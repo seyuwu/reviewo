@@ -10,6 +10,11 @@ export default [
     files: ["**/*.{js,cjs,mjs,ts,tsx}"],
     languageOptions: {
       ecmaVersion: 2022,
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        URL: "readonly"
+      },
       sourceType: "module"
     },
     rules: {

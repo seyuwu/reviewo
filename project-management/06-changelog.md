@@ -210,3 +210,45 @@
   - Future domain modules exist as empty module shells only.
   - Config validation is limited to current runtime settings.
   - No database, ORM, auth, DTO, repository, entity, Swagger, or business logic was added.
+
+## 2026-06-24 - Stage 6 - Database Infrastructure
+
+- Stage: 6
+- Summary: Added Prisma-based PostgreSQL infrastructure, database DI module, migration structure, seed placeholder, and database health check without creating domain models or tables.
+- Created modules:
+  - `DatabaseModule`
+- Changed modules:
+  - `HealthModule`
+  - `AppModule`
+- Created files:
+  - `apps/api/prisma.config.ts`
+  - `apps/api/prisma/schema.prisma`
+  - `apps/api/prisma/migrations/migration_lock.toml`
+  - `apps/api/prisma/migrations/20260624182000_init_database_schemas/migration.sql`
+  - `apps/api/prisma/seed.mjs`
+  - `apps/api/src/database/database.module.ts`
+  - `apps/api/src/database/prisma.service.ts`
+  - `apps/api/src/health/health.service.ts`
+- Changed files:
+  - `apps/api/package.json`
+  - `apps/api/src/app.module.ts`
+  - `apps/api/src/config/environment.config.ts`
+  - `apps/api/src/config/environment.validation.ts`
+  - `apps/api/src/health/health.controller.ts`
+  - `apps/api/src/health/health.module.ts`
+  - `packages/config/eslint.config.mjs`
+  - `pnpm-lock.yaml`
+  - `pnpm-workspace.yaml`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Prisma is the chosen ORM/migration tooling.
+  - Prisma 7 config lives in `prisma.config.ts`; `schema.prisma` contains no connection URL.
+  - Prisma Client uses the PostgreSQL driver adapter.
+  - Initial migration creates domain PostgreSQL schemas only.
+  - Health now verifies database connectivity.
+  - No domain tables, repositories, DTOs, entities, auth, or business logic were added.

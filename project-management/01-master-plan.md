@@ -98,7 +98,7 @@ Verification:
 - Health endpoint responds.
 - Backend passes lint and typecheck.
 
-### 6. ⬜ Database Infrastructure
+### 6. ✅ Database Infrastructure
 
 Goal: prepare PostgreSQL infrastructure for MVP.
 

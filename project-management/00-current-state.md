@@ -3,11 +3,11 @@
 ## Snapshot
 
 - Date: 2026-06-24
-- Current stage: Waiting for user confirmation before Stage 6
-- Stage status: Stage 5 completed
-- MVP readiness: 5%
-- Last completed stage: Stage 5 - Backend Skeleton
-- Next stage: Stage 6 - Database Infrastructure
+- Current stage: Waiting for user confirmation before Stage 7
+- Stage status: Stage 6 completed
+- MVP readiness: 6%
+- Last completed stage: Stage 6 - Database Infrastructure
+- Next stage: Stage 7 - Backend Error And Response Foundation
 
 ## Implemented Capabilities
 
@@ -64,6 +64,18 @@ The backend skeleton is initialized:
 - Future domain modules exist as empty NestJS module shells.
 - No database, ORM, auth, DTO, repositories, entities, Swagger, or domain business logic has been added.
 
+The database infrastructure is initialized:
+
+- Prisma is configured as the ORM and migration tooling.
+- Prisma 7 configuration lives in `apps/api/prisma.config.ts`.
+- Prisma schema exists without domain models.
+- Initial migration creates PostgreSQL schemas only.
+- `DatabaseModule` exposes a single infrastructure Prisma provider through DI.
+- `PrismaService` owns database connection lifecycle and shutdown.
+- Seed script structure exists without seed data.
+- Health endpoint includes a database connectivity check.
+- No domain tables, repositories, DTOs, entities, or business logic have been added.
+
 Roadmap update:
 
 - Docker Infrastructure was added as Stage 3.
@@ -107,3 +119,5 @@ Current app containers use temporary placeholder commands because the applicatio
 Stage 4 created shared package boundaries only. These packages must remain free of business logic unless a future stage explicitly introduces approved shared contracts or technical utilities.
 
 Stage 5 created backend skeleton only. The only HTTP endpoint is `GET /health`.
+
+Stage 6 created database infrastructure only. Prisma migrations currently create schemas, not domain tables.

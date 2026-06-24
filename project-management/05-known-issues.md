@@ -76,3 +76,10 @@
 - Status: Intentional infrastructure simplification.
 - Possible solution: Add app-specific live reload mounts and dependency synchronization when real app development begins.
 - Priority: Low.
+
+## Localhost Database Checks Can Hit A Non-Compose PostgreSQL
+
+- Description: On Windows, Prisma CLI checks against `localhost:5432` can fail if another local PostgreSQL listener is present or if port forwarding resolves differently than expected.
+- Status: Known environment caveat.
+- Possible solution: Prefer running migration smoke checks inside the Docker Compose network using host `postgres`, or ensure local `DATABASE_URL` points to the intended database.
+- Priority: Low.

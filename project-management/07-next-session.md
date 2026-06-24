@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 5 - Backend Skeleton is completed.
+Stage 6 - Database Infrastructure is completed.
 
-Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, and a NestJS backend skeleton.
+Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, and Prisma database infrastructure.
 
 ## Already Done
 
@@ -110,15 +110,35 @@ Product capabilities are not implemented yet. The project currently has project 
   - local `GET /health`
   - Docker dev `GET /health`
   - production Docker image build
+- Stage 6 database infrastructure was added:
+  - `apps/api/prisma.config.ts`
+  - `apps/api/prisma/schema.prisma`
+  - `apps/api/prisma/migrations/migration_lock.toml`
+  - `apps/api/prisma/migrations/20260624182000_init_database_schemas/migration.sql`
+  - `apps/api/prisma/seed.mjs`
+  - `apps/api/src/database/database.module.ts`
+  - `apps/api/src/database/prisma.service.ts`
+  - `apps/api/src/health/health.service.ts`
+- Stage 6 was verified with:
+  - `corepack pnpm --filter @reviewo/api db:generate`
+  - Prisma migration deploy inside Docker Compose network
+  - schema existence check in PostgreSQL
+  - Docker API `GET /health` with database check
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - production Docker image build
 
 ## Remaining Work
 
-- Stage 6 - Database Infrastructure.
-- Do not start Stage 6 until the user confirms.
+- Stage 7 - Backend Error And Response Foundation.
+- Do not start Stage 7 until the user confirms.
 
 ## Next Stage
 
-Stage 6 - Database Infrastructure, but only after explicit user confirmation.
+Stage 7 - Backend Error And Response Foundation, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -136,10 +156,13 @@ Stage 6 - Database Infrastructure, but only after explicit user confirmation.
 - Do not add generic helpers to `@reviewo/shared` without real duplication.
 - Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
 - Backend currently exposes only `GET /health`.
+- `GET /health` now includes database connectivity status.
 - Backend domain modules are empty NestJS module shells only.
 - Do not add DTOs, repositories, entities, auth, Swagger, or business logic without the relevant stage.
+- Prisma schema intentionally has no domain models yet.
+- Initial Prisma migration creates PostgreSQL schemas only, not tables.
+- Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
-- Stage 6 requires confirmation of ORM/migration tooling before implementation.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
 - Current Windows environment does not have `make` installed.
 - `pnpm` is not installed globally in the current environment; use `corepack pnpm ...`.

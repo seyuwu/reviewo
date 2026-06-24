@@ -336,3 +336,83 @@ The current priority is reliable one-command startup. Rebuild-based development 
 - Keep bind mounts and install dependencies on every container start.
 - Keep a named `node_modules` volume.
 - Add a more complex development entrypoint to synchronize dependencies.
+
+## 2026-06-24 - Prisma As ORM And Migration Tooling
+
+### Problem
+
+The backend needs a TypeScript-friendly PostgreSQL ORM and migration foundation before domain modules start using persistence.
+
+### Decision
+
+Use Prisma for database access and migrations.
+
+### Reason
+
+Prisma provides strong TypeScript integration, readable schema files, mature PostgreSQL support, convenient migrations, and good long-term maintainability.
+
+### Alternatives
+
+- TypeORM.
+- Drizzle ORM.
+- Raw SQL migrations with a lightweight query builder.
+
+## 2026-06-24 - Prisma 7 Configuration
+
+### Problem
+
+Prisma 7 no longer supports datasource URLs inside `schema.prisma`, and runtime database access requires a driver adapter.
+
+### Decision
+
+Keep `schema.prisma` free of connection URLs, configure Prisma CLI through `apps/api/prisma.config.ts`, and instantiate `PrismaClient` with `@prisma/adapter-pg`.
+
+### Reason
+
+This follows current Prisma 7 architecture and keeps environment-specific connection data outside the schema.
+
+### Alternatives
+
+- Pin Prisma to an older major version.
+- Use a non-Prisma migration tool.
+- Hardcode connection values in scripts.
+
+## 2026-06-24 - Database Infrastructure Without Domain Models
+
+### Problem
+
+Database infrastructure is needed now, but creating user/entity/rating tables would start domain implementation too early.
+
+### Decision
+
+Create only PostgreSQL schemas for future domains and keep Prisma schema without models in Stage 6.
+
+### Reason
+
+This preserves modular monolith data boundaries while keeping the stage focused on infrastructure.
+
+### Alternatives
+
+- Create all MVP tables immediately.
+- Create only the `public` schema.
+- Delay migrations until the first domain module.
+
+## 2026-06-24 - Single Prisma Provider Through DI
+
+### Problem
+
+Future modules must not create their own database connections or bypass infrastructure boundaries.
+
+### Decision
+
+Expose `PrismaService` from a global `DatabaseModule` and let future modules consume database access through dependency injection.
+
+### Reason
+
+This centralizes connection lifecycle, shutdown behavior, and future instrumentation while keeping domain modules independent from connection setup.
+
+### Alternatives
+
+- Instantiate Prisma directly in repositories.
+- Create one Prisma client per module.
+- Delay DI integration until repositories are implemented.

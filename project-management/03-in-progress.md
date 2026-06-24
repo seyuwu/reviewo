@@ -16,52 +16,50 @@ Stage 4 - Shared Packages is completed.
 
 Stage 5 - Backend Skeleton is completed.
 
-Stage 6 - Database Infrastructure is next, pending explicit user confirmation.
+Stage 6 - Database Infrastructure is completed.
+
+Stage 7 - Backend Error And Response Foundation is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare PostgreSQL database infrastructure after user confirmation.
+Prepare centralized backend errors and API response foundation after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 6 implementation.
+To be confirmed before Stage 7 implementation.
 
 Expected work may include:
 
-- ORM/migration tooling choice confirmation.
-- PostgreSQL connection configuration.
-- Migration command foundation.
-- Domain database schema creation.
-- Environment validation extension for database settings.
+- Common exception classes.
+- Global exception filter.
+- Response/error shape foundation.
+- Validation error formatting.
 
 ## Files To Change
 
-To be confirmed before Stage 6 implementation.
+To be confirmed before Stage 7 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Database tooling must be confirmed before implementation.
-- Stage 6 should connect infrastructure only, not implement domain repositories.
-- Domain database schemas should preserve modular monolith boundaries.
-- No business logic should be added in database infrastructure.
+- Error/response foundation must not introduce domain behavior.
+- Controllers should not manually build repeated error responses.
+- API error shape must be stable enough for future frontend and extension clients.
+- Do not create product API contracts without approval.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 6.
-- [ ] Confirm ORM/migration tooling if not already decided.
-- [ ] Describe Stage 6 goal, files, and architectural decisions before editing.
-- [ ] Implement database infrastructure only.
-- [ ] Verify migrations and backend startup.
+- [ ] Wait for user confirmation to start Stage 7.
+- [ ] Describe Stage 7 goal, files, and architectural decisions before editing.
+- [ ] Implement error/response foundation only.
+- [ ] Verify backend lint/typecheck/build and health.
 
 ## Current Progress
 
-Stage 5 is complete. Stage 6 has not started.
+Stage 6 is complete. Stage 7 has not started.
 
 ## Open Questions
 
-No active questions until Stage 6 starts.
-
-Stage 6 has a required decision: ORM/migration tooling choice.
+No active questions until Stage 7 starts.
 
 ## Blockers
 
@@ -69,5 +67,5 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 6.
-- Do not add database tooling until confirmation is received.
+- Wait for user confirmation before Stage 7.
+- Do not add error/response code until confirmation is received.
