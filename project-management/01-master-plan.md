@@ -24,7 +24,7 @@ Verification:
 - Dependencies can be installed.
 - Basic project command can run.
 
-### 2. ⬜ TypeScript And Tooling Setup
+### 2. ✅ TypeScript And Tooling Setup
 
 Goal: establish a strict TypeScript baseline.
 
@@ -42,7 +42,29 @@ Verification:
 - `lint` passes.
 - No cyclic dependencies in the initial structure.
 
-### 3. ⬜ Shared Packages
+### 3. ⬜ Docker Infrastructure
+
+Goal: prepare one-command development and production startup through Docker Compose.
+
+Result:
+
+- Add `docker-compose.yml` as the base Compose definition.
+- Add `docker-compose.dev.yml` for local development.
+- Add `docker-compose.prod.yml` for production deployment.
+- Add Dockerfiles for each application.
+- Add `.env.example`.
+- Add `.dockerignore`.
+- Add `Makefile` or `Taskfile.yml` with core development commands.
+- Keep the structure ready for one-command production updates in the future.
+
+Verification:
+
+- Development stack can be started with one command.
+- Production stack has a separate compose override.
+- Docker files do not break monorepo boundaries.
+- Production update path does not require changing project structure.
+
+### 4. ⬜ Shared Packages
 
 Goal: prepare shared packages without business logic.
 
@@ -58,7 +80,7 @@ Verification:
 - Packages can be imported by apps.
 - Shared packages contain no business logic.
 
-### 4. ⬜ Backend Skeleton
+### 5. ⬜ Backend Skeleton
 
 Goal: create the NestJS API as a modular monolith.
 
@@ -76,7 +98,7 @@ Verification:
 - Health endpoint responds.
 - Backend passes lint and typecheck.
 
-### 5. ⬜ Database Infrastructure
+### 6. ⬜ Database Infrastructure
 
 Goal: prepare PostgreSQL infrastructure for MVP.
 
@@ -96,7 +118,7 @@ Required confirmation before implementation:
 
 - ORM and migration tooling choice.
 
-### 6. ⬜ Backend Error And Response Foundation
+### 7. ⬜ Backend Error And Response Foundation
 
 Goal: define one API error and response foundation.
 
@@ -113,7 +135,7 @@ Verification:
 - Errors are returned in one format.
 - Controllers do not manually build error responses.
 
-### 7. ⬜ Users/Auth MVP Foundation
+### 8. ⬜ Users/Auth MVP Foundation
 
 Goal: create the minimum user model needed for ratings.
 
@@ -135,7 +157,7 @@ Required confirmation before implementation:
 
 - MVP auth approach.
 
-### 8. ⬜ Entities Module
+### 9. ⬜ Entities Module
 
 Goal: implement the central entity domain.
 
@@ -154,7 +176,7 @@ Verification:
 - Entity can be found by canonical or normalized URL.
 - Other modules do not access entity repositories directly.
 
-### 9. ⬜ URL Normalization MVP
+### 10. ⬜ URL Normalization MVP
 
 Goal: implement minimal URL canonicalization.
 
@@ -171,7 +193,7 @@ Verification:
 - Equivalent URLs with tracking parameters point to one entity.
 - The normalization algorithm is isolated and replaceable.
 
-### 10. ⬜ Ratings Module
+### 11. ⬜ Ratings Module
 
 Goal: implement user ratings.
 
@@ -189,7 +211,7 @@ Verification:
 - Average score and votes count update.
 - Entity module does not contain rating logic.
 
-### 11. ⬜ Reviews Module
+### 12. ⬜ Reviews Module
 
 Goal: implement basic reviews.
 
@@ -208,7 +230,7 @@ Verification:
 - Entity reviews can be fetched.
 - Review votes work independently from ratings.
 
-### 12. ⬜ Trust Module MVP
+### 13. ⬜ Trust Module MVP
 
 Goal: implement a simple replaceable trust score.
 
@@ -225,7 +247,7 @@ Verification:
 - Trust recalculates after important events.
 - Algorithm can be replaced without API contract changes.
 
-### 13. ⬜ Backend Domain Events MVP
+### 14. ⬜ Backend Domain Events MVP
 
 Goal: prepare low coupling between modules.
 
@@ -241,7 +263,7 @@ Verification:
 - Events work inside the monolith.
 - Future event bus migration does not require domain rewrites.
 
-### 14. ⬜ Search Module MVP
+### 15. ⬜ Search Module MVP
 
 Goal: implement entity search through PostgreSQL.
 
@@ -258,7 +280,7 @@ Verification:
 - User can find an entity.
 - Search does not contain entity creation business logic.
 
-### 15. ⬜ Entity Page API Composition
+### 16. ⬜ Entity Page API Composition
 
 Goal: provide one backend endpoint for the entity page.
 
@@ -277,7 +299,7 @@ Required confirmation before implementation:
 
 - Exact response DTO.
 
-### 16. ⬜ Extension API MVP
+### 17. ⬜ Extension API MVP
 
 Goal: provide the minimum API required by the browser extension.
 
@@ -298,7 +320,7 @@ Required confirmation before implementation:
 
 - Extension API contract.
 
-### 17. ⬜ Frontend Skeleton
+### 18. ⬜ Frontend Skeleton
 
 Goal: create the Next.js web app.
 
@@ -316,7 +338,7 @@ Verification:
 - Basic page opens.
 - Lint and typecheck pass.
 
-### 18. ⬜ Web Home And Search
+### 19. ⬜ Web Home And Search
 
 Goal: implement the main search UX.
 
@@ -332,7 +354,7 @@ Verification:
 - User can search for an entity.
 - UI does not contain search business logic.
 
-### 19. ⬜ Web Entity Creation MVP
+### 20. ⬜ Web Entity Creation MVP
 
 Goal: implement manual entity creation.
 
@@ -347,7 +369,7 @@ Verification:
 - User can create an entity in a minimal number of steps.
 - Backend validates all submitted data.
 
-### 20. ⬜ Web Entity Page MVP
+### 21. ⬜ Web Entity Page MVP
 
 Goal: implement the base entity page.
 
@@ -366,7 +388,7 @@ Verification:
 - User can open an entity, rate it, and leave a review.
 - Page uses the composition endpoint.
 
-### 21. ⬜ Web Profile MVP
+### 22. ⬜ Web Profile MVP
 
 Goal: implement a minimal user profile.
 
@@ -381,7 +403,7 @@ Verification:
 - User sees their data.
 - Profile does not mix rating or review business logic.
 
-### 22. ⬜ Browser Extension Skeleton
+### 23. ⬜ Browser Extension Skeleton
 
 Goal: create the minimum extension structure.
 
@@ -397,7 +419,7 @@ Verification:
 - Extension can be loaded locally.
 - Background and content scripts exchange messages.
 
-### 23. ⬜ Extension URL Detection
+### 24. ⬜ Extension URL Detection
 
 Goal: detect the current URL and send it to the backend.
 
@@ -412,7 +434,7 @@ Verification:
 - Opening a page produces an API request.
 - No site-specific parsers exist.
 
-### 24. ⬜ Extension Rating Card MVP
+### 25. ⬜ Extension Rating Card MVP
 
 Goal: show the compact rating card.
 
@@ -428,7 +450,7 @@ Verification:
 - Card appears for a found entity.
 - "More details" opens the web entity page.
 
-### 25. ⬜ Extension Quick Rating
+### 26. ⬜ Extension Quick Rating
 
 Goal: allow rating from the extension.
 
@@ -444,7 +466,7 @@ Verification:
 - Aggregates update.
 - Extension does not calculate rating itself.
 
-### 26. ⬜ Moderation MVP Foundation
+### 27. ⬜ Moderation MVP Foundation
 
 Goal: create the minimum moderation foundation.
 
@@ -460,7 +482,7 @@ Verification:
 - Moderation flag can be created.
 - Moderation stays isolated in its module.
 
-### 27. ⬜ Testing Baseline
+### 28. ⬜ Testing Baseline
 
 Goal: cover critical MVP scenarios.
 
@@ -476,7 +498,7 @@ Verification:
 - Tests run with one command.
 - Critical MVP flow is covered.
 
-### 28. ⬜ MVP End-To-End Flow
+### 29. ⬜ MVP End-To-End Flow
 
 Goal: verify the main user journey.
 
@@ -494,7 +516,7 @@ Verification:
 - End-to-end flow passes.
 - "Rate an object in under 5 seconds" can be checked manually.
 
-### 29. ⬜ Production Readiness MVP
+### 30. ⬜ Production Readiness MVP
 
 Goal: prepare the project for first deployment.
 
@@ -512,7 +534,7 @@ Verification:
 - Backend, web, and extension build.
 - Project can be deployed using documented instructions.
 
-### 30. ⬜ MVP Stabilization
+### 31. ⬜ MVP Stabilization
 
 Goal: remove architectural and UX problems before growth.
 

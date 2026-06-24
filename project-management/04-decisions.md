@@ -115,3 +115,43 @@ Use `pnpm` workspaces for Stage 1. Do not add Turborepo or Nx yet. Pin the packa
 - Use Yarn workspaces.
 - Add Turborepo immediately.
 - Add Nx immediately.
+
+## 2026-06-24 - Docker Infrastructure Roadmap Stage
+
+### Problem
+
+The MVP must be runnable in development and production with one command, and production updates should not require changing the project structure later.
+
+### Decision
+
+Add a dedicated Docker Infrastructure stage immediately after TypeScript And Tooling Setup. This stage will prepare Docker Compose base, development, and production files, Dockerfiles for each app, `.env.example`, `.dockerignore`, and a `Makefile` or `Taskfile.yml`.
+
+### Reason
+
+Docker affects app boundaries, environment configuration, development commands, and production deployment shape. Making it a dedicated early stage prevents deployment concerns from being bolted on after app code appears.
+
+### Alternatives
+
+- Delay Docker until production readiness.
+- Add Docker files separately inside each app stage.
+- Use only local non-Docker development during MVP.
+
+## 2026-06-24 - TypeScript And Tooling Baseline
+
+### Problem
+
+The monorepo needs strict TypeScript and consistent formatting/linting before application code is added.
+
+### Decision
+
+Use TypeScript Strict Mode, ESLint flat config, Prettier, and shared tooling presets in `packages/config`. Root configs consume the shared presets and add only workspace-level behavior.
+
+### Reason
+
+This keeps tooling framework-neutral and reusable across backend, frontend, extension, and packages without duplicating configuration in each app.
+
+### Alternatives
+
+- Configure each app independently.
+- Delay linting and formatting until apps are created.
+- Use framework-specific tooling presets before framework stages begin.

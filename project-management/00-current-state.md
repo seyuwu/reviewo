@@ -3,11 +3,11 @@
 ## Snapshot
 
 - Date: 2026-06-24
-- Current stage: Waiting for user confirmation before Stage 2
-- Stage status: Stage 1 completed
-- MVP readiness: 1%
-- Last completed stage: Stage 1 - Monorepo Initialization
-- Next stage: Stage 2 - TypeScript And Tooling Setup
+- Current stage: Waiting for user confirmation before Stage 3
+- Stage status: Stage 2 completed
+- MVP readiness: 2%
+- Last completed stage: Stage 2 - TypeScript And Tooling Setup
+- Next stage: Stage 3 - Docker Infrastructure
 
 ## Implemented Capabilities
 
@@ -22,6 +22,21 @@ The monorepo foundation is initialized:
 - Application placeholders exist under `apps/api`, `apps/web`, and `apps/extension`.
 - Shared package placeholders exist under `packages/ui`, `packages/shared`, `packages/types`, and `packages/config`.
 - Dependency installation is verified through Corepack-managed `pnpm`.
+
+The TypeScript and tooling baseline is initialized:
+
+- Strict TypeScript base configuration exists.
+- Root `tsconfig.json` is ready for project references.
+- ESLint flat config is configured.
+- Prettier is configured.
+- Shared tooling presets exist in `packages/config`.
+- Root scripts verify linting, typechecking, formatting, and build.
+
+Roadmap update:
+
+- Docker Infrastructure was added as Stage 3.
+- Later stages were shifted by one number.
+- Docker files are not part of Stage 2.
 
 ## Current Architecture State
 
@@ -52,3 +67,5 @@ No active blockers.
 ## Notes
 
 Stage 1 created only the monorepo foundation and workspace structure. Backend, frontend, extension frameworks, database tooling, and business modules are intentionally not added yet.
+
+Stage 2 created only strict TypeScript and baseline development tooling. Docker infrastructure is intentionally deferred to Stage 3.

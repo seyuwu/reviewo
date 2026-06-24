@@ -6,45 +6,61 @@ No active implementation stage.
 
 Stage 1 - Monorepo Initialization is completed.
 
-Stage 2 - TypeScript And Tooling Setup is next, pending explicit user confirmation.
+Stage 2 - TypeScript And Tooling Setup is completed.
+
+Roadmap update: Docker Infrastructure is now Stage 3 and will be implemented after Stage 2.
+
+Stage 3 - Docker Infrastructure is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare strict TypeScript and development tooling after user confirmation.
+Prepare Docker-based development and production infrastructure after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 2 implementation.
+To be confirmed before Stage 3 implementation.
 
-Expected files may include shared TypeScript, ESLint, and formatting configuration files, but exact files must be described before writing code.
+Expected files include:
+
+- `docker-compose.yml`
+- `docker-compose.dev.yml`
+- `docker-compose.prod.yml`
+- Dockerfiles for each application
+- `.env.example`
+- `.dockerignore`
+- `Makefile` or `Taskfile.yml`
 
 ## Files To Change
 
-To be confirmed before Stage 2 implementation.
+To be confirmed before Stage 3 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 2 must keep TypeScript Strict Mode as the baseline.
-- Tooling should be shared through root/package configuration, not copied independently into each app.
-- Avoid adding framework-specific configuration before the relevant app stages.
-- Any package or tooling choice that affects long-term architecture must be recorded in `04-decisions.md`.
+- Docker infrastructure must support both development and production modes.
+- The system should be runnable through one command in development.
+- Production deployment should support one-command updates later without changing project structure.
+- Dockerfiles must respect app boundaries.
+- Docker Compose should not encode business logic.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 2.
-- [ ] Describe Stage 2 goal, files, and architectural decisions before editing.
-- [ ] Implement TypeScript and tooling setup after confirmation.
-- [ ] Verify lint/typecheck commands after setup.
+- [ ] Wait for user confirmation to start Stage 3.
+- [ ] Describe Stage 3 goal, files, and architectural decisions before editing.
+- [ ] Create Docker Compose base/dev/prod files.
+- [ ] Create app Dockerfiles.
+- [ ] Create `.env.example` and `.dockerignore`.
+- [ ] Create `Makefile` or `Taskfile.yml`.
+- [ ] Verify Docker commands where possible.
 
 ## Current Progress
 
-Stage 1 is complete. Stage 2 has not started.
+Stage 2 is complete. Stage 3 has not started.
 
 ## Open Questions
 
-No active questions until Stage 2 starts.
+No active questions until Stage 3 starts.
 
-Before Stage 2, confirm whether to proceed with the minimal tooling stack implied by the plan: TypeScript, ESLint, Prettier, and shared config packages.
+Before Stage 3, confirm command runner preference if needed: `Makefile` or `Taskfile.yml`.
 
 ## Blockers
 
@@ -52,5 +68,5 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 2.
-- Do not implement TypeScript tooling until confirmation is received.
+- Wait for user confirmation before Stage 3.
+- Do not create Docker files until confirmation is received.
