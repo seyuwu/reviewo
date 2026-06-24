@@ -12,50 +12,54 @@ Roadmap update: Docker Infrastructure is now Stage 3 and will be implemented aft
 
 Stage 3 - Docker Infrastructure is completed.
 
-Stage 4 - Shared Packages is next, pending explicit user confirmation.
+Stage 4 - Shared Packages is completed.
+
+Stage 5 - Backend Skeleton is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare shared packages without business logic after user confirmation.
+Prepare the NestJS API skeleton as a modular monolith after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 4 implementation.
+To be confirmed before Stage 5 implementation.
 
-Expected work may include package manifests and minimal entry points for:
+Expected work may include:
 
-- `packages/types`
-- `packages/shared`
-- `packages/config`
-- `packages/ui`
+- `apps/api/package.json`
+- `apps/api/tsconfig.json`
+- `apps/api/src/main.ts`
+- `apps/api/src/app.module.ts`
+- `apps/api/src/modules/`
+- `apps/api/src/common/`
 
 ## Files To Change
 
-To be confirmed before Stage 4 implementation.
+To be confirmed before Stage 5 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Shared packages must not contain product business logic.
-- Shared packages should expose stable technical boundaries for future apps.
-- `packages/types` may contain cross-app contracts only after API contracts are agreed.
-- `packages/shared` should contain only generic technical utilities when needed.
-- `packages/ui` should stay framework-compatible with the planned frontend stack.
+- Backend must be a NestJS modular monolith.
+- Stage 5 should create skeleton structure only, not business modules.
+- Backend business logic must stay in services in later stages.
+- Controllers must not contain business logic.
+- Module boundaries should be visible from the first backend structure.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 4.
-- [ ] Describe Stage 4 goal, files, and architectural decisions before editing.
-- [ ] Create shared package manifests and minimal structure.
-- [ ] Verify package imports where appropriate.
-- [ ] Ensure shared packages do not contain business logic.
+- [ ] Wait for user confirmation to start Stage 5.
+- [ ] Describe Stage 5 goal, files, and architectural decisions before editing.
+- [ ] Create backend package and NestJS skeleton.
+- [ ] Create health endpoint or equivalent basic app verification.
+- [ ] Verify backend lint/typecheck/build.
 
 ## Current Progress
 
-Stage 3 is complete. Stage 4 has not started.
+Stage 4 is complete. Stage 5 has not started.
 
 ## Open Questions
 
-No active questions until Stage 4 starts.
+No active questions until Stage 5 starts.
 
 ## Blockers
 
@@ -63,5 +67,5 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 4.
-- Do not create shared package code until confirmation is received.
+- Wait for user confirmation before Stage 5.
+- Do not create backend files until confirmation is received.

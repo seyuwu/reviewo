@@ -29,6 +29,12 @@ importers:
 
   packages/config: {}
 
+  packages/shared: {}
+
+  packages/types: {}
+
+  packages/ui: {}
+
 packages:
 
   '@eslint-community/eslint-utils@4.9.1':

@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 3 - Docker Infrastructure is completed.
+Stage 4 - Shared Packages is completed.
 
-Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, and Docker infrastructure.
+Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, and shared package boundaries.
 
 ## Already Done
 
@@ -26,10 +26,7 @@ Product capabilities are not implemented yet. The project currently has project 
   - `apps/api/.gitkeep`
   - `apps/web/.gitkeep`
   - `apps/extension/.gitkeep`
-- Package placeholders were created:
-  - `packages/ui/.gitkeep`
-  - `packages/shared/.gitkeep`
-  - `packages/types/.gitkeep`
+- Initial package placeholders were created during Stage 1 and later replaced by real shared package boundaries in Stage 4.
 - Stage 1 was verified with:
   - `corepack pnpm install`
   - `corepack pnpm check`
@@ -71,15 +68,34 @@ Product capabilities are not implemented yet. The project currently has project 
   - `docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml build`
   - `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml up -d`
   - `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans`
+- Stage 4 shared packages were added:
+  - `packages/types/package.json`
+  - `packages/types/tsconfig.json`
+  - `packages/types/src/index.ts`
+  - `packages/shared/package.json`
+  - `packages/shared/tsconfig.json`
+  - `packages/shared/src/index.ts`
+  - `packages/ui/package.json`
+  - `packages/ui/tsconfig.json`
+  - `packages/ui/src/index.ts`
+- Stage 4 was verified with:
+  - `corepack pnpm install`
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - built package entry point import check
+  - dev Docker image build
+  - prod Docker image build
 
 ## Remaining Work
 
-- Stage 4 - Shared Packages.
-- Do not start Stage 4 until the user confirms.
+- Stage 5 - Backend Skeleton.
+- Do not start Stage 5 until the user confirms.
 
 ## Next Stage
 
-Stage 4 - Shared Packages, but only after explicit user confirmation.
+Stage 5 - Backend Skeleton, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -92,6 +108,10 @@ Stage 4 - Shared Packages, but only after explicit user confirmation.
 - Documentation has priority over implementation.
 - Do not create API contracts without proposing them first.
 - Do not add framework code outside the approved stage.
+- Shared packages currently expose empty public entry points intentionally.
+- Do not add API DTOs to `@reviewo/types` until API contracts are approved.
+- Do not add generic helpers to `@reviewo/shared` without real duplication.
+- Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
 - Docker app services currently use placeholder commands because real apps do not exist yet.
 - Replace Docker placeholder commands during the relevant app implementation stages.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

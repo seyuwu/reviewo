@@ -111,3 +111,38 @@
   - Each future app has a dedicated Dockerfile and image boundary.
   - Docker image tags can be controlled through environment values for future CI/CD and production updates.
   - App containers use temporary placeholder commands until real apps are implemented.
+
+## 2026-06-24 - Stage 4 - Shared Packages
+
+- Stage: 4
+- Summary: Created importable shared package boundaries for types, shared utilities, and UI without adding business logic, API contracts, or UI components.
+- Created modules:
+  - `@reviewo/types`
+  - `@reviewo/shared`
+  - `@reviewo/ui`
+- Changed modules:
+  - Root TypeScript project references.
+- Created files:
+  - `packages/types/package.json`
+  - `packages/types/tsconfig.json`
+  - `packages/types/src/index.ts`
+  - `packages/shared/package.json`
+  - `packages/shared/tsconfig.json`
+  - `packages/shared/src/index.ts`
+  - `packages/ui/package.json`
+  - `packages/ui/tsconfig.json`
+  - `packages/ui/src/index.ts`
+- Changed files:
+  - `tsconfig.json`
+  - `pnpm-lock.yaml`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Shared packages now exist as explicit workspace boundaries.
+  - `@reviewo/types` intentionally contains no API DTOs until API contracts are approved.
+  - `@reviewo/shared` intentionally contains no generic utilities until real duplication appears.
+  - `@reviewo/ui` intentionally contains no UI components until frontend/design-system stages.

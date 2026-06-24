@@ -235,3 +235,24 @@ This makes CI/CD and production upgrades easier because image versions can be co
 - Hardcode all image tags in Compose and Dockerfiles.
 - Use only `latest` tags.
 - Manage image versions only in CI scripts.
+
+## 2026-06-24 - Shared Packages As Empty Boundaries
+
+### Problem
+
+The monorepo needs shared package boundaries, but adding API DTOs, UI components, or generic utilities too early would either violate the API approval rule or create premature abstractions.
+
+### Decision
+
+Create `@reviewo/types`, `@reviewo/shared`, and `@reviewo/ui` as compile-ready packages with empty public entry points. Keep `@reviewo/config` as the existing shared tooling configuration package.
+
+### Reason
+
+This makes package boundaries importable and testable while preserving YAGNI and preventing business logic or unapproved contracts from leaking into shared code.
+
+### Alternatives
+
+- Add initial API DTOs to `@reviewo/types`.
+- Add common utility functions to `@reviewo/shared`.
+- Add placeholder UI components to `@reviewo/ui`.
+- Delay shared package creation until apps are implemented.

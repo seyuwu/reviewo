@@ -3,11 +3,11 @@
 ## Snapshot
 
 - Date: 2026-06-24
-- Current stage: Waiting for user confirmation before Stage 4
-- Stage status: Stage 3 completed
-- MVP readiness: 3%
-- Last completed stage: Stage 3 - Docker Infrastructure
-- Next stage: Stage 4 - Shared Packages
+- Current stage: Waiting for user confirmation before Stage 5
+- Stage status: Stage 4 completed
+- MVP readiness: 4%
+- Last completed stage: Stage 4 - Shared Packages
+- Next stage: Stage 5 - Backend Skeleton
 
 ## Implemented Capabilities
 
@@ -20,7 +20,7 @@ The monorepo foundation is initialized:
 - Root workspace metadata exists in `package.json`.
 - Workspace boundaries are configured in `pnpm-workspace.yaml`.
 - Application placeholders exist under `apps/api`, `apps/web`, and `apps/extension`.
-- Shared package placeholders exist under `packages/ui`, `packages/shared`, `packages/types`, and `packages/config`.
+- Shared workspace packages exist under `packages/ui`, `packages/shared`, `packages/types`, and `packages/config`.
 - Dependency installation is verified through Corepack-managed `pnpm`.
 
 The TypeScript and tooling baseline is initialized:
@@ -43,6 +43,15 @@ The Docker infrastructure foundation is initialized:
 - `Makefile` provides short development commands.
 - Development stack startup was verified with Docker Compose.
 - Development and production Docker image builds were verified.
+
+The shared package foundation is initialized:
+
+- `@reviewo/types` exists as the future home for approved cross-application contracts.
+- `@reviewo/shared` exists as the future home for generic technical utilities.
+- `@reviewo/ui` exists as the future home for design-system UI.
+- `@reviewo/config` exists as the shared tooling configuration package.
+- Shared packages currently expose empty public entry points only.
+- No API DTO, business logic, or UI components have been added yet.
 
 Roadmap update:
 
@@ -83,3 +92,5 @@ Stage 1 created only the monorepo foundation and workspace structure. Backend, f
 Stage 3 created Docker infrastructure only. It did not add backend, frontend, extension framework code, database migrations, or business modules.
 
 Current app containers use temporary placeholder commands because the applications are not implemented yet. Future app stages should replace these commands with real app start commands without changing the overall Docker structure.
+
+Stage 4 created shared package boundaries only. These packages must remain free of business logic unless a future stage explicitly introduces approved shared contracts or technical utilities.
