@@ -416,3 +416,63 @@ This centralizes connection lifecycle, shutdown behavior, and future instrumenta
 - Instantiate Prisma directly in repositories.
 - Create one Prisma client per module.
 - Delay DI integration until repositories are implemented.
+
+## 2026-06-24 - Unified Backend Error Response Shape
+
+### Problem
+
+Future web and extension clients need predictable backend errors, but product API contracts are not ready yet.
+
+### Decision
+
+Define one infrastructure-level error response shape with `statusCode`, `error.code`, `error.message`, optional `error.details`, `path`, and `timestamp`.
+
+### Reason
+
+This gives clients and future API documentation a stable foundation without introducing product DTOs or domain endpoint contracts.
+
+### Alternatives
+
+- Let each controller build errors manually.
+- Use Nest default exception responses.
+- Delay error shape standardization until frontend integration.
+
+## 2026-06-24 - Global Exception Filter
+
+### Problem
+
+Without centralized error handling, future controllers and modules would duplicate response formatting and risk leaking internal errors.
+
+### Decision
+
+Register a global Nest exception filter that normalizes known HTTP exceptions and unknown runtime errors into the shared error response shape.
+
+### Reason
+
+This keeps controllers focused on application behavior and ensures unknown errors are logged without exposing internal details to clients.
+
+### Alternatives
+
+- Add local filters per module.
+- Handle errors manually in each controller.
+- Keep only Nest default exception handling.
+
+## 2026-06-24 - Centralized Validation Error Formatting
+
+### Problem
+
+Validation errors need to be machine-readable for future clients, but no DTOs or product API endpoints should be added in this stage.
+
+### Decision
+
+Configure the global `ValidationPipe` with a shared exception factory that returns `VALIDATION_ERROR` and a flattened list of validation details.
+
+### Reason
+
+This prepares consistent request validation behavior before DTOs are introduced, while keeping validation formatting separate from controllers and domain modules.
+
+### Alternatives
+
+- Use the default Nest validation error response.
+- Format validation errors inside controllers.
+- Delay validation formatting until the first product endpoint.

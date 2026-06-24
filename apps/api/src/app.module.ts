@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { GlobalExceptionFilter } from "./common/filters/global-exception.filter.js";
 import { AppLogger } from "./common/logger/app-logger.service.js";
 import { AppConfigModule } from "./config/app-config.module.js";
 import { DatabaseModule } from "./database/database.module.js";
@@ -31,6 +32,6 @@ import { UsersModule } from "./modules/users/users.module.js";
     ModerationModule,
     RecommendationModule
   ],
-  providers: [AppLogger]
+  providers: [AppLogger, GlobalExceptionFilter]
 })
 export class AppModule {}

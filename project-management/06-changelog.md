@@ -252,3 +252,39 @@
   - Initial migration creates domain PostgreSQL schemas only.
   - Health now verifies database connectivity.
   - No domain tables, repositories, DTOs, entities, auth, or business logic were added.
+
+## 2026-06-24 - Stage 7 - Backend Error And Response Foundation
+
+- Stage: 7
+- Summary: Added centralized backend error response infrastructure, global exception handling, base application exceptions, error codes, and validation error formatting without adding product API endpoints or domain behavior.
+- Created modules: none.
+- Changed modules:
+  - `AppModule`
+  - API bootstrap
+- Created files:
+  - `apps/api/src/common/exceptions/app-error-code.ts`
+  - `apps/api/src/common/exceptions/app.exception.ts`
+  - `apps/api/src/common/exceptions/validation.exception.ts`
+  - `apps/api/src/common/filters/api-error-response.ts`
+  - `apps/api/src/common/filters/global-exception.filter.ts`
+  - `apps/api/src/common/pipes/validation-exception.factory.ts`
+- Changed files:
+  - `apps/api/src/app.module.ts`
+  - `apps/api/src/main.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/05-known-issues.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Removed files:
+  - `apps/api/src/common/exceptions/.gitkeep`
+  - `apps/api/src/common/filters/.gitkeep`
+  - `apps/api/src/common/pipes/.gitkeep`
+- Important architectural changes:
+  - Backend errors now use one infrastructure response shape.
+  - Unknown errors are normalized and logged without leaking internal details.
+  - Validation errors now use centralized machine-readable formatting.
+  - Controllers do not need to manually build repeated error responses.
+  - No domain-specific errors, DTOs, product endpoints, repositories, auth, or business logic were added.

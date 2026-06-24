@@ -118,7 +118,7 @@ Required confirmation before implementation:
 
 - ORM and migration tooling choice.
 
-### 7. ⬜ Backend Error And Response Foundation
+### 7. ✅ Backend Error And Response Foundation
 
 Goal: define one API error and response foundation.
 

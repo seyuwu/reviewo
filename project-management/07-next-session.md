@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 6 - Database Infrastructure is completed.
+Stage 7 - Backend Error And Response Foundation is completed.
 
-Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, and Prisma database infrastructure.
+Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, and centralized backend error/validation response infrastructure.
 
 ## Already Done
 
@@ -130,15 +130,33 @@ Product capabilities are not implemented yet. The project currently has project 
   - `corepack pnpm format:check`
   - `corepack pnpm test`
   - production Docker image build
+- Stage 7 backend error and response foundation was added:
+  - `apps/api/src/common/exceptions/app-error-code.ts`
+  - `apps/api/src/common/exceptions/app.exception.ts`
+  - `apps/api/src/common/exceptions/validation.exception.ts`
+  - `apps/api/src/common/filters/api-error-response.ts`
+  - `apps/api/src/common/filters/global-exception.filter.ts`
+  - `apps/api/src/common/pipes/validation-exception.factory.ts`
+  - `apps/api/src/app.module.ts` updated to provide `GlobalExceptionFilter`
+  - `apps/api/src/main.ts` updated to register global exception filter and validation exception factory
+- Stage 7 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - Docker Prisma migration deploy inside Docker Compose network
+  - Docker API `GET /health`
+  - Docker API normalized 404 response for `/missing`
 
 ## Remaining Work
 
-- Stage 7 - Backend Error And Response Foundation.
-- Do not start Stage 7 until the user confirms.
+- Stage 8 - Users/Auth MVP Foundation.
+- Do not start Stage 8 until the user confirms the MVP auth approach.
 
 ## Next Stage
 
-Stage 7 - Backend Error And Response Foundation, but only after explicit user confirmation.
+Stage 8 - Users/Auth MVP Foundation, but only after explicit user confirmation and MVP auth approach approval.
 
 ## Documents To Read First
 
@@ -157,6 +175,9 @@ Stage 7 - Backend Error And Response Foundation, but only after explicit user co
 - Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
 - Backend currently exposes only `GET /health`.
 - `GET /health` now includes database connectivity status.
+- Backend errors now use a centralized infrastructure response shape.
+- Global exception filter is registered in API bootstrap.
+- Validation errors are prepared through a centralized exception factory, but no product DTOs exist yet.
 - Backend domain modules are empty NestJS module shells only.
 - Do not add DTOs, repositories, entities, auth, Swagger, or business logic without the relevant stage.
 - Prisma schema intentionally has no domain models yet.
@@ -167,5 +188,5 @@ Stage 7 - Backend Error And Response Foundation, but only after explicit user co
 - Current Windows environment does not have `make` installed.
 - `pnpm` is not installed globally in the current environment; use `corepack pnpm ...`.
 - `package.json` pins `pnpm@11.9.0`.
-- Current workspace is not a git repository; `git status --short` fails until git is initialized or the correct repo root is opened.
+- Current workspace is a git repository.
 - Update `project-management/` after every completed stage.

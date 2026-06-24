@@ -51,9 +51,9 @@
 
 ## Workspace Is Not A Git Repository
 
-- Description: `git status --short` fails because the current workspace has no `.git` repository.
-- Status: Known environment/project setup limitation.
-- Possible solution: Initialize git or open the actual repository root before creating commits.
+- Description: Earlier `git status --short` failed because the workspace did not expose a `.git` repository.
+- Status: Resolved in the current workspace.
+- Possible solution: No action needed while working from the current repository root.
 - Priority: Low.
 
 ## `make` Is Not Installed In Current Environment
