@@ -1,0 +1,30 @@
+services:
+  api:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+
+  web:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+
+  extension:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]

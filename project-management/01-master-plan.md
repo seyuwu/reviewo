@@ -42,7 +42,7 @@ Verification:
 - `lint` passes.
 - No cyclic dependencies in the initial structure.
 
-### 3. ⬜ Docker Infrastructure
+### 3. ✅ Docker Infrastructure
 
 Goal: prepare one-command development and production startup through Docker Compose.
 

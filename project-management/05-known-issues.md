@@ -55,3 +55,17 @@
 - Status: Known environment/project setup limitation.
 - Possible solution: Initialize git or open the actual repository root before creating commits.
 - Priority: Low.
+
+## `make` Is Not Installed In Current Environment
+
+- Description: The project has a `Makefile`, but the current Windows shell does not recognize `make`.
+- Status: Known environment limitation.
+- Possible solution: Install `make`, use Docker Compose commands directly, or add an additional cross-platform task runner later if needed.
+- Priority: Low.
+
+## Docker App Services Use Placeholder Commands
+
+- Description: `api`, `web`, and `extension` containers currently run `pnpm check` and stay alive because real applications are not implemented yet.
+- Status: Intentional Stage 3 limitation.
+- Possible solution: Replace placeholder commands with real app start commands during the relevant app implementation stages.
+- Priority: Medium.

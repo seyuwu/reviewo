@@ -1,0 +1,33 @@
+services:
+  api:
+    build:
+      target: production
+    environment:
+      NODE_ENV: production
+    restart: always
+    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+
+  web:
+    build:
+      target: production
+    environment:
+      NODE_ENV: production
+    restart: always
+    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+
+  extension:
+    build:
+      target: production
+    environment:
+      NODE_ENV: production
+    restart: always
+    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+
+  postgres:
+    restart: always
+
+  redis:
+    restart: always
+
+  minio:
+    restart: always

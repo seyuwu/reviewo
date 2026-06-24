@@ -3,11 +3,11 @@
 ## Snapshot
 
 - Date: 2026-06-24
-- Current stage: Waiting for user confirmation before Stage 3
-- Stage status: Stage 2 completed
-- MVP readiness: 2%
-- Last completed stage: Stage 2 - TypeScript And Tooling Setup
-- Next stage: Stage 3 - Docker Infrastructure
+- Current stage: Waiting for user confirmation before Stage 4
+- Stage status: Stage 3 completed
+- MVP readiness: 3%
+- Last completed stage: Stage 3 - Docker Infrastructure
+- Next stage: Stage 4 - Shared Packages
 
 ## Implemented Capabilities
 
@@ -31,6 +31,18 @@ The TypeScript and tooling baseline is initialized:
 - Prettier is configured.
 - Shared tooling presets exist in `packages/config`.
 - Root scripts verify linting, typechecking, formatting, and build.
+
+The Docker infrastructure foundation is initialized:
+
+- Base Docker Compose configuration exists.
+- Development and production Docker Compose overrides exist.
+- PostgreSQL, Redis, and MinIO services are prepared.
+- `api`, `web`, and `extension` each have a dedicated Dockerfile.
+- Environment templates/placeholders exist.
+- Root `.dockerignore` minimizes Docker build context.
+- `Makefile` provides short development commands.
+- Development stack startup was verified with Docker Compose.
+- Development and production Docker image builds were verified.
 
 Roadmap update:
 
@@ -68,4 +80,6 @@ No active blockers.
 
 Stage 1 created only the monorepo foundation and workspace structure. Backend, frontend, extension frameworks, database tooling, and business modules are intentionally not added yet.
 
-Stage 2 created only strict TypeScript and baseline development tooling. Docker infrastructure is intentionally deferred to Stage 3.
+Stage 3 created Docker infrastructure only. It did not add backend, frontend, extension framework code, database migrations, or business modules.
+
+Current app containers use temporary placeholder commands because the applications are not implemented yet. Future app stages should replace these commands with real app start commands without changing the overall Docker structure.

@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 2 - TypeScript And Tooling Setup is completed.
+Stage 3 - Docker Infrastructure is completed.
 
-Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, and baseline TypeScript/ESLint/Prettier tooling.
+Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, and Docker infrastructure.
 
 ## Already Done
 
@@ -51,15 +51,35 @@ Product capabilities are not implemented yet. The project currently has project 
   - `corepack pnpm typecheck`
   - `corepack pnpm format:check`
   - `corepack pnpm build`
+- Stage 3 Docker infrastructure was added:
+  - `docker-compose.yml`
+  - `docker-compose.dev.yml`
+  - `docker-compose.prod.yml`
+  - `docker/api/Dockerfile`
+  - `docker/web/Dockerfile`
+  - `docker/extension/Dockerfile`
+  - `.env.example`
+  - `.env.development`
+  - `.env.production`
+  - `.dockerignore`
+  - `Makefile`
+- Stage 3 was verified with:
+  - `docker compose config`
+  - `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml config`
+  - `docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml config`
+  - `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml build`
+  - `docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml build`
+  - `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml up -d`
+  - `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans`
 
 ## Remaining Work
 
-- Stage 3 - Docker Infrastructure.
-- Do not start Stage 3 until the user confirms.
+- Stage 4 - Shared Packages.
+- Do not start Stage 4 until the user confirms.
 
 ## Next Stage
 
-Stage 3 - Docker Infrastructure, but only after explicit user confirmation.
+Stage 4 - Shared Packages, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -72,8 +92,10 @@ Stage 3 - Docker Infrastructure, but only after explicit user confirmation.
 - Documentation has priority over implementation.
 - Do not create API contracts without proposing them first.
 - Do not add framework code outside the approved stage.
-- Docker files have not been created yet. They belong to Stage 3.
-- Stage 3 must prepare `docker-compose.yml`, `docker-compose.dev.yml`, `docker-compose.prod.yml`, Dockerfiles for each app, `.env.example`, `.dockerignore`, and `Makefile` or `Taskfile.yml`.
+- Docker app services currently use placeholder commands because real apps do not exist yet.
+- Replace Docker placeholder commands during the relevant app implementation stages.
+- Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
+- Current Windows environment does not have `make` installed.
 - `pnpm` is not installed globally in the current environment; use `corepack pnpm ...`.
 - `package.json` pins `pnpm@11.9.0`.
 - Current workspace is not a git repository; `git status --short` fails until git is initialized or the correct repo root is opened.

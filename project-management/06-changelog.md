@@ -78,3 +78,36 @@
 - Important architectural changes:
   - `packages/config` is now the shared source for baseline TypeScript, ESLint, and Prettier presets.
   - Root configs remain framework-neutral and do not introduce backend, frontend, or extension framework assumptions.
+
+## 2026-06-24 - Stage 3 - Docker Infrastructure
+
+- Stage: 3
+- Summary: Added Docker infrastructure for development and production, including base/dev/prod Compose files, app Dockerfiles, environment templates, Docker ignore rules, and Makefile commands.
+- Created modules: none.
+- Changed modules: none.
+- Created files:
+  - `docker-compose.yml`
+  - `docker-compose.dev.yml`
+  - `docker-compose.prod.yml`
+  - `docker/api/Dockerfile`
+  - `docker/web/Dockerfile`
+  - `docker/extension/Dockerfile`
+  - `.env.example`
+  - `.env.development`
+  - `.env.production`
+  - `.dockerignore`
+  - `Makefile`
+- Changed files:
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/05-known-issues.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Docker Compose is split into base, development override, and production override.
+  - PostgreSQL, Redis, and MinIO are part of the infrastructure foundation.
+  - Each future app has a dedicated Dockerfile and image boundary.
+  - Docker image tags can be controlled through environment values for future CI/CD and production updates.
+  - App containers use temporary placeholder commands until real apps are implemented.

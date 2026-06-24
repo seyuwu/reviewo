@@ -10,57 +10,52 @@ Stage 2 - TypeScript And Tooling Setup is completed.
 
 Roadmap update: Docker Infrastructure is now Stage 3 and will be implemented after Stage 2.
 
-Stage 3 - Docker Infrastructure is next, pending explicit user confirmation.
+Stage 3 - Docker Infrastructure is completed.
+
+Stage 4 - Shared Packages is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Docker-based development and production infrastructure after user confirmation.
+Prepare shared packages without business logic after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 3 implementation.
+To be confirmed before Stage 4 implementation.
 
-Expected files include:
+Expected work may include package manifests and minimal entry points for:
 
-- `docker-compose.yml`
-- `docker-compose.dev.yml`
-- `docker-compose.prod.yml`
-- Dockerfiles for each application
-- `.env.example`
-- `.dockerignore`
-- `Makefile` or `Taskfile.yml`
+- `packages/types`
+- `packages/shared`
+- `packages/config`
+- `packages/ui`
 
 ## Files To Change
 
-To be confirmed before Stage 3 implementation.
+To be confirmed before Stage 4 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Docker infrastructure must support both development and production modes.
-- The system should be runnable through one command in development.
-- Production deployment should support one-command updates later without changing project structure.
-- Dockerfiles must respect app boundaries.
-- Docker Compose should not encode business logic.
+- Shared packages must not contain product business logic.
+- Shared packages should expose stable technical boundaries for future apps.
+- `packages/types` may contain cross-app contracts only after API contracts are agreed.
+- `packages/shared` should contain only generic technical utilities when needed.
+- `packages/ui` should stay framework-compatible with the planned frontend stack.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 3.
-- [ ] Describe Stage 3 goal, files, and architectural decisions before editing.
-- [ ] Create Docker Compose base/dev/prod files.
-- [ ] Create app Dockerfiles.
-- [ ] Create `.env.example` and `.dockerignore`.
-- [ ] Create `Makefile` or `Taskfile.yml`.
-- [ ] Verify Docker commands where possible.
+- [ ] Wait for user confirmation to start Stage 4.
+- [ ] Describe Stage 4 goal, files, and architectural decisions before editing.
+- [ ] Create shared package manifests and minimal structure.
+- [ ] Verify package imports where appropriate.
+- [ ] Ensure shared packages do not contain business logic.
 
 ## Current Progress
 
-Stage 2 is complete. Stage 3 has not started.
+Stage 3 is complete. Stage 4 has not started.
 
 ## Open Questions
 
-No active questions until Stage 3 starts.
-
-Before Stage 3, confirm command runner preference if needed: `Makefile` or `Taskfile.yml`.
+No active questions until Stage 4 starts.
 
 ## Blockers
 
@@ -68,5 +63,5 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 3.
-- Do not create Docker files until confirmation is received.
+- Wait for user confirmation before Stage 4.
+- Do not create shared package code until confirmation is received.

@@ -155,3 +155,83 @@ This keeps tooling framework-neutral and reusable across backend, frontend, exte
 - Configure each app independently.
 - Delay linting and formatting until apps are created.
 - Use framework-specific tooling presets before framework stages begin.
+
+## 2026-06-24 - Docker Compose Layering
+
+### Problem
+
+The platform must run in development and production while avoiding duplicated Docker Compose configuration.
+
+### Decision
+
+Use `docker-compose.yml` as the base configuration and use `docker-compose.dev.yml` and `docker-compose.prod.yml` as environment-specific overrides.
+
+### Reason
+
+This keeps shared infrastructure, networks, volumes, and app service definitions in one place while allowing development and production to differ in commands, restart policies, environment files, and mounts.
+
+### Alternatives
+
+- Keep one large Compose file for every environment.
+- Make development and production Compose files fully standalone.
+- Generate Compose files through scripts.
+
+## 2026-06-24 - Dedicated Dockerfile Per Application
+
+### Problem
+
+The apps are not implemented yet, but future services need clear deployment boundaries from the beginning.
+
+### Decision
+
+Create separate Dockerfiles for `api`, `web`, and `extension` under `docker/api`, `docker/web`, and `docker/extension`.
+
+### Reason
+
+This preserves independent app build/deployment boundaries and allows each app to evolve without changing the global Docker layout.
+
+### Alternatives
+
+- Use one shared Dockerfile for all Node apps.
+- Delay Dockerfiles until each app is implemented.
+- Put Dockerfiles directly inside `apps/*`.
+
+## 2026-06-24 - Docker Placeholder Commands
+
+### Problem
+
+Docker app services must exist now, but `api`, `web`, and `extension` do not yet contain application code.
+
+### Decision
+
+Use temporary app container commands that run `corepack pnpm check` and then stay alive. Replace these commands with real app start commands during the corresponding app stages.
+
+### Reason
+
+This allows Docker Compose to start the complete future topology now without introducing fake application code or violating stage boundaries.
+
+### Alternatives
+
+- Exclude app services until applications are implemented.
+- Add temporary demo applications.
+- Let app containers exit immediately after `pnpm check`.
+
+## 2026-06-24 - Docker Image Configuration Through Environment
+
+### Problem
+
+Production infrastructure should support future image pinning and updates without editing Compose structure.
+
+### Decision
+
+Expose `NODE_IMAGE`, `POSTGRES_IMAGE`, `REDIS_IMAGE`, and `MINIO_IMAGE` through env files and Compose build/image configuration.
+
+### Reason
+
+This makes CI/CD and production upgrades easier because image versions can be controlled through environment or deployment configuration.
+
+### Alternatives
+
+- Hardcode all image tags in Compose and Dockerfiles.
+- Use only `latest` tags.
+- Manage image versions only in CI scripts.
