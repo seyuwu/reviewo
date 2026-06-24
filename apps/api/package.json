@@ -1,0 +1,29 @@
+{
+  "name": "@reviewo/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reviewo backend API application.",
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "corepack pnpm build && node dist/main.js",
+    "lint": "eslint .",
+    "start": "node dist/main.js",
+    "test": "node -e \"console.log('No API tests configured yet')\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.27",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.1.27",
+    "@nestjs/platform-express": "^11.1.27",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0"
+  }
+}

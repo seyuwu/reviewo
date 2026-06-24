@@ -63,9 +63,16 @@
 - Possible solution: Install `make`, use Docker Compose commands directly, or add an additional cross-platform task runner later if needed.
 - Priority: Low.
 
-## Docker App Services Use Placeholder Commands
+## Web And Extension Docker Services Use Placeholder Commands
 
-- Description: `api`, `web`, and `extension` containers currently run `pnpm check` and stay alive because real applications are not implemented yet.
+- Description: `web` and `extension` containers currently run `pnpm check` and stay alive because real applications are not implemented yet.
 - Status: Intentional Stage 3 limitation.
 - Possible solution: Replace placeholder commands with real app start commands during the relevant app implementation stages.
 - Priority: Medium.
+
+## Docker Development Has No Live Reload Yet
+
+- Description: Development Compose currently uses rebuilt images instead of bind mounts/live reload.
+- Status: Intentional infrastructure simplification.
+- Possible solution: Add app-specific live reload mounts and dependency synchronization when real app development begins.
+- Priority: Low.

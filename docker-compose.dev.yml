@@ -4,19 +4,13 @@ services:
       target: development
     environment:
       NODE_ENV: development
-    volumes:
-      - .:/workspace
-      - node_modules:/workspace/node_modules
-    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+    command: ["sh", "-c", "corepack pnpm --filter @reviewo/api dev"]
 
   web:
     build:
       target: development
     environment:
       NODE_ENV: development
-    volumes:
-      - .:/workspace
-      - node_modules:/workspace/node_modules
     command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
 
   extension:
@@ -24,7 +18,4 @@ services:
       target: development
     environment:
       NODE_ENV: development
-    volumes:
-      - .:/workspace
-      - node_modules:/workspace/node_modules
     command: ["sh", "-c", "corepack pnpm check && sleep infinity"]

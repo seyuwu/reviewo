@@ -3,5 +3,10 @@ dist/
 build/
 .next/
 coverage/
+**/dist/
+**/build/
+**/.next/
+**/coverage/
+*.tsbuildinfo
 pnpm-lock.yaml
 *.md

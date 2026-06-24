@@ -3,11 +3,11 @@
 ## Snapshot
 
 - Date: 2026-06-24
-- Current stage: Waiting for user confirmation before Stage 5
-- Stage status: Stage 4 completed
-- MVP readiness: 4%
-- Last completed stage: Stage 4 - Shared Packages
-- Next stage: Stage 5 - Backend Skeleton
+- Current stage: Waiting for user confirmation before Stage 6
+- Stage status: Stage 5 completed
+- MVP readiness: 5%
+- Last completed stage: Stage 5 - Backend Skeleton
+- Next stage: Stage 6 - Database Infrastructure
 
 ## Implemented Capabilities
 
@@ -53,6 +53,17 @@ The shared package foundation is initialized:
 - Shared packages currently expose empty public entry points only.
 - No API DTO, business logic, or UI components have been added yet.
 
+The backend skeleton is initialized:
+
+- `@reviewo/api` exists as a NestJS application package.
+- `GET /health` is available for Docker and future production checks.
+- Centralized config foundation exists through `ConfigModule`.
+- Runtime environment validation exists for current application settings.
+- Standard Nest logger is wrapped by `AppLogger` for future replacement.
+- Common infrastructure folders exist for filters, interceptors, guards, pipes, decorators, exceptions, and logger.
+- Future domain modules exist as empty NestJS module shells.
+- No database, ORM, auth, DTO, repositories, entities, Swagger, or domain business logic has been added.
+
 Roadmap update:
 
 - Docker Infrastructure was added as Stage 3.
@@ -94,3 +105,5 @@ Stage 3 created Docker infrastructure only. It did not add backend, frontend, ex
 Current app containers use temporary placeholder commands because the applications are not implemented yet. Future app stages should replace these commands with real app start commands without changing the overall Docker structure.
 
 Stage 4 created shared package boundaries only. These packages must remain free of business logic unless a future stage explicitly introduces approved shared contracts or technical utilities.
+
+Stage 5 created backend skeleton only. The only HTTP endpoint is `GET /health`.

@@ -80,7 +80,7 @@ Verification:
 - Packages can be imported by apps.
 - Shared packages contain no business logic.
 
-### 5. ⬜ Backend Skeleton
+### 5. ✅ Backend Skeleton
 
 Goal: create the NestJS API as a modular monolith.
 

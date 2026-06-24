@@ -256,3 +256,83 @@ This makes package boundaries importable and testable while preserving YAGNI and
 - Add common utility functions to `@reviewo/shared`.
 - Add placeholder UI components to `@reviewo/ui`.
 - Delay shared package creation until apps are implemented.
+
+## 2026-06-24 - Backend Skeleton Without Domain Logic
+
+### Problem
+
+The backend needs a production-ready architectural foundation, but Stage 5 must not implement business behavior, DTOs, repositories, entities, auth, or database integration.
+
+### Decision
+
+Create `@reviewo/api` as a NestJS application with bootstrap, root module, config foundation, logger wrapper, health module, common infrastructure folders, and empty domain module shells.
+
+### Reason
+
+This establishes the modular monolith shape while keeping all domain behavior for later dedicated stages.
+
+### Alternatives
+
+- Generate full Nest resources for each domain.
+- Start with only a single app module and add domain folders later.
+- Add database/auth/swagger immediately.
+
+## 2026-06-24 - Health Endpoint As The Only Stage 5 HTTP Endpoint
+
+### Problem
+
+Docker and future production deployment need a basic runtime check, but API contracts are not approved yet.
+
+### Decision
+
+Expose only `GET /health`, returning a minimal status response.
+
+### Reason
+
+Health is infrastructure-oriented and does not introduce product API behavior or domain contracts.
+
+### Alternatives
+
+- Add no HTTP endpoints.
+- Add a root API endpoint.
+- Add Swagger/OpenAPI documentation immediately.
+
+## 2026-06-24 - Backend Logger Wrapper
+
+### Problem
+
+Modules should not become coupled to a specific logging implementation.
+
+### Decision
+
+Wrap the standard Nest `ConsoleLogger` in `AppLogger` and register it as the application logger.
+
+### Reason
+
+This keeps the current implementation simple while preserving a replacement path for structured logging later.
+
+### Alternatives
+
+- Use Nest logger directly everywhere.
+- Add a third-party logger immediately.
+- Delay logging setup.
+
+## 2026-06-24 - Docker Dev Images Without Bind Mounts
+
+### Problem
+
+Development bind mounts hid image-installed `node_modules`, forcing containers to reinstall dependencies into a named volume and making `docker compose up` unreliable after dependency changes.
+
+### Decision
+
+Remove development bind mounts for now. `docker compose` and `make dev` use freshly built images. Live reload can be introduced later when real app development needs it.
+
+### Reason
+
+The current priority is reliable one-command startup. Rebuild-based development is acceptable at the skeleton stage and avoids container dependency drift.
+
+### Alternatives
+
+- Keep bind mounts and install dependencies on every container start.
+- Keep a named `node_modules` volume.
+- Add a more complex development entrypoint to synchronize dependencies.

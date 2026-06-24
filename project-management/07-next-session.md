@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 4 - Shared Packages is completed.
+Stage 5 - Backend Skeleton is completed.
 
-Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, and shared package boundaries.
+Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, and a NestJS backend skeleton.
 
 ## Already Done
 
@@ -87,15 +87,38 @@ Product capabilities are not implemented yet. The project currently has project 
   - built package entry point import check
   - dev Docker image build
   - prod Docker image build
+- Stage 5 backend skeleton was added:
+  - `apps/api/package.json`
+  - `apps/api/tsconfig.json`
+  - `apps/api/src/main.ts`
+  - `apps/api/src/app.module.ts`
+  - `apps/api/src/common/logger/app-logger.service.ts`
+  - `apps/api/src/config/app-config.module.ts`
+  - `apps/api/src/config/environment.config.ts`
+  - `apps/api/src/config/environment.validation.ts`
+  - `apps/api/src/health/health.controller.ts`
+  - `apps/api/src/health/health.module.ts`
+  - empty module shells under `apps/api/src/modules/`
+  - common infrastructure folders under `apps/api/src/common/`
+- Stage 5 was verified with:
+  - `corepack pnpm install`
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - local `GET /health`
+  - Docker dev `GET /health`
+  - production Docker image build
 
 ## Remaining Work
 
-- Stage 5 - Backend Skeleton.
-- Do not start Stage 5 until the user confirms.
+- Stage 6 - Database Infrastructure.
+- Do not start Stage 6 until the user confirms.
 
 ## Next Stage
 
-Stage 5 - Backend Skeleton, but only after explicit user confirmation.
+Stage 6 - Database Infrastructure, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -112,8 +135,11 @@ Stage 5 - Backend Skeleton, but only after explicit user confirmation.
 - Do not add API DTOs to `@reviewo/types` until API contracts are approved.
 - Do not add generic helpers to `@reviewo/shared` without real duplication.
 - Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
-- Docker app services currently use placeholder commands because real apps do not exist yet.
-- Replace Docker placeholder commands during the relevant app implementation stages.
+- Backend currently exposes only `GET /health`.
+- Backend domain modules are empty NestJS module shells only.
+- Do not add DTOs, repositories, entities, auth, Swagger, or business logic without the relevant stage.
+- Web and extension Docker services still use placeholder commands because those apps do not exist yet.
+- Stage 6 requires confirmation of ORM/migration tooling before implementation.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
 - Current Windows environment does not have `make` installed.
 - `pnpm` is not installed globally in the current environment; use `corepack pnpm ...`.

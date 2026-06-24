@@ -5,7 +5,7 @@ services:
     environment:
       NODE_ENV: production
     restart: always
-    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+    command: ["sh", "-c", "corepack pnpm --filter @reviewo/api start"]
 
   web:
     build:
