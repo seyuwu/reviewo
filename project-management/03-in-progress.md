@@ -44,43 +44,44 @@ Stage 17 - Extension API MVP is completed.
 
 Stage 18 - Frontend Skeleton is completed.
 
-Stage 19 - Web Home And Search is next, pending explicit user confirmation.
+Stage 19 - Web Home And Search is completed.
+
+Stage 20 - Web Entity Creation MVP is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Web Home And Search after user confirmation.
+Prepare Web Entity Creation MVP after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 19 implementation.
+To be confirmed before Stage 20 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 19 implementation.
+To be confirmed before Stage 20 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 19 should implement the main web home/search UX after user confirmation.
-- Home page should search through backend Search API.
-- UI must not contain search business logic.
-- Keep `fetch` out of components.
-- Do not add entity creation flow or entity pages in Stage 19 unless explicitly confirmed.
+- Stage 20 should implement manual entity creation after user confirmation.
+- Creation should use backend `POST /entities`.
+- Creation should require authenticated user state when auth UI exists; exact MVP behavior must be confirmed before implementation.
+- Do not add full entity page UI, ratings UI, reviews UI, or extension UI in Stage 20 unless explicitly confirmed.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 19.
-- [ ] Confirm exact Web Home And Search scope before implementation.
-- [ ] Describe Stage 19 goal, files, and architectural decisions before editing.
-- [ ] Implement Web Home And Search only.
+- [ ] Wait for user confirmation to start Stage 20.
+- [ ] Confirm exact Web Entity Creation MVP scope before implementation.
+- [ ] Describe Stage 20 goal, files, and architectural decisions before editing.
+- [ ] Implement Web Entity Creation MVP only.
 - [ ] Verify frontend/backend lint/typecheck/build behavior.
 
 ## Current Progress
 
-Stage 18 is complete. Stage 19 has not started.
+Stage 19 is complete. Stage 20 has not started.
 
 ## Open Questions
 
-Stage 19 requires confirmation of exact Web Home And Search scope before implementation.
+Stage 20 requires confirmation of exact Web Entity Creation MVP scope before implementation.
 
 ## Blockers
 
@@ -88,6 +89,6 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 19.
-- Confirm search UI contract and client behavior.
-- Do not add entity creation pages, entity detail pages, auth UI, ratings UI, or extension UI until their dedicated stages.
+- Wait for user confirmation before Stage 20.
+- Confirm entity creation UI/auth behavior and redirect behavior.
+- Do not add full entity detail pages, ratings UI, reviews UI, or extension UI until their dedicated stages.

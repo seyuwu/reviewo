@@ -31,7 +31,14 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const configService = app.get(ConfigService<EnvironmentVariables, true>);
+  const corsAllowedOrigins = configService.get("CORS_ALLOWED_ORIGINS", { infer: true });
   const port = configService.get("API_PORT", { infer: true });
+
+  if (corsAllowedOrigins.length > 0) {
+    app.enableCors({
+      origin: corsAllowedOrigins
+    });
+  }
 
   await app.listen(port);
   logger.log(`API application is running on port ${port}`, "Bootstrap");

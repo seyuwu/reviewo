@@ -1360,3 +1360,83 @@ This keeps the frontend foundation small and makes later UI stages easier to rev
 - Build the home/search UI in Stage 18.
 - Add auth UI in Stage 18.
 - Add entity page UI in Stage 18.
+
+## 2026-06-27 - Home Search Uses Backend Search API
+
+### Problem
+
+The web home page needs live entity search, but search rules and URL-aware behavior belong to the backend.
+
+### Decision
+
+Implement the home search UI against `GET /search/entities?query=...` through a feature-level API function and TanStack Query hook.
+
+### Reason
+
+This keeps frontend code focused on presentation and state while preserving backend ownership of search behavior.
+
+### Alternatives
+
+- Search directly against entity endpoints from components.
+- Duplicate search normalization in the frontend.
+- Add OpenSearch or frontend-side indexing.
+
+## 2026-06-27 - Home Search Is Feature-Scoped
+
+### Problem
+
+The frontend needs a scalable structure before more screens are added.
+
+### Decision
+
+Put home search code under `apps/web/src/features/home-search` with local `api`, `hooks`, `components`, and `types` folders.
+
+### Reason
+
+This follows the feature-based frontend architecture while avoiding premature shared abstractions.
+
+### Alternatives
+
+- Put all home search files directly in `src/app`.
+- Move DTOs into `@reviewo/types` immediately.
+- Create a global search package before reuse exists.
+
+## 2026-06-27 - Search Missing State Does Not Create Entities
+
+### Problem
+
+The home page should guide users when no entity is found, but manual entity creation is a separate roadmap stage.
+
+### Decision
+
+Show a create-page hint when `canCreateEntity` is true, but do not implement the creation flow in Stage 19.
+
+### Reason
+
+This matches the backend Search API contract and keeps Stage 20 responsible for entity creation.
+
+### Alternatives
+
+- Create entities directly from search.
+- Link to a non-existent entity creation page.
+- Hide the create hint until Stage 20.
+
+## 2026-06-27 - API Enables CORS For Web Origin
+
+### Problem
+
+The browser web app runs on `localhost:3001` and needs to call the API on `localhost:3000`.
+
+### Decision
+
+Add `CORS_ALLOWED_ORIGINS` and enable CORS in API bootstrap when allowed origins are configured.
+
+### Reason
+
+This enables browser-based frontend/API integration without weakening domain boundaries.
+
+### Alternatives
+
+- Proxy all API calls through Next.js.
+- Disable browser integration until deployment.
+- Allow all origins unconditionally.

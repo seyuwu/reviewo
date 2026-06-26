@@ -722,3 +722,40 @@
   - Web development container now runs the Next.js dev server.
   - `sharp` is allowed in `pnpm-workspace.yaml` because Next.js depends on it for image optimization.
   - Product search UI, entity pages, auth UI, extension UI, frontend business logic, and shared API DTO exports were not added.
+
+## 2026-06-27 - Stage 19 - Web Home And Search
+
+- Stage: 19
+- Summary: Added the main web home search UX backed by the backend Search API, including live search, results rendering, and a create-page hint for missing entities.
+- Created modules:
+  - `HomeSearch` frontend feature
+- Changed modules:
+  - `@reviewo/web` home page
+  - `@reviewo/api` bootstrap/config for CORS
+- Created files:
+  - `apps/web/src/features/home-search/api/search-entities.ts`
+  - `apps/web/src/features/home-search/components/home-search.tsx`
+  - `apps/web/src/features/home-search/hooks/use-entity-search.ts`
+  - `apps/web/src/features/home-search/types/search-entities.ts`
+- Changed files:
+  - `.env.development`
+  - `.env.example`
+  - `apps/api/src/config/environment.config.ts`
+  - `apps/api/src/config/environment.validation.ts`
+  - `apps/api/src/main.ts`
+  - `apps/web/src/app/globals.css`
+  - `apps/web/src/app/page.tsx`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Home page asks "Что хотите оценить?" and searches live.
+  - Search requests use a feature API function and the shared web API client boundary.
+  - TanStack Query owns search request state.
+  - UI does not duplicate backend search logic.
+  - Missing search results show a create-page hint without implementing entity creation.
+  - API CORS is configured through `CORS_ALLOWED_ORIGINS` for browser web access.
+  - Entity creation flow, entity detail pages, auth UI, ratings UI, extension UI, and frontend search business logic were not added.

@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 18 - Frontend Skeleton is completed.
+Stage 19 - Web Home And Search is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app skeleton now starts as a Next.js application with routing, layout, providers, TanStack Query, and a base API client. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, and Frontend Skeleton foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, and a home search UX backed by the Search API. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, and Web Home/Search foundation.
 
 ## Already Done
 
@@ -440,15 +440,35 @@ The first product capabilities are implemented: users can register, sign in, rea
   - IDE diagnostics check for changed web/Docker files
   - Persistent Docker dev stack web startup without rebuild
   - Docker web `GET /` smoke on `localhost:3001`
+- Stage 19 Web Home And Search was added:
+  - `apps/web/src/features/home-search/api/search-entities.ts`
+  - `apps/web/src/features/home-search/components/home-search.tsx`
+  - `apps/web/src/features/home-search/hooks/use-entity-search.ts`
+  - `apps/web/src/features/home-search/types/search-entities.ts`
+  - `apps/web/src/app/page.tsx` now renders the home search feature
+  - `apps/web/src/app/globals.css` now includes search UI styles
+  - `apps/api/src/main.ts` now enables CORS when origins are configured
+  - `apps/api/src/config/environment.validation.ts` validates `CORS_ALLOWED_ORIGINS`
+  - `.env.development` and `.env.example` include `CORS_ALLOWED_ORIGINS`
+- Stage 19 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed web/API config files
+  - Persistent Docker dev stack API/web service restart without rebuild
+  - Docker API Search smoke with CORS origin header
+  - Docker web `GET /` smoke on `localhost:3001`
 
 ## Remaining Work
 
-- Stage 19 - Web Home And Search.
-- Do not start Stage 19 until the user confirms and exact Web Home And Search scope is agreed.
+- Stage 20 - Web Entity Creation MVP.
+- Do not start Stage 20 until the user confirms and exact Web Entity Creation MVP scope is agreed.
 
 ## Next Stage
 
-Stage 19 - Web Home And Search, but only after explicit user confirmation and scope confirmation.
+Stage 20 - Web Entity Creation MVP, but only after explicit user confirmation and scope confirmation.
 
 ## Documents To Read First
 
@@ -487,7 +507,7 @@ Stage 19 - Web Home And Search, but only after explicit user confirmation and sc
 - `canCreateEntity` is only a fallback hint; Search Module must not create entities.
 - Search Module uses `EntitiesPort.searchEntities(query)` and must not access entity repositories directly.
 - Existing `GET /entities/search` remains available.
-- OpenSearch, indexing workers, frontend search UI, and extension search flow are not implemented.
+- OpenSearch, indexing workers, and extension search flow are not implemented.
 - Entity Page API Composition supports `GET /entities/:entityId/page`.
 - Entity page response contains `entity`, `rating`, `trust`, `reviews`, and `meta`.
 - Entity page `reviews` contains top 10 reviews only.
@@ -504,7 +524,10 @@ Stage 19 - Web Home And Search, but only after explicit user confirmation and sc
 - Frontend Skeleton exists under `apps/web`.
 - Web uses Next.js App Router, strict TypeScript, root layout, global styles, TanStack Query provider, and a base API client.
 - Web components should not call `fetch` directly; use the API client/query layer.
-- Product search UI, entity pages, auth UI, ratings UI, and extension UI are not implemented yet.
+- Home search UI exists under `apps/web/src/features/home-search`.
+- Home search uses backend `GET /search/entities?query=...` through a feature API function and TanStack Query hook.
+- Home search renders result cards and a create-page hint when `canCreateEntity` is true.
+- Entity pages, entity creation flow, auth UI, ratings UI, and extension UI are not implemented yet.
 - Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
 - Rating scale is integer `1..5`.
 - One active rating exists per user per entity; repeated rating updates the existing record.
@@ -538,13 +561,15 @@ Stage 19 - Web Home And Search, but only after explicit user confirmation and sc
 - Stage 16 implemented Entity Page API Composition only.
 - Stage 17 implemented Extension API MVP only.
 - Stage 18 implemented Frontend Skeleton only.
-- Stage 19 should implement Web Home And Search only after user confirmation and exact scope confirmation.
+- Stage 19 implemented Web Home And Search only.
+- Stage 20 should implement Web Entity Creation MVP only after user confirmation and exact scope confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web Docker service runs the Next.js dev server. Extension Docker service still uses a placeholder command because the extension app does not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
 - Dev Compose now uses source bind mounts and Docker-managed dependency volumes; code changes should not require rebuilding images.
 - Keep the dev stack running for routine checks; do not rebuild, stop containers, or run `down -v` after every stage.
 - Prefer short targeted smoke checks against the already running API container.
+- API CORS for browser web access is configured by `CORS_ALLOWED_ORIGINS`; local development uses `http://localhost:3001`.
 - Use disposable isolated Compose projects only when isolation is explicitly needed.
 - Run `make build`, `make rebuild`, or the equivalent Docker Compose build command after Dockerfile/base image changes.
 - If dependency volumes become stale after package metadata changes, use `make clean` or `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml down -v --remove-orphans`.

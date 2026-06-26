@@ -2,6 +2,7 @@ export type NodeEnvironment = "development" | "production" | "test";
 
 export interface EnvironmentVariables {
   API_PORT: number;
+  CORS_ALLOWED_ORIGINS: string[];
   DATABASE_URL: string;
   JWT_ACCESS_TOKEN_TTL_SECONDS: number;
   JWT_SECRET: string;
@@ -10,6 +11,7 @@ export interface EnvironmentVariables {
 
 const DEFAULT_API_PORT = 3000;
 const DEFAULT_NODE_ENV: NodeEnvironment = "development";
+const DEFAULT_DEVELOPMENT_CORS_ALLOWED_ORIGINS = ["http://localhost:3001"];
 const DEFAULT_DATABASE_URL = "postgresql://reviewo:reviewo_password@localhost:5432/reviewo";
 const DEFAULT_JWT_ACCESS_TOKEN_TTL_SECONDS = 900;
 const DEFAULT_JWT_SECRET = "reviewo_development_jwt_secret_change_me";
@@ -18,6 +20,10 @@ const VALID_NODE_ENVIRONMENTS = new Set<NodeEnvironment>(["development", "produc
 export function validateEnvironment(config: Record<string, unknown>): EnvironmentVariables {
   const nodeEnvironment = parseNodeEnvironment(config["NODE_ENV"]);
   const apiPort = parsePort(config["API_PORT"]);
+  const corsAllowedOrigins = parseCorsAllowedOrigins(
+    config["CORS_ALLOWED_ORIGINS"],
+    nodeEnvironment
+  );
   const databaseUrl = parseDatabaseUrl(config["DATABASE_URL"]);
   const jwtSecret = parseJwtSecret(config["JWT_SECRET"], nodeEnvironment);
   const jwtAccessTokenTtlSeconds = parseJwtAccessTokenTtlSeconds(
@@ -26,11 +32,41 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
 
   return {
     API_PORT: apiPort,
+    CORS_ALLOWED_ORIGINS: corsAllowedOrigins,
     DATABASE_URL: databaseUrl,
     JWT_ACCESS_TOKEN_TTL_SECONDS: jwtAccessTokenTtlSeconds,
     JWT_SECRET: jwtSecret,
     NODE_ENV: nodeEnvironment
   };
+}
+
+function parseCorsAllowedOrigins(value: unknown, nodeEnvironment: NodeEnvironment): string[] {
+  if (value === undefined || value === null || value === "") {
+    return nodeEnvironment === "development" ? DEFAULT_DEVELOPMENT_CORS_ALLOWED_ORIGINS : [];
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("CORS_ALLOWED_ORIGINS must be a comma-separated list of URLs");
+  }
+
+  const origins = value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  for (const origin of origins) {
+    try {
+      const url = new URL(origin);
+
+      if (!["http:", "https:"].includes(url.protocol)) {
+        throw new Error("Invalid CORS origin protocol");
+      }
+    } catch {
+      throw new Error("CORS_ALLOWED_ORIGINS must contain valid HTTP or HTTPS URLs");
+    }
+  }
+
+  return origins;
 }
 
 function parseNodeEnvironment(value: unknown): NodeEnvironment {

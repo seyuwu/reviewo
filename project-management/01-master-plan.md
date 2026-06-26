@@ -344,7 +344,7 @@ Verification:
 - Basic page opens.
 - Lint and typecheck pass.
 
-### 19. ⬜ Web Home And Search
+### 19. ✅ Web Home And Search
 
 Goal: implement the main search UX.
 
