@@ -2,16 +2,16 @@
 
 ## Snapshot
 
-- Date: 2026-06-24
-- Current stage: Waiting for user confirmation before Stage 8
-- Stage status: Stage 7 completed
-- MVP readiness: 7%
-- Last completed stage: Stage 7 - Backend Error And Response Foundation
-- Next stage: Stage 8 - Users/Auth MVP Foundation
+- Date: 2026-06-26
+- Current stage: Waiting for user confirmation before Stage 9
+- Stage status: Stage 8 completed
+- MVP readiness: 8%
+- Last completed stage: Stage 8 - Users/Auth MVP Foundation
+- Next stage: Stage 9 - Entities Module
 
 ## Implemented Capabilities
 
-No product capabilities are implemented yet.
+The first product capability is implemented: users can register, sign in, and read the current authenticated user through the backend API.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -86,6 +86,18 @@ The backend error and response foundation is initialized:
 - Controllers do not manually build error responses.
 - No product API endpoints, DTOs, auth, repositories, or business logic have been added.
 
+The Users/Auth MVP foundation is initialized:
+
+- MVP auth approach is email/password with JWT access tokens.
+- `users.users` stores user profile/account state.
+- `auth.user_auth_identities` stores email auth identity and password hash.
+- Password hashing uses Node built-in `scrypt`.
+- `POST /auth/register` creates a user and returns an access token.
+- `POST /auth/login` verifies credentials and returns an access token.
+- `GET /auth/me` returns the authenticated user and requires a Bearer token.
+- JWT auth guard loads active users through the `users` module.
+- OAuth, refresh tokens, email verification, password reset, roles, and permissions are intentionally deferred.
+
 Roadmap update:
 
 - Docker Infrastructure was added as Stage 3.
@@ -133,3 +145,5 @@ Stage 5 created backend skeleton only. The only HTTP endpoint is `GET /health`.
 Stage 6 created database infrastructure only. Prisma migrations currently create schemas, not domain tables.
 
 Stage 7 created backend error and response infrastructure only. It did not add domain-specific errors, product API endpoints, DTOs, repositories, auth, or business logic.
+
+Stage 8 created the minimum users/auth foundation needed before ratings. It did not add entities, ratings, reviews, roles, permissions, OAuth, refresh tokens, or frontend/extension integration.

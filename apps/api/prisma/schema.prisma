@@ -4,4 +4,36 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  schemas  = ["auth", "users"]
+}
+
+model User {
+  id             String             @id @default(uuid()) @db.Uuid
+  email          String?            @unique
+  username       String?            @unique
+  displayName    String             @map("display_name")
+  avatarUrl      String?            @map("avatar_url")
+  status         String             @default("active")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  authIdentities UserAuthIdentity[]
+
+  @@map("users")
+  @@schema("users")
+}
+
+model UserAuthIdentity {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  provider       String
+  providerUserId String   @map("provider_user_id")
+  passwordHash   String?  @map("password_hash")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("user_auth_identities")
+  @@schema("auth")
 }

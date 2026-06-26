@@ -288,3 +288,53 @@
   - Validation errors now use centralized machine-readable formatting.
   - Controllers do not need to manually build repeated error responses.
   - No domain-specific errors, DTOs, product endpoints, repositories, auth, or business logic were added.
+
+## 2026-06-26 - Stage 8 - Users/Auth MVP Foundation
+
+- Stage: 8
+- Summary: Added the minimum users/auth foundation with email/password registration, login, JWT access tokens, current user endpoint, and protected endpoint behavior.
+- Created modules: none.
+- Changed modules:
+  - `AuthModule`
+  - `UsersModule`
+  - Prisma database schema
+  - Docker API service configuration
+- Created files:
+  - `apps/api/prisma/migrations/20260626224500_add_users_auth_foundation/migration.sql`
+  - `apps/api/src/common/decorators/current-user.decorator.ts`
+  - `apps/api/src/common/interfaces/authenticated-request.ts`
+  - `apps/api/src/modules/auth/controllers/auth.controller.ts`
+  - `apps/api/src/modules/auth/dto/auth-response.dto.ts`
+  - `apps/api/src/modules/auth/dto/current-user.dto.ts`
+  - `apps/api/src/modules/auth/dto/login.dto.ts`
+  - `apps/api/src/modules/auth/dto/register.dto.ts`
+  - `apps/api/src/modules/auth/guards/jwt-auth.guard.ts`
+  - `apps/api/src/modules/auth/repositories/auth.repository.ts`
+  - `apps/api/src/modules/auth/services/auth.service.ts`
+  - `apps/api/src/modules/auth/services/jwt-token.service.ts`
+  - `apps/api/src/modules/auth/services/password-hasher.service.ts`
+  - `apps/api/src/modules/users/repositories/users.repository.ts`
+  - `apps/api/src/modules/users/services/users.service.ts`
+- Changed files:
+  - `.env.example`
+  - `apps/api/prisma/schema.prisma`
+  - `apps/api/src/config/environment.config.ts`
+  - `apps/api/src/config/environment.validation.ts`
+  - `apps/api/src/modules/auth/auth.module.ts`
+  - `apps/api/src/modules/users/users.module.ts`
+  - `docker-compose.yml`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Removed files:
+  - `apps/api/src/common/decorators/.gitkeep`
+- Important architectural changes:
+  - MVP auth approach is email/password with JWT access tokens.
+  - `users` owns user profile data and `auth` owns auth identity data.
+  - Password hashes use Node `scrypt` with random salts.
+  - `GET /auth/me` is protected by the JWT guard.
+  - Docker API port mapping now follows `API_PORT`.
+  - OAuth, refresh tokens, email verification, password reset, roles, and permissions are deferred.

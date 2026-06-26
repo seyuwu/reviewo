@@ -476,3 +476,84 @@ This prepares consistent request validation behavior before DTOs are introduced,
 - Use the default Nest validation error response.
 - Format validation errors inside controllers.
 - Delay validation formatting until the first product endpoint.
+
+## 2026-06-26 - MVP Auth Approach
+
+### Problem
+
+Stage 8 needs a working authentication foundation, but OAuth, refresh tokens, sessions, roles, and permissions would expand the MVP scope.
+
+### Decision
+
+Use email/password authentication with a signed JWT access token for MVP.
+
+### Reason
+
+This supports the backend, future web app, and browser extension with a small contract and avoids premature session/OAuth infrastructure. Refresh tokens, OAuth providers, email verification, password reset, roles, and permissions can be added later without changing the current module boundaries.
+
+### Alternatives
+
+- Server-side sessions in PostgreSQL or Redis.
+- OAuth-only authentication.
+- Passwordless magic links.
+- Add refresh tokens immediately.
+
+## 2026-06-26 - Users/Auth Data Ownership
+
+### Problem
+
+Registration touches both user profile data and authentication identity data, but the modular monolith must preserve domain ownership.
+
+### Decision
+
+`users` owns `users.users`; `auth` owns `auth.user_auth_identities`. `AuthService` orchestrates registration and uses `UsersService` as the public user module boundary.
+
+### Reason
+
+This keeps user profile persistence and auth identity persistence separated while still allowing a complete MVP registration flow.
+
+### Alternatives
+
+- Put all account/auth data in one module.
+- Let AuthModule write directly to users repositories.
+- Delay registration until a more advanced account module exists.
+
+## 2026-06-26 - Password Hashing Through Node Crypto
+
+### Problem
+
+MVP password storage needs secure hashing, but adding native password hashing dependencies can complicate Docker and Windows development early.
+
+### Decision
+
+Use Node's built-in `scrypt` with per-password random salt for Stage 8 password hashing.
+
+### Reason
+
+This avoids premature external dependencies while keeping password hashes non-reversible and versioned for future migration.
+
+### Alternatives
+
+- Add `bcrypt`.
+- Add `argon2`.
+- Delegate all auth to an external provider.
+
+## 2026-06-26 - API Port Mapping Follows `API_PORT`
+
+### Problem
+
+When `API_PORT` is overridden, the Nest API listens on the overridden container port, but Compose previously mapped the host port to container port `3000`.
+
+### Decision
+
+Map the API service as `${API_PORT}:${API_PORT}` in Docker Compose.
+
+### Reason
+
+This keeps app runtime configuration and Docker port mapping aligned and allows isolated smoke tests or local development to use alternate API ports.
+
+### Alternatives
+
+- Keep the container port hardcoded to `3000`.
+- Split host and container API port variables.
+- Force the API to always listen on `3000` in containers.

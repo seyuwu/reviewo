@@ -135,7 +135,7 @@ Verification:
 - Errors are returned in one format.
 - Controllers do not manually build error responses.
 
-### 8. ⬜ Users/Auth MVP Foundation
+### 8. ✅ Users/Auth MVP Foundation
 
 Goal: create the minimum user model needed for ratings.
 

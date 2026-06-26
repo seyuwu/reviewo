@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 7 - Backend Error And Response Foundation is completed.
+Stage 8 - Users/Auth MVP Foundation is completed.
 
-Product capabilities are not implemented yet. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, and centralized backend error/validation response infrastructure.
+The first product capability is implemented: users can register, sign in, and read the current authenticated user through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, and Users/Auth MVP foundation.
 
 ## Already Done
 
@@ -148,15 +148,43 @@ Product capabilities are not implemented yet. The project currently has project 
   - Docker Prisma migration deploy inside Docker Compose network
   - Docker API `GET /health`
   - Docker API normalized 404 response for `/missing`
+- Stage 8 Users/Auth MVP foundation was added:
+  - `apps/api/prisma/migrations/20260626224500_add_users_auth_foundation/migration.sql`
+  - `apps/api/prisma/schema.prisma` models for `users.users` and `auth.user_auth_identities`
+  - `apps/api/src/common/decorators/current-user.decorator.ts`
+  - `apps/api/src/common/interfaces/authenticated-request.ts`
+  - `apps/api/src/modules/auth/controllers/auth.controller.ts`
+  - `apps/api/src/modules/auth/dto/*`
+  - `apps/api/src/modules/auth/guards/jwt-auth.guard.ts`
+  - `apps/api/src/modules/auth/repositories/auth.repository.ts`
+  - `apps/api/src/modules/auth/services/*`
+  - `apps/api/src/modules/users/repositories/users.repository.ts`
+  - `apps/api/src/modules/users/services/users.service.ts`
+  - JWT environment validation/configuration
+  - Docker API port mapping aligned with `API_PORT`
+- Stage 8 was verified with:
+  - `corepack pnpm --filter @reviewo/api db:generate`
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - Docker Prisma migration deploy inside Docker Compose network
+  - Docker API `GET /health`
+  - Docker API `POST /auth/register`
+  - Docker API `POST /auth/login`
+  - Docker API `GET /auth/me` with Bearer token
+  - Docker API unauthorized response for `GET /auth/me`
+  - Alternate `API_PORT` Docker health smoke
 
 ## Remaining Work
 
-- Stage 8 - Users/Auth MVP Foundation.
-- Do not start Stage 8 until the user confirms the MVP auth approach.
+- Stage 9 - Entities Module.
+- Do not start Stage 9 until the user confirms.
 
 ## Next Stage
 
-Stage 8 - Users/Auth MVP Foundation, but only after explicit user confirmation and MVP auth approach approval.
+Stage 9 - Entities Module, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -173,16 +201,22 @@ Stage 8 - Users/Auth MVP Foundation, but only after explicit user confirmation a
 - Do not add API DTOs to `@reviewo/types` until API contracts are approved.
 - Do not add generic helpers to `@reviewo/shared` without real duplication.
 - Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
-- Backend currently exposes only `GET /health`.
+- Backend currently exposes `GET /health` and minimal auth endpoints under `/auth`.
 - `GET /health` now includes database connectivity status.
 - Backend errors now use a centralized infrastructure response shape.
 - Global exception filter is registered in API bootstrap.
 - Validation errors are prepared through a centralized exception factory, but no product DTOs exist yet.
-- Backend domain modules are empty NestJS module shells only.
-- Do not add DTOs, repositories, entities, auth, Swagger, or business logic without the relevant stage.
-- Prisma schema intentionally has no domain models yet.
-- Initial Prisma migration creates PostgreSQL schemas only, not tables.
+- Users/Auth MVP uses email/password with JWT access tokens.
+- `POST /auth/register`, `POST /auth/login`, and `GET /auth/me` exist.
+- `GET /auth/me` requires Bearer token authentication.
+- OAuth, refresh tokens, email verification, password reset, roles, and permissions are intentionally deferred.
+- Other backend domain modules are empty NestJS module shells only.
+- Do not add DTOs, repositories, entities, Swagger, or business logic outside the relevant stage.
+- Prisma schema now has only Users/Auth models.
+- Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates only `users.users` and `auth.user_auth_identities`.
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
+- Stage 9 should implement entity domain only. MVP entity model uses `parent_id`, `entity_links`, and `canonical_url`; `entity_relations` remains deferred.
+- URL normalization has a dedicated Stage 10 and should not be fully implemented in Stage 9 unless explicitly approved.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
 - Current Windows environment does not have `make` installed.

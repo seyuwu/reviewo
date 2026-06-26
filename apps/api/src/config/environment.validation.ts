@@ -3,22 +3,32 @@ export type NodeEnvironment = "development" | "production" | "test";
 export interface EnvironmentVariables {
   API_PORT: number;
   DATABASE_URL: string;
+  JWT_ACCESS_TOKEN_TTL_SECONDS: number;
+  JWT_SECRET: string;
   NODE_ENV: NodeEnvironment;
 }
 
 const DEFAULT_API_PORT = 3000;
 const DEFAULT_NODE_ENV: NodeEnvironment = "development";
 const DEFAULT_DATABASE_URL = "postgresql://reviewo:reviewo_password@localhost:5432/reviewo";
+const DEFAULT_JWT_ACCESS_TOKEN_TTL_SECONDS = 900;
+const DEFAULT_JWT_SECRET = "reviewo_development_jwt_secret_change_me";
 const VALID_NODE_ENVIRONMENTS = new Set<NodeEnvironment>(["development", "production", "test"]);
 
 export function validateEnvironment(config: Record<string, unknown>): EnvironmentVariables {
   const nodeEnvironment = parseNodeEnvironment(config["NODE_ENV"]);
   const apiPort = parsePort(config["API_PORT"]);
   const databaseUrl = parseDatabaseUrl(config["DATABASE_URL"]);
+  const jwtSecret = parseJwtSecret(config["JWT_SECRET"], nodeEnvironment);
+  const jwtAccessTokenTtlSeconds = parseJwtAccessTokenTtlSeconds(
+    config["JWT_ACCESS_TOKEN_TTL_SECONDS"]
+  );
 
   return {
     API_PORT: apiPort,
     DATABASE_URL: databaseUrl,
+    JWT_ACCESS_TOKEN_TTL_SECONDS: jwtAccessTokenTtlSeconds,
+    JWT_SECRET: jwtSecret,
     NODE_ENV: nodeEnvironment
   };
 }
@@ -69,4 +79,42 @@ function parseDatabaseUrl(value: unknown): string {
   }
 
   return value;
+}
+
+function parseJwtSecret(value: unknown, nodeEnvironment: NodeEnvironment): string {
+  if (value === undefined || value === null || value === "") {
+    if (nodeEnvironment === "production") {
+      throw new Error("JWT_SECRET must be set in production");
+    }
+
+    return DEFAULT_JWT_SECRET;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("JWT_SECRET must be a string");
+  }
+
+  if (nodeEnvironment === "production" && value.startsWith("change_me")) {
+    throw new Error("JWT_SECRET must not use a placeholder value in production");
+  }
+
+  if (value.length < 32) {
+    throw new Error("JWT_SECRET must be at least 32 characters long");
+  }
+
+  return value;
+}
+
+function parseJwtAccessTokenTtlSeconds(value: unknown): number {
+  if (value === undefined || value === null || value === "") {
+    return DEFAULT_JWT_ACCESS_TOKEN_TTL_SECONDS;
+  }
+
+  const ttlSeconds = Number(value);
+
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds < 60 || ttlSeconds > 86400) {
+    throw new Error("JWT_ACCESS_TOKEN_TTL_SECONDS must be an integer between 60 and 86400");
+  }
+
+  return ttlSeconds;
 }
