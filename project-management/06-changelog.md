@@ -577,3 +577,34 @@
   - API dev command runs `pnpm install --frozen-lockfile --store-dir /pnpm/store` before starting the dev server to sync dependency volumes.
   - `make dev` runs `docker compose up` without forcing `--build`.
   - Rebuilds are now explicit through `make build` or `make rebuild`.
+
+## 2026-06-27 - Stage 15 - Search Module MVP
+
+- Stage: 15
+- Summary: Added the MVP Search Module with a public home-page entity search endpoint, PostgreSQL-backed entity lookup through `EntitiesPort`, and a create-entity fallback hint.
+- Created modules: none.
+- Changed modules:
+  - `SearchModule`
+  - `EntitiesModule` public port
+- Created files:
+  - `apps/api/src/modules/search/controllers/search.controller.ts`
+  - `apps/api/src/modules/search/dto/search-entities-query.dto.ts`
+  - `apps/api/src/modules/search/dto/search-entities-response.dto.ts`
+  - `apps/api/src/modules/search/services/search.service.ts`
+- Changed files:
+  - `apps/api/src/modules/entities/interfaces/entities.port.ts`
+  - `apps/api/src/modules/search/search.module.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Search Module exposes `GET /search/entities?query=...`.
+  - Search Module uses `EntitiesPort.searchEntities(query)`.
+  - Search Module does not use `EntitiesRepository` or Prisma directly.
+  - Search response includes `results` and `canCreateEntity`.
+  - `canCreateEntity` is a fallback hint only; Search Module does not create entities.
+  - Existing `GET /entities/search` remains available.
+  - OpenSearch, indexing workers, frontend search UI, extension search flow, and entity page composition were not added.

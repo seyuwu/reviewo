@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 15
-- Stage status: Stage 14 completed
-- MVP readiness: 14%
-- Last completed stage: Stage 14 - Backend Domain Events MVP
-- Next stage: Stage 15 - Search Module MVP
+- Current stage: Waiting for user confirmation before Stage 16
+- Stage status: Stage 15 completed
+- MVP readiness: 15%
+- Last completed stage: Stage 15 - Search Module MVP
+- Next stage: Stage 16 - Entity Page API Composition
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities through the dedicated Search Module, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -64,7 +64,7 @@ The backend skeleton is initialized:
 - Standard Nest logger is wrapped by `AppLogger` for future replacement.
 - Common infrastructure folders exist for filters, interceptors, guards, pipes, decorators, exceptions, and logger.
 - Future domain modules exist as empty NestJS module shells.
-- No search, moderation, recommendation, Swagger, frontend, or extension product behavior has been added.
+- No moderation, recommendation, Swagger, frontend, or extension product behavior has been added.
 
 The database infrastructure is initialized:
 
@@ -76,7 +76,7 @@ The database infrastructure is initialized:
 - `PrismaService` owns database connection lifecycle and shutdown.
 - Seed script structure exists without seed data.
 - Health endpoint includes a database connectivity check.
-- No trust, search, moderation, recommendation, or extension tables have been added. Stage 13 intentionally does not persist trust scores.
+- No trust, search, moderation, recommendation, or extension tables have been added. Stage 13 intentionally does not persist trust scores; Stage 15 intentionally does not add search tables.
 
 The backend error and response foundation is initialized:
 
@@ -110,7 +110,7 @@ The Entity MVP foundation is initialized:
 - `POST /entities` creates an entity and requires JWT authentication.
 - `GET /entities/:id` returns an entity by id.
 - `GET /entities/search` performs simple PostgreSQL-backed search.
-- `EntitiesPort` exists as the future public module interface.
+- `EntitiesPort` exists as the public module interface for entity lookup and search.
 
 The URL Normalization MVP is initialized:
 
@@ -171,6 +171,17 @@ The backend domain events foundation is initialized:
 - No external broker, queue, outbox table, retry mechanism, or event versioning has been added.
 - Rating aggregates remain transaction-local in Ratings Module.
 - Trust confidence remains on-demand in Trust Module.
+
+The Search MVP foundation is initialized:
+
+- `GET /search/entities?query=...` provides the home-page entity search endpoint.
+- Search results are backed by the Entity Module PostgreSQL search.
+- Search supports title/slug/canonical URL matching through `EntitiesPort`.
+- URL-aware search reuses Entity Module URL normalization behavior.
+- Search response includes `results` and `canCreateEntity`.
+- `canCreateEntity` is only a fallback hint for clients; Search Module does not create entities.
+- Search Module does not import or use `EntitiesRepository`.
+- OpenSearch is intentionally not implemented.
 
 Roadmap update:
 
@@ -233,3 +244,5 @@ Stage 12 created reviews and review likes only. It did not add dislikes, replies
 Stage 13 created MVP trust confidence only. It did not add trust persistence, user reputation, account age, anti-fraud, text analysis, IP checks, ML, external services, behavioral signals, badges, user trust, review trust, moderation, frontend, or extension flow.
 
 Stage 14 created backend domain events infrastructure and publish points only. It did not add external brokers, queues, outbox persistence, retries, event versioning, asynchronous handlers, or move aggregate/trust behavior into event handlers.
+
+Stage 15 created the Search Module MVP only. It did not add OpenSearch, frontend search UI, extension search flow, indexing workers, entity creation business logic inside Search Module, or entity page API composition.

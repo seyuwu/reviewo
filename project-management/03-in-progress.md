@@ -36,40 +36,43 @@ Stage 14 - Backend Domain Events MVP is completed.
 
 Infrastructure optimization - Docker Dev Volumes is completed.
 
-Stage 15 - Search Module MVP is next, pending explicit user confirmation.
+Stage 15 - Search Module MVP is completed.
+
+Stage 16 - Entity Page API Composition is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Search Module MVP after user confirmation.
+Prepare Entity Page API Composition after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 15 implementation.
+To be confirmed before Stage 16 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 15 implementation.
+To be confirmed before Stage 16 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 15 should implement Search Module MVP only after user confirmation.
-- Search Module should not own entity creation business logic.
-- Search should remain PostgreSQL-backed unless a future stage explicitly introduces OpenSearch.
+- Stage 16 should compose entity page data only after user confirmation.
+- Stage 16 requires exact response DTO confirmation before implementation.
+- Entity page composition should use public module interfaces, not foreign repositories.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 15.
-- [ ] Describe Stage 15 goal, files, and architectural decisions before editing.
-- [ ] Implement Search Module MVP only.
-- [ ] Verify backend lint/typecheck/build and search behavior.
+- [ ] Wait for user confirmation to start Stage 16.
+- [ ] Confirm exact response DTO for entity page composition.
+- [ ] Describe Stage 16 goal, files, and architectural decisions before editing.
+- [ ] Implement Entity Page API Composition only.
+- [ ] Verify backend lint/typecheck/build and composition behavior.
 
 ## Current Progress
 
-Stage 14 is complete. Stage 15 has not started.
+Stage 15 is complete. Stage 16 has not started.
 
 ## Open Questions
 
-No active questions until Stage 15 starts.
+Stage 16 requires confirmation of the exact response DTO before implementation.
 
 ## Blockers
 
@@ -77,5 +80,6 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 15.
-- Do not add search endpoints, search repositories, OpenSearch, frontend search flow, or entity creation fallback behavior until Stage 15 is explicitly started.
+- Wait for user confirmation before Stage 16.
+- Confirm the exact entity page composition response DTO.
+- Do not add entity page composition endpoint, frontend logic, or extension behavior until Stage 16 is explicitly started and response DTO is confirmed.

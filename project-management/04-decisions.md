@@ -1100,3 +1100,63 @@ This avoids weakening consistency or adding speculative handlers before there is
 - Move rating aggregates to event handlers immediately.
 - Persist trust scores and recalculate them from events immediately.
 - Add placeholder subscribers with no behavior.
+
+## 2026-06-27 - Search Module Uses EntitiesPort
+
+### Problem
+
+The MVP needs a dedicated home-page search endpoint, but entity search rules and URL normalization already belong to the Entity Module.
+
+### Decision
+
+Search Module depends on `EntitiesPort.searchEntities(query)` and does not import or use `EntitiesRepository`.
+
+### Reason
+
+This keeps Search as an application-facing module while preserving Entity Module ownership of entity lookup rules and persistence.
+
+### Alternatives
+
+- Query `entities.entities` directly from Search Module.
+- Move entity repository access into Search Module.
+- Keep only `GET /entities/search` and skip Search Module.
+
+## 2026-06-27 - Search Fallback Is A Hint Only
+
+### Problem
+
+The home page needs a fallback flow for creating a new page when no entity is found, but Search Module must not own entity creation business logic.
+
+### Decision
+
+`GET /search/entities` returns `canCreateEntity: true` when the result list is empty. It does not create entities or prepare creation DTOs.
+
+### Reason
+
+This gives clients enough information for the MVP fallback UX while keeping creation inside Entity Module.
+
+### Alternatives
+
+- Let Search Module create missing entities.
+- Return a generated create-entity payload from Search Module.
+- Omit fallback information from the API.
+
+## 2026-06-27 - Search Remains PostgreSQL-Backed
+
+### Problem
+
+The roadmap includes more advanced search later, but MVP search should stay simple and rely on existing persistence.
+
+### Decision
+
+Search Module reuses the existing PostgreSQL-backed Entity Module search. OpenSearch, indexing workers, and search-specific persistence are not added in Stage 15.
+
+### Reason
+
+This keeps the MVP small and avoids premature infrastructure before search requirements are validated.
+
+### Alternatives
+
+- Add OpenSearch immediately.
+- Add a dedicated search index table.
+- Add asynchronous indexing from domain events in Stage 15.

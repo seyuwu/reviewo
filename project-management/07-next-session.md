@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 14 - Backend Domain Events MVP is completed.
+Stage 15 - Search Module MVP is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The backend now also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, and Backend Domain Events MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities through the dedicated Search Module, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The backend now also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, and Search MVP foundation.
 
 ## Already Done
 
@@ -341,15 +341,38 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker API review update through repeated `PUT`
   - Docker API `GET /reviews/entities/:entityId`
   - Docker API `GET /trust/entities/:entityId`
+- Stage 15 Search Module MVP was added:
+  - `apps/api/src/modules/search/controllers/search.controller.ts`
+  - `apps/api/src/modules/search/dto/search-entities-query.dto.ts`
+  - `apps/api/src/modules/search/dto/search-entities-response.dto.ts`
+  - `apps/api/src/modules/search/services/search.service.ts`
+  - `apps/api/src/modules/search/search.module.ts`
+  - `apps/api/src/modules/entities/interfaces/entities.port.ts` now exposes public entity search
+- Stage 15 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed search/entity port files
+  - Docker Prisma migration deploy inside Docker Compose network
+  - Docker API `GET /health`
+  - Docker API `POST /auth/register`
+  - Docker API `POST /entities`
+  - Docker API `GET /search/entities?query=...` by title
+  - Docker API `GET /search/entities?query=...` by normalized canonical URL
+  - Docker API `GET /search/entities?query=...` empty result with `canCreateEntity: true`
+  - Docker API validation error for empty search query
+  - Docker API legacy `GET /entities/search`
 
 ## Remaining Work
 
-- Stage 15 - Search Module MVP.
-- Do not start Stage 15 until the user confirms.
+- Stage 16 - Entity Page API Composition.
+- Do not start Stage 16 until the user confirms and the exact response DTO is agreed.
 
 ## Next Stage
 
-Stage 15 - Search Module MVP, but only after explicit user confirmation.
+Stage 16 - Entity Page API Composition, but only after explicit user confirmation and response DTO confirmation.
 
 ## Documents To Read First
 
@@ -366,7 +389,7 @@ Stage 15 - Search Module MVP, but only after explicit user confirmation.
 - Do not add API DTOs to `@reviewo/types` until API contracts are approved.
 - Do not add generic helpers to `@reviewo/shared` without real duplication.
 - Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
-- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, minimal entity endpoints under `/entities`, minimal rating endpoints under `/ratings`, minimal review endpoints under `/reviews`, and minimal trust endpoint under `/trust`.
+- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, minimal entity endpoints under `/entities`, minimal search endpoint under `/search`, minimal rating endpoints under `/ratings`, minimal review endpoints under `/reviews`, and minimal trust endpoint under `/trust`.
 - `GET /health` now includes database connectivity status.
 - Backend errors now use a centralized infrastructure response shape.
 - Global exception filter is registered in API bootstrap.
@@ -383,6 +406,12 @@ Stage 15 - Search Module MVP, but only after explicit user confirmation.
 - URL normalization canonicalizes to `https`, lowercases hostnames, removes one leading `www`, removes hash fragments, removes non-root trailing slashes, removes basic tracking params, and sorts preserved query params.
 - URL-aware search supports protocol-less URL input if it has a likely hostname.
 - Equivalent canonical URLs return `409 CONFLICT` from `POST /entities`.
+- Search MVP supports `GET /search/entities?query=...`.
+- Search response contains `query`, `results`, and `canCreateEntity`.
+- `canCreateEntity` is only a fallback hint; Search Module must not create entities.
+- Search Module uses `EntitiesPort.searchEntities(query)` and must not access entity repositories directly.
+- Existing `GET /entities/search` remains available.
+- OpenSearch, indexing workers, frontend search UI, extension search flow, and entity page API composition are not implemented.
 - Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
 - Rating scale is integer `1..5`.
 - One active rating exists per user per entity; repeated rating updates the existing record.
@@ -413,7 +442,7 @@ Stage 15 - Search Module MVP, but only after explicit user confirmation.
 - Prisma schema now has Users/Auth, Entity MVP, Ratings MVP, and Reviews MVP models only. Trust MVP adds no Prisma models.
 - Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`; Stage 11 migration creates `ratings.ratings` and `ratings.rating_aggregates`; Stage 12 migration creates `reviews.reviews` and `reviews.review_votes`.
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
-- Stage 15 should implement Search Module MVP only after user confirmation. Search should stay PostgreSQL-backed unless a future stage explicitly introduces OpenSearch, and it should not own entity creation business logic.
+- Stage 16 should implement Entity Page API Composition only after user confirmation and exact response DTO confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

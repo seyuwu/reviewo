@@ -274,7 +274,7 @@ Verification:
 - Events work inside the monolith.
 - Future event bus migration does not require domain rewrites.
 
-### 15. ⬜ Search Module MVP
+### 15. ✅ Search Module MVP
 
 Goal: implement entity search through PostgreSQL.
 
@@ -283,13 +283,14 @@ Result:
 - `search` module.
 - Search by title and canonical URL.
 - Basic indexes.
-- Endpoint for the home page.
-- Fallback flow for creating a new page.
+- `GET /search/entities` endpoint for the home page.
+- Fallback hint for creating a new page when no results are found.
 
 Verification:
 
 - User can find an entity.
 - Search does not contain entity creation business logic.
+- Search Module uses `EntitiesPort`, not entity repositories.
 
 ### 16. ⬜ Entity Page API Composition
 
