@@ -19,3 +19,9 @@ export interface LoginInput {
 export interface RegisterInput extends LoginInput {
   displayName: string;
 }
+
+export interface StoredAuthSession {
+  accessToken: string;
+  displayName: string;
+  email: string | null;
+}

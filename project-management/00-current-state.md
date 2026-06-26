@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 21
-- Stage status: Stage 20 completed
-- MVP readiness: 20%
-- Last completed stage: Stage 20 - Web Entity Creation MVP
-- Next stage: Stage 21 - Web Entity Page MVP
+- Current stage: Waiting for user confirmation before Stage 22
+- Stage status: Stage 21 completed
+- MVP readiness: 21%
+- Last completed stage: Stage 21 - Web Entity Page MVP
+- Next stage: Stage 22 - Web Profile MVP
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, and a minimal authenticated entity creation flow.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, and a base entity page with rating/review interactions.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -214,7 +214,7 @@ The Frontend Skeleton is initialized:
 - Frontend uses `NEXT_PUBLIC_API_BASE_URL` with a local fallback.
 - Components do not call `fetch` directly.
 - Docker development web service runs the Next.js dev server on `WEB_PORT`.
-- Full entity pages, full auth UI, extension UI, frontend business logic, and shared API DTO exports are intentionally not implemented yet.
+- Full auth UI, extension UI, frontend business logic, and shared API DTO exports are intentionally not implemented yet.
 
 The Web Home And Search MVP is initialized:
 
@@ -222,21 +222,33 @@ The Web Home And Search MVP is initialized:
 - Search runs live through TanStack Query.
 - Search requests go through feature API code and the base API client.
 - Search results are rendered as result cards.
-- Missing entity responses show a create-page hint without implementing the creation flow.
+- Missing entity responses show a create-page hint that links to the creation flow.
 - Frontend search code is scoped under `apps/web/src/features/home-search`.
 - Browser access from web to API is supported through `CORS_ALLOWED_ORIGINS`.
-- Entity creation flow, entity detail pages, auth UI, ratings UI, extension UI, and frontend search business logic are intentionally not implemented.
+- Full auth UI, ratings UI outside entity pages, extension UI, and frontend search business logic are intentionally not implemented.
 
 The Web Entity Creation MVP is initialized:
 
 - `/entities/new` contains a short entity creation form.
-- The creation form includes a minimal register/login block only for creation.
+- The creation form uses the shared minimal web auth panel.
 - Creation uses backend `POST /entities` with a JWT access token.
 - Created entities redirect to `/entities/:id`.
-- `/entities/:id` is a minimal placeholder route until Stage 21.
+- Created entities redirect to the base web entity page.
 - Home search missing-result hint links to `/entities/new?query=...`.
 - Backend still validates submitted entity data and normalizes canonical URLs.
-- Full auth UI, full entity page UI, ratings UI, reviews UI, and extension UI are intentionally not implemented.
+- Full auth UI, ratings UI outside entity pages, reviews UI outside entity pages, and extension UI are intentionally not implemented.
+
+The Web Entity Page MVP is initialized:
+
+- `/entities/:id` renders a base entity page.
+- Entity page primary data comes from backend `GET /entities/:entityId/page`.
+- Entity page shows entity header, average rating, vote count, trust confidence, review count, rating distribution, and top reviews.
+- Entity page includes a rating form using `PUT /ratings/entities/:entityId/my-rating`.
+- Entity page includes a review form using `PUT /reviews/entities/:entityId/my-review`.
+- Entity page reads current user rating/review when a minimal web auth session exists.
+- Entity page refreshes composed data through TanStack Query invalidation after rating/review updates.
+- Minimal web auth is shared between entity creation and entity page interactions.
+- Review pagination, review likes UI, recommendations, moderation, profile UI, full auth UI, and extension UI are intentionally not implemented.
 
 Roadmap update:
 
@@ -311,3 +323,5 @@ Stage 18 created the frontend skeleton only. It did not add product search UI, e
 Stage 19 created the web home/search UX only. It did not add entity creation flow, entity detail pages, auth UI, ratings UI, extension UI, or frontend search business logic.
 
 Stage 20 created the web entity creation flow only. It did not add full auth UI, full entity page UI, ratings UI, reviews UI, or extension UI.
+
+Stage 21 created the base web entity page only. It did not add review pagination, review likes UI, recommendations, moderation, profile UI, full auth UI, or extension UI.

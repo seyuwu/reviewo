@@ -793,3 +793,44 @@
   - Backend remains authoritative for validation, normalization, slug generation, and duplicate checks.
   - `/entities/:id` is a placeholder route until Stage 21.
   - Full auth UI, full entity page UI, ratings UI, reviews UI, and extension UI were not added.
+
+## 2026-06-27 - Stage 21 - Web Entity Page MVP
+
+- Stage: 21
+- Summary: Replaced the placeholder entity route with a base web entity page backed by the composition API, including rating/trust/reviews display and authenticated rating/review forms.
+- Created modules:
+  - `Auth` frontend feature
+  - `EntityPage` frontend feature
+- Changed modules:
+  - `@reviewo/web` entity routing
+  - `EntityCreation` frontend feature
+- Created files:
+  - `apps/web/src/features/auth/api/authenticate.ts`
+  - `apps/web/src/features/auth/components/minimal-auth-panel.tsx`
+  - `apps/web/src/features/auth/hooks/use-auth-session.ts`
+  - `apps/web/src/features/auth/lib/auth-session-storage.ts`
+  - `apps/web/src/features/auth/types/auth.ts`
+  - `apps/web/src/features/entity-page/api/entity-page.ts`
+  - `apps/web/src/features/entity-page/components/entity-page-view.tsx`
+  - `apps/web/src/features/entity-page/types/entity-page.ts`
+- Changed files:
+  - `apps/web/src/app/entities/[entityId]/page.tsx`
+  - `apps/web/src/app/globals.css`
+  - `apps/web/src/features/entity-creation/components/entity-creation-form.tsx`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Removed files:
+  - `apps/web/src/features/entity-creation/api/authenticate.ts`
+  - `apps/web/src/features/entity-creation/types/auth.ts`
+- Important architectural changes:
+  - Entity page primary data comes from backend `GET /entities/:entityId/page`.
+  - Entity page displays entity header, rating summary, trust confidence, review count, rating distribution, and top reviews.
+  - Rating form writes through `PUT /ratings/entities/:entityId/my-rating`.
+  - Review form writes through `PUT /reviews/entities/:entityId/my-review`.
+  - Minimal web auth moved into `apps/web/src/features/auth` and is reused by entity creation and entity page interactions.
+  - Frontend does not recalculate rating aggregates or trust confidence.
+  - Review pagination, review likes UI, recommendations, moderation, profile UI, full auth UI, and extension UI were not added.

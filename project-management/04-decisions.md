@@ -1500,3 +1500,63 @@ This preserves the user flow after creation without prematurely implementing rat
 - Redirect back to home after creation.
 - Implement the full entity page in Stage 20.
 - Redirect to a route that returns 404 until Stage 21.
+
+## 2026-06-27 - Web Entity Page Uses Composition API
+
+### Problem
+
+The web entity page needs entity, rating, trust, reviews, and review count data without duplicating backend composition logic in the frontend.
+
+### Decision
+
+Use `GET /entities/:entityId/page` as the primary data source for the web entity page.
+
+### Reason
+
+This preserves backend ownership of page composition and keeps the frontend focused on rendering and interaction state.
+
+### Alternatives
+
+- Call entity, rating, trust, and review endpoints independently from the page.
+- Duplicate page composition rules in frontend code.
+- Add a Next.js API route as an extra composition layer.
+
+## 2026-06-27 - Minimal Web Auth Is Shared Across Interaction Flows
+
+### Problem
+
+Entity creation, rating, and review writes all require JWT authentication, but a full profile/auth product surface is not part of Stage 21.
+
+### Decision
+
+Move the minimal register/login panel and local auth session handling into `apps/web/src/features/auth`, then reuse it from entity creation and entity page interactions.
+
+### Reason
+
+This removes duplicated auth UI and storage code while keeping auth intentionally lightweight until the dedicated profile/auth stages.
+
+### Alternatives
+
+- Keep separate auth implementations per feature.
+- Add a full global auth shell in Stage 21.
+- Use temporary bearer-token fields for rating/review forms.
+
+## 2026-06-27 - Rating And Review Forms Use Backend Write APIs
+
+### Problem
+
+The entity page needs user interaction forms, but rating aggregate updates and review invariants belong to backend modules.
+
+### Decision
+
+The web page writes ratings through `PUT /ratings/entities/:entityId/my-rating` and reviews through `PUT /reviews/entities/:entityId/my-review`, then invalidates TanStack Query data for the composed entity page and current user state.
+
+### Reason
+
+This keeps aggregate recalculation, one-rating-per-user, and one-review-per-user rules in the backend while giving the web page fresh data after writes.
+
+### Alternatives
+
+- Calculate rating aggregates optimistically in frontend state.
+- Append reviews locally without refetching composition data.
+- Add frontend-specific write endpoints.

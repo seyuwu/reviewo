@@ -375,7 +375,7 @@ Verification:
 - User can create an entity in a minimal number of steps.
 - Backend validates all submitted data.
 
-### 21. ⬜ Web Entity Page MVP
+### 21. ✅ Web Entity Page MVP
 
 Goal: implement the base entity page.
 
