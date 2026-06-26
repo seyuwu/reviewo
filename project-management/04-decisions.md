@@ -1220,3 +1220,83 @@ This keeps trust calculation owned by Trust Module and preserves the public-inte
 - Inject `TrustService` directly.
 - Recalculate confidence in the composition layer.
 - Omit trust from the entity page response.
+
+## 2026-06-27 - Extension API As A Thin Backend Layer
+
+### Problem
+
+The browser extension needs a compact API surface, but backend domain modules must remain the source of business logic.
+
+### Decision
+
+Add a dedicated Extension API module with `GET /extension/resolve?url=...` and `PUT /extension/entities/:entityId/my-rating`. The module composes data through public ports and does not access repositories.
+
+### Reason
+
+This gives the extension a stable MVP contract while keeping entity lookup, rating writes, and trust calculation owned by their existing modules.
+
+### Alternatives
+
+- Let the extension call several domain endpoints directly.
+- Put extension-specific behavior into Entity Module.
+- Let Extension API read domain repositories directly.
+
+## 2026-06-27 - Extension URL Resolution Belongs To Entity Module
+
+### Problem
+
+URL normalization and canonical URL matching are entity-domain rules, but the extension needs URL-based resolution.
+
+### Decision
+
+Expose URL resolution through `EntitiesPort.resolveEntityByUrl(url)`.
+
+### Reason
+
+This avoids duplicating normalization rules in Extension API and keeps canonical URL lookup owned by Entity Module.
+
+### Alternatives
+
+- Inject `URL_NORMALIZER` and `EntitiesRepository` into Extension API.
+- Duplicate URL normalization in Extension API.
+- Reuse search endpoint response shape directly.
+
+## 2026-06-27 - Extension Quick Rating Uses RatingsPort
+
+### Problem
+
+The extension needs quick rating, but rating write rules include ownership checks, upsert behavior, aggregate recalculation, and domain events.
+
+### Decision
+
+Expose rating writes through `RatingsPort.rateEntity(...)` and use that from Extension API.
+
+### Reason
+
+This keeps rating invariants inside Ratings Module and avoids a second rating write path.
+
+### Alternatives
+
+- Write ratings directly from Extension API.
+- Duplicate rating service logic in Extension API.
+- Force extension to call the generic ratings endpoint only.
+
+## 2026-06-27 - No Extension Auto-Creation Or Site Parsers
+
+### Problem
+
+The extension can encounter URLs that do not match an existing entity, but auto-creation and site-specific detection would expand MVP scope.
+
+### Decision
+
+For missing URLs, `GET /extension/resolve` returns `not_found`, canonical URL data, and `canCreateEntity: true`. Stage 17 does not create entities, add site-specific parsers, or add extension tables.
+
+### Reason
+
+This supports the first extension flow while keeping creation and parser complexity for later dedicated stages.
+
+### Alternatives
+
+- Auto-create entities from URL resolution.
+- Add parser-specific entity detection immediately.
+- Add extension persistence tables in Stage 17.

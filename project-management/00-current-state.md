@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 17
-- Stage status: Stage 16 completed
-- MVP readiness: 16%
-- Last completed stage: Stage 16 - Entity Page API Composition
-- Next stage: Stage 17 - Extension API MVP
+- Current stage: Waiting for user confirmation before Stage 18
+- Stage status: Stage 17 completed
+- MVP readiness: 17%
+- Last completed stage: Stage 17 - Extension API MVP
+- Next stage: Stage 18 - Frontend Skeleton
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -76,7 +76,7 @@ The database infrastructure is initialized:
 - `PrismaService` owns database connection lifecycle and shutdown.
 - Seed script structure exists without seed data.
 - Health endpoint includes a database connectivity check.
-- No trust, search, moderation, recommendation, or extension tables have been added. Stage 13 intentionally does not persist trust scores; Stage 15 intentionally does not add search tables.
+- No trust, search, extension, moderation, or recommendation tables have been added. Stage 13 intentionally does not persist trust scores; Stage 15 intentionally does not add search tables; Stage 17 intentionally does not add extension tables.
 
 The backend error and response foundation is initialized:
 
@@ -110,7 +110,7 @@ The Entity MVP foundation is initialized:
 - `POST /entities` creates an entity and requires JWT authentication.
 - `GET /entities/:id` returns an entity by id.
 - `GET /entities/search` performs simple PostgreSQL-backed search.
-- `EntitiesPort` exists as the public module interface for entity lookup and search.
+- `EntitiesPort` exists as the public module interface for entity lookup, URL resolution, and search.
 
 The URL Normalization MVP is initialized:
 
@@ -133,6 +133,7 @@ The Ratings MVP foundation is initialized:
 - `GET /ratings/entities/:entityId` returns the rating aggregate.
 - `GET /ratings/entities/:entityId/my-rating` returns the current user's rating or `null`.
 - Ratings Module checks entity existence through `EntitiesPort`.
+- Ratings Module exposes rating aggregate reads and rating writes through `RatingsPort`.
 - Entity Module does not store or calculate ratings.
 
 The Reviews MVP foundation is initialized:
@@ -192,6 +193,17 @@ The Entity Page API Composition foundation is initialized:
 - Composition uses `EntitiesPort`, `RatingsPort`, `ReviewsPort`, and `TrustPort`.
 - Entity page composition does not import or use domain repositories.
 - No frontend or extension behavior has been added.
+
+The Extension API MVP foundation is initialized:
+
+- `GET /extension/resolve?url=...` resolves a browser tab URL into extension card data.
+- Found URL resolution returns entity summary, rating aggregate, trust confidence, canonical URL data, and web entity page path.
+- Missing URL resolution returns `not_found`, canonical URL data, and `canCreateEntity`.
+- `PUT /extension/entities/:entityId/my-rating` quick-rates an entity and requires JWT authentication.
+- Quick rating returns updated aggregate, current user's rating, refreshed trust confidence, entity summary, and web entity page path.
+- Extension API uses `EntitiesPort`, `RatingsPort`, and `TrustPort`.
+- Extension API does not import or use domain repositories.
+- Browser extension UI, Chrome APIs, content scripts, site-specific parsers, entity auto-creation, new auth model, and new database tables are intentionally not implemented.
 
 Roadmap update:
 
@@ -258,3 +270,5 @@ Stage 14 created backend domain events infrastructure and publish points only. I
 Stage 15 created the Search Module MVP only. It did not add OpenSearch, frontend search UI, extension search flow, indexing workers, entity creation business logic inside Search Module, or entity page API composition.
 
 Stage 16 created entity page API composition only. It did not add frontend UI, extension behavior, review pagination endpoint, new domain logic, or direct repository access from the composition layer.
+
+Stage 17 created the backend Extension API MVP only. It did not add browser extension UI, Chrome APIs, content scripts, site-specific parsers, entity auto-creation, new auth model, or new database tables.

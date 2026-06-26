@@ -309,7 +309,7 @@ Verification:
 - Internal module boundaries are not exposed.
 - Composition uses public module ports only.
 
-### 17. ⬜ Extension API MVP
+### 17. ✅ Extension API MVP
 
 Goal: provide the minimum API required by the browser extension.
 
@@ -325,10 +325,6 @@ Verification:
 
 - Extension can send URL and receive card data.
 - Extension does not contain object type detection business logic.
-
-Required confirmation before implementation:
-
-- Extension API contract.
 
 ### 18. ⬜ Frontend Skeleton
 

@@ -9,6 +9,7 @@ import { CreateEntityDto } from "../dto/create-entity.dto.js";
 import { EntityDto } from "../dto/entity.dto.js";
 import { createEntityCreatedEvent } from "../events/entity-created.event.js";
 import type { EntitiesPort } from "../interfaces/entities.port.js";
+import type { ResolveEntityByUrlResult } from "../interfaces/entities.port.js";
 import { URL_NORMALIZER } from "../interfaces/url-normalizer.js";
 import type { UrlNormalizer } from "../interfaces/url-normalizer.js";
 import type { CreateEntityRecordInput } from "../repositories/entities.repository.js";
@@ -102,6 +103,26 @@ export class EntitiesService implements EntitiesPort {
     const entity = await this.entitiesRepository.findById(id);
 
     return entity ? toEntityDto(entity) : null;
+  }
+
+  async resolveEntityByUrl(url: string): Promise<ResolveEntityByUrlResult> {
+    const canonicalUrl = this.urlNormalizer.normalize(url);
+
+    if (!canonicalUrl) {
+      throw createAppException({
+        code: AppErrorCode.BadRequest,
+        message: "URL must be a valid HTTP or HTTPS URL",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    const entity = await this.entitiesRepository.findByCanonicalUrl(canonicalUrl);
+
+    return {
+      canonicalUrl,
+      entity: entity ? toEntityDto(entity) : null,
+      inputUrl: url.trim()
+    };
   }
 
   async getEntityById(id: string): Promise<EntityDto> {

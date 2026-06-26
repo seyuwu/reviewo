@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 16 - Entity Page API Composition is completed.
+Stage 17 - Extension API MVP is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The backend now also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, and Entity Page API Composition foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The backend now also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, and Extension API MVP foundation.
 
 ## Already Done
 
@@ -391,15 +391,40 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker API composed response with `meta.reviewsCount === 12`
   - Docker API composed response with rating aggregate and trust confidence
   - Docker API not found response for missing entity page
+- Stage 17 Extension API MVP was added:
+  - `apps/api/src/modules/extension-api/controllers/extension-api.controller.ts`
+  - `apps/api/src/modules/extension-api/dto/extension-quick-rating-response.dto.ts`
+  - `apps/api/src/modules/extension-api/dto/extension-resolve-query.dto.ts`
+  - `apps/api/src/modules/extension-api/dto/extension-resolve-response.dto.ts`
+  - `apps/api/src/modules/extension-api/extension-api.module.ts`
+  - `apps/api/src/modules/extension-api/services/extension-api.service.ts`
+  - `apps/api/src/app.module.ts` now imports `ExtensionApiModule`
+  - `EntitiesPort` now exposes URL resolution through Entity Module ownership
+  - `RatingsPort` now exposes rating writes through Ratings Module ownership
+- Stage 17 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed extension-api/entity/rating files
+  - Persistent Docker dev stack startup without rebuild
+  - Docker Prisma migration deploy inside the persistent dev stack
+  - Docker API `GET /health`
+  - Docker API `GET /extension/resolve?url=...` for unknown URL
+  - Docker API `GET /extension/resolve?url=...` for known canonical URL
+  - Docker API unauthorized response for quick rating
+  - Docker API `PUT /extension/entities/:entityId/my-rating`
+  - Docker API quick rating aggregate and trust refresh
 
 ## Remaining Work
 
-- Stage 17 - Extension API MVP.
-- Do not start Stage 17 until the user confirms and exact Extension API contracts are agreed.
+- Stage 18 - Frontend Skeleton.
+- Do not start Stage 18 until the user confirms and exact Frontend Skeleton scope is agreed.
 
 ## Next Stage
 
-Stage 17 - Extension API MVP, but only after explicit user confirmation and API contract confirmation.
+Stage 18 - Frontend Skeleton, but only after explicit user confirmation and scope confirmation.
 
 ## Documents To Read First
 
@@ -416,7 +441,7 @@ Stage 17 - Extension API MVP, but only after explicit user confirmation and API 
 - Do not add API DTOs to `@reviewo/types` until API contracts are approved.
 - Do not add generic helpers to `@reviewo/shared` without real duplication.
 - Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
-- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, minimal entity endpoints under `/entities`, minimal search endpoint under `/search`, minimal rating endpoints under `/ratings`, minimal review endpoints under `/reviews`, and minimal trust endpoint under `/trust`.
+- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, minimal entity endpoints under `/entities`, minimal search endpoint under `/search`, minimal extension endpoints under `/extension`, minimal rating endpoints under `/ratings`, minimal review endpoints under `/reviews`, and minimal trust endpoint under `/trust`.
 - `GET /health` now includes database connectivity status.
 - Backend errors now use a centralized infrastructure response shape.
 - Global exception filter is registered in API bootstrap.
@@ -445,6 +470,13 @@ Stage 17 - Extension API MVP, but only after explicit user confirmation and API 
 - Entity page `meta.reviewsCount` contains the total review count.
 - Entity page composition uses `EntitiesPort`, `RatingsPort`, `ReviewsPort`, and `TrustPort`.
 - Entity page composition must not access domain repositories directly.
+- Extension API MVP supports `GET /extension/resolve?url=...`.
+- Extension URL resolution returns `found` with entity summary, rating aggregate, trust confidence, canonical URL data, and web path when an entity exists.
+- Extension URL resolution returns `not_found`, canonical URL data, and `canCreateEntity: true` when an entity does not exist.
+- Extension API MVP supports protected `PUT /extension/entities/:entityId/my-rating`.
+- Extension quick rating returns updated aggregate, current user's rating, refreshed trust confidence, entity summary, and web path.
+- Extension API uses `EntitiesPort`, `RatingsPort`, and `TrustPort`.
+- Extension API must not access domain repositories directly.
 - Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
 - Rating scale is integer `1..5`.
 - One active rating exists per user per entity; repeated rating updates the existing record.
@@ -476,7 +508,8 @@ Stage 17 - Extension API MVP, but only after explicit user confirmation and API 
 - Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`; Stage 11 migration creates `ratings.ratings` and `ratings.rating_aggregates`; Stage 12 migration creates `reviews.reviews` and `reviews.review_votes`.
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
 - Stage 16 implemented Entity Page API Composition only.
-- Stage 17 should implement Extension API MVP only after user confirmation and exact API contract confirmation.
+- Stage 17 implemented Extension API MVP only.
+- Stage 18 should implement Frontend Skeleton only after user confirmation and exact scope confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

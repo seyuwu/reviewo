@@ -644,3 +644,40 @@
   - `meta.reviewsCount` contains the total review count.
   - `TrustPort` exposes Trust Module confidence to composition without duplicating trust logic.
   - Review pagination endpoint, frontend UI, extension behavior, and direct repository access were not added.
+
+## 2026-06-27 - Stage 17 - Extension API MVP
+
+- Stage: 17
+- Summary: Added the minimal backend Extension API for URL resolution and authenticated quick rating through existing public module ports.
+- Created modules:
+  - `ExtensionApiModule`
+- Changed modules:
+  - `EntitiesModule` public port
+  - `RatingsModule` public port
+- Created files:
+  - `apps/api/src/modules/extension-api/controllers/extension-api.controller.ts`
+  - `apps/api/src/modules/extension-api/dto/extension-quick-rating-response.dto.ts`
+  - `apps/api/src/modules/extension-api/dto/extension-resolve-query.dto.ts`
+  - `apps/api/src/modules/extension-api/dto/extension-resolve-response.dto.ts`
+  - `apps/api/src/modules/extension-api/extension-api.module.ts`
+  - `apps/api/src/modules/extension-api/services/extension-api.service.ts`
+- Changed files:
+  - `apps/api/src/app.module.ts`
+  - `apps/api/src/modules/entities/interfaces/entities.port.ts`
+  - `apps/api/src/modules/entities/services/entities.service.ts`
+  - `apps/api/src/modules/ratings/interfaces/ratings.port.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - `GET /extension/resolve?url=...` resolves a browser tab URL into extension card data.
+  - Found resolution returns entity summary, rating aggregate, trust confidence, canonical URL data, and web entity page path.
+  - Missing resolution returns `not_found`, canonical URL data, and `canCreateEntity: true`.
+  - `PUT /extension/entities/:entityId/my-rating` quick-rates an entity and requires JWT authentication.
+  - Extension API uses `EntitiesPort`, `RatingsPort`, and `TrustPort`.
+  - URL normalization remains owned by Entity Module.
+  - Rating write invariants remain owned by Ratings Module.
+  - Browser extension UI, Chrome APIs, content scripts, site-specific parsers, entity auto-creation, new auth model, new database tables, and direct repository access were not added.
