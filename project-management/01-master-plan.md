@@ -232,22 +232,27 @@ Verification:
 - Entity reviews can be fetched.
 - Review likes work independently from ratings.
 
-### 13. ⬜ Trust Module MVP
+### 13. ✅ Trust Module MVP
 
 Goal: implement a simple replaceable trust score.
 
 Result:
 
 - `trust` module.
-- `trust_scores` table.
-- Calculation based on rating count, review count, entity age, and user activity.
-- Algorithm extracted into a strategy/service.
+- `GET /trust/entities/:entityId`.
+- Response format: `{ "confidence": number }` with a decimal value from `0` to `1`.
+- Calculation based only on rating count and review count.
+- Rating count is read through `RatingsPort`.
+- Review count is read through `ReviewsPort`.
+- Algorithm extracted into a replaceable calculator service.
 - API returns trust without exposing internal algorithm details.
 
 Verification:
 
-- Trust recalculates after important events.
+- Trust confidence returns `0` for entities without ratings/reviews.
+- Trust confidence grows monotonically as rating/review counts grow.
 - Algorithm can be replaced without API contract changes.
+- Trust Module does not read foreign tables or repositories directly.
 
 ### 14. ⬜ Backend Domain Events MVP
 

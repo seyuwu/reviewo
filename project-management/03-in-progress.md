@@ -30,40 +30,42 @@ Stage 11 - Ratings Module is completed.
 
 Stage 12 - Reviews Module is completed.
 
-Stage 13 - Trust Module MVP is next, pending explicit user confirmation.
+Stage 13 - Trust Module MVP is completed.
+
+Stage 14 - Backend Domain Events MVP is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Trust Module MVP after user confirmation.
+Prepare Backend Domain Events MVP after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 13 implementation.
+To be confirmed before Stage 14 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 13 implementation.
+To be confirmed before Stage 14 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 13 should implement the simple MVP trust score only after user confirmation.
-- Trust score must remain replaceable without API changes.
-- Trust Module should not move rating or review ownership into Entity Module.
+- Stage 14 should prepare low coupling between modules only after user confirmation.
+- Do not add event-driven behavior until Stage 14 is explicitly started.
+- Preserve existing module boundaries: no direct cross-module repository access.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 13.
-- [ ] Describe Stage 13 goal, files, and architectural decisions before editing.
-- [ ] Implement Trust Module MVP only.
-- [ ] Verify backend lint/typecheck/build and trust behavior.
+- [ ] Wait for user confirmation to start Stage 14.
+- [ ] Describe Stage 14 goal, files, and architectural decisions before editing.
+- [ ] Implement Backend Domain Events MVP only.
+- [ ] Verify backend lint/typecheck/build and event behavior.
 
 ## Current Progress
 
-Stage 12 is complete. Stage 13 has not started.
+Stage 13 is complete. Stage 14 has not started.
 
 ## Open Questions
 
-No active questions until Stage 13 starts.
+No active questions until Stage 14 starts.
 
 ## Blockers
 
@@ -71,5 +73,5 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 13.
-- Do not add trust score tables, calculation strategies, DTOs, endpoints, repositories, or business logic until Stage 13 is explicitly started.
+- Wait for user confirmation before Stage 14.
+- Do not add domain events, event handlers, event buses, async reactions, or new cross-module behavior until Stage 14 is explicitly started.

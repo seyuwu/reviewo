@@ -61,6 +61,14 @@ export class ReviewsRepository {
     });
   }
 
+  async countByEntity(entityId: string): Promise<number> {
+    return this.prismaService.review.count({
+      where: {
+        entityId
+      }
+    });
+  }
+
   async upsertReview(input: UpsertReviewInput): Promise<ReviewWithVotes> {
     return this.prismaService.review.upsert({
       create: {

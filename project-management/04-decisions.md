@@ -937,3 +937,84 @@ This matches the approved MVP requirement while keeping the query simple and Pos
 - Sort only by creation date.
 - Add configurable sorting in Stage 12.
 - Add a separate review ranking algorithm immediately.
+
+## 2026-06-26 - Trust Confidence Response Format
+
+### Problem
+
+The MVP needs a trust indicator that can be returned consistently by the API without locking the product into a final scoring system.
+
+### Decision
+
+Return trust as `{ "confidence": number }`, where `confidence` is a decimal number from `0` to `1`, rounded to two decimals.
+
+### Reason
+
+A normalized decimal is easy for API clients to display as a percentage while keeping the API contract independent from UI formatting.
+
+### Alternatives
+
+- Return an integer from `0` to `100`.
+- Return labels such as `low`, `medium`, and `high`.
+- Return internal formula components in the public API.
+
+## 2026-06-26 - Trust MVP Formula
+
+### Problem
+
+The first trust score must be simple, monotonic, bounded, and explainable while using only approved MVP signals.
+
+### Decision
+
+Calculate confidence as `min(1, min(votesCount, 100) / 100 * 0.9 + min(reviewCount, 20) / 20 * 0.1)`, rounded to two decimals.
+
+### Reason
+
+Rating count is the primary signal for confidence in a rating, while review count adds a small supporting contribution. The formula is predictable and can be replaced later without changing the API response shape.
+
+### Alternatives
+
+- Use account reputation or account age.
+- Use text analysis or anti-fraud signals.
+- Persist and update trust scores through events in Stage 13.
+- Use a logarithmic or ML-based formula immediately.
+
+## 2026-06-26 - Trust Reads Data Through Ports
+
+### Problem
+
+Trust confidence depends on rating and review counts, but Trust Module must not own or query Ratings/Reviews persistence directly.
+
+### Decision
+
+Trust Module uses `RatingsPort.getAggregate(entityId)` for rating count and `ReviewsPort.getReviewCountForEntity(entityId)` for review count. It does not import rating/review repositories or read their tables.
+
+### Reason
+
+This keeps Trust as a separate domain and preserves module boundaries for future service extraction.
+
+### Alternatives
+
+- Query `ratings.rating_aggregates` directly from Trust Module.
+- Query `reviews.reviews` directly from Trust Module.
+- Move trust calculation into Entity Module.
+
+## 2026-06-26 - Trust MVP Has No Persistence
+
+### Problem
+
+The roadmap previously mentioned a `trust_scores` table, but the approved Stage 13 scope only needs on-demand MVP confidence from current rating/review counts.
+
+### Decision
+
+Do not create `trust_scores` persistence in Stage 13. `GET /trust/entities/:entityId` calculates confidence on demand through public ports.
+
+### Reason
+
+This avoids premature storage and event synchronization before the trust algorithm is stable.
+
+### Alternatives
+
+- Add `trust.trust_scores` immediately.
+- Recalculate trust through domain events in Stage 13.
+- Store trust confidence on `entities.entities`.

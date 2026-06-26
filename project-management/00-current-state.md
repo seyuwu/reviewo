@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-26
-- Current stage: Waiting for user confirmation before Stage 13
-- Stage status: Stage 12 completed
-- MVP readiness: 12%
-- Last completed stage: Stage 12 - Reviews Module
-- Next stage: Stage 13 - Trust Module MVP
+- Current stage: Waiting for user confirmation before Stage 14
+- Stage status: Stage 13 completed
+- MVP readiness: 13%
+- Last completed stage: Stage 13 - Trust Module MVP
+- Next stage: Stage 14 - Backend Domain Events MVP
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, and list entity reviews through the backend API.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -62,7 +62,7 @@ The backend skeleton is initialized:
 - Standard Nest logger is wrapped by `AppLogger` for future replacement.
 - Common infrastructure folders exist for filters, interceptors, guards, pipes, decorators, exceptions, and logger.
 - Future domain modules exist as empty NestJS module shells.
-- No trust, search, moderation, recommendation, Swagger, frontend, or extension product behavior has been added.
+- No search, moderation, recommendation, Swagger, frontend, or extension product behavior has been added.
 
 The database infrastructure is initialized:
 
@@ -74,7 +74,7 @@ The database infrastructure is initialized:
 - `PrismaService` owns database connection lifecycle and shutdown.
 - Seed script structure exists without seed data.
 - Health endpoint includes a database connectivity check.
-- No trust, search, moderation, recommendation, or extension tables have been added.
+- No trust, search, moderation, recommendation, or extension tables have been added. Stage 13 intentionally does not persist trust scores.
 
 The backend error and response foundation is initialized:
 
@@ -104,7 +104,7 @@ The Entity MVP foundation is initialized:
 - Entity fields are limited to `id`, `title`, `slug`, `type`, `description`, `canonical_url`, `parent_id`, `created_by`, `created_at`, and `updated_at`.
 - Entity type is stored as a PostgreSQL enum.
 - `parent_id` supports a simple tree.
-- `entity_relations`, graph relations, many-to-many entity links, aliases, tags, categories, versions, moderation, merge, AI, import, trust, and recommendations are intentionally not implemented.
+- `entity_relations`, graph relations, many-to-many entity links, aliases, tags, categories, versions, moderation, merge, AI, import, and recommendations are intentionally not implemented.
 - `POST /entities` creates an entity and requires JWT authentication.
 - `GET /entities/:id` returns an entity by id.
 - `GET /entities/search` performs simple PostgreSQL-backed search.
@@ -144,6 +144,19 @@ The Reviews MVP foundation is initialized:
 - `DELETE /reviews/:reviewId/like` removes a review like idempotently.
 - Reviews Module checks entity existence through `EntitiesPort`.
 - Reviews Module does not read or modify Ratings data.
+
+The Trust MVP foundation is initialized:
+
+- `GET /trust/entities/:entityId` returns `{ "confidence": number }`.
+- `confidence` is a decimal number from `0` to `1`, rounded to two decimals.
+- MVP trust confidence uses only rating count and review count.
+- Rating count contributes up to `0.9` confidence at 100 ratings.
+- Review count contributes up to `0.1` confidence at 20 reviews.
+- Trust Module reads rating count through `RatingsPort`.
+- Trust Module reads review count through `ReviewsPort`.
+- Trust Module does not own users, ratings, reviews, or entity data.
+- Trust Module does not persist `trust_scores` in Stage 13.
+- User reputation, account age, anti-fraud, text analysis, IP, ML, external services, and behavioral signals are intentionally excluded.
 
 Roadmap update:
 
@@ -202,3 +215,5 @@ Stage 10 created URL normalization only. It did not add `entity_links`, aliases,
 Stage 11 created ratings only. It did not add reviews, trust calculation, recommendations, moderation, frontend, extension flow, or rating logic inside Entity Module.
 
 Stage 12 created reviews and review likes only. It did not add dislikes, replies, threaded comments, reactions, attachments, images, AI analysis, moderation, complaints, edit history, review ratings, trust calculation, frontend, or extension flow.
+
+Stage 13 created MVP trust confidence only. It did not add trust persistence, user reputation, account age, anti-fraud, text analysis, IP checks, ML, external services, behavioral signals, badges, user trust, review trust, moderation, frontend, or extension flow.

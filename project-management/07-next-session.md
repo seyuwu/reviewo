@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 12 - Reviews Module is completed.
+Stage 13 - Trust Module MVP is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, and list entity reviews through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, and Reviews MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, and Trust MVP foundation.
 
 ## Already Done
 
@@ -280,15 +280,41 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker API `DELETE /reviews/:reviewId/like`
   - Docker API unauthorized response for review update
   - Docker API not found response for missing entity reviews
+- Stage 13 Trust Module MVP was added:
+  - `apps/api/src/modules/trust/controllers/trust.controller.ts`
+  - `apps/api/src/modules/trust/dto/trust-confidence.dto.ts`
+  - `apps/api/src/modules/trust/services/trust-confidence-calculator.service.ts`
+  - `apps/api/src/modules/trust/services/trust.service.ts`
+  - `apps/api/src/modules/trust/trust.module.ts`
+  - `apps/api/src/modules/reviews/interfaces/reviews.port.ts` now exposes review count for public module interaction
+  - `apps/api/src/modules/reviews/repositories/reviews.repository.ts` now supports count by entity
+  - `apps/api/src/modules/reviews/services/reviews.service.ts` now implements `getReviewCountForEntity`
+- Stage 13 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed trust/review files
+  - Docker Prisma migration deploy inside Docker Compose network
+  - Docker API `GET /health`
+  - Docker API `POST /auth/register`
+  - Docker API `POST /entities`
+  - Docker API `GET /trust/entities/:entityId` with no ratings/reviews
+  - Docker API `PUT /ratings/entities/:entityId/my-rating`
+  - Docker API confidence growth after ratings
+  - Docker API `PUT /reviews/entities/:entityId/my-review`
+  - Docker API confidence remains monotonic after reviews
+  - Docker API not found response for missing entity trust
 
 ## Remaining Work
 
-- Stage 13 - Trust Module MVP.
-- Do not start Stage 13 until the user confirms.
+- Stage 14 - Backend Domain Events MVP.
+- Do not start Stage 14 until the user confirms.
 
 ## Next Stage
 
-Stage 13 - Trust Module MVP, but only after explicit user confirmation.
+Stage 14 - Backend Domain Events MVP, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -305,7 +331,7 @@ Stage 13 - Trust Module MVP, but only after explicit user confirmation.
 - Do not add API DTOs to `@reviewo/types` until API contracts are approved.
 - Do not add generic helpers to `@reviewo/shared` without real duplication.
 - Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
-- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, minimal entity endpoints under `/entities`, minimal rating endpoints under `/ratings`, and minimal review endpoints under `/reviews`.
+- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, minimal entity endpoints under `/entities`, minimal rating endpoints under `/ratings`, minimal review endpoints under `/reviews`, and minimal trust endpoint under `/trust`.
 - `GET /health` now includes database connectivity status.
 - Backend errors now use a centralized infrastructure response shape.
 - Global exception filter is registered in API bootstrap.
@@ -333,13 +359,19 @@ Stage 13 - Trust Module MVP, but only after explicit user confirmation.
 - Review likes use `reviews.review_votes`; repeated like is idempotent and does not create duplicates.
 - Review list is sorted by likes count descending by default.
 - Reviews Module uses `EntitiesPort` and must not access entity repositories directly.
-- `entity_links`, aliases, `entity_relations`, graph relations, tags, categories, versions, moderation, merge, AI, imports, trust, and recommendations are not implemented.
+- Trust MVP supports `GET /trust/entities/:entityId`.
+- Trust confidence response format is `{ "confidence": number }`, where `confidence` is a decimal number from `0` to `1`.
+- Trust confidence formula is `min(1, min(votesCount, 100) / 100 * 0.9 + min(reviewCount, 20) / 20 * 0.1)`, rounded to two decimals.
+- Trust Module uses `RatingsPort` and `ReviewsPort`; it must not read rating/review tables or repositories directly.
+- Trust Module does not persist `trust_scores` in Stage 13.
+- User reputation, account age, anti-fraud, text analysis, IP, ML, external services, behavioral signals, badges, user trust, review trust, and moderation are intentionally excluded from Stage 13.
+- `entity_links`, aliases, `entity_relations`, graph relations, tags, categories, versions, moderation, merge, AI, imports, and recommendations are not implemented.
 - Other backend domain modules are empty NestJS module shells only.
 - Do not add DTOs, repositories, Swagger, or business logic outside the relevant stage.
-- Prisma schema now has Users/Auth, Entity MVP, Ratings MVP, and Reviews MVP models only.
+- Prisma schema now has Users/Auth, Entity MVP, Ratings MVP, and Reviews MVP models only. Trust MVP adds no Prisma models.
 - Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`; Stage 11 migration creates `ratings.ratings` and `ratings.rating_aggregates`; Stage 12 migration creates `reviews.reviews` and `reviews.review_votes`.
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
-- Stage 13 should implement trust score only after user confirmation. It should not move ratings or reviews ownership into Entity Module.
+- Stage 14 should implement backend domain events only after user confirmation. It should not move ratings, reviews, or trust ownership into Entity Module.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

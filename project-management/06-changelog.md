@@ -474,3 +474,37 @@
   - Reviews Module checks entity existence through `EntitiesPort`.
   - Reviews Module does not import Ratings Module or access rating repositories/tables.
   - Dislikes, replies, threaded comments, reactions, attachments, images, AI analysis, moderation, complaints, edit history, review ratings, frontend, and extension flow were not added.
+
+## 2026-06-26 - Stage 13 - Trust Module MVP
+
+- Stage: 13
+- Summary: Added the MVP Trust Module with public entity trust confidence based on rating count and review count only.
+- Created modules: none.
+- Changed modules:
+  - `TrustModule`
+  - `ReviewsModule` public port
+- Created files:
+  - `apps/api/src/modules/trust/controllers/trust.controller.ts`
+  - `apps/api/src/modules/trust/dto/trust-confidence.dto.ts`
+  - `apps/api/src/modules/trust/services/trust-confidence-calculator.service.ts`
+  - `apps/api/src/modules/trust/services/trust.service.ts`
+- Changed files:
+  - `apps/api/src/modules/reviews/interfaces/reviews.port.ts`
+  - `apps/api/src/modules/reviews/repositories/reviews.repository.ts`
+  - `apps/api/src/modules/reviews/services/reviews.service.ts`
+  - `apps/api/src/modules/trust/trust.module.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Trust confidence response format is `{ "confidence": number }` with a decimal `0..1` value.
+  - MVP trust confidence uses only rating count and review count.
+  - Rating count contributes up to `0.9`; review count contributes up to `0.1`.
+  - Formula is isolated in `TrustConfidenceCalculatorService` for later replacement.
+  - Trust Module reads rating count through `RatingsPort`.
+  - Trust Module reads review count through `ReviewsPort`.
+  - Trust Module does not read foreign tables or repositories directly.
+  - `trust_scores` persistence, user reputation, account age, anti-fraud, text analysis, IP, ML, external services, behavioral signals, badges, user trust, review trust, moderation, frontend, and extension flow were not added.
