@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["auth", "entities", "users"]
+  schemas  = ["auth", "entities", "ratings", "users"]
 }
 
 model User {
@@ -77,4 +77,35 @@ model Entity {
   @@index([createdBy])
   @@map("entities")
   @@schema("entities")
+}
+
+model Rating {
+  id        String   @id @default(uuid()) @db.Uuid
+  entityId  String   @map("entity_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  score     Int      @db.SmallInt
+  source    String   @default("web")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([entityId, userId])
+  @@index([entityId])
+  @@index([userId])
+  @@map("ratings")
+  @@schema("ratings")
+}
+
+model RatingAggregate {
+  entityId      String   @id @map("entity_id") @db.Uuid
+  avgScore      Decimal  @default(0) @map("avg_score") @db.Decimal(3, 2)
+  votesCount    Int      @default(0) @map("votes_count")
+  distribution1 Int      @default(0) @map("distribution_1")
+  distribution2 Int      @default(0) @map("distribution_2")
+  distribution3 Int      @default(0) @map("distribution_3")
+  distribution4 Int      @default(0) @map("distribution_4")
+  distribution5 Int      @default(0) @map("distribution_5")
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("rating_aggregates")
+  @@schema("ratings")
 }

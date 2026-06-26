@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 10 - URL Normalization MVP is completed.
+Stage 11 - Ratings Module is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, and search entities through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, and URL Normalization MVP.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, and read their own rating through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, and Ratings MVP foundation.
 
 ## Already Done
 
@@ -221,15 +221,43 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker API `GET /entities/search` with normalized URL query
   - Docker API `GET /entities/search` with protocol-less URL query
   - Docker duplicate canonical URL prevention with `409 CONFLICT`
+- Stage 11 Ratings Module was added:
+  - `apps/api/prisma/migrations/20260626233000_add_ratings_foundation/migration.sql`
+  - `apps/api/prisma/schema.prisma` models for `ratings.ratings` and `ratings.rating_aggregates`
+  - `apps/api/src/modules/ratings/controllers/ratings.controller.ts`
+  - `apps/api/src/modules/ratings/dto/rate-entity.dto.ts`
+  - `apps/api/src/modules/ratings/dto/rating-aggregate.dto.ts`
+  - `apps/api/src/modules/ratings/dto/rating-response.dto.ts`
+  - `apps/api/src/modules/ratings/interfaces/ratings.port.ts`
+  - `apps/api/src/modules/ratings/repositories/ratings.repository.ts`
+  - `apps/api/src/modules/ratings/services/ratings.service.ts`
+  - `apps/api/src/modules/ratings/ratings.module.ts`
+- Stage 11 was verified with:
+  - `corepack pnpm --filter @reviewo/api db:generate`
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - Docker Prisma migration deploy inside Docker Compose network
+  - Docker API `GET /health`
+  - Docker API `POST /auth/register`
+  - Docker API `POST /entities`
+  - Docker API `PUT /ratings/entities/:entityId/my-rating`
+  - Docker API rating update through repeated `PUT`
+  - Docker API `GET /ratings/entities/:entityId`
+  - Docker API `GET /ratings/entities/:entityId/my-rating`
+  - Docker API unauthorized response for rating update
+  - Docker API not found response for missing entity aggregate
 
 ## Remaining Work
 
-- Stage 11 - Ratings Module.
-- Do not start Stage 11 until the user confirms.
+- Stage 12 - Reviews Module.
+- Do not start Stage 12 until the user confirms.
 
 ## Next Stage
 
-Stage 11 - Ratings Module, but only after explicit user confirmation.
+Stage 12 - Reviews Module, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -246,7 +274,7 @@ Stage 11 - Ratings Module, but only after explicit user confirmation.
 - Do not add API DTOs to `@reviewo/types` until API contracts are approved.
 - Do not add generic helpers to `@reviewo/shared` without real duplication.
 - Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
-- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, and minimal entity endpoints under `/entities`.
+- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, minimal entity endpoints under `/entities`, and minimal rating endpoints under `/ratings`.
 - `GET /health` now includes database connectivity status.
 - Backend errors now use a centralized infrastructure response shape.
 - Global exception filter is registered in API bootstrap.
@@ -263,13 +291,18 @@ Stage 11 - Ratings Module, but only after explicit user confirmation.
 - URL normalization canonicalizes to `https`, lowercases hostnames, removes one leading `www`, removes hash fragments, removes non-root trailing slashes, removes basic tracking params, and sorts preserved query params.
 - URL-aware search supports protocol-less URL input if it has a likely hostname.
 - Equivalent canonical URLs return `409 CONFLICT` from `POST /entities`.
-- `entity_links`, aliases, `entity_relations`, graph relations, tags, categories, versions, moderation, merge, AI, imports, ratings, reviews, trust, and recommendations are not implemented.
+- Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
+- Rating scale is integer `1..5`.
+- One active rating exists per user per entity; repeated rating updates the existing record.
+- Rating aggregates include `avgScore`, `votesCount`, and score distribution `1..5`.
+- Ratings Module uses `EntitiesPort` and must not access entity repositories directly.
+- `entity_links`, aliases, `entity_relations`, graph relations, tags, categories, versions, moderation, merge, AI, imports, reviews, trust, and recommendations are not implemented.
 - Other backend domain modules are empty NestJS module shells only.
 - Do not add DTOs, repositories, Swagger, or business logic outside the relevant stage.
-- Prisma schema now has Users/Auth and Entity MVP models only.
-- Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`.
+- Prisma schema now has Users/Auth, Entity MVP, and Ratings MVP models only.
+- Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`; Stage 11 migration creates `ratings.ratings` and `ratings.rating_aggregates`.
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
-- Stage 11 should implement ratings only. It should use `EntitiesPort` and must not access entity repositories directly.
+- Stage 12 should implement reviews only. It should not duplicate ratings logic or calculate trust.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

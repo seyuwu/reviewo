@@ -757,3 +757,83 @@ This preserves a clean extension point without adding unvalidated complexity.
 - Add YouTube/GitHub normalizers immediately.
 - Hardcode site-specific cases in the default normalizer.
 - Delay the normalizer interface until site-specific support is needed.
+
+## 2026-06-26 - Ratings MVP Scale And Repeat Voting
+
+### Problem
+
+The MVP needs a simple rating model that is easy for users and simple to aggregate.
+
+### Decision
+
+Use integer ratings from `1` to `5`. A user can have one active rating per entity. Re-rating the same entity updates the existing rating.
+
+### Reason
+
+This matches the approved MVP scope and avoids rating history or fractional score complexity before the main product flow is validated.
+
+### Alternatives
+
+- Support fractional ratings.
+- Allow multiple ratings per user per entity.
+- Keep rating history in Stage 11.
+
+## 2026-06-26 - Ratings Data Ownership
+
+### Problem
+
+Ratings depend on entities but must not leak rating logic into the Entity Module.
+
+### Decision
+
+Store raw ratings in `ratings.ratings` and aggregates in `ratings.rating_aggregates`. Entity Module does not store or calculate rating values.
+
+### Reason
+
+This keeps ratings as an independent domain and preserves the path to extracting Ratings as a separate service later.
+
+### Alternatives
+
+- Store average rating directly on `entities.entities`.
+- Let Entity Module recalculate rating aggregates.
+- Delay aggregate storage and calculate on every request.
+
+## 2026-06-26 - Ratings Use EntitiesPort
+
+### Problem
+
+Ratings must validate that an entity exists without crossing module boundaries.
+
+### Decision
+
+Ratings Module depends on `EntitiesPort.findEntityById()` and does not import or use `EntitiesRepository`.
+
+### Reason
+
+This keeps module boundaries clear and avoids direct repository access across domains.
+
+### Alternatives
+
+- Query `entities.entities` directly from RatingsRepository.
+- Import `EntitiesRepository`.
+- Skip entity existence validation.
+
+## 2026-06-26 - Ratings Aggregate Recalculation
+
+### Problem
+
+Rating aggregates must stay correct after create/update, but incremental aggregate updates are easier to get wrong.
+
+### Decision
+
+After each create/update, recalculate the aggregate for the affected entity inside the same transaction using current ratings grouped by score.
+
+### Reason
+
+This is simple, correct for MVP scale, and can later be replaced with event-driven or incremental aggregation without changing the API.
+
+### Alternatives
+
+- Increment/decrement aggregate counters manually.
+- Recalculate aggregates asynchronously through events immediately.
+- Do not store aggregates in MVP.

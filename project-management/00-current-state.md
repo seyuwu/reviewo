@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-26
-- Current stage: Waiting for user confirmation before Stage 11
-- Stage status: Stage 10 completed
-- MVP readiness: 10%
-- Last completed stage: Stage 10 - URL Normalization MVP
-- Next stage: Stage 11 - Ratings Module
+- Current stage: Waiting for user confirmation before Stage 12
+- Stage status: Stage 11 completed
+- MVP readiness: 11%
+- Last completed stage: Stage 11 - Ratings Module
+- Next stage: Stage 12 - Reviews Module
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, and search entities through the backend API.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, and read their own rating through the backend API.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -62,7 +62,7 @@ The backend skeleton is initialized:
 - Standard Nest logger is wrapped by `AppLogger` for future replacement.
 - Common infrastructure folders exist for filters, interceptors, guards, pipes, decorators, exceptions, and logger.
 - Future domain modules exist as empty NestJS module shells.
-- No ratings, reviews, trust, search, moderation, recommendation, Swagger, frontend, or extension product behavior has been added.
+- No reviews, trust, search, moderation, recommendation, Swagger, frontend, or extension product behavior has been added.
 
 The database infrastructure is initialized:
 
@@ -74,7 +74,7 @@ The database infrastructure is initialized:
 - `PrismaService` owns database connection lifecycle and shutdown.
 - Seed script structure exists without seed data.
 - Health endpoint includes a database connectivity check.
-- No ratings, reviews, trust, search, moderation, recommendation, or extension tables have been added.
+- No reviews, trust, search, moderation, recommendation, or extension tables have been added.
 
 The backend error and response foundation is initialized:
 
@@ -104,7 +104,7 @@ The Entity MVP foundation is initialized:
 - Entity fields are limited to `id`, `title`, `slug`, `type`, `description`, `canonical_url`, `parent_id`, `created_by`, `created_at`, and `updated_at`.
 - Entity type is stored as a PostgreSQL enum.
 - `parent_id` supports a simple tree.
-- `entity_relations`, graph relations, many-to-many entity links, aliases, tags, categories, versions, moderation, merge, AI, import, ratings, reviews, trust, and recommendations are intentionally not implemented.
+- `entity_relations`, graph relations, many-to-many entity links, aliases, tags, categories, versions, moderation, merge, AI, import, reviews, trust, and recommendations are intentionally not implemented.
 - `POST /entities` creates an entity and requires JWT authentication.
 - `GET /entities/:id` returns an entity by id.
 - `GET /entities/search` performs simple PostgreSQL-backed search.
@@ -119,6 +119,19 @@ The URL Normalization MVP is initialized:
 - The normalizer removes basic tracking parameters.
 - The normalizer lowercases hostnames, removes a leading `www`, removes hash fragments, removes non-root trailing slashes, canonicalizes to `https`, and sorts preserved query parameters.
 - Site-specific normalizers are intentionally not implemented yet.
+
+The Ratings MVP foundation is initialized:
+
+- `ratings.ratings` stores one active rating per user per entity.
+- `ratings.rating_aggregates` stores aggregate rating data per entity.
+- Rating scale is integer `1..5`.
+- Re-rating updates the previous user rating.
+- Aggregates include `avgScore`, `votesCount`, and distribution for scores `1..5`.
+- `PUT /ratings/entities/:entityId/my-rating` creates or updates the current user's rating.
+- `GET /ratings/entities/:entityId` returns the rating aggregate.
+- `GET /ratings/entities/:entityId/my-rating` returns the current user's rating or `null`.
+- Ratings Module checks entity existence through `EntitiesPort`.
+- Entity Module does not store or calculate ratings.
 
 Roadmap update:
 
@@ -173,3 +186,5 @@ Stage 8 created the minimum users/auth foundation needed before ratings. It did 
 Stage 9 created the minimum entity domain foundation. It did not add entity links, aliases, URL normalization, ratings, reviews, trust, recommendations, moderation, tags, categories, versions, merge, AI, or imports.
 
 Stage 10 created URL normalization only. It did not add `entity_links`, aliases, site-specific parsers, extension behavior, OpenSearch, ratings, reviews, trust, or recommendations.
+
+Stage 11 created ratings only. It did not add reviews, trust calculation, recommendations, moderation, frontend, extension flow, or rating logic inside Entity Module.

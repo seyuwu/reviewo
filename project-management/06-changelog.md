@@ -404,3 +404,39 @@
   - Equivalent canonical URLs are rejected on create with `409 CONFLICT`.
   - Tracking parameters are removed in one centralized normalizer.
   - Site-specific normalizers, `entity_links`, aliases, extension behavior, OpenSearch, ratings, reviews, trust, and recommendations were not added.
+
+## 2026-06-26 - Stage 11 - Ratings Module
+
+- Stage: 11
+- Summary: Added the MVP Ratings Module with one active rating per user per entity, create/update rating endpoint, aggregate read endpoint, current user rating endpoint, and per-entity aggregate recalculation.
+- Created modules: none.
+- Changed modules:
+  - `RatingsModule`
+  - Prisma database schema
+- Created files:
+  - `apps/api/prisma/migrations/20260626233000_add_ratings_foundation/migration.sql`
+  - `apps/api/src/modules/ratings/controllers/ratings.controller.ts`
+  - `apps/api/src/modules/ratings/dto/rate-entity.dto.ts`
+  - `apps/api/src/modules/ratings/dto/rating-aggregate.dto.ts`
+  - `apps/api/src/modules/ratings/dto/rating-response.dto.ts`
+  - `apps/api/src/modules/ratings/interfaces/ratings.port.ts`
+  - `apps/api/src/modules/ratings/repositories/ratings.repository.ts`
+  - `apps/api/src/modules/ratings/services/ratings.service.ts`
+- Changed files:
+  - `apps/api/prisma/schema.prisma`
+  - `apps/api/src/modules/ratings/ratings.module.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Rating scale is integer `1..5`.
+  - One active rating exists per user per entity.
+  - Re-rating updates the existing rating.
+  - Ratings Module owns raw ratings and rating aggregates.
+  - Entity Module does not store or calculate rating values.
+  - Ratings Module checks entity existence through `EntitiesPort`.
+  - Aggregates are recalculated inside Ratings Module after create/update.
+  - Reviews, trust, recommendations, moderation, frontend, and extension flow were not added.

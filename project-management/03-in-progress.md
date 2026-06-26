@@ -26,41 +26,44 @@ Stage 9 - Entities Module is completed.
 
 Stage 10 - URL Normalization MVP is completed.
 
-Stage 11 - Ratings Module is next, pending explicit user confirmation.
+Stage 11 - Ratings Module is completed.
+
+Stage 12 - Reviews Module is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Ratings Module after user confirmation.
+Prepare Reviews Module after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 11 implementation.
+To be confirmed before Stage 12 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 11 implementation.
+To be confirmed before Stage 12 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 11 should implement user ratings only.
-- Ratings must depend on the public `EntitiesPort`, not entity repositories.
-- Do not add reviews, trust calculation, recommendations, extension flow, or frontend behavior in Stage 11.
-- Rating aggregate behavior and exact score scale should be confirmed before implementation if unclear.
+- Stage 12 should implement reviews only.
+- Reviews must not duplicate rating logic.
+- Reviews should depend on the public `EntitiesPort`, not entity repositories.
+- Reviews should remain separate from Ratings Module aggregates.
+- Do not add trust calculation, recommendations, moderation workflow, frontend, or extension flow in Stage 12.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 11.
-- [ ] Describe Stage 11 goal, files, and architectural decisions before editing.
-- [ ] Implement Ratings Module only.
-- [ ] Verify backend lint/typecheck/build and rating behavior.
+- [ ] Wait for user confirmation to start Stage 12.
+- [ ] Describe Stage 12 goal, files, and architectural decisions before editing.
+- [ ] Implement Reviews Module only.
+- [ ] Verify backend lint/typecheck/build and review behavior.
 
 ## Current Progress
 
-Stage 10 is complete. Stage 11 has not started.
+Stage 11 is complete. Stage 12 has not started.
 
 ## Open Questions
 
-No active questions until Stage 11 starts.
+No active questions until Stage 12 starts.
 
 ## Blockers
 
@@ -68,5 +71,5 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 11.
-- Do not add ratings models, DTOs, endpoints, repositories, or business logic until Stage 11 is explicitly started.
+- Wait for user confirmation before Stage 12.
+- Do not add reviews models, DTOs, endpoints, repositories, or business logic until Stage 12 is explicitly started.

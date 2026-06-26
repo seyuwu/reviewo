@@ -195,7 +195,7 @@ Verification:
 - Equivalent URLs with tracking parameters point to one entity.
 - The normalization algorithm is isolated and replaceable.
 
-### 11. ⬜ Ratings Module
+### 11. ✅ Ratings Module
 
 Goal: implement user ratings.
 
