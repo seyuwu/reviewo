@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 15 - Search Module MVP is completed.
+Stage 16 - Entity Page API Composition is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities through the dedicated Search Module, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The backend now also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, and Search MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The backend now also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, and Entity Page API Composition foundation.
 
 ## Already Done
 
@@ -364,15 +364,42 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker API `GET /search/entities?query=...` empty result with `canCreateEntity: true`
   - Docker API validation error for empty search query
   - Docker API legacy `GET /entities/search`
+- Stage 16 Entity Page API Composition was added:
+  - `apps/api/src/modules/entity-page/controllers/entity-page.controller.ts`
+  - `apps/api/src/modules/entity-page/dto/entity-page-response.dto.ts`
+  - `apps/api/src/modules/entity-page/entity-page.module.ts`
+  - `apps/api/src/modules/entity-page/services/entity-page.service.ts`
+  - `apps/api/src/modules/trust/interfaces/trust.port.ts`
+  - `apps/api/src/app.module.ts` now imports `EntityPageModule`
+  - `ReviewsPort` now exposes top-N review access
+  - `TrustModule` now exposes `TrustPort`
+- Stage 16 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed entity-page/reviews/trust files
+  - Docker Prisma migration deploy inside Docker Compose network
+  - Docker API `GET /health`
+  - Docker API `POST /auth/register`
+  - Docker API `POST /entities`
+  - Docker API `GET /entities/:entityId/page` with no reviews
+  - Docker API `PUT /ratings/entities/:entityId/my-rating`
+  - Docker API creation of 12 reviews
+  - Docker API composed response with `reviews.length === 10`
+  - Docker API composed response with `meta.reviewsCount === 12`
+  - Docker API composed response with rating aggregate and trust confidence
+  - Docker API not found response for missing entity page
 
 ## Remaining Work
 
-- Stage 16 - Entity Page API Composition.
-- Do not start Stage 16 until the user confirms and the exact response DTO is agreed.
+- Stage 17 - Extension API MVP.
+- Do not start Stage 17 until the user confirms and exact Extension API contracts are agreed.
 
 ## Next Stage
 
-Stage 16 - Entity Page API Composition, but only after explicit user confirmation and response DTO confirmation.
+Stage 17 - Extension API MVP, but only after explicit user confirmation and API contract confirmation.
 
 ## Documents To Read First
 
@@ -411,7 +438,13 @@ Stage 16 - Entity Page API Composition, but only after explicit user confirmatio
 - `canCreateEntity` is only a fallback hint; Search Module must not create entities.
 - Search Module uses `EntitiesPort.searchEntities(query)` and must not access entity repositories directly.
 - Existing `GET /entities/search` remains available.
-- OpenSearch, indexing workers, frontend search UI, extension search flow, and entity page API composition are not implemented.
+- OpenSearch, indexing workers, frontend search UI, and extension search flow are not implemented.
+- Entity Page API Composition supports `GET /entities/:entityId/page`.
+- Entity page response contains `entity`, `rating`, `trust`, `reviews`, and `meta`.
+- Entity page `reviews` contains top 10 reviews only.
+- Entity page `meta.reviewsCount` contains the total review count.
+- Entity page composition uses `EntitiesPort`, `RatingsPort`, `ReviewsPort`, and `TrustPort`.
+- Entity page composition must not access domain repositories directly.
 - Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
 - Rating scale is integer `1..5`.
 - One active rating exists per user per entity; repeated rating updates the existing record.
@@ -442,11 +475,15 @@ Stage 16 - Entity Page API Composition, but only after explicit user confirmatio
 - Prisma schema now has Users/Auth, Entity MVP, Ratings MVP, and Reviews MVP models only. Trust MVP adds no Prisma models.
 - Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`; Stage 11 migration creates `ratings.ratings` and `ratings.rating_aggregates`; Stage 12 migration creates `reviews.reviews` and `reviews.review_votes`.
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
-- Stage 16 should implement Entity Page API Composition only after user confirmation and exact response DTO confirmation.
+- Stage 16 implemented Entity Page API Composition only.
+- Stage 17 should implement Extension API MVP only after user confirmation and exact API contract confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
 - Dev Compose now uses source bind mounts and Docker-managed dependency volumes; code changes should not require rebuilding images.
+- Keep the dev stack running for routine checks; do not rebuild, stop containers, or run `down -v` after every stage.
+- Prefer short targeted smoke checks against the already running API container.
+- Use disposable isolated Compose projects only when isolation is explicitly needed.
 - Run `make build`, `make rebuild`, or the equivalent Docker Compose build command after Dockerfile/base image changes.
 - If dependency volumes become stale after package metadata changes, use `make clean` or `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml down -v --remove-orphans`.
 - Current Windows environment does not have `make` installed.

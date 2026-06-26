@@ -608,3 +608,39 @@
   - `canCreateEntity` is a fallback hint only; Search Module does not create entities.
   - Existing `GET /entities/search` remains available.
   - OpenSearch, indexing workers, frontend search UI, extension search flow, and entity page composition were not added.
+
+## 2026-06-27 - Stage 16 - Entity Page API Composition
+
+- Stage: 16
+- Summary: Added a dedicated entity page composition endpoint that returns entity data, rating aggregate, trust confidence, top 10 reviews, and review metadata through public module ports.
+- Created modules:
+  - `EntityPageModule`
+- Changed modules:
+  - `ReviewsModule` public port
+  - `TrustModule` public port
+- Created files:
+  - `apps/api/src/modules/entity-page/controllers/entity-page.controller.ts`
+  - `apps/api/src/modules/entity-page/dto/entity-page-response.dto.ts`
+  - `apps/api/src/modules/entity-page/entity-page.module.ts`
+  - `apps/api/src/modules/entity-page/services/entity-page.service.ts`
+  - `apps/api/src/modules/trust/interfaces/trust.port.ts`
+- Changed files:
+  - `apps/api/src/app.module.ts`
+  - `apps/api/src/modules/reviews/interfaces/reviews.port.ts`
+  - `apps/api/src/modules/reviews/repositories/reviews.repository.ts`
+  - `apps/api/src/modules/reviews/services/reviews.service.ts`
+  - `apps/api/src/modules/trust/services/trust.service.ts`
+  - `apps/api/src/modules/trust/trust.module.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - `GET /entities/:entityId/page` composes page data without owning domain logic.
+  - Composition uses `EntitiesPort`, `RatingsPort`, `ReviewsPort`, and `TrustPort`.
+  - `reviews` contains top 10 reviews only.
+  - `meta.reviewsCount` contains the total review count.
+  - `TrustPort` exposes Trust Module confidence to composition without duplicating trust logic.
+  - Review pagination endpoint, frontend UI, extension behavior, and direct repository access were not added.

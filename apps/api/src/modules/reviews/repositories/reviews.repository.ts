@@ -41,7 +41,11 @@ export class ReviewsRepository {
     });
   }
 
-  async listByEntity(entityId: string, currentUserId?: string): Promise<ReviewWithVotes[]> {
+  async listByEntity(
+    entityId: string,
+    currentUserId?: string,
+    limit = 50
+  ): Promise<ReviewWithVotes[]> {
     return this.prismaService.review.findMany({
       include: getReviewInclude(currentUserId),
       orderBy: [
@@ -54,7 +58,7 @@ export class ReviewsRepository {
           updatedAt: "desc"
         }
       ],
-      take: 50,
+      take: limit,
       where: {
         entityId
       }

@@ -61,6 +61,14 @@ export class ReviewsService implements ReviewsPort {
     return reviews.map((review) => toReviewDto(review, currentUserId));
   }
 
+  async listTopReviewsForEntity(entityId: string, limit: number): Promise<ReviewDto[]> {
+    await this.ensureEntityExists(entityId);
+
+    const reviews = await this.reviewsRepository.listByEntity(entityId, undefined, limit);
+
+    return reviews.map((review) => toReviewDto(review));
+  }
+
   async getReviewCountForEntity(entityId: string): Promise<number> {
     await this.ensureEntityExists(entityId);
 

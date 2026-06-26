@@ -1,0 +1,15 @@
+---
+description: Use the persistent Docker dev stack for routine verification
+alwaysApply: true
+---
+
+# Docker Dev Workflow
+
+- Prefer the persistent development Compose stack for routine backend checks.
+- Do not rebuild, stop, remove, or `down -v` containers/volumes after every stage.
+- Use bind mounts and Docker-managed dependency volumes for code changes during development.
+- Run Docker rebuilds only when Dockerfiles, base images, or package dependency metadata changed.
+- Run migrations separately when Prisma migrations changed.
+- Use short targeted smoke checks against the already running API container when possible.
+- Use disposable isolated Compose projects only when isolation is explicitly needed, and explain why before doing it.
+- Use `down -v` only for stale dependency volumes, broken environment state, port conflicts, or explicit cleanup requests.

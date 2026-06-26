@@ -38,41 +38,44 @@ Infrastructure optimization - Docker Dev Volumes is completed.
 
 Stage 15 - Search Module MVP is completed.
 
-Stage 16 - Entity Page API Composition is next, pending explicit user confirmation.
+Stage 16 - Entity Page API Composition is completed.
+
+Stage 17 - Extension API MVP is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Entity Page API Composition after user confirmation.
+Prepare Extension API MVP after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 16 implementation.
+To be confirmed before Stage 17 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 16 implementation.
+To be confirmed before Stage 17 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 16 should compose entity page data only after user confirmation.
-- Stage 16 requires exact response DTO confirmation before implementation.
-- Entity page composition should use public module interfaces, not foreign repositories.
+- Stage 17 should provide the minimum API required by the browser extension after user confirmation.
+- Extension API should support resolving an object by URL and quick rating.
+- Backend remains the only source of business logic.
+- Do not add browser extension UI code in Stage 17 unless explicitly confirmed.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 16.
-- [ ] Confirm exact response DTO for entity page composition.
-- [ ] Describe Stage 16 goal, files, and architectural decisions before editing.
-- [ ] Implement Entity Page API Composition only.
-- [ ] Verify backend lint/typecheck/build and composition behavior.
+- [ ] Wait for user confirmation to start Stage 17.
+- [ ] Confirm exact Extension API contracts before implementation.
+- [ ] Describe Stage 17 goal, files, and architectural decisions before editing.
+- [ ] Implement Extension API MVP only.
+- [ ] Verify backend lint/typecheck/build and extension API behavior.
 
 ## Current Progress
 
-Stage 15 is complete. Stage 16 has not started.
+Stage 16 is complete. Stage 17 has not started.
 
 ## Open Questions
 
-Stage 16 requires confirmation of the exact response DTO before implementation.
+Stage 17 requires confirmation of exact Extension API contracts before implementation.
 
 ## Blockers
 
@@ -80,6 +83,6 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 16.
-- Confirm the exact entity page composition response DTO.
-- Do not add entity page composition endpoint, frontend logic, or extension behavior until Stage 16 is explicitly started and response DTO is confirmed.
+- Wait for user confirmation before Stage 17.
+- Confirm Extension API request/response contracts.
+- Do not add extension API endpoints, extension frontend code, or site-specific parsers until Stage 17 is explicitly started and contracts are confirmed.

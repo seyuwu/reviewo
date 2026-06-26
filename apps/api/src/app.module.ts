@@ -6,6 +6,7 @@ import { AppConfigModule } from "./config/app-config.module.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
+import { EntityPageModule } from "./modules/entity-page/entity-page.module.js";
 import { EntitiesModule } from "./modules/entities/entities.module.js";
 import { ModerationModule } from "./modules/moderation/moderation.module.js";
 import { NotificationsModule } from "./modules/notifications/notifications.module.js";
@@ -24,6 +25,7 @@ import { UsersModule } from "./modules/users/users.module.js";
     AuthModule,
     UsersModule,
     EntitiesModule,
+    EntityPageModule,
     RatingsModule,
     ReviewsModule,
     TrustModule,

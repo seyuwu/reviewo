@@ -5,10 +5,11 @@ import type { RatingsPort } from "../../ratings/interfaces/ratings.port.js";
 import { REVIEWS_PORT } from "../../reviews/interfaces/reviews.port.js";
 import type { ReviewsPort } from "../../reviews/interfaces/reviews.port.js";
 import { TrustConfidenceDto } from "../dto/trust-confidence.dto.js";
+import type { TrustPort } from "../interfaces/trust.port.js";
 import { TrustConfidenceCalculatorService } from "./trust-confidence-calculator.service.js";
 
 @Injectable()
-export class TrustService {
+export class TrustService implements TrustPort {
   constructor(
     @Inject(RATINGS_PORT)
     private readonly ratingsPort: RatingsPort,

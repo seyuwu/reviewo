@@ -292,13 +292,14 @@ Verification:
 - Search does not contain entity creation business logic.
 - Search Module uses `EntitiesPort`, not entity repositories.
 
-### 16. ⬜ Entity Page API Composition
+### 16. ✅ Entity Page API Composition
 
 Goal: provide one backend endpoint for the entity page.
 
 Result:
 
-- Endpoint returns entity, rating aggregate, trust, and reviews.
+- `GET /entities/:entityId/page` returns entity, rating aggregate, trust, top 10 reviews, and metadata.
+- Metadata includes total `reviewsCount`.
 - Frontend does not know which modules were involved.
 - Response DTO is located in the public API layer.
 
@@ -306,10 +307,7 @@ Verification:
 
 - Web can fetch entity page data with one request.
 - Internal module boundaries are not exposed.
-
-Required confirmation before implementation:
-
-- Exact response DTO.
+- Composition uses public module ports only.
 
 ### 17. ⬜ Extension API MVP
 

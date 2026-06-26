@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 16
-- Stage status: Stage 15 completed
-- MVP readiness: 15%
-- Last completed stage: Stage 15 - Search Module MVP
-- Next stage: Stage 16 - Entity Page API Composition
+- Current stage: Waiting for user confirmation before Stage 17
+- Stage status: Stage 16 completed
+- MVP readiness: 16%
+- Last completed stage: Stage 16 - Entity Page API Composition
+- Next stage: Stage 17 - Extension API MVP
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities through the dedicated Search Module, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -183,6 +183,16 @@ The Search MVP foundation is initialized:
 - Search Module does not import or use `EntitiesRepository`.
 - OpenSearch is intentionally not implemented.
 
+The Entity Page API Composition foundation is initialized:
+
+- `GET /entities/:entityId/page` returns composed entity page data.
+- Response contains `entity`, `rating`, `trust`, `reviews`, and `meta`.
+- `reviews` contains top 10 reviews only.
+- `meta.reviewsCount` contains the total number of reviews.
+- Composition uses `EntitiesPort`, `RatingsPort`, `ReviewsPort`, and `TrustPort`.
+- Entity page composition does not import or use domain repositories.
+- No frontend or extension behavior has been added.
+
 Roadmap update:
 
 - Docker Infrastructure was added as Stage 3.
@@ -246,3 +256,5 @@ Stage 13 created MVP trust confidence only. It did not add trust persistence, us
 Stage 14 created backend domain events infrastructure and publish points only. It did not add external brokers, queues, outbox persistence, retries, event versioning, asynchronous handlers, or move aggregate/trust behavior into event handlers.
 
 Stage 15 created the Search Module MVP only. It did not add OpenSearch, frontend search UI, extension search flow, indexing workers, entity creation business logic inside Search Module, or entity page API composition.
+
+Stage 16 created entity page API composition only. It did not add frontend UI, extension behavior, review pagination endpoint, new domain logic, or direct repository access from the composition layer.

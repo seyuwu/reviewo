@@ -74,7 +74,8 @@
 
 - Description: Development Compose uses bind-mounted source files and Docker-managed dependency volumes. First startup or lockfile changes still run `pnpm install` inside the API container to populate/sync volumes.
 - Status: Resolved for backend development loop; still a known dev environment behavior.
-- Possible solution: Use `make clean` or `docker compose ... down -v` if dependency volumes become stale. Run `make build` when Dockerfiles or base images change.
+- Operating rule: Keep the dev stack running for routine development and smoke checks. Do not rebuild, stop containers, or run `down -v` after every stage.
+- Possible solution: Use `make clean` or `docker compose ... down -v` only if dependency volumes become stale, the environment is broken, ports conflict, or explicit cleanup is requested. Run `make build` when Dockerfiles, base images, or package dependency metadata change.
 - Priority: Low.
 
 ## Localhost Database Checks Can Hit A Non-Compose PostgreSQL

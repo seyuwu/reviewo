@@ -1160,3 +1160,63 @@ This keeps the MVP small and avoids premature infrastructure before search requi
 - Add OpenSearch immediately.
 - Add a dedicated search index table.
 - Add asynchronous indexing from domain events in Stage 15.
+
+## 2026-06-27 - Entity Page Composition Layer
+
+### Problem
+
+The frontend needs one endpoint for the entity page, but entity, ratings, reviews, and trust must remain separate domains.
+
+### Decision
+
+Add `GET /entities/:entityId/page` in a dedicated composition module. The composition service reads data through `EntitiesPort`, `RatingsPort`, `ReviewsPort`, and `TrustPort`.
+
+### Reason
+
+This gives clients a single page payload while keeping domain ownership and repository boundaries intact.
+
+### Alternatives
+
+- Let frontend call each domain endpoint separately.
+- Put composition logic inside Entity Module.
+- Read domain repositories directly from the composition layer.
+
+## 2026-06-27 - Entity Page Reviews Are Limited
+
+### Problem
+
+Returning all reviews from the entity page endpoint would become expensive as review counts grow.
+
+### Decision
+
+Return only the top 10 reviews in `reviews` and include `meta.reviewsCount` for the total count.
+
+### Reason
+
+This keeps the MVP page endpoint lightweight while still giving clients enough data for summary UI. Paginated review loading can be added later as a separate endpoint.
+
+### Alternatives
+
+- Return all reviews in the entity page response.
+- Add paginated reviews to Stage 16 immediately.
+- Return no reviews in the entity page response.
+
+## 2026-06-27 - TrustPort For Composition
+
+### Problem
+
+Entity page composition needs trust confidence, but it should not depend on a concrete Trust service or duplicate trust formula logic.
+
+### Decision
+
+Expose `TrustPort` from Trust Module and inject it into Entity Page composition.
+
+### Reason
+
+This keeps trust calculation owned by Trust Module and preserves the public-interface rule between modules.
+
+### Alternatives
+
+- Inject `TrustService` directly.
+- Recalculate confidence in the composition layer.
+- Omit trust from the entity page response.
