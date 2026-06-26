@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 11 - Ratings Module is completed.
+Stage 12 - Reviews Module is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, and read their own rating through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, and Ratings MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, and list entity reviews through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, and Reviews MVP foundation.
 
 ## Already Done
 
@@ -249,15 +249,46 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker API `GET /ratings/entities/:entityId/my-rating`
   - Docker API unauthorized response for rating update
   - Docker API not found response for missing entity aggregate
+- Stage 12 Reviews Module was added:
+  - `apps/api/prisma/migrations/20260626234500_add_reviews_foundation/migration.sql`
+  - `apps/api/prisma/schema.prisma` models for `reviews.reviews` and `reviews.review_votes`
+  - `apps/api/src/modules/reviews/controllers/reviews.controller.ts`
+  - `apps/api/src/modules/reviews/dto/review.dto.ts`
+  - `apps/api/src/modules/reviews/dto/upsert-review.dto.ts`
+  - `apps/api/src/modules/reviews/interfaces/reviews.port.ts`
+  - `apps/api/src/modules/reviews/repositories/reviews.repository.ts`
+  - `apps/api/src/modules/reviews/services/reviews.service.ts`
+  - `apps/api/src/modules/reviews/reviews.module.ts`
+- Stage 12 was verified with:
+  - `corepack pnpm --filter @reviewo/api db:generate`
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed review files
+  - Docker Prisma migration deploy inside Docker Compose network
+  - Docker API `GET /health`
+  - Docker API `POST /auth/register`
+  - Docker API `POST /entities`
+  - Docker API `PUT /ratings/entities/:entityId/my-rating`
+  - Docker API `PUT /reviews/entities/:entityId/my-review`
+  - Docker API review update through repeated `PUT`
+  - Docker API `GET /reviews/entities/:entityId`
+  - Docker API `GET /reviews/entities/:entityId/my-review`
+  - Docker API idempotent `POST /reviews/:reviewId/like`
+  - Docker API `DELETE /reviews/:reviewId/like`
+  - Docker API unauthorized response for review update
+  - Docker API not found response for missing entity reviews
 
 ## Remaining Work
 
-- Stage 12 - Reviews Module.
-- Do not start Stage 12 until the user confirms.
+- Stage 13 - Trust Module MVP.
+- Do not start Stage 13 until the user confirms.
 
 ## Next Stage
 
-Stage 12 - Reviews Module, but only after explicit user confirmation.
+Stage 13 - Trust Module MVP, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -274,7 +305,7 @@ Stage 12 - Reviews Module, but only after explicit user confirmation.
 - Do not add API DTOs to `@reviewo/types` until API contracts are approved.
 - Do not add generic helpers to `@reviewo/shared` without real duplication.
 - Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
-- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, minimal entity endpoints under `/entities`, and minimal rating endpoints under `/ratings`.
+- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, minimal entity endpoints under `/entities`, minimal rating endpoints under `/ratings`, and minimal review endpoints under `/reviews`.
 - `GET /health` now includes database connectivity status.
 - Backend errors now use a centralized infrastructure response shape.
 - Global exception filter is registered in API bootstrap.
@@ -296,13 +327,19 @@ Stage 12 - Reviews Module, but only after explicit user confirmation.
 - One active rating exists per user per entity; repeated rating updates the existing record.
 - Rating aggregates include `avgScore`, `votesCount`, and score distribution `1..5`.
 - Ratings Module uses `EntitiesPort` and must not access entity repositories directly.
-- `entity_links`, aliases, `entity_relations`, graph relations, tags, categories, versions, moderation, merge, AI, imports, reviews, trust, and recommendations are not implemented.
+- Reviews MVP supports `PUT /reviews/entities/:entityId/my-review`, `GET /reviews/entities/:entityId`, `GET /reviews/entities/:entityId/my-review`, `POST /reviews/:reviewId/like`, and `DELETE /reviews/:reviewId/like`.
+- `Review != Rating`: Reviews Module stores text only and must not read or write Ratings tables.
+- One review exists per author per entity; repeated review submission updates the existing row.
+- Review likes use `reviews.review_votes`; repeated like is idempotent and does not create duplicates.
+- Review list is sorted by likes count descending by default.
+- Reviews Module uses `EntitiesPort` and must not access entity repositories directly.
+- `entity_links`, aliases, `entity_relations`, graph relations, tags, categories, versions, moderation, merge, AI, imports, trust, and recommendations are not implemented.
 - Other backend domain modules are empty NestJS module shells only.
 - Do not add DTOs, repositories, Swagger, or business logic outside the relevant stage.
-- Prisma schema now has Users/Auth, Entity MVP, and Ratings MVP models only.
-- Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`; Stage 11 migration creates `ratings.ratings` and `ratings.rating_aggregates`.
+- Prisma schema now has Users/Auth, Entity MVP, Ratings MVP, and Reviews MVP models only.
+- Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`; Stage 11 migration creates `ratings.ratings` and `ratings.rating_aggregates`; Stage 12 migration creates `reviews.reviews` and `reviews.review_votes`.
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
-- Stage 12 should implement reviews only. It should not duplicate ratings logic or calculate trust.
+- Stage 13 should implement trust score only after user confirmation. It should not move ratings or reviews ownership into Entity Module.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

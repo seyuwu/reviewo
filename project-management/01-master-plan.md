@@ -213,7 +213,7 @@ Verification:
 - Average score and votes count update.
 - Entity module does not contain rating logic.
 
-### 12. ⬜ Reviews Module
+### 12. ✅ Reviews Module
 
 Goal: implement basic reviews.
 
@@ -223,14 +223,14 @@ Result:
 - `reviews` and `review_votes` tables.
 - Create review.
 - List reviews for an entity.
-- Upvote or downvote review.
+- Like or unlike review.
 - Public `ReviewsPort`.
 
 Verification:
 
 - User can leave a review.
 - Entity reviews can be fetched.
-- Review votes work independently from ratings.
+- Review likes work independently from ratings.
 
 ### 13. ⬜ Trust Module MVP
 

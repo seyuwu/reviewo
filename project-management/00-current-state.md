@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-26
-- Current stage: Waiting for user confirmation before Stage 12
-- Stage status: Stage 11 completed
-- MVP readiness: 11%
-- Last completed stage: Stage 11 - Ratings Module
-- Next stage: Stage 12 - Reviews Module
+- Current stage: Waiting for user confirmation before Stage 13
+- Stage status: Stage 12 completed
+- MVP readiness: 12%
+- Last completed stage: Stage 12 - Reviews Module
+- Next stage: Stage 13 - Trust Module MVP
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, and read their own rating through the backend API.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, and list entity reviews through the backend API.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -62,19 +62,19 @@ The backend skeleton is initialized:
 - Standard Nest logger is wrapped by `AppLogger` for future replacement.
 - Common infrastructure folders exist for filters, interceptors, guards, pipes, decorators, exceptions, and logger.
 - Future domain modules exist as empty NestJS module shells.
-- No reviews, trust, search, moderation, recommendation, Swagger, frontend, or extension product behavior has been added.
+- No trust, search, moderation, recommendation, Swagger, frontend, or extension product behavior has been added.
 
 The database infrastructure is initialized:
 
 - Prisma is configured as the ORM and migration tooling.
 - Prisma 7 configuration lives in `apps/api/prisma.config.ts`.
-- Prisma schema exists with Users/Auth and Entity MVP models.
+- Prisma schema exists with Users/Auth, Entity, Ratings, and Reviews MVP models.
 - Initial migration creates PostgreSQL schemas only.
 - `DatabaseModule` exposes a single infrastructure Prisma provider through DI.
 - `PrismaService` owns database connection lifecycle and shutdown.
 - Seed script structure exists without seed data.
 - Health endpoint includes a database connectivity check.
-- No reviews, trust, search, moderation, recommendation, or extension tables have been added.
+- No trust, search, moderation, recommendation, or extension tables have been added.
 
 The backend error and response foundation is initialized:
 
@@ -104,7 +104,7 @@ The Entity MVP foundation is initialized:
 - Entity fields are limited to `id`, `title`, `slug`, `type`, `description`, `canonical_url`, `parent_id`, `created_by`, `created_at`, and `updated_at`.
 - Entity type is stored as a PostgreSQL enum.
 - `parent_id` supports a simple tree.
-- `entity_relations`, graph relations, many-to-many entity links, aliases, tags, categories, versions, moderation, merge, AI, import, reviews, trust, and recommendations are intentionally not implemented.
+- `entity_relations`, graph relations, many-to-many entity links, aliases, tags, categories, versions, moderation, merge, AI, import, trust, and recommendations are intentionally not implemented.
 - `POST /entities` creates an entity and requires JWT authentication.
 - `GET /entities/:id` returns an entity by id.
 - `GET /entities/search` performs simple PostgreSQL-backed search.
@@ -132,6 +132,18 @@ The Ratings MVP foundation is initialized:
 - `GET /ratings/entities/:entityId/my-rating` returns the current user's rating or `null`.
 - Ratings Module checks entity existence through `EntitiesPort`.
 - Entity Module does not store or calculate ratings.
+
+The Reviews MVP foundation is initialized:
+
+- `reviews.reviews` stores one text review per author per entity.
+- `reviews.review_votes` stores one like per user per review.
+- `PUT /reviews/entities/:entityId/my-review` creates or updates the current user's review.
+- `GET /reviews/entities/:entityId` returns entity reviews sorted by likes count.
+- `GET /reviews/entities/:entityId/my-review` returns the current user's review or `null`.
+- `POST /reviews/:reviewId/like` likes a review idempotently.
+- `DELETE /reviews/:reviewId/like` removes a review like idempotently.
+- Reviews Module checks entity existence through `EntitiesPort`.
+- Reviews Module does not read or modify Ratings data.
 
 Roadmap update:
 
@@ -188,3 +200,5 @@ Stage 9 created the minimum entity domain foundation. It did not add entity link
 Stage 10 created URL normalization only. It did not add `entity_links`, aliases, site-specific parsers, extension behavior, OpenSearch, ratings, reviews, trust, or recommendations.
 
 Stage 11 created ratings only. It did not add reviews, trust calculation, recommendations, moderation, frontend, extension flow, or rating logic inside Entity Module.
+
+Stage 12 created reviews and review likes only. It did not add dislikes, replies, threaded comments, reactions, attachments, images, AI analysis, moderation, complaints, edit history, review ratings, trust calculation, frontend, or extension flow.

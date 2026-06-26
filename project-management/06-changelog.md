@@ -440,3 +440,37 @@
   - Ratings Module checks entity existence through `EntitiesPort`.
   - Aggregates are recalculated inside Ratings Module after create/update.
   - Reviews, trust, recommendations, moderation, frontend, and extension flow were not added.
+
+## 2026-06-26 - Stage 12 - Reviews Module
+
+- Stage: 12
+- Summary: Added the MVP Reviews Module with one text review per author per entity, review listing sorted by likes, current user review retrieval, and idempotent like/unlike endpoints.
+- Created modules: none.
+- Changed modules:
+  - `ReviewsModule`
+  - Prisma database schema
+- Created files:
+  - `apps/api/prisma/migrations/20260626234500_add_reviews_foundation/migration.sql`
+  - `apps/api/src/modules/reviews/controllers/reviews.controller.ts`
+  - `apps/api/src/modules/reviews/dto/review.dto.ts`
+  - `apps/api/src/modules/reviews/dto/upsert-review.dto.ts`
+  - `apps/api/src/modules/reviews/interfaces/reviews.port.ts`
+  - `apps/api/src/modules/reviews/repositories/reviews.repository.ts`
+  - `apps/api/src/modules/reviews/services/reviews.service.ts`
+- Changed files:
+  - `apps/api/prisma/schema.prisma`
+  - `apps/api/src/modules/reviews/reviews.module.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - `Review != Rating`: reviews store text only and do not store numeric scores.
+  - One review exists per author per entity; repeated submission updates the existing review.
+  - Review likes use a separate `reviews.review_votes` table with one like per user per review.
+  - Reviews are sorted by likes count descending by default.
+  - Reviews Module checks entity existence through `EntitiesPort`.
+  - Reviews Module does not import Ratings Module or access rating repositories/tables.
+  - Dislikes, replies, threaded comments, reactions, attachments, images, AI analysis, moderation, complaints, edit history, review ratings, frontend, and extension flow were not added.

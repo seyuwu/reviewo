@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["auth", "entities", "ratings", "users"]
+  schemas  = ["auth", "entities", "ratings", "reviews", "users"]
 }
 
 model User {
@@ -108,4 +108,34 @@ model RatingAggregate {
 
   @@map("rating_aggregates")
   @@schema("ratings")
+}
+
+model Review {
+  id        String       @id @default(uuid()) @db.Uuid
+  entityId  String       @map("entity_id") @db.Uuid
+  authorId  String       @map("author_id") @db.Uuid
+  text      String
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  votes     ReviewVote[]
+
+  @@unique([authorId, entityId])
+  @@index([entityId])
+  @@index([authorId])
+  @@map("reviews")
+  @@schema("reviews")
+}
+
+model ReviewVote {
+  id        String   @id @default(uuid()) @db.Uuid
+  reviewId  String   @map("review_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, userId])
+  @@index([reviewId])
+  @@index([userId])
+  @@map("review_votes")
+  @@schema("reviews")
 }

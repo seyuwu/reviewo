@@ -28,42 +28,42 @@ Stage 10 - URL Normalization MVP is completed.
 
 Stage 11 - Ratings Module is completed.
 
-Stage 12 - Reviews Module is next, pending explicit user confirmation.
+Stage 12 - Reviews Module is completed.
+
+Stage 13 - Trust Module MVP is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Reviews Module after user confirmation.
+Prepare Trust Module MVP after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 12 implementation.
+To be confirmed before Stage 13 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 12 implementation.
+To be confirmed before Stage 13 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 12 should implement reviews only.
-- Reviews must not duplicate rating logic.
-- Reviews should depend on the public `EntitiesPort`, not entity repositories.
-- Reviews should remain separate from Ratings Module aggregates.
-- Do not add trust calculation, recommendations, moderation workflow, frontend, or extension flow in Stage 12.
+- Stage 13 should implement the simple MVP trust score only after user confirmation.
+- Trust score must remain replaceable without API changes.
+- Trust Module should not move rating or review ownership into Entity Module.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 12.
-- [ ] Describe Stage 12 goal, files, and architectural decisions before editing.
-- [ ] Implement Reviews Module only.
-- [ ] Verify backend lint/typecheck/build and review behavior.
+- [ ] Wait for user confirmation to start Stage 13.
+- [ ] Describe Stage 13 goal, files, and architectural decisions before editing.
+- [ ] Implement Trust Module MVP only.
+- [ ] Verify backend lint/typecheck/build and trust behavior.
 
 ## Current Progress
 
-Stage 11 is complete. Stage 12 has not started.
+Stage 12 is complete. Stage 13 has not started.
 
 ## Open Questions
 
-No active questions until Stage 12 starts.
+No active questions until Stage 13 starts.
 
 ## Blockers
 
@@ -71,5 +71,5 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 12.
-- Do not add reviews models, DTOs, endpoints, repositories, or business logic until Stage 12 is explicitly started.
+- Wait for user confirmation before Stage 13.
+- Do not add trust score tables, calculation strategies, DTOs, endpoints, repositories, or business logic until Stage 13 is explicitly started.

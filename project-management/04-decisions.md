@@ -837,3 +837,103 @@ This is simple, correct for MVP scale, and can later be replaced with event-driv
 - Increment/decrement aggregate counters manually.
 - Recalculate aggregates asynchronously through events immediately.
 - Do not store aggregates in MVP.
+
+## 2026-06-26 - Reviews Are Independent From Ratings
+
+### Problem
+
+The MVP needs text reviews, but review data must not duplicate or mix with numeric rating behavior.
+
+### Decision
+
+Keep Reviews Module as a separate domain. Reviews store textual opinions only in `reviews.reviews`. Ratings stay in Ratings Module and are not read, written, or recalculated by Reviews Module.
+
+### Reason
+
+This preserves the `Review != Rating` boundary and keeps both modules independently extractable later.
+
+### Alternatives
+
+- Store review text together with user ratings.
+- Let Reviews Module read rating tables to enrich review responses.
+- Move rating/review summary data into Entity Module.
+
+## 2026-06-26 - One Review Per Author Per Entity
+
+### Problem
+
+The MVP needs a simple repeat-review policy that avoids duplicate reviews from the same user on the same entity.
+
+### Decision
+
+Use `UNIQUE(author_id, entity_id)` on `reviews.reviews`. `PUT /reviews/entities/:entityId/my-review` creates the current user's review if missing and updates it if it already exists.
+
+### Reason
+
+This keeps the user experience simple and avoids review history/versioning before moderation and audit requirements are designed.
+
+### Alternatives
+
+- Allow multiple reviews per user per entity.
+- Keep full edit history in Stage 12.
+- Reject repeated review submission instead of updating.
+
+## 2026-06-26 - Review Likes Use Separate Votes Table
+
+### Problem
+
+Reviews need usefulness feedback, but dislikes and richer reactions are excluded from the MVP.
+
+### Decision
+
+Store review likes in `reviews.review_votes` with `UNIQUE(review_id, user_id)`. `POST /reviews/:reviewId/like` is idempotent and `DELETE /reviews/:reviewId/like` removes the current user's like if present.
+
+### Reason
+
+This supports useful-review sorting without introducing reaction types, dislike semantics, or review rating systems.
+
+### Alternatives
+
+- Store `likes_count` directly on `reviews.reviews`.
+- Add reaction type enum immediately.
+- Add dislikes in Stage 12.
+
+## 2026-06-26 - Reviews Use EntitiesPort
+
+### Problem
+
+Reviews must verify entity existence without crossing into Entity Module persistence internals.
+
+### Decision
+
+Reviews Module depends on `EntitiesPort.findEntityById()` and does not import or use `EntitiesRepository`.
+
+### Reason
+
+This keeps module boundaries consistent with Ratings Module and supports future service extraction.
+
+### Alternatives
+
+- Query `entities.entities` directly from ReviewsRepository.
+- Import `EntitiesRepository`.
+- Skip entity existence validation.
+
+## 2026-06-26 - Reviews Sorted By Likes
+
+### Problem
+
+The MVP needs a default ordering for entity reviews that surfaces useful reviews first.
+
+### Decision
+
+Sort `GET /reviews/entities/:entityId` by review likes count descending, then by `updated_at` descending as a deterministic tiebreaker.
+
+### Reason
+
+This matches the approved MVP requirement while keeping the query simple and PostgreSQL-backed.
+
+### Alternatives
+
+- Sort only by creation date.
+- Add configurable sorting in Stage 12.
+- Add a separate review ranking algorithm immediately.
