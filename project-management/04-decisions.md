@@ -1440,3 +1440,63 @@ This enables browser-based frontend/API integration without weakening domain bou
 - Proxy all API calls through Next.js.
 - Disable browser integration until deployment.
 - Allow all origins unconditionally.
+
+## 2026-06-27 - Entity Creation Includes Minimal Auth Flow
+
+### Problem
+
+Backend entity creation requires JWT authentication, but the full web auth/profile experience is not implemented yet.
+
+### Decision
+
+Stage 20 adds a minimal register/login block inside the entity creation flow only. The received access token is stored locally for this MVP creation flow.
+
+### Reason
+
+This allows real entity creation through the existing protected backend endpoint without weakening backend auth rules or adding a full auth product surface ahead of schedule.
+
+### Alternatives
+
+- Add a full auth section before entity creation.
+- Add a temporary bearer-token text field.
+- Make backend entity creation public.
+
+## 2026-06-27 - Entity Creation Uses Backend Validation
+
+### Problem
+
+The web form needs to submit entity data but must not duplicate backend business rules.
+
+### Decision
+
+The web form collects title, type, optional canonical URL, and optional description, then submits to `POST /entities`. Backend validation, canonical URL normalization, slug generation, and duplicate checks remain authoritative.
+
+### Reason
+
+This keeps frontend logic focused on UX and preserves backend ownership of business rules.
+
+### Alternatives
+
+- Reimplement entity validation and normalization in the frontend.
+- Generate slugs in the frontend.
+- Add a new frontend-specific entity creation endpoint.
+
+## 2026-06-27 - Entity Route Placeholder Until Stage 21
+
+### Problem
+
+Stage 20 should redirect after successful creation, but the full entity page is a separate Stage 21 deliverable.
+
+### Decision
+
+Add a minimal `/entities/:id` placeholder route after creation. The full entity page UI remains Stage 21.
+
+### Reason
+
+This preserves the user flow after creation without prematurely implementing rating, trust, reviews, or entity page composition UI.
+
+### Alternatives
+
+- Redirect back to home after creation.
+- Implement the full entity page in Stage 20.
+- Redirect to a route that returns 404 until Stage 21.

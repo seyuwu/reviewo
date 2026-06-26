@@ -360,7 +360,7 @@ Verification:
 - User can search for an entity.
 - UI does not contain search business logic.
 
-### 20. ⬜ Web Entity Creation MVP
+### 20. ✅ Web Entity Creation MVP
 
 Goal: implement manual entity creation.
 

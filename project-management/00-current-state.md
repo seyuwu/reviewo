@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 20
-- Stage status: Stage 19 completed
-- MVP readiness: 19%
-- Last completed stage: Stage 19 - Web Home And Search
-- Next stage: Stage 20 - Web Entity Creation MVP
+- Current stage: Waiting for user confirmation before Stage 21
+- Stage status: Stage 20 completed
+- MVP readiness: 20%
+- Last completed stage: Stage 20 - Web Entity Creation MVP
+- Next stage: Stage 21 - Web Entity Page MVP
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, and a home search UX backed by the Search API.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, and a minimal authenticated entity creation flow.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -214,7 +214,7 @@ The Frontend Skeleton is initialized:
 - Frontend uses `NEXT_PUBLIC_API_BASE_URL` with a local fallback.
 - Components do not call `fetch` directly.
 - Docker development web service runs the Next.js dev server on `WEB_PORT`.
-- Entity pages, auth UI, extension UI, frontend business logic, and shared API DTO exports are intentionally not implemented yet.
+- Full entity pages, full auth UI, extension UI, frontend business logic, and shared API DTO exports are intentionally not implemented yet.
 
 The Web Home And Search MVP is initialized:
 
@@ -226,6 +226,17 @@ The Web Home And Search MVP is initialized:
 - Frontend search code is scoped under `apps/web/src/features/home-search`.
 - Browser access from web to API is supported through `CORS_ALLOWED_ORIGINS`.
 - Entity creation flow, entity detail pages, auth UI, ratings UI, extension UI, and frontend search business logic are intentionally not implemented.
+
+The Web Entity Creation MVP is initialized:
+
+- `/entities/new` contains a short entity creation form.
+- The creation form includes a minimal register/login block only for creation.
+- Creation uses backend `POST /entities` with a JWT access token.
+- Created entities redirect to `/entities/:id`.
+- `/entities/:id` is a minimal placeholder route until Stage 21.
+- Home search missing-result hint links to `/entities/new?query=...`.
+- Backend still validates submitted entity data and normalizes canonical URLs.
+- Full auth UI, full entity page UI, ratings UI, reviews UI, and extension UI are intentionally not implemented.
 
 Roadmap update:
 
@@ -298,3 +309,5 @@ Stage 17 created the backend Extension API MVP only. It did not add browser exte
 Stage 18 created the frontend skeleton only. It did not add product search UI, entity pages, auth UI, extension UI, frontend business logic, or shared API DTO exports.
 
 Stage 19 created the web home/search UX only. It did not add entity creation flow, entity detail pages, auth UI, ratings UI, extension UI, or frontend search business logic.
+
+Stage 20 created the web entity creation flow only. It did not add full auth UI, full entity page UI, ratings UI, reviews UI, or extension UI.

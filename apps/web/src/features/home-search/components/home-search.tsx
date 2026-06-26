@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useId, useState } from "react";
 
 import { useEntitySearch } from "../hooks/use-entity-search";
@@ -104,7 +105,9 @@ function SearchResults({ results }: SearchResultsProps) {
             <h2>{entity.title}</h2>
             <p>{entity.description ?? entity.canonicalUrl ?? entity.slug}</p>
           </div>
-          <span className="result-action">Entity page later</span>
+          <Link className="result-action" href={`/entities/${entity.id}`}>
+            Open
+          </Link>
         </article>
       ))}
     </div>
@@ -116,16 +119,18 @@ interface CreateEntityHintProps {
 }
 
 function CreateEntityHint({ query }: CreateEntityHintProps) {
+  const createEntityHref = `/entities/new?query=${encodeURIComponent(query)}`;
+
   return (
     <div className="create-hint">
       <div>
         <p className="result-type">No entity found</p>
         <h2>Create a new page for "{query}"</h2>
-        <p>Entity creation is planned for the next dedicated web stage.</p>
+        <p>Start a minimal entity page and let the backend validate the submitted data.</p>
       </div>
-      <button type="button" disabled>
-        Create page later
-      </button>
+      <Link className="primary-link" href={createEntityHref}>
+        Create page
+      </Link>
     </div>
   );
 }

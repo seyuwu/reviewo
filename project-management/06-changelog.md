@@ -759,3 +759,37 @@
   - Missing search results show a create-page hint without implementing entity creation.
   - API CORS is configured through `CORS_ALLOWED_ORIGINS` for browser web access.
   - Entity creation flow, entity detail pages, auth UI, ratings UI, extension UI, and frontend search business logic were not added.
+
+## 2026-06-27 - Stage 20 - Web Entity Creation MVP
+
+- Stage: 20
+- Summary: Added the minimal web entity creation flow with creation-scoped register/login, authenticated `POST /entities`, home search create-link integration, and a placeholder post-creation entity route.
+- Created modules:
+  - `EntityCreation` frontend feature
+- Changed modules:
+  - `@reviewo/web` routing and home search integration
+- Created files:
+  - `apps/web/src/app/entities/[entityId]/page.tsx`
+  - `apps/web/src/app/entities/new/page.tsx`
+  - `apps/web/src/features/entity-creation/api/authenticate.ts`
+  - `apps/web/src/features/entity-creation/api/create-entity.ts`
+  - `apps/web/src/features/entity-creation/components/entity-creation-form.tsx`
+  - `apps/web/src/features/entity-creation/types/auth.ts`
+  - `apps/web/src/features/entity-creation/types/entity.ts`
+- Changed files:
+  - `apps/web/src/app/globals.css`
+  - `apps/web/src/features/home-search/components/home-search.tsx`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Entity creation lives under `apps/web/src/features/entity-creation`.
+  - Creation flow uses existing backend `POST /entities`.
+  - Minimal register/login exists only inside the entity creation flow.
+  - Access token is stored locally for this MVP flow.
+  - Backend remains authoritative for validation, normalization, slug generation, and duplicate checks.
+  - `/entities/:id` is a placeholder route until Stage 21.
+  - Full auth UI, full entity page UI, ratings UI, reviews UI, and extension UI were not added.

@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 19 - Web Home And Search is completed.
+Stage 20 - Web Entity Creation MVP is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, and a home search UX backed by the Search API. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, and Web Home/Search foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, and minimal authenticated entity creation. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, Web Home/Search foundation, and Web Entity Creation MVP foundation.
 
 ## Already Done
 
@@ -460,15 +460,36 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Persistent Docker dev stack API/web service restart without rebuild
   - Docker API Search smoke with CORS origin header
   - Docker web `GET /` smoke on `localhost:3001`
+- Stage 20 Web Entity Creation MVP was added:
+  - `apps/web/src/app/entities/[entityId]/page.tsx`
+  - `apps/web/src/app/entities/new/page.tsx`
+  - `apps/web/src/features/entity-creation/api/authenticate.ts`
+  - `apps/web/src/features/entity-creation/api/create-entity.ts`
+  - `apps/web/src/features/entity-creation/components/entity-creation-form.tsx`
+  - `apps/web/src/features/entity-creation/types/auth.ts`
+  - `apps/web/src/features/entity-creation/types/entity.ts`
+  - `apps/web/src/features/home-search/components/home-search.tsx` now links missing search results to entity creation
+- Stage 20 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed web files
+  - Persistent Docker dev stack web service restart without rebuild
+  - Docker web `GET /entities/new?query=...` smoke on `localhost:3001`
+  - Docker backend `POST /auth/register`
+  - Docker backend `POST /entities`
+  - Docker web `GET /entities/:id` placeholder smoke
 
 ## Remaining Work
 
-- Stage 20 - Web Entity Creation MVP.
-- Do not start Stage 20 until the user confirms and exact Web Entity Creation MVP scope is agreed.
+- Stage 21 - Web Entity Page MVP.
+- Do not start Stage 21 until the user confirms and exact Web Entity Page MVP scope is agreed.
 
 ## Next Stage
 
-Stage 20 - Web Entity Creation MVP, but only after explicit user confirmation and scope confirmation.
+Stage 21 - Web Entity Page MVP, but only after explicit user confirmation and scope confirmation.
 
 ## Documents To Read First
 
@@ -527,7 +548,12 @@ Stage 20 - Web Entity Creation MVP, but only after explicit user confirmation an
 - Home search UI exists under `apps/web/src/features/home-search`.
 - Home search uses backend `GET /search/entities?query=...` through a feature API function and TanStack Query hook.
 - Home search renders result cards and a create-page hint when `canCreateEntity` is true.
-- Entity pages, entity creation flow, auth UI, ratings UI, and extension UI are not implemented yet.
+- Web entity creation exists under `apps/web/src/features/entity-creation`.
+- `/entities/new` contains a short entity creation form and creation-scoped register/login block.
+- Entity creation uses backend `POST /entities` with a JWT access token.
+- Created entities redirect to `/entities/:id`.
+- `/entities/:id` is currently a placeholder route until Stage 21.
+- Full entity page UI, full auth UI, ratings UI, reviews UI, and extension UI are not implemented yet.
 - Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
 - Rating scale is integer `1..5`.
 - One active rating exists per user per entity; repeated rating updates the existing record.
@@ -562,7 +588,8 @@ Stage 20 - Web Entity Creation MVP, but only after explicit user confirmation an
 - Stage 17 implemented Extension API MVP only.
 - Stage 18 implemented Frontend Skeleton only.
 - Stage 19 implemented Web Home And Search only.
-- Stage 20 should implement Web Entity Creation MVP only after user confirmation and exact scope confirmation.
+- Stage 20 implemented Web Entity Creation MVP only.
+- Stage 21 should implement Web Entity Page MVP only after user confirmation and exact scope confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web Docker service runs the Next.js dev server. Extension Docker service still uses a placeholder command because the extension app does not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
