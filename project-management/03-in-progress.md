@@ -42,42 +42,45 @@ Stage 16 - Entity Page API Composition is completed.
 
 Stage 17 - Extension API MVP is completed.
 
-Stage 18 - Frontend Skeleton is next, pending explicit user confirmation.
+Stage 18 - Frontend Skeleton is completed.
+
+Stage 19 - Web Home And Search is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Frontend Skeleton after user confirmation.
+Prepare Web Home And Search after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 18 implementation.
+To be confirmed before Stage 19 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 18 implementation.
+To be confirmed before Stage 19 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 18 should create the Next.js web app skeleton after user confirmation.
-- Stage 18 should configure routing, layout, providers, TanStack Query, and base API client.
+- Stage 19 should implement the main web home/search UX after user confirmation.
+- Home page should search through backend Search API.
+- UI must not contain search business logic.
 - Keep `fetch` out of components.
-- Do not add product UI flows beyond the approved frontend skeleton.
+- Do not add entity creation flow or entity pages in Stage 19 unless explicitly confirmed.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 18.
-- [ ] Confirm exact Frontend Skeleton scope before implementation.
-- [ ] Describe Stage 18 goal, files, and architectural decisions before editing.
-- [ ] Implement Frontend Skeleton only.
+- [ ] Wait for user confirmation to start Stage 19.
+- [ ] Confirm exact Web Home And Search scope before implementation.
+- [ ] Describe Stage 19 goal, files, and architectural decisions before editing.
+- [ ] Implement Web Home And Search only.
 - [ ] Verify frontend/backend lint/typecheck/build behavior.
 
 ## Current Progress
 
-Stage 17 is complete. Stage 18 has not started.
+Stage 18 is complete. Stage 19 has not started.
 
 ## Open Questions
 
-Stage 18 requires confirmation of exact Frontend Skeleton scope before implementation.
+Stage 19 requires confirmation of exact Web Home And Search scope before implementation.
 
 ## Blockers
 
@@ -85,6 +88,6 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 18.
-- Confirm frontend framework/package versions and skeleton scope.
-- Do not add product search UI, entity pages, auth UI, or extension UI until their dedicated stages.
+- Wait for user confirmation before Stage 19.
+- Confirm search UI contract and client behavior.
+- Do not add entity creation pages, entity detail pages, auth UI, ratings UI, or extension UI until their dedicated stages.

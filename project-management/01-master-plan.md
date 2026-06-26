@@ -326,7 +326,7 @@ Verification:
 - Extension can send URL and receive card data.
 - Extension does not contain object type detection business logic.
 
-### 18. ⬜ Frontend Skeleton
+### 18. ✅ Frontend Skeleton
 
 Goal: create the Next.js web app.
 

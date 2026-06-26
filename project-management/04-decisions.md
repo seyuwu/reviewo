@@ -1300,3 +1300,63 @@ This supports the first extension flow while keeping creation and parser complex
 - Auto-create entities from URL resolution.
 - Add parser-specific entity detection immediately.
 - Add extension persistence tables in Stage 17.
+
+## 2026-06-27 - Web Uses Next.js App Router
+
+### Problem
+
+The roadmap requires a web frontend foundation before product pages and search UI can be implemented.
+
+### Decision
+
+Create `@reviewo/web` as a Next.js App Router application with TypeScript, root layout, global styles, and a minimal placeholder page.
+
+### Reason
+
+This establishes the web application boundary without adding product flows before their dedicated stages.
+
+### Alternatives
+
+- Use a custom React/Vite app.
+- Add full home/search UI immediately.
+- Delay web framework setup until product UI stages.
+
+## 2026-06-27 - Web API Access Goes Through Client Boundary
+
+### Problem
+
+Frontend components need API data later, but direct `fetch` calls inside components would duplicate transport details and make flows harder to test.
+
+### Decision
+
+Add a base API client under `apps/web/src/lib/api` and keep direct `fetch` out of React components.
+
+### Reason
+
+This preserves the backend as the business logic source while giving future feature code one place for API transport behavior.
+
+### Alternatives
+
+- Call `fetch` directly from components.
+- Generate API clients before contracts are stable.
+- Put API helpers into shared packages immediately.
+
+## 2026-06-27 - Frontend Skeleton Avoids Product Flows
+
+### Problem
+
+Stage 18 needs to prove the web app starts, but adding search, auth, entity pages, or rating UI would overlap later roadmap stages.
+
+### Decision
+
+Stage 18 includes only routing, layout, providers, TanStack Query, API client foundation, and a minimal placeholder page.
+
+### Reason
+
+This keeps the frontend foundation small and makes later UI stages easier to review independently.
+
+### Alternatives
+
+- Build the home/search UI in Stage 18.
+- Add auth UI in Stage 18.
+- Add entity page UI in Stage 18.

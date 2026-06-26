@@ -1,0 +1,113 @@
+:root {
+  color-scheme: light;
+  --color-background: #eff6ff;
+  --color-card: #ffffff;
+  --color-card-border: #bfdbfe;
+  --color-primary: #1e40af;
+  --color-primary-soft: #dbeafe;
+  --color-text: #0f172a;
+  --color-text-muted: #475569;
+  --shadow-card: 0 24px 80px rgb(30 64 175 / 12%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgb(59 130 246 / 16%), transparent 34rem),
+    var(--color-background);
+  color: var(--color-text);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 2rem;
+}
+
+.hero-card {
+  width: min(100%, 52rem);
+  border: 1px solid var(--color-card-border);
+  border-radius: 2rem;
+  background: rgb(255 255 255 / 86%);
+  box-shadow: var(--shadow-card);
+  padding: clamp(2rem, 5vw, 4rem);
+}
+
+.eyebrow {
+  margin: 0 0 1rem;
+  color: var(--color-primary);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1 {
+  max-width: 13ch;
+  margin: 0;
+  color: var(--color-primary);
+  font-size: clamp(2.75rem, 8vw, 5.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+}
+
+.hero-copy {
+  max-width: 42rem;
+  margin: 1.5rem 0 0;
+  color: var(--color-text-muted);
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  line-height: 1.7;
+}
+
+.readiness-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.readiness-list span {
+  border: 1px solid var(--color-card-border);
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.875rem;
+  font-weight: 700;
+  padding: 0.625rem 0.875rem;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    align-items: stretch;
+    padding: 1rem;
+  }
+
+  .hero-card {
+    border-radius: 1.5rem;
+  }
+}

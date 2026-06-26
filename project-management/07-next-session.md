@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 17 - Extension API MVP is completed.
+Stage 18 - Frontend Skeleton is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The backend now also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, and Extension API MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app skeleton now starts as a Next.js application with routing, layout, providers, TanStack Query, and a base API client. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, and Frontend Skeleton foundation.
 
 ## Already Done
 
@@ -416,15 +416,39 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker API unauthorized response for quick rating
   - Docker API `PUT /extension/entities/:entityId/my-rating`
   - Docker API quick rating aggregate and trust refresh
+- Stage 18 Frontend Skeleton was added:
+  - `apps/web/package.json`
+  - `apps/web/next-env.d.ts`
+  - `apps/web/next.config.mjs`
+  - `apps/web/tsconfig.json`
+  - `apps/web/src/app/globals.css`
+  - `apps/web/src/app/layout.tsx`
+  - `apps/web/src/app/page.tsx`
+  - `apps/web/src/app/providers.tsx`
+  - `apps/web/src/lib/api/api-client.ts`
+  - `apps/web/src/lib/api/api-error.ts`
+  - `apps/web/src/lib/config/public-env.ts`
+  - `docker-compose.dev.yml` now starts the web dev server
+  - `docker/web/Dockerfile` now runs web dev/start commands
+  - `pnpm-workspace.yaml` now allows `sharp` build scripts for Next.js
+- Stage 18 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed web/Docker files
+  - Persistent Docker dev stack web startup without rebuild
+  - Docker web `GET /` smoke on `localhost:3001`
 
 ## Remaining Work
 
-- Stage 18 - Frontend Skeleton.
-- Do not start Stage 18 until the user confirms and exact Frontend Skeleton scope is agreed.
+- Stage 19 - Web Home And Search.
+- Do not start Stage 19 until the user confirms and exact Web Home And Search scope is agreed.
 
 ## Next Stage
 
-Stage 18 - Frontend Skeleton, but only after explicit user confirmation and scope confirmation.
+Stage 19 - Web Home And Search, but only after explicit user confirmation and scope confirmation.
 
 ## Documents To Read First
 
@@ -440,7 +464,7 @@ Stage 18 - Frontend Skeleton, but only after explicit user confirmation and scop
 - Shared packages currently expose empty public entry points intentionally.
 - Do not add API DTOs to `@reviewo/types` until API contracts are approved.
 - Do not add generic helpers to `@reviewo/shared` without real duplication.
-- Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
+- Do not add UI components to `@reviewo/ui` before a dedicated design-system or reusable component stage.
 - Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, minimal entity endpoints under `/entities`, minimal search endpoint under `/search`, minimal extension endpoints under `/extension`, minimal rating endpoints under `/ratings`, minimal review endpoints under `/reviews`, and minimal trust endpoint under `/trust`.
 - `GET /health` now includes database connectivity status.
 - Backend errors now use a centralized infrastructure response shape.
@@ -477,6 +501,10 @@ Stage 18 - Frontend Skeleton, but only after explicit user confirmation and scop
 - Extension quick rating returns updated aggregate, current user's rating, refreshed trust confidence, entity summary, and web path.
 - Extension API uses `EntitiesPort`, `RatingsPort`, and `TrustPort`.
 - Extension API must not access domain repositories directly.
+- Frontend Skeleton exists under `apps/web`.
+- Web uses Next.js App Router, strict TypeScript, root layout, global styles, TanStack Query provider, and a base API client.
+- Web components should not call `fetch` directly; use the API client/query layer.
+- Product search UI, entity pages, auth UI, ratings UI, and extension UI are not implemented yet.
 - Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
 - Rating scale is integer `1..5`.
 - One active rating exists per user per entity; repeated rating updates the existing record.
@@ -509,9 +537,10 @@ Stage 18 - Frontend Skeleton, but only after explicit user confirmation and scop
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
 - Stage 16 implemented Entity Page API Composition only.
 - Stage 17 implemented Extension API MVP only.
-- Stage 18 should implement Frontend Skeleton only after user confirmation and exact scope confirmation.
+- Stage 18 implemented Frontend Skeleton only.
+- Stage 19 should implement Web Home And Search only after user confirmation and exact scope confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
-- Web and extension Docker services still use placeholder commands because those apps do not exist yet.
+- Web Docker service runs the Next.js dev server. Extension Docker service still uses a placeholder command because the extension app does not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
 - Dev Compose now uses source bind mounts and Docker-managed dependency volumes; code changes should not require rebuilding images.
 - Keep the dev stack running for routine checks; do not rebuild, stop containers, or run `down -v` after every stage.
@@ -519,6 +548,7 @@ Stage 18 - Frontend Skeleton, but only after explicit user confirmation and scop
 - Use disposable isolated Compose projects only when isolation is explicitly needed.
 - Run `make build`, `make rebuild`, or the equivalent Docker Compose build command after Dockerfile/base image changes.
 - If dependency volumes become stale after package metadata changes, use `make clean` or `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml down -v --remove-orphans`.
+- Next.js depends on `sharp`, which is allowed in `pnpm-workspace.yaml` for build scripts.
 - Current Windows environment does not have `make` installed.
 - `pnpm` is not installed globally in the current environment; use `corepack pnpm ...`.
 - `package.json` pins `pnpm@11.9.0`.

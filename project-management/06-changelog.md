@@ -681,3 +681,44 @@
   - URL normalization remains owned by Entity Module.
   - Rating write invariants remain owned by Ratings Module.
   - Browser extension UI, Chrome APIs, content scripts, site-specific parsers, entity auto-creation, new auth model, new database tables, and direct repository access were not added.
+
+## 2026-06-27 - Stage 18 - Frontend Skeleton
+
+- Stage: 18
+- Summary: Added the Next.js web app skeleton with App Router, root layout, global styles, TanStack Query provider, and a base API client boundary.
+- Created modules:
+  - `@reviewo/web`
+- Changed modules:
+  - Docker web development/runtime infrastructure
+- Created files:
+  - `apps/web/package.json`
+  - `apps/web/next-env.d.ts`
+  - `apps/web/next.config.mjs`
+  - `apps/web/tsconfig.json`
+  - `apps/web/src/app/globals.css`
+  - `apps/web/src/app/layout.tsx`
+  - `apps/web/src/app/page.tsx`
+  - `apps/web/src/app/providers.tsx`
+  - `apps/web/src/lib/api/api-client.ts`
+  - `apps/web/src/lib/api/api-error.ts`
+  - `apps/web/src/lib/config/public-env.ts`
+- Changed files:
+  - `docker-compose.dev.yml`
+  - `docker/web/Dockerfile`
+  - `pnpm-lock.yaml`
+  - `pnpm-workspace.yaml`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/05-known-issues.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Web app uses Next.js App Router and strict TypeScript.
+  - TanStack Query is configured through a top-level providers component.
+  - Base API client lives under `apps/web/src/lib/api`.
+  - Web components do not call `fetch` directly.
+  - Web development container now runs the Next.js dev server.
+  - `sharp` is allowed in `pnpm-workspace.yaml` because Next.js depends on it for image optimization.
+  - Product search UI, entity pages, auth UI, extension UI, frontend business logic, and shared API DTO exports were not added.

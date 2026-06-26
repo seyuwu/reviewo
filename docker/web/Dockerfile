@@ -16,7 +16,7 @@ FROM base AS development
 ENV NODE_ENV=development
 ENV APP_NAME=web
 
-CMD ["corepack", "pnpm", "check"]
+CMD ["corepack", "pnpm", "--filter", "@reviewo/web", "dev"]
 
 FROM base AS production
 
@@ -25,4 +25,4 @@ ENV APP_NAME=web
 
 RUN corepack pnpm build
 
-CMD ["corepack", "pnpm", "check"]
+CMD ["corepack", "pnpm", "--filter", "@reviewo/web", "start"]

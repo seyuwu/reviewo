@@ -63,11 +63,11 @@
 - Possible solution: Install `make`, use Docker Compose commands directly, or add an additional cross-platform task runner later if needed.
 - Priority: Low.
 
-## Web And Extension Docker Services Use Placeholder Commands
+## Extension Docker Service Uses Placeholder Command
 
-- Description: `web` and `extension` containers currently run `pnpm check` and stay alive because real applications are not implemented yet.
-- Status: Intentional Stage 3 limitation.
-- Possible solution: Replace placeholder commands with real app start commands during the relevant app implementation stages.
+- Description: `extension` container currently runs `pnpm check` and stays alive because the real extension application is not implemented yet. The `web` container now runs the Next.js dev server.
+- Status: Intentional limitation until the extension implementation stage.
+- Possible solution: Replace the extension placeholder command with a real extension app command during the relevant app implementation stage.
 - Priority: Medium.
 
 ## Docker Development Uses Dev Volumes

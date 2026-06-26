@@ -1,0 +1,26 @@
+{
+  "name": "@reviewo/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reviewo web application.",
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "lint": "eslint .",
+    "start": "next start --hostname 0.0.0.0 --port 3000",
+    "test": "node -e \"console.log('No web tests configured yet')\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.101.1",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3"
+  }
+}

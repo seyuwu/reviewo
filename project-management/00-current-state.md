@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 18
-- Stage status: Stage 17 completed
-- MVP readiness: 17%
-- Last completed stage: Stage 17 - Extension API MVP
-- Next stage: Stage 18 - Frontend Skeleton
+- Current stage: Waiting for user confirmation before Stage 19
+- Stage status: Stage 18 completed
+- MVP readiness: 18%
+- Last completed stage: Stage 18 - Frontend Skeleton
+- Next stage: Stage 19 - Web Home And Search
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app skeleton now starts as a Next.js application with routing, layout, providers, TanStack Query, and a base API client.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -19,7 +19,7 @@ The monorepo foundation is initialized:
 
 - Root workspace metadata exists in `package.json`.
 - Workspace boundaries are configured in `pnpm-workspace.yaml`.
-- Application placeholders exist under `apps/api`, `apps/web`, and `apps/extension`.
+- Application directories exist under `apps/api`, `apps/web`, and `apps/extension`.
 - Shared workspace packages exist under `packages/ui`, `packages/shared`, `packages/types`, and `packages/config`.
 - Dependency installation is verified through Corepack-managed `pnpm`.
 
@@ -205,6 +205,17 @@ The Extension API MVP foundation is initialized:
 - Extension API does not import or use domain repositories.
 - Browser extension UI, Chrome APIs, content scripts, site-specific parsers, entity auto-creation, new auth model, and new database tables are intentionally not implemented.
 
+The Frontend Skeleton is initialized:
+
+- `@reviewo/web` exists as a Next.js App Router application.
+- Root layout, global styles, and a minimal placeholder page exist.
+- TanStack Query is configured through a top-level providers component.
+- A base API client exists under `apps/web/src/lib/api`.
+- Frontend uses `NEXT_PUBLIC_API_BASE_URL` with a local fallback.
+- Components do not call `fetch` directly.
+- Docker development web service runs the Next.js dev server on `WEB_PORT`.
+- Product search UI, entity pages, auth UI, extension UI, frontend business logic, and shared API DTO exports are intentionally not implemented yet.
+
 Roadmap update:
 
 - Docker Infrastructure was added as Stage 3.
@@ -243,7 +254,7 @@ Stage 1 created only the monorepo foundation and workspace structure. Backend, f
 
 Stage 3 created Docker infrastructure only. It did not add backend, frontend, extension framework code, database migrations, or business modules.
 
-Current app containers use temporary placeholder commands because the applications are not implemented yet. Future app stages should replace these commands with real app start commands without changing the overall Docker structure.
+The web container now runs the Next.js dev server in development. The extension container still uses a temporary placeholder command because the extension app is not implemented yet.
 
 Stage 4 created shared package boundaries only. These packages must remain free of business logic unless a future stage explicitly introduces approved shared contracts or technical utilities.
 
@@ -272,3 +283,5 @@ Stage 15 created the Search Module MVP only. It did not add OpenSearch, frontend
 Stage 16 created entity page API composition only. It did not add frontend UI, extension behavior, review pagination endpoint, new domain logic, or direct repository access from the composition layer.
 
 Stage 17 created the backend Extension API MVP only. It did not add browser extension UI, Chrome APIs, content scripts, site-specific parsers, entity auto-creation, new auth model, or new database tables.
+
+Stage 18 created the frontend skeleton only. It did not add product search UI, entity pages, auth UI, extension UI, frontend business logic, or shared API DTO exports.
