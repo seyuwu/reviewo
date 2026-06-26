@@ -157,23 +157,25 @@ Required confirmation before implementation:
 
 - MVP auth approach.
 
-### 9. ⬜ Entities Module
+### 9. ✅ Entities Module
 
 Goal: implement the central entity domain.
 
 Result:
 
 - `entities` module.
-- `entities`, `entity_links`, and `entity_images` tables.
-- Support `parent_id`, `canonical_url`, and `entity_links`.
+- `entities.entities` table.
+- Support `parent_id` and one optional `canonical_url`.
 - Manual entity creation.
-- Find entity by normalized URL.
+- Fetch entity by id.
+- Simple PostgreSQL-backed search.
 - Public `EntitiesPort` for other modules.
 
 Verification:
 
 - Entity can be created.
-- Entity can be found by canonical or normalized URL.
+- Entity can be fetched by id.
+- Entity can be found through simple search.
 - Other modules do not access entity repositories directly.
 
 ### 10. ⬜ URL Normalization MVP

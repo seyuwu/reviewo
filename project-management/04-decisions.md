@@ -557,3 +557,123 @@ This keeps app runtime configuration and Docker port mapping aligned and allows 
 - Keep the container port hardcoded to `3000`.
 - Split host and container API port variables.
 - Force the API to always listen on `3000` in containers.
+
+## 2026-06-26 - Stage 9 Entity MVP Model
+
+### Problem
+
+Entity is the central domain of the platform, but adding links, aliases, graph relations, versions, tags, moderation, ratings, reviews, and trust in the same stage would make the core model too broad.
+
+### Decision
+
+Stage 9 implements only `entities.entities` with `id`, `title`, `slug`, `type`, `description`, `canonical_url`, `parent_id`, `created_by`, `created_at`, and `updated_at`.
+
+### Reason
+
+This gives the platform a usable central object while preserving a clean path to add URL normalization, links, graph relations, ratings, reviews, and trust in later stages.
+
+### Alternatives
+
+- Implement `entity_links` and aliases immediately.
+- Implement `entity_relations` immediately.
+- Add categories/tags as part of the entity stage.
+
+## 2026-06-26 - Entity Type As PostgreSQL Enum
+
+### Problem
+
+MVP needs a bounded set of entity types, but a separate category/type management domain would be premature.
+
+### Decision
+
+Store entity type as `entities.entity_type` enum with the approved MVP values.
+
+### Reason
+
+This keeps validation and storage simple while allowing a later migration to a more flexible type system if needed.
+
+### Alternatives
+
+- Store type as free text.
+- Add a separate `entity_types` table.
+- Delay type support.
+
+## 2026-06-26 - Single Canonical URL In Stage 9
+
+### Problem
+
+Entities need a canonical URL, but URL normalization, aliases, and multiple links are part of later scope.
+
+### Decision
+
+Stage 9 stores one optional `canonical_url` on `entities.entities`. It does not create `entity_links`, URL aliases, or site-specific normalization logic.
+
+### Reason
+
+This follows the user's Stage 9 scope and keeps URL normalization isolated for Stage 10.
+
+### Alternatives
+
+- Add `entity_links` now.
+- Add URL alias support now.
+- Delay canonical URL storage until Stage 10.
+
+## 2026-06-26 - Entity API Access Rules
+
+### Problem
+
+Entity creation needs ownership attribution through `created_by`, while entity reads should be available for public pages and future extension lookup.
+
+### Decision
+
+`POST /entities` requires JWT authentication and uses the current user's id as `created_by`. `GET /entities/:id` and `GET /entities/search` are public.
+
+### Reason
+
+This keeps entity creation accountable without blocking public entity page reads.
+
+### Alternatives
+
+- Make all entity endpoints public.
+- Require authentication for reads.
+- Delay `created_by` until moderation/auth is more advanced.
+
+## 2026-06-26 - Simple PostgreSQL Entity Search
+
+### Problem
+
+Users must be able to find entities, but OpenSearch and advanced ranking are outside MVP Stage 9.
+
+### Decision
+
+Use Prisma/PostgreSQL filtering against `title`, `slug`, and `canonical_url`, limited to a small result set.
+
+### Reason
+
+This provides a verifiable MVP search path without introducing new infrastructure or duplicating future Search Module responsibilities.
+
+### Alternatives
+
+- Add OpenSearch immediately.
+- Implement full-text ranking in Stage 9.
+- Delay search until a dedicated Search Module stage.
+
+## 2026-06-26 - EntitiesPort Boundary
+
+### Problem
+
+Future modules will need entity data, but direct repository access would violate modular monolith boundaries.
+
+### Decision
+
+Expose an `EntitiesPort` token/interface from `EntitiesModule`; future modules should depend on this public boundary instead of `EntitiesRepository`.
+
+### Reason
+
+This keeps repository details private to the entity domain and preserves the future microservice extraction path.
+
+### Alternatives
+
+- Export `EntitiesRepository`.
+- Let future modules query Prisma directly.
+- Add no public entity interface until another module needs it.

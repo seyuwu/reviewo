@@ -83,3 +83,10 @@
 - Status: Known environment caveat.
 - Possible solution: Prefer running migration smoke checks inside the Docker Compose network using host `postgres`, or ensure local `DATABASE_URL` points to the intended database.
 - Priority: Low.
+
+## Parallel Prisma Generate Can Lock Files On Windows
+
+- Description: Running multiple workspace commands that invoke `prisma generate` in parallel can fail with `EBUSY` when the generated Prisma Client files are copied.
+- Status: Known environment caveat.
+- Possible solution: Run `corepack pnpm typecheck` and `corepack pnpm build` sequentially when Prisma schema changed, or avoid parallel commands that both generate Prisma Client.
+- Priority: Low.

@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 8 - Users/Auth MVP Foundation is completed.
+Stage 9 - Entities Module is completed.
 
-The first product capability is implemented: users can register, sign in, and read the current authenticated user through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, and Users/Auth MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities, fetch entities by id, and search entities through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, and Entity MVP foundation.
 
 ## Already Done
 
@@ -176,15 +176,40 @@ The first product capability is implemented: users can register, sign in, and re
   - Docker API `GET /auth/me` with Bearer token
   - Docker API unauthorized response for `GET /auth/me`
   - Alternate `API_PORT` Docker health smoke
+- Stage 9 Entity Module was added:
+  - `apps/api/prisma/migrations/20260626230000_add_entities_foundation/migration.sql`
+  - `apps/api/prisma/schema.prisma` model for `entities.entities`
+  - `apps/api/src/modules/entities/controllers/entities.controller.ts`
+  - `apps/api/src/modules/entities/dto/create-entity.dto.ts`
+  - `apps/api/src/modules/entities/dto/entity.dto.ts`
+  - `apps/api/src/modules/entities/dto/search-entities.dto.ts`
+  - `apps/api/src/modules/entities/interfaces/entities.port.ts`
+  - `apps/api/src/modules/entities/repositories/entities.repository.ts`
+  - `apps/api/src/modules/entities/services/entities.service.ts`
+  - `apps/api/src/modules/entities/entities.module.ts`
+- Stage 9 was verified with:
+  - `corepack pnpm --filter @reviewo/api db:generate`
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - Docker Prisma migration deploy inside Docker Compose network
+  - Docker API `GET /health`
+  - Docker API `POST /auth/register`
+  - Docker API `POST /entities`
+  - Docker API `GET /entities/:id`
+  - Docker API `GET /entities/search`
+  - Docker API unauthorized response for `POST /entities`
 
 ## Remaining Work
 
-- Stage 9 - Entities Module.
-- Do not start Stage 9 until the user confirms.
+- Stage 10 - URL Normalization MVP.
+- Do not start Stage 10 until the user confirms.
 
 ## Next Stage
 
-Stage 9 - Entities Module, but only after explicit user confirmation.
+Stage 10 - URL Normalization MVP, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -201,7 +226,7 @@ Stage 9 - Entities Module, but only after explicit user confirmation.
 - Do not add API DTOs to `@reviewo/types` until API contracts are approved.
 - Do not add generic helpers to `@reviewo/shared` without real duplication.
 - Do not add UI components to `@reviewo/ui` before frontend/design-system stages.
-- Backend currently exposes `GET /health` and minimal auth endpoints under `/auth`.
+- Backend currently exposes `GET /health`, minimal auth endpoints under `/auth`, and minimal entity endpoints under `/entities`.
 - `GET /health` now includes database connectivity status.
 - Backend errors now use a centralized infrastructure response shape.
 - Global exception filter is registered in API bootstrap.
@@ -210,13 +235,18 @@ Stage 9 - Entities Module, but only after explicit user confirmation.
 - `POST /auth/register`, `POST /auth/login`, and `GET /auth/me` exist.
 - `GET /auth/me` requires Bearer token authentication.
 - OAuth, refresh tokens, email verification, password reset, roles, and permissions are intentionally deferred.
+- Entity MVP supports `POST /entities`, `GET /entities/:id`, and `GET /entities/search`.
+- `POST /entities` requires JWT authentication and uses current user id as `created_by`.
+- Entity type is currently a PostgreSQL enum.
+- Stage 9 entity model uses one optional `canonical_url` and `parent_id`.
+- `entity_links`, aliases, `entity_relations`, graph relations, tags, categories, versions, moderation, merge, AI, imports, ratings, reviews, trust, and recommendations are not implemented.
 - Other backend domain modules are empty NestJS module shells only.
-- Do not add DTOs, repositories, entities, Swagger, or business logic outside the relevant stage.
-- Prisma schema now has only Users/Auth models.
-- Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates only `users.users` and `auth.user_auth_identities`.
+- Do not add DTOs, repositories, Swagger, or business logic outside the relevant stage.
+- Prisma schema now has Users/Auth and Entity MVP models only.
+- Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`.
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
-- Stage 9 should implement entity domain only. MVP entity model uses `parent_id`, `entity_links`, and `canonical_url`; `entity_relations` remains deferred.
-- URL normalization has a dedicated Stage 10 and should not be fully implemented in Stage 9 unless explicitly approved.
+- Stage 10 should implement URL normalization only. It may refine canonical URL handling, but should not add `entity_links` unless explicitly approved.
+- Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
 - Current Windows environment does not have `make` installed.

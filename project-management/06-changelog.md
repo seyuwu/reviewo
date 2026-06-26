@@ -338,3 +338,40 @@
   - `GET /auth/me` is protected by the JWT guard.
   - Docker API port mapping now follows `API_PORT`.
   - OAuth, refresh tokens, email verification, password reset, roles, and permissions are deferred.
+
+## 2026-06-26 - Stage 9 - Entities Module
+
+- Stage: 9
+- Summary: Added the MVP Entity Module with entity persistence, protected entity creation, public entity retrieval by id, simple PostgreSQL-backed search, and a public `EntitiesPort` boundary.
+- Created modules: none.
+- Changed modules:
+  - `EntitiesModule`
+  - Prisma database schema
+- Created files:
+  - `apps/api/prisma/migrations/20260626230000_add_entities_foundation/migration.sql`
+  - `apps/api/src/modules/entities/controllers/entities.controller.ts`
+  - `apps/api/src/modules/entities/dto/create-entity.dto.ts`
+  - `apps/api/src/modules/entities/dto/entity.dto.ts`
+  - `apps/api/src/modules/entities/dto/search-entities.dto.ts`
+  - `apps/api/src/modules/entities/interfaces/entities.port.ts`
+  - `apps/api/src/modules/entities/repositories/entities.repository.ts`
+  - `apps/api/src/modules/entities/services/entities.service.ts`
+- Changed files:
+  - `apps/api/prisma/schema.prisma`
+  - `apps/api/src/modules/entities/entities.module.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/05-known-issues.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Entity storage is limited to `entities.entities`.
+  - Entity type is stored as a PostgreSQL enum.
+  - Stage 9 stores only one optional `canonical_url`; `entity_links` and aliases are deferred.
+  - `parent_id` supports a simple MVP tree; `entity_relations` remains deferred.
+  - `POST /entities` is protected by JWT and sets `created_by` from the current user.
+  - `GET /entities/:id` and `GET /entities/search` are public.
+  - Search is simple PostgreSQL/Prisma filtering, not OpenSearch.
+  - Ratings, reviews, trust, recommendations, moderation, tags, categories, versions, merge, AI, and imports were not added.
