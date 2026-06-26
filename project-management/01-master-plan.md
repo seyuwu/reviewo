@@ -254,15 +254,18 @@ Verification:
 - Algorithm can be replaced without API contract changes.
 - Trust Module does not read foreign tables or repositories directly.
 
-### 14. ⬜ Backend Domain Events MVP
+### 14. ✅ Backend Domain Events MVP
 
 Goal: prepare low coupling between modules.
 
 Result:
 
 - Simple in-process event mechanism.
-- Events: `EntityCreated`, `RatingCreated`, `RatingUpdated`, `ReviewCreated`.
+- Events: `EntityCreated`, `RatingCreated`, `RatingUpdated`, `ReviewCreated`, `ReviewUpdated`.
+- Events are published after successful persistence.
+- Event payloads are plain data contracts.
 - Trust and aggregates react to events where appropriate.
+- Stage 14 keeps rating aggregates transaction-local and trust on-demand; event handlers are deferred until a concrete consumer is introduced.
 - No direct access to foreign repositories.
 
 Verification:

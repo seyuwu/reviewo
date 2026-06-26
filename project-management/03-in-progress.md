@@ -32,40 +32,42 @@ Stage 12 - Reviews Module is completed.
 
 Stage 13 - Trust Module MVP is completed.
 
-Stage 14 - Backend Domain Events MVP is next, pending explicit user confirmation.
+Stage 14 - Backend Domain Events MVP is completed.
+
+Stage 15 - Search Module MVP is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Backend Domain Events MVP after user confirmation.
+Prepare Search Module MVP after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 14 implementation.
+To be confirmed before Stage 15 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 14 implementation.
+To be confirmed before Stage 15 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 14 should prepare low coupling between modules only after user confirmation.
-- Do not add event-driven behavior until Stage 14 is explicitly started.
-- Preserve existing module boundaries: no direct cross-module repository access.
+- Stage 15 should implement Search Module MVP only after user confirmation.
+- Search Module should not own entity creation business logic.
+- Search should remain PostgreSQL-backed unless a future stage explicitly introduces OpenSearch.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 14.
-- [ ] Describe Stage 14 goal, files, and architectural decisions before editing.
-- [ ] Implement Backend Domain Events MVP only.
-- [ ] Verify backend lint/typecheck/build and event behavior.
+- [ ] Wait for user confirmation to start Stage 15.
+- [ ] Describe Stage 15 goal, files, and architectural decisions before editing.
+- [ ] Implement Search Module MVP only.
+- [ ] Verify backend lint/typecheck/build and search behavior.
 
 ## Current Progress
 
-Stage 13 is complete. Stage 14 has not started.
+Stage 14 is complete. Stage 15 has not started.
 
 ## Open Questions
 
-No active questions until Stage 14 starts.
+No active questions until Stage 15 starts.
 
 ## Blockers
 
@@ -73,5 +75,5 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 14.
-- Do not add domain events, event handlers, event buses, async reactions, or new cross-module behavior until Stage 14 is explicitly started.
+- Wait for user confirmation before Stage 15.
+- Do not add search endpoints, search repositories, OpenSearch, frontend search flow, or entity creation fallback behavior until Stage 15 is explicitly started.

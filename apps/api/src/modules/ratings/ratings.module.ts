@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { DomainEventsModule } from "../../common/domain-events/domain-events.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { EntitiesModule } from "../entities/entities.module.js";
 import { UsersModule } from "../users/users.module.js";
@@ -11,7 +12,7 @@ import { RatingsService } from "./services/ratings.service.js";
 @Module({
   controllers: [RatingsController],
   exports: [RATINGS_PORT, RatingsService],
-  imports: [AuthModule, EntitiesModule, UsersModule],
+  imports: [AuthModule, DomainEventsModule, EntitiesModule, UsersModule],
   providers: [
     RatingsRepository,
     RatingsService,

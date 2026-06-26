@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
+import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
@@ -7,6 +8,8 @@ import { ENTITIES_PORT } from "../../entities/interfaces/entities.port.js";
 import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
 import { ReviewDto } from "../dto/review.dto.js";
 import { UpsertReviewDto } from "../dto/upsert-review.dto.js";
+import { createReviewCreatedEvent } from "../events/review-created.event.js";
+import { createReviewUpdatedEvent } from "../events/review-updated.event.js";
 import type { ReviewsPort } from "../interfaces/reviews.port.js";
 import { ReviewsRepository } from "../repositories/reviews.repository.js";
 import type { ReviewWithVotes } from "../repositories/reviews.repository.js";
@@ -16,6 +19,7 @@ export class ReviewsService implements ReviewsPort {
   constructor(
     @Inject(ENTITIES_PORT)
     private readonly entitiesPort: EntitiesPort,
+    private readonly domainEventBus: DomainEventBus,
     private readonly reviewsRepository: ReviewsRepository
   ) {}
 
@@ -26,13 +30,27 @@ export class ReviewsService implements ReviewsPort {
   ): Promise<ReviewDto> {
     await this.ensureEntityExists(entityId);
 
+    const existingReview = await this.reviewsRepository.findUserReview(entityId, currentUser.id);
     const review = await this.reviewsRepository.upsertReview({
       authorId: currentUser.id,
       entityId,
       text: input.text.trim()
     });
+    const reviewDto = toReviewDto(review, currentUser.id);
 
-    return toReviewDto(review, currentUser.id);
+    const eventPayload = {
+      authorId: currentUser.id,
+      entityId,
+      reviewId: reviewDto.id
+    };
+
+    await this.domainEventBus.publish(
+      existingReview
+        ? createReviewUpdatedEvent(eventPayload)
+        : createReviewCreatedEvent(eventPayload)
+    );
+
+    return reviewDto;
   }
 
   async listReviewsForEntity(entityId: string, currentUserId?: string): Promise<ReviewDto[]> {

@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import type { Rating, RatingAggregate } from "@prisma/client";
 
+import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
@@ -9,6 +10,8 @@ import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
 import { RateEntityDto } from "../dto/rate-entity.dto.js";
 import { RatingAggregateDto } from "../dto/rating-aggregate.dto.js";
 import { RateEntityResponseDto, UserRatingDto } from "../dto/rating-response.dto.js";
+import { createRatingCreatedEvent } from "../events/rating-created.event.js";
+import { createRatingUpdatedEvent } from "../events/rating-updated.event.js";
 import type { RatingsPort } from "../interfaces/ratings.port.js";
 import { RatingsRepository } from "../repositories/ratings.repository.js";
 
@@ -19,6 +22,7 @@ export class RatingsService implements RatingsPort {
   constructor(
     @Inject(ENTITIES_PORT)
     private readonly entitiesPort: EntitiesPort,
+    private readonly domainEventBus: DomainEventBus,
     private readonly ratingsRepository: RatingsRepository
   ) {}
 
@@ -29,7 +33,12 @@ export class RatingsService implements RatingsPort {
   ): Promise<RateEntityResponseDto> {
     await this.ensureEntityExists(entityId);
 
-    return this.ratingsRepository.runInTransaction(async (transaction) => {
+    const result = await this.ratingsRepository.runInTransaction(async (transaction) => {
+      const existingRating = await this.ratingsRepository.findUserRating(
+        entityId,
+        currentUser.id,
+        transaction
+      );
       const rating = await this.ratingsRepository.upsertRating(
         {
           entityId,
@@ -43,9 +52,29 @@ export class RatingsService implements RatingsPort {
 
       return {
         aggregate: toAggregateDto(aggregate),
-        rating: toUserRatingDto(rating)
+        ratingId: rating.id,
+        rating: toUserRatingDto(rating),
+        wasCreated: !existingRating
       };
     });
+
+    const eventPayload = {
+      entityId,
+      ratingId: result.ratingId,
+      score: result.rating.score,
+      userId: currentUser.id
+    };
+
+    await this.domainEventBus.publish(
+      result.wasCreated
+        ? createRatingCreatedEvent(eventPayload)
+        : createRatingUpdatedEvent(eventPayload)
+    );
+
+    return {
+      aggregate: result.aggregate,
+      rating: result.rating
+    };
   }
 
   async getAggregate(entityId: string): Promise<RatingAggregateDto> {

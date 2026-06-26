@@ -508,3 +508,46 @@
   - Trust Module reads review count through `ReviewsPort`.
   - Trust Module does not read foreign tables or repositories directly.
   - `trust_scores` persistence, user reputation, account age, anti-fraud, text analysis, IP, ML, external services, behavioral signals, badges, user trust, review trust, moderation, frontend, and extension flow were not added.
+
+## 2026-06-27 - Stage 14 - Backend Domain Events MVP
+
+- Stage: 14
+- Summary: Added a minimal in-process domain events foundation and publish points for entity creation, rating create/update, and review create/update without changing existing business behavior.
+- Created modules: none.
+- Changed modules:
+  - `EntitiesModule`
+  - `RatingsModule`
+  - `ReviewsModule`
+  - Common backend infrastructure
+- Created files:
+  - `apps/api/src/common/domain-events/domain-event.ts`
+  - `apps/api/src/common/domain-events/domain-event-bus.ts`
+  - `apps/api/src/common/domain-events/domain-event-name.ts`
+  - `apps/api/src/common/domain-events/domain-events.module.ts`
+  - `apps/api/src/modules/entities/events/entity-created.event.ts`
+  - `apps/api/src/modules/ratings/events/rating-created.event.ts`
+  - `apps/api/src/modules/ratings/events/rating-updated.event.ts`
+  - `apps/api/src/modules/reviews/events/review-created.event.ts`
+  - `apps/api/src/modules/reviews/events/review-updated.event.ts`
+- Changed files:
+  - `apps/api/src/modules/entities/entities.module.ts`
+  - `apps/api/src/modules/entities/services/entities.service.ts`
+  - `apps/api/src/modules/ratings/ratings.module.ts`
+  - `apps/api/src/modules/ratings/repositories/ratings.repository.ts`
+  - `apps/api/src/modules/ratings/services/ratings.service.ts`
+  - `apps/api/src/modules/reviews/reviews.module.ts`
+  - `apps/api/src/modules/reviews/services/reviews.service.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Domain events use an in-process `DomainEventBus`.
+  - Event payloads are plain data contracts and do not expose Prisma models.
+  - Events are published after successful persistence.
+  - Rating events are published after the rating transaction commits.
+  - No external broker, queue, outbox persistence, retry mechanism, event versioning, or async handlers were added.
+  - Rating aggregate recalculation remains transaction-local in Ratings Module.
+  - Trust confidence remains on-demand in Trust Module.

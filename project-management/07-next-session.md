@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 13 - Trust Module MVP is completed.
+Stage 14 - Backend Domain Events MVP is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, and Trust MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, search entities, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The backend now also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, and Backend Domain Events MVP foundation.
 
 ## Already Done
 
@@ -306,15 +306,45 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker API `PUT /reviews/entities/:entityId/my-review`
   - Docker API confidence remains monotonic after reviews
   - Docker API not found response for missing entity trust
+- Stage 14 Backend Domain Events MVP was added:
+  - `apps/api/src/common/domain-events/domain-event.ts`
+  - `apps/api/src/common/domain-events/domain-event-bus.ts`
+  - `apps/api/src/common/domain-events/domain-event-name.ts`
+  - `apps/api/src/common/domain-events/domain-events.module.ts`
+  - `apps/api/src/modules/entities/events/entity-created.event.ts`
+  - `apps/api/src/modules/ratings/events/rating-created.event.ts`
+  - `apps/api/src/modules/ratings/events/rating-updated.event.ts`
+  - `apps/api/src/modules/reviews/events/review-created.event.ts`
+  - `apps/api/src/modules/reviews/events/review-updated.event.ts`
+  - `apps/api/src/modules/entities/services/entities.service.ts` now publishes `EntityCreated`
+  - `apps/api/src/modules/ratings/services/ratings.service.ts` now publishes `RatingCreated` or `RatingUpdated`
+  - `apps/api/src/modules/reviews/services/reviews.service.ts` now publishes `ReviewCreated` or `ReviewUpdated`
+- Stage 14 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed event/entity/rating/review files
+  - Docker Prisma migration deploy inside Docker Compose network
+  - Docker API `GET /health`
+  - Docker API `POST /auth/register`
+  - Docker API `POST /entities`
+  - Docker API `PUT /ratings/entities/:entityId/my-rating`
+  - Docker API rating update through repeated `PUT`
+  - Docker API `PUT /reviews/entities/:entityId/my-review`
+  - Docker API review update through repeated `PUT`
+  - Docker API `GET /reviews/entities/:entityId`
+  - Docker API `GET /trust/entities/:entityId`
 
 ## Remaining Work
 
-- Stage 14 - Backend Domain Events MVP.
-- Do not start Stage 14 until the user confirms.
+- Stage 15 - Search Module MVP.
+- Do not start Stage 15 until the user confirms.
 
 ## Next Stage
 
-Stage 14 - Backend Domain Events MVP, but only after explicit user confirmation.
+Stage 15 - Search Module MVP, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -365,13 +395,20 @@ Stage 14 - Backend Domain Events MVP, but only after explicit user confirmation.
 - Trust Module uses `RatingsPort` and `ReviewsPort`; it must not read rating/review tables or repositories directly.
 - Trust Module does not persist `trust_scores` in Stage 13.
 - User reputation, account age, anti-fraud, text analysis, IP, ML, external services, behavioral signals, badges, user trust, review trust, and moderation are intentionally excluded from Stage 13.
+- Backend domain events MVP provides an in-process `DomainEventBus` with `publish` and `subscribe`.
+- Domain events are plain data contracts with `name`, `occurredAt`, and `payload`.
+- Published events currently include `EntityCreated`, `RatingCreated`, `RatingUpdated`, `ReviewCreated`, and `ReviewUpdated`.
+- Events are published after successful persistence; rating events publish after the rating transaction commits.
+- Stage 14 intentionally does not add external brokers, queues, outbox persistence, retries, event versioning, or asynchronous handlers.
+- Rating aggregate recalculation remains transaction-local in Ratings Module.
+- Trust confidence remains on-demand in Trust Module.
 - `entity_links`, aliases, `entity_relations`, graph relations, tags, categories, versions, moderation, merge, AI, imports, and recommendations are not implemented.
 - Other backend domain modules are empty NestJS module shells only.
 - Do not add DTOs, repositories, Swagger, or business logic outside the relevant stage.
 - Prisma schema now has Users/Auth, Entity MVP, Ratings MVP, and Reviews MVP models only. Trust MVP adds no Prisma models.
 - Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`; Stage 11 migration creates `ratings.ratings` and `ratings.rating_aggregates`; Stage 12 migration creates `reviews.reviews` and `reviews.review_votes`.
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
-- Stage 14 should implement backend domain events only after user confirmation. It should not move ratings, reviews, or trust ownership into Entity Module.
+- Stage 15 should implement Search Module MVP only after user confirmation. Search should stay PostgreSQL-backed unless a future stage explicitly introduces OpenSearch, and it should not own entity creation business logic.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

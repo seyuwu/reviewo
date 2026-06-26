@@ -2,12 +2,12 @@
 
 ## Snapshot
 
-- Date: 2026-06-26
-- Current stage: Waiting for user confirmation before Stage 14
-- Stage status: Stage 13 completed
-- MVP readiness: 13%
-- Last completed stage: Stage 13 - Trust Module MVP
-- Next stage: Stage 14 - Backend Domain Events MVP
+- Date: 2026-06-27
+- Current stage: Waiting for user confirmation before Stage 15
+- Stage status: Stage 14 completed
+- MVP readiness: 14%
+- Last completed stage: Stage 14 - Backend Domain Events MVP
+- Next stage: Stage 15 - Search Module MVP
 
 ## Implemented Capabilities
 
@@ -158,6 +158,18 @@ The Trust MVP foundation is initialized:
 - Trust Module does not persist `trust_scores` in Stage 13.
 - User reputation, account age, anti-fraud, text analysis, IP, ML, external services, and behavioral signals are intentionally excluded.
 
+The backend domain events foundation is initialized:
+
+- `DomainEventBus` provides a minimal in-process publish/subscribe mechanism.
+- Domain events are plain data contracts with `name`, `occurredAt`, and `payload`.
+- `EntityCreated`, `RatingCreated`, `RatingUpdated`, `ReviewCreated`, and `ReviewUpdated` event contracts exist.
+- Entity creation publishes `EntityCreated` after successful persistence.
+- Rating create/update publishes `RatingCreated` or `RatingUpdated` after the rating transaction commits.
+- Review create/update publishes `ReviewCreated` or `ReviewUpdated` after successful persistence.
+- No external broker, queue, outbox table, retry mechanism, or event versioning has been added.
+- Rating aggregates remain transaction-local in Ratings Module.
+- Trust confidence remains on-demand in Trust Module.
+
 Roadmap update:
 
 - Docker Infrastructure was added as Stage 3.
@@ -217,3 +229,5 @@ Stage 11 created ratings only. It did not add reviews, trust calculation, recomm
 Stage 12 created reviews and review likes only. It did not add dislikes, replies, threaded comments, reactions, attachments, images, AI analysis, moderation, complaints, edit history, review ratings, trust calculation, frontend, or extension flow.
 
 Stage 13 created MVP trust confidence only. It did not add trust persistence, user reputation, account age, anti-fraud, text analysis, IP checks, ML, external services, behavioral signals, badges, user trust, review trust, moderation, frontend, or extension flow.
+
+Stage 14 created backend domain events infrastructure and publish points only. It did not add external brokers, queues, outbox persistence, retries, event versioning, asynchronous handlers, or move aggregate/trust behavior into event handlers.

@@ -23,8 +23,12 @@ export class RatingsRepository {
     return this.prismaService.$transaction(callback);
   }
 
-  async findUserRating(entityId: string, userId: string): Promise<Rating | null> {
-    return this.prismaService.rating.findUnique({
+  async findUserRating(
+    entityId: string,
+    userId: string,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<Rating | null> {
+    return client.rating.findUnique({
       where: {
         entityId_userId: {
           entityId,

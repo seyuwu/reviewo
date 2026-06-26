@@ -1018,3 +1018,63 @@ This avoids premature storage and event synchronization before the trust algorit
 - Add `trust.trust_scores` immediately.
 - Recalculate trust through domain events in Stage 13.
 - Store trust confidence on `entities.entities`.
+
+## 2026-06-27 - In-Process Domain Event Bus
+
+### Problem
+
+The modular monolith needs a low-coupling communication foundation before introducing search composition, future trust recalculation, notifications, moderation, or service extraction.
+
+### Decision
+
+Add a minimal in-process `DomainEventBus` with `publish` and `subscribe`. Domain events are plain data contracts with `name`, `occurredAt`, and `payload`.
+
+### Reason
+
+This prepares a future migration to a broker or outbox without introducing distributed systems complexity before there is a concrete need.
+
+### Alternatives
+
+- Add RabbitMQ/Kafka/NATS immediately.
+- Add a persisted outbox table immediately.
+- Keep all future module communication as direct service calls.
+
+## 2026-06-27 - Domain Events Publish After Persistence
+
+### Problem
+
+Domain events should represent facts that have already happened, not requested operations that may still fail.
+
+### Decision
+
+Publish `EntityCreated`, `RatingCreated`, `RatingUpdated`, `ReviewCreated`, and `ReviewUpdated` after successful persistence. Rating events publish after the rating transaction commits.
+
+### Reason
+
+This keeps event semantics predictable and avoids subscribers reacting to failed writes.
+
+### Alternatives
+
+- Publish before persistence.
+- Publish from repositories.
+- Publish inside database transactions.
+
+## 2026-06-27 - No Event-Driven Reactions Yet
+
+### Problem
+
+The roadmap mentioned trust and aggregate reactions, but current MVP behavior already has clear ownership: rating aggregates are transaction-local in Ratings Module and trust is calculated on demand.
+
+### Decision
+
+Stage 14 creates event infrastructure and publish points only. It does not move rating aggregate recalculation or trust confidence calculation into event handlers.
+
+### Reason
+
+This avoids weakening consistency or adding speculative handlers before there is a concrete consumer. Future stages can subscribe to the existing events without rewriting domain flows.
+
+### Alternatives
+
+- Move rating aggregates to event handlers immediately.
+- Persist trust scores and recalculate them from events immediately.
+- Add placeholder subscribers with no behavior.

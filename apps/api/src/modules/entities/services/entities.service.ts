@@ -1,11 +1,13 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import type { Entity } from "@prisma/client";
 
+import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import { CreateEntityDto } from "../dto/create-entity.dto.js";
 import { EntityDto } from "../dto/entity.dto.js";
+import { createEntityCreatedEvent } from "../events/entity-created.event.js";
 import type { EntitiesPort } from "../interfaces/entities.port.js";
 import { URL_NORMALIZER } from "../interfaces/url-normalizer.js";
 import type { UrlNormalizer } from "../interfaces/url-normalizer.js";
@@ -16,6 +18,7 @@ import { EntitiesRepository } from "../repositories/entities.repository.js";
 export class EntitiesService implements EntitiesPort {
   constructor(
     private readonly entitiesRepository: EntitiesRepository,
+    private readonly domainEventBus: DomainEventBus,
     @Inject(URL_NORMALIZER)
     private readonly urlNormalizer: UrlNormalizer
   ) {}
@@ -71,8 +74,17 @@ export class EntitiesService implements EntitiesPort {
       }
 
       const entity = await this.entitiesRepository.create(recordInput);
+      const entityDto = toEntityDto(entity);
 
-      return toEntityDto(entity);
+      await this.domainEventBus.publish(
+        createEntityCreatedEvent({
+          createdBy: entityDto.createdBy,
+          entityId: entityDto.id,
+          type: entityDto.type
+        })
+      );
+
+      return entityDto;
     } catch (error) {
       if (this.entitiesRepository.isUniqueConstraintError(error)) {
         throw createAppException({
