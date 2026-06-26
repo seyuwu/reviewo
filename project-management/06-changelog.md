@@ -375,3 +375,32 @@
   - `GET /entities/:id` and `GET /entities/search` are public.
   - Search is simple PostgreSQL/Prisma filtering, not OpenSearch.
   - Ratings, reviews, trust, recommendations, moderation, tags, categories, versions, merge, AI, and imports were not added.
+
+## 2026-06-26 - Stage 10 - URL Normalization MVP
+
+- Stage: 10
+- Summary: Added isolated URL normalization for entity canonical URLs, exact canonical URL duplicate detection, and URL-aware entity search without adding entity links or site-specific parsers.
+- Created modules: none.
+- Changed modules:
+  - `EntitiesModule`
+- Created files:
+  - `apps/api/src/modules/entities/interfaces/url-normalizer.ts`
+  - `apps/api/src/modules/entities/services/url-normalization.service.ts`
+- Changed files:
+  - `apps/api/src/modules/entities/dto/create-entity.dto.ts`
+  - `apps/api/src/modules/entities/entities.module.ts`
+  - `apps/api/src/modules/entities/repositories/entities.repository.ts`
+  - `apps/api/src/modules/entities/services/entities.service.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - URL normalization is isolated behind a `UrlNormalizer` interface/token.
+  - `canonical_url` is normalized before entity creation.
+  - URL search queries are normalized before exact `canonical_url` lookup.
+  - Equivalent canonical URLs are rejected on create with `409 CONFLICT`.
+  - Tracking parameters are removed in one centralized normalizer.
+  - Site-specific normalizers, `entity_links`, aliases, extension behavior, OpenSearch, ratings, reviews, trust, and recommendations were not added.

@@ -677,3 +677,83 @@ This keeps repository details private to the entity domain and preserves the fut
 - Export `EntitiesRepository`.
 - Let future modules query Prisma directly.
 - Add no public entity interface until another module needs it.
+
+## 2026-06-26 - URL Normalization MVP
+
+### Problem
+
+Equivalent URLs with tracking parameters or small formatting differences can create duplicate entities if stored as-is.
+
+### Decision
+
+Add an isolated default URL normalizer inside `EntitiesModule` and normalize `canonical_url` before entity creation and URL-aware search.
+
+### Reason
+
+This keeps URL logic near the entity domain, prevents obvious duplicate entities, and avoids creating a separate URL/domain service before there is a real cross-module need.
+
+### Alternatives
+
+- Keep canonical URLs exactly as submitted.
+- Add `entity_links` and aliases immediately.
+- Create a separate URL service/module in Stage 10.
+
+## 2026-06-26 - Default URL Normalization Rules
+
+### Problem
+
+The MVP needs deterministic canonical URLs without site-specific parsers.
+
+### Decision
+
+Use the standard `URL` API, canonicalize to `https`, lowercase hostnames, remove one leading `www`, remove hash fragments, remove non-root trailing slashes, remove known tracking query parameters, and sort preserved query parameters.
+
+### Reason
+
+These rules cover common duplicate cases while avoiding assumptions about site-specific URL semantics.
+
+### Alternatives
+
+- Add site-specific URL parsing immediately.
+- Remove all query parameters.
+- Preserve submitted URLs unchanged.
+
+## 2026-06-26 - URL Lookup Uses Exact Canonical URL
+
+### Problem
+
+After normalization, entity lookup should be predictable and not depend on fuzzy matching.
+
+### Decision
+
+Look up existing entities by exact normalized `canonical_url`. If `POST /entities` receives an equivalent URL for an existing entity, return `409 CONFLICT` with the existing `entityId` in error details.
+
+### Reason
+
+This keeps `POST /entities` a creation endpoint while still preventing duplicate canonical URLs.
+
+### Alternatives
+
+- Return the existing entity from `POST /entities`.
+- Add a dedicated resolve endpoint in Stage 10.
+- Use fuzzy URL matching.
+
+## 2026-06-26 - Future Site-Specific Normalizers
+
+### Problem
+
+Future URLs for YouTube, GitHub, stores, products, and posts may need special canonicalization, but adding those parsers now would exceed Stage 10 scope.
+
+### Decision
+
+Keep Stage 10 as a default normalizer behind a `UrlNormalizer` interface/token. Site-specific normalizers can be added later through a separate RFC.
+
+### Reason
+
+This preserves a clean extension point without adding unvalidated complexity.
+
+### Alternatives
+
+- Add YouTube/GitHub normalizers immediately.
+- Hardcode site-specific cases in the default normalizer.
+- Delay the normalizer interface until site-specific support is needed.

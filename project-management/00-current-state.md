@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-26
-- Current stage: Waiting for user confirmation before Stage 10
-- Stage status: Stage 9 completed
-- MVP readiness: 9%
-- Last completed stage: Stage 9 - Entities Module
-- Next stage: Stage 10 - URL Normalization MVP
+- Current stage: Waiting for user confirmation before Stage 11
+- Stage status: Stage 10 completed
+- MVP readiness: 10%
+- Last completed stage: Stage 10 - URL Normalization MVP
+- Next stage: Stage 11 - Ratings Module
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities, fetch entities by id, and search entities through the backend API.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, and search entities through the backend API.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -110,6 +110,16 @@ The Entity MVP foundation is initialized:
 - `GET /entities/search` performs simple PostgreSQL-backed search.
 - `EntitiesPort` exists as the future public module interface.
 
+The URL Normalization MVP is initialized:
+
+- URL normalization is isolated behind a replaceable normalizer interface.
+- Canonical URLs are normalized during entity creation.
+- URL-aware entity search normalizes URL queries before lookup.
+- Equivalent URLs with tracking parameters resolve to one `canonical_url`.
+- The normalizer removes basic tracking parameters.
+- The normalizer lowercases hostnames, removes a leading `www`, removes hash fragments, removes non-root trailing slashes, canonicalizes to `https`, and sorts preserved query parameters.
+- Site-specific normalizers are intentionally not implemented yet.
+
 Roadmap update:
 
 - Docker Infrastructure was added as Stage 3.
@@ -161,3 +171,5 @@ Stage 7 created backend error and response infrastructure only. It did not add d
 Stage 8 created the minimum users/auth foundation needed before ratings. It did not add entities, ratings, reviews, roles, permissions, OAuth, refresh tokens, or frontend/extension integration.
 
 Stage 9 created the minimum entity domain foundation. It did not add entity links, aliases, URL normalization, ratings, reviews, trust, recommendations, moderation, tags, categories, versions, merge, AI, or imports.
+
+Stage 10 created URL normalization only. It did not add `entity_links`, aliases, site-specific parsers, extension behavior, OpenSearch, ratings, reviews, trust, or recommendations.

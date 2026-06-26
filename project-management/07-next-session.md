@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 9 - Entities Module is completed.
+Stage 10 - URL Normalization MVP is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities, fetch entities by id, and search entities through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, and Entity MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, and search entities through the backend API. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, and URL Normalization MVP.
 
 ## Already Done
 
@@ -201,15 +201,35 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker API `GET /entities/:id`
   - Docker API `GET /entities/search`
   - Docker API unauthorized response for `POST /entities`
+- Stage 10 URL Normalization MVP was added:
+  - `apps/api/src/modules/entities/interfaces/url-normalizer.ts`
+  - `apps/api/src/modules/entities/services/url-normalization.service.ts`
+  - `apps/api/src/modules/entities/dto/create-entity.dto.ts` now limits canonical URLs to HTTP/HTTPS
+  - `apps/api/src/modules/entities/entities.module.ts` now wires `URL_NORMALIZER`
+  - `apps/api/src/modules/entities/repositories/entities.repository.ts` now supports exact canonical URL lookup
+  - `apps/api/src/modules/entities/services/entities.service.ts` now normalizes canonical URLs during create and URL-aware search
+- Stage 10 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - Docker Prisma migration deploy inside Docker Compose network
+  - Docker API `GET /health`
+  - Docker API `POST /auth/register`
+  - Docker API `POST /entities` with URL normalization
+  - Docker API `GET /entities/search` with normalized URL query
+  - Docker API `GET /entities/search` with protocol-less URL query
+  - Docker duplicate canonical URL prevention with `409 CONFLICT`
 
 ## Remaining Work
 
-- Stage 10 - URL Normalization MVP.
-- Do not start Stage 10 until the user confirms.
+- Stage 11 - Ratings Module.
+- Do not start Stage 11 until the user confirms.
 
 ## Next Stage
 
-Stage 10 - URL Normalization MVP, but only after explicit user confirmation.
+Stage 11 - Ratings Module, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -239,13 +259,17 @@ Stage 10 - URL Normalization MVP, but only after explicit user confirmation.
 - `POST /entities` requires JWT authentication and uses current user id as `created_by`.
 - Entity type is currently a PostgreSQL enum.
 - Stage 9 entity model uses one optional `canonical_url` and `parent_id`.
+- URL Normalization MVP normalizes `canonical_url` before create and URL search.
+- URL normalization canonicalizes to `https`, lowercases hostnames, removes one leading `www`, removes hash fragments, removes non-root trailing slashes, removes basic tracking params, and sorts preserved query params.
+- URL-aware search supports protocol-less URL input if it has a likely hostname.
+- Equivalent canonical URLs return `409 CONFLICT` from `POST /entities`.
 - `entity_links`, aliases, `entity_relations`, graph relations, tags, categories, versions, moderation, merge, AI, imports, ratings, reviews, trust, and recommendations are not implemented.
 - Other backend domain modules are empty NestJS module shells only.
 - Do not add DTOs, repositories, Swagger, or business logic outside the relevant stage.
 - Prisma schema now has Users/Auth and Entity MVP models only.
 - Initial Prisma migration creates PostgreSQL schemas; Stage 8 migration creates `users.users` and `auth.user_auth_identities`; Stage 9 migration creates `entities.entities` and `entities.entity_type`.
 - Future domain modules must use `DatabaseModule`/`PrismaService` through DI, not create their own connections.
-- Stage 10 should implement URL normalization only. It may refine canonical URL handling, but should not add `entity_links` unless explicitly approved.
+- Stage 11 should implement ratings only. It should use `EntitiesPort` and must not access entity repositories directly.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import type { Entity } from "@prisma/client";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
@@ -7,12 +7,18 @@ import type { AuthenticatedUser } from "../../../common/interfaces/authenticated
 import { CreateEntityDto } from "../dto/create-entity.dto.js";
 import { EntityDto } from "../dto/entity.dto.js";
 import type { EntitiesPort } from "../interfaces/entities.port.js";
+import { URL_NORMALIZER } from "../interfaces/url-normalizer.js";
+import type { UrlNormalizer } from "../interfaces/url-normalizer.js";
 import type { CreateEntityRecordInput } from "../repositories/entities.repository.js";
 import { EntitiesRepository } from "../repositories/entities.repository.js";
 
 @Injectable()
 export class EntitiesService implements EntitiesPort {
-  constructor(private readonly entitiesRepository: EntitiesRepository) {}
+  constructor(
+    private readonly entitiesRepository: EntitiesRepository,
+    @Inject(URL_NORMALIZER)
+    private readonly urlNormalizer: UrlNormalizer
+  ) {}
 
   async createEntity(input: CreateEntityDto, currentUser: AuthenticatedUser): Promise<EntityDto> {
     if (input.parentId) {
@@ -36,10 +42,23 @@ export class EntitiesService implements EntitiesPort {
         title: input.title.trim(),
         type: input.type
       };
-      const canonicalUrl = normalizeOptionalString(input.canonicalUrl);
+      const canonicalUrl = this.normalizeCanonicalUrl(input.canonicalUrl);
       const description = normalizeOptionalString(input.description);
 
       if (canonicalUrl) {
+        const existingEntity = await this.entitiesRepository.findByCanonicalUrl(canonicalUrl);
+
+        if (existingEntity) {
+          throw createAppException({
+            code: AppErrorCode.Conflict,
+            details: {
+              entityId: existingEntity.id
+            },
+            message: "Entity with this canonical URL already exists",
+            statusCode: HttpStatus.CONFLICT
+          });
+        }
+
         recordInput.canonicalUrl = canonicalUrl;
       }
 
@@ -88,9 +107,39 @@ export class EntitiesService implements EntitiesPort {
   }
 
   async searchEntities(query: string): Promise<EntityDto[]> {
+    const normalizedUrl = this.urlNormalizer.normalize(query);
+
+    if (normalizedUrl) {
+      const entity = await this.entitiesRepository.findByCanonicalUrl(normalizedUrl);
+
+      if (entity) {
+        return [toEntityDto(entity)];
+      }
+
+      return [];
+    }
+
     const entities = await this.entitiesRepository.search(query.trim());
 
     return entities.map(toEntityDto);
+  }
+
+  private normalizeCanonicalUrl(canonicalUrl: string | undefined): string | undefined {
+    if (!canonicalUrl) {
+      return undefined;
+    }
+
+    const normalizedUrl = this.urlNormalizer.normalize(canonicalUrl);
+
+    if (!normalizedUrl) {
+      throw createAppException({
+        code: AppErrorCode.BadRequest,
+        message: "Canonical URL must be a valid HTTP or HTTPS URL",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    return normalizedUrl;
   }
 }
 

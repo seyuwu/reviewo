@@ -50,6 +50,14 @@ export class EntitiesRepository {
     });
   }
 
+  async findByCanonicalUrl(canonicalUrl: string): Promise<Entity | null> {
+    return this.prismaService.entity.findUnique({
+      where: {
+        canonicalUrl
+      }
+    });
+  }
+
   async findBySlug(slug: string): Promise<Entity | null> {
     return this.prismaService.entity.findUnique({
       where: {

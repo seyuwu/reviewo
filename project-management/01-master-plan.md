@@ -178,7 +178,7 @@ Verification:
 - Entity can be found through simple search.
 - Other modules do not access entity repositories directly.
 
-### 10. ⬜ URL Normalization MVP
+### 10. ✅ URL Normalization MVP
 
 Goal: implement minimal URL canonicalization.
 

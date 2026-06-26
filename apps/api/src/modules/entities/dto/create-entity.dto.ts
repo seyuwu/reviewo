@@ -14,7 +14,7 @@ import {
 export class CreateEntityDto {
   @IsOptional()
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
-  @IsUrl({ require_protocol: true })
+  @IsUrl({ protocols: ["http", "https"], require_protocol: true })
   @MaxLength(2048)
   canonicalUrl?: string;
 
