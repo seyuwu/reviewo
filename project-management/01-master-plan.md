@@ -55,6 +55,7 @@ Result:
 - Add `.env.example`.
 - Add `.dockerignore`.
 - Add `Makefile` or `Taskfile.yml` with core development commands.
+- Dev Compose uses bind-mounted source files with Docker-managed dependency volumes.
 - Keep the structure ready for one-command production updates in the future.
 
 Verification:

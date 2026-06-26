@@ -70,11 +70,11 @@
 - Possible solution: Replace placeholder commands with real app start commands during the relevant app implementation stages.
 - Priority: Medium.
 
-## Docker Development Has No Live Reload Yet
+## Docker Development Uses Dev Volumes
 
-- Description: Development Compose currently uses rebuilt images instead of bind mounts/live reload.
-- Status: Intentional infrastructure simplification.
-- Possible solution: Add app-specific live reload mounts and dependency synchronization when real app development begins.
+- Description: Development Compose uses bind-mounted source files and Docker-managed dependency volumes. First startup or lockfile changes still run `pnpm install` inside the API container to populate/sync volumes.
+- Status: Resolved for backend development loop; still a known dev environment behavior.
+- Possible solution: Use `make clean` or `docker compose ... down -v` if dependency volumes become stale. Run `make build` when Dockerfiles or base images change.
 - Priority: Low.
 
 ## Localhost Database Checks Can Hit A Non-Compose PostgreSQL

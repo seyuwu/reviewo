@@ -34,6 +34,8 @@ Stage 13 - Trust Module MVP is completed.
 
 Stage 14 - Backend Domain Events MVP is completed.
 
+Infrastructure optimization - Docker Dev Volumes is completed.
+
 Stage 15 - Search Module MVP is next, pending explicit user confirmation.
 
 ## Goal

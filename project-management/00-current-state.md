@@ -41,6 +41,8 @@ The Docker infrastructure foundation is initialized:
 - Environment templates/placeholders exist.
 - Root `.dockerignore` minimizes Docker build context.
 - `Makefile` provides short development commands.
+- Development Compose uses bind-mounted source files with Docker-managed `node_modules` and pnpm store volumes.
+- `make dev` no longer forces a rebuild on every startup.
 - Development stack startup was verified with Docker Compose.
 - Development and production Docker image builds were verified.
 

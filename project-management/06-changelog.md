@@ -551,3 +551,29 @@
   - No external broker, queue, outbox persistence, retry mechanism, event versioning, or async handlers were added.
   - Rating aggregate recalculation remains transaction-local in Ratings Module.
   - Trust confidence remains on-demand in Trust Module.
+
+## 2026-06-27 - Infrastructure Optimization - Docker Dev Volumes
+
+- Stage: Infrastructure optimization before Stage 15
+- Summary: Optimized the development Docker loop by adding bind-mounted source files and Docker-managed dependency volumes to the dev Compose override.
+- Created modules: none.
+- Changed modules:
+  - Docker development infrastructure
+- Created files: none.
+- Changed files:
+  - `docker-compose.dev.yml`
+  - `Makefile`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/04-decisions.md`
+  - `project-management/05-known-issues.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Production Compose remains image-based and unchanged.
+  - Development Compose now bind-mounts the workspace into `/workspace`.
+  - Root/app/package `node_modules` paths are masked with Docker named volumes.
+  - pnpm store is persisted in a Docker named volume at `/pnpm/store`.
+  - API dev command runs `pnpm install --frozen-lockfile --store-dir /pnpm/store` before starting the dev server to sync dependency volumes.
+  - `make dev` runs `docker compose up` without forcing `--build`.
+  - Rebuilds are now explicit through `make build` or `make rebuild`.

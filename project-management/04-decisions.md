@@ -327,6 +327,8 @@ Development bind mounts hid image-installed `node_modules`, forcing containers t
 
 Remove development bind mounts for now. `docker compose` and `make dev` use freshly built images. Live reload can be introduced later when real app development needs it.
 
+Superseded on 2026-06-27 by "Docker Dev Volumes For Faster Iteration".
+
 ### Reason
 
 The current priority is reliable one-command startup. Rebuild-based development is acceptable at the skeleton stage and avoids container dependency drift.
@@ -336,6 +338,26 @@ The current priority is reliable one-command startup. Rebuild-based development 
 - Keep bind mounts and install dependencies on every container start.
 - Keep a named `node_modules` volume.
 - Add a more complex development entrypoint to synchronize dependencies.
+
+## 2026-06-27 - Docker Dev Volumes For Faster Iteration
+
+### Problem
+
+Rebuilding development images after every source code change slows backend development and smoke testing.
+
+### Decision
+
+Use bind-mounted source files in `docker-compose.dev.yml`, keep dependency folders in Docker named volumes, and mount a Docker-managed pnpm store. `make dev` now runs `docker compose up` without `--build`.
+
+### Reason
+
+This keeps production images immutable while making the development loop faster. Docker-managed dependency volumes avoid leaking Windows host `node_modules` into Linux containers.
+
+### Alternatives
+
+- Continue rebuilding images on every `make dev`.
+- Bind mount the whole workspace without masking `node_modules`.
+- Add a custom development entrypoint script before it is needed.
 
 ## 2026-06-24 - Prisma As ORM And Migration Tooling
 

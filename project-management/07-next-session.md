@@ -60,6 +60,11 @@ The first product capabilities are implemented: users can register, sign in, rea
   - `.env.production`
   - `.dockerignore`
   - `Makefile`
+- Docker development loop was later optimized before Stage 15:
+  - `docker-compose.dev.yml` bind-mounts source files into `/workspace`
+  - `docker-compose.dev.yml` masks root/app/package `node_modules` with Docker named volumes
+  - `docker-compose.dev.yml` persists pnpm store in a Docker named volume
+  - `Makefile` `dev` target now runs Compose without forcing `--build`
 - Stage 3 was verified with:
   - `docker compose config`
   - `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml config`
@@ -412,6 +417,9 @@ Stage 15 - Search Module MVP, but only after explicit user confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web and extension Docker services still use placeholder commands because those apps do not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
+- Dev Compose now uses source bind mounts and Docker-managed dependency volumes; code changes should not require rebuilding images.
+- Run `make build`, `make rebuild`, or the equivalent Docker Compose build command after Dockerfile/base image changes.
+- If dependency volumes become stale after package metadata changes, use `make clean` or `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml down -v --remove-orphans`.
 - Current Windows environment does not have `make` installed.
 - `pnpm` is not installed globally in the current environment; use `corepack pnpm ...`.
 - `package.json` pins `pnpm@11.9.0`.

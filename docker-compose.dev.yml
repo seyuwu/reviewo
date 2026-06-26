@@ -1,16 +1,57 @@
+name: ${COMPOSE_PROJECT_NAME:-reviewo}
+
+x-dev-workspace-volumes: &dev-workspace-volumes
+  - type: bind
+    source: .
+    target: /workspace
+  - type: volume
+    source: dev_pnpm_store
+    target: /pnpm/store
+  - type: volume
+    source: dev_root_node_modules
+    target: /workspace/node_modules
+  - type: volume
+    source: dev_api_node_modules
+    target: /workspace/apps/api/node_modules
+  - type: volume
+    source: dev_web_node_modules
+    target: /workspace/apps/web/node_modules
+  - type: volume
+    source: dev_extension_node_modules
+    target: /workspace/apps/extension/node_modules
+  - type: volume
+    source: dev_config_node_modules
+    target: /workspace/packages/config/node_modules
+  - type: volume
+    source: dev_shared_node_modules
+    target: /workspace/packages/shared/node_modules
+  - type: volume
+    source: dev_types_node_modules
+    target: /workspace/packages/types/node_modules
+  - type: volume
+    source: dev_ui_node_modules
+    target: /workspace/packages/ui/node_modules
+
 services:
   api:
     build:
       target: development
     environment:
       NODE_ENV: development
-    command: ["sh", "-c", "corepack pnpm --filter @reviewo/api dev"]
+    volumes: *dev-workspace-volumes
+    command:
+      [
+        "sh",
+        "-c",
+        "corepack pnpm install --frozen-lockfile --store-dir /pnpm/store && corepack pnpm --filter @reviewo/api dev"
+      ]
 
   web:
     build:
       target: development
     environment:
       NODE_ENV: development
+    volumes: *dev-workspace-volumes
     command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
 
   extension:
@@ -18,4 +59,16 @@ services:
       target: development
     environment:
       NODE_ENV: development
+    volumes: *dev-workspace-volumes
     command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+
+volumes:
+  dev_pnpm_store:
+  dev_root_node_modules:
+  dev_api_node_modules:
+  dev_web_node_modules:
+  dev_extension_node_modules:
+  dev_config_node_modules:
+  dev_shared_node_modules:
+  dev_types_node_modules:
+  dev_ui_node_modules:

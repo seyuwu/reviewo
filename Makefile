@@ -6,7 +6,7 @@ PNPM = corepack pnpm
 .PHONY: dev down build rebuild logs clean lint typecheck format test prod prod-down prod-logs
 
 dev:
-	$(COMPOSE_DEV) up --build
+	$(COMPOSE_DEV) up
 
 down:
 	$(COMPOSE_DEV) down --remove-orphans
