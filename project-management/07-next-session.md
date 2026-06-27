@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 24 - Extension URL Detection is completed.
+Stage 25 - Extension Rating Card MVP is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, and passes the result toward future card UI. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, Web Home/Search foundation, Web Entity Creation MVP foundation, Web Entity Page MVP foundation, Web Profile MVP foundation, and Browser Extension Skeleton foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, and shows a compact read-only rating card for found entities. RFC 0007 Lazy Entity Creation is confirmed for Stage 28. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, Web Home/Search foundation, Web Entity Creation MVP foundation, Web Entity Page MVP foundation, Web Profile MVP foundation, Browser Extension Skeleton foundation, Extension URL Detection foundation, and Extension Rating Card MVP foundation.
 
 ## Already Done
 
@@ -566,15 +566,30 @@ The first product capabilities are implemented: users can register, sign in, rea
   - `corepack pnpm --filter @reviewo/extension test`
   - IDE diagnostics check for changed extension files
   - Docker backend `GET /extension/resolve?url=...` smoke for unknown URL
+- Stage 25 Extension Rating Card MVP was added:
+  - `apps/extension/src/content/rating-card/format-display.ts`
+  - `apps/extension/src/content/rating-card/rating-card-styles.ts`
+  - `apps/extension/src/content/rating-card/rating-card.ts`
+  - `apps/extension/scripts/build.mjs` now injects `EXTENSION_WEB_BASE_URL`
+  - Content script renders a Shadow DOM rating card for `found` resolve results
+  - Card shows entity title, average score, votes count, trust confidence, dismiss control, and **More details** link
+- Stage 25 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm --filter @reviewo/extension test`
+  - IDE diagnostics check for changed extension files
+  - Docker backend `GET /extension/resolve?url=...` smoke for known entity (`found`)
 
 ## Remaining Work
 
-- Stage 25 - Extension Rating Card MVP.
-- Do not start Stage 25 until the user confirms and exact Extension Rating Card MVP scope is agreed.
+- Stage 26 - Extension Authentication.
+- Do not start Stage 26 until the user confirms and exact Extension Authentication scope is agreed.
 
 ## Next Stage
 
-Stage 25 - Extension Rating Card MVP, but only after explicit user confirmation and scope confirmation.
+Stage 26 - Extension Authentication, but only after explicit user confirmation and scope confirmation.
 
 ## Documents To Read First
 
@@ -655,9 +670,11 @@ Stage 25 - Extension Rating Card MVP, but only after explicit user confirmation 
 - Extension content and popup scripts exchange ping/pong messages with the background worker.
 - Extension content script reads current HTTP/HTTPS page URLs and requests background resolve.
 - Extension background worker calls backend `GET /extension/resolve?url=...`.
-- Extension content script publishes `reviewo:resolve-result` for future card UI integration.
+- Extension content script publishes `reviewo:resolve-result` for card integration.
 - Extension popup can read active-tab resolve status through background messaging.
-- Rating card UI, auth, quick rating UI, and site-specific parsers are not implemented yet.
+- Extension content script renders a compact read-only rating card for `found` resolve results.
+- Extension rating card uses Shadow DOM and links **More details** to the web entity page.
+- Extension auth, submit-rating writes, lazy entity creation, and site-specific parsers are not implemented yet.
 - Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
 - Rating scale is integer `1..5`.
 - One active rating exists per user per entity; repeated rating updates the existing record.
@@ -697,7 +714,8 @@ Stage 25 - Extension Rating Card MVP, but only after explicit user confirmation 
 - Stage 22 implemented Web Profile MVP only.
 - Stage 23 implemented Browser Extension Skeleton only.
 - Stage 24 implemented Extension URL Detection only.
-- Stage 25 should implement Extension Rating Card MVP only after user confirmation and exact scope confirmation.
+- Stage 25 implemented Extension Rating Card MVP only.
+- Stage 26 should implement Extension Authentication only after user confirmation and exact scope confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web Docker service runs the Next.js dev server. Extension Docker service runs the extension watch build.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

@@ -1,3 +1,4 @@
+import { showRatingCardForFoundEntity } from "./rating-card/rating-card.js";
 import { createResolvePageUrlMessage, ExtensionMessageType } from "../shared/messages.js";
 import { isResolvablePageUrl, readCurrentPageUrl } from "../shared/page-url.js";
 import type { ExtensionResolveResponse } from "../shared/types/resolve.js";
@@ -31,6 +32,11 @@ function requestResolveForCurrentPage(): void {
     if (response?.type === ExtensionMessageType.ResolvePageUrlResult) {
       console.info("Reviewo content script received resolve result.", response.payload);
       publishResolveResult(response.payload.result);
+
+      if (response.payload.result.status === "found") {
+        showRatingCardForFoundEntity(response.payload.result);
+      }
+
       return;
     }
 

@@ -939,3 +939,57 @@
   - Popup reads active-tab resolve status through background messaging.
   - Manifest now includes `tabs` permission and localhost API host permissions.
   - Rating card UI, auth, quick rating UI, and site-specific parsers were not added.
+
+## 2026-06-27 - RFC 0007 Lazy Entity Creation Confirmed
+
+- Stage: documentation / roadmap (not an implementation stage)
+- Summary: Confirmed RFC for Lazy Entity Creation with product clarifications and reordered extension roadmap (Stages 25–28).
+- Created files:
+  - `docs/11-rfc/0007-lazy-entity-creation.md`
+  - `docs/README.md`
+- Changed files:
+  - `docs/11-rfc/0007-lazy-entity-creation.md`
+  - `docs/README.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+- Important architectural decisions:
+  - Lazy entity creation triggers on first authenticated rating/review, not on resolve.
+  - Default lazy entity type is `website`.
+  - Title sanitization is minimal only (trim, collapse spaces, max 200).
+  - Application use case orchestration (`RateSiteUseCase`); Ratings/Reviews must not call Entities for provisioning.
+  - Extension-first delivery; web reuse deferred.
+  - Manual `POST /entities` remains as fallback path.
+  - SEO/noindex for low-activity entities is a future decision.
+  - Implementation deferred to Stage 28 after Extension Rating Card, Extension Auth, and Extension Submit Rating.
+  - MVP roadmap extended to 33 stages; moderation/testing/E2E/production/stabilization shifted to Stages 29–33.
+- No code, migrations, or API changes were made.
+
+## 2026-06-27 - Stage 25 - Extension Rating Card MVP
+
+- Stage: 25
+- Summary: Added a compact read-only extension rating card for `found` resolve results with entity title, average score, votes count, trust confidence, dismiss control, and web entity page link.
+- Changed modules:
+  - `@reviewo/extension`
+- Created files:
+  - `apps/extension/src/content/rating-card/format-display.ts`
+  - `apps/extension/src/content/rating-card/rating-card-styles.ts`
+  - `apps/extension/src/content/rating-card/rating-card.ts`
+- Changed files:
+  - `apps/extension/scripts/build.mjs`
+  - `apps/extension/src/content/index.ts`
+  - `apps/extension/src/env.d.ts`
+  - `apps/extension/src/shared/config.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Content script renders a fixed-position rating card for `found` resolve results only.
+  - Card uses Shadow DOM for style isolation from host pages.
+  - Card displays average score, votes count, trust confidence, and entity title from resolve payload.
+  - **More details** opens the web entity page via `EXTENSION_WEB_BASE_URL` + `web.entityPagePath`.
+  - Card can be dismissed without affecting resolve behavior.
+  - Extension auth, submit-rating writes, lazy entity creation, and site-specific parsers were not added.

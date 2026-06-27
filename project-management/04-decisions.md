@@ -1680,3 +1680,98 @@ This gives Stage 25 a stable integration point while keeping Stage 24 focused on
 - Inject card UI immediately in Stage 24.
 - Store resolve results only in popup-local state.
 - Persist resolve cache across browser restarts.
+
+## 2026-06-27 - Lazy Entity Creation RFC Confirmed
+
+### Problem
+
+Manual entity creation adds friction in the extension flow. Lazy creation must be designed before implementation without breaking the existing resolve and rating card stages.
+
+### Decision
+
+Approve `docs/11-rfc/0007-lazy-entity-creation.md` with confirmed product and architecture choices:
+
+- Lazy creation triggers on first authenticated rating or review, not on resolve.
+- Default lazy entity type is `website`.
+- Title uses minimal sanitization only (trim, collapse spaces, max 200).
+- Extension-first delivery; web reuses the same application use case later.
+- Manual `POST /entities` remains as fallback for admins, moderators, and catalog seeding.
+- SEO/noindex for low-activity entities is a future decision; implementation deferred.
+- Orchestration lives in application use cases (e.g. `RateSiteUseCase`); Ratings/Reviews must not call Entities for provisioning.
+- Implementation is **Stage 28**, after Stages 25–27 (rating card, extension auth, submit rating for existing entities).
+
+### Reason
+
+This preserves modular monolith boundaries, minimizes risk to working resolve, and sequences extension UX before entity provisioning changes.
+
+### Alternatives
+
+- Implement lazy creation immediately after Stage 24.
+- Let Ratings module call Entities directly.
+- Default lazy type to `page`.
+- Remove manual entity creation.
+
+## 2026-06-27 - Extension Roadmap Split Before Lazy Creation
+
+### Problem
+
+The previous roadmap combined extension quick rating and lazy creation implicitly in one stage, increasing risk to resolve and card UI stability.
+
+### Decision
+
+Split extension delivery into:
+
+1. Stage 25 — Extension Rating Card MVP
+2. Stage 26 — Extension Authentication
+3. Stage 27 — Extension Submit Rating (existing entities only)
+4. Stage 28 — Lazy Entity Creation (RFC 0007)
+
+Moderation, testing, E2E, production readiness, and stabilization shift to Stages 29–33.
+
+### Reason
+
+Each stage has a narrow verification surface. Resolve and found-entity rating work before URL-scoped entity provisioning is introduced.
+
+### Alternatives
+
+- Keep single "Extension Quick Rating" stage covering auth, rating, and lazy creation.
+- Implement lazy creation before extension auth.
+
+## 2026-06-27 - Extension Rating Card Uses Shadow DOM In Content Script
+
+### Problem
+
+The extension needs a compact on-page rating card that shows resolve data without leaking styles to or from the host page.
+
+### Decision
+
+Render the Stage 25 rating card from the content script using a fixed-position host element with Shadow DOM, fed by the existing resolve result flow. Show the card only for `found` entities.
+
+### Reason
+
+This keeps card UI isolated from arbitrary site CSS, matches the Stage 24 resolve integration point, and avoids backend or API changes in Stage 25.
+
+### Alternatives
+
+- Inject global CSS into the host page.
+- Render the card in the popup only.
+- Show lazy-creation CTA for `not_found` in Stage 25.
+
+## 2026-06-27 - Extension Web Links Use Build-Time Web Base URL
+
+### Problem
+
+The rating card **More details** action must open the web entity page, which runs on a different origin than the API during local development.
+
+### Decision
+
+Add `EXTENSION_WEB_BASE_URL` to the extension build (default `http://localhost:3001`) and compose entity page links from resolve `web.entityPagePath`.
+
+### Reason
+
+This keeps web link generation explicit and environment-configurable without hardcoding API origin as the web origin.
+
+### Alternatives
+
+- Hardcode `http://localhost:3001` in content script source.
+- Ask the backend resolve endpoint to return absolute web URLs.

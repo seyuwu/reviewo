@@ -440,7 +440,7 @@ Verification:
 - Opening a page produces an API request.
 - No site-specific parsers exist.
 
-### 25. ⬜ Extension Rating Card MVP
+### 25. ✅ Extension Rating Card MVP
 
 Goal: show the compact rating card.
 
@@ -456,23 +456,60 @@ Verification:
 - Card appears for a found entity.
 - "More details" opens the web entity page.
 
-### 26. ⬜ Extension Quick Rating
+### 26. ⬜ Extension Authentication
 
-Goal: allow rating from the extension.
+Goal: allow authenticated writes from the extension.
 
 Result:
 
-- User selects a rating in the card.
-- Extension sends the rating to backend.
+- Minimal register/login in extension popup or card.
+- Access token stored in extension-local storage.
+- Background/content can request authenticated API calls through background worker.
+
+Verification:
+
+- User can register and sign in from extension.
+- Token persists across popup reopen.
+- Extension does not implement full auth product UI.
+
+### 27. ⬜ Extension Submit Rating
+
+Goal: allow rating existing entities from the extension.
+
+Result:
+
+- User selects a rating in the card for `found` entities.
+- Extension sends rating to backend (`PUT /extension/entities/:entityId/my-rating`).
 - Card updates rating and trust data.
 
 Verification:
 
-- Rating is saved.
+- Rating is saved for an existing entity.
 - Aggregates update.
 - Extension does not calculate rating itself.
+- `not_found` lazy creation is not implemented yet.
 
-### 27. ⬜ Moderation MVP Foundation
+### 28. ⬜ Lazy Entity Creation
+
+Goal: create entities on first rating against an unknown URL (RFC 0007).
+
+Result:
+
+- `EntitiesPort.ensureEntityForUrl` in Entities domain.
+- `RateSiteUseCase` at application level (Extension API).
+- `PUT /extension/entities/by-url/my-rating` for extension lazy rating.
+- `not_found` card state: "Be the first to rate this site".
+
+Verification:
+
+- First rating on unknown URL creates entity and saves rating.
+- Concurrent first ratings on same URL do not create duplicates.
+- Resolve remains read-only.
+- Web is not changed in this stage.
+
+Reference: `docs/11-rfc/0007-lazy-entity-creation.md`
+
+### 29. ⬜ Moderation MVP Foundation
 
 Goal: create the minimum moderation foundation.
 
@@ -488,7 +525,7 @@ Verification:
 - Moderation flag can be created.
 - Moderation stays isolated in its module.
 
-### 28. ⬜ Testing Baseline
+### 30. ⬜ Testing Baseline
 
 Goal: cover critical MVP scenarios.
 
@@ -504,7 +541,7 @@ Verification:
 - Tests run with one command.
 - Critical MVP flow is covered.
 
-### 29. ⬜ MVP End-To-End Flow
+### 31. ⬜ MVP End-To-End Flow
 
 Goal: verify the main user journey.
 
@@ -512,7 +549,7 @@ Result:
 
 - User registers.
 - User searches for an object.
-- User creates an object if missing.
+- User creates an object if missing (manual fallback) or rates via extension (lazy creation).
 - User rates the object.
 - User sees updated rating.
 - Extension detects URL and allows rating.
@@ -522,7 +559,7 @@ Verification:
 - End-to-end flow passes.
 - "Rate an object in under 5 seconds" can be checked manually.
 
-### 30. ⬜ Production Readiness MVP
+### 32. ⬜ Production Readiness MVP
 
 Goal: prepare the project for first deployment.
 
@@ -540,7 +577,7 @@ Verification:
 - Backend, web, and extension build.
 - Project can be deployed using documented instructions.
 
-### 31. ⬜ MVP Stabilization
+### 33. ⬜ MVP Stabilization
 
 Goal: remove architectural and UX problems before growth.
 
@@ -549,7 +586,7 @@ Result:
 - Review module boundaries.
 - Check absence of cyclic dependencies.
 - Review API contracts.
-- List post-MVP RFCs: site-specific parsers, entity relations, advanced trust, OpenSearch, recommendations.
+- List post-MVP RFCs: site-specific parsers, entity relations, advanced trust, OpenSearch, recommendations, SEO/noindex policy.
 
 Verification:
 

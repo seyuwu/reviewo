@@ -9,11 +9,13 @@ const publicDirectory = join(extensionRoot, "public");
 const distDirectory = join(extensionRoot, "dist");
 const watchMode = process.argv.includes("--watch");
 const apiBaseUrl = process.env.EXTENSION_API_BASE_URL ?? "http://localhost:3000";
+const webBaseUrl = process.env.EXTENSION_WEB_BASE_URL ?? "http://localhost:3001";
 
 const buildOptions = {
   bundle: true,
   define: {
-    __EXTENSION_API_BASE_URL__: JSON.stringify(apiBaseUrl)
+    __EXTENSION_API_BASE_URL__: JSON.stringify(apiBaseUrl),
+    __EXTENSION_WEB_BASE_URL__: JSON.stringify(webBaseUrl)
   },
   entryPoints: {
     background: join(extensionRoot, "src/background/index.ts"),

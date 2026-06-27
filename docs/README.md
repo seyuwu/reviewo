@@ -1,0 +1,23 @@
+# Reviewo Documentation
+
+This directory is the long-term home for project documentation. Content is being migrated from root-level markdown files (see `project-management/02-backlog.md`).
+
+## Index
+
+| Path | Description |
+| ---- | ----------- |
+| [11-rfc/0007-lazy-entity-creation.md](./11-rfc/0007-lazy-entity-creation.md) | RFC: Lazy Entity Creation MVP (**confirmed**, Stage 28) |
+
+## RFCs
+
+Request for Comments documents propose architectural changes before implementation.
+
+| RFC | Title | Status |
+| --- | ----- | ------ |
+| [0007](./11-rfc/0007-lazy-entity-creation.md) | Lazy Entity Creation MVP | **Confirmed** (implements at Stage 28) |
+
+Planned RFC slots (from `Структура.md`): rating system, trust system, extension UI, mobile app, AI summary, recommendation, extension parser, extension cache, extension API, extension settings, extension sync.
+
+## Related
+
+- [project-management/](../project-management/) — active development state, ADRs, changelog, roadmap execution

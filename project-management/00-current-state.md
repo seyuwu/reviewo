@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 25
-- Stage status: Stage 24 completed
-- MVP readiness: 24%
-- Last completed stage: Stage 24 - Extension URL Detection
-- Next stage: Stage 25 - Extension Rating Card MVP
+- Current stage: Waiting for user confirmation before Stage 26
+- Stage status: Stage 25 completed
+- MVP readiness: 25%
+- Last completed stage: Stage 25 - Extension Rating Card MVP
+- Next stage: Stage 26 - Extension Authentication
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now has a Chrome MV3 skeleton with background, content, and popup entry points plus a local build output. The extension reads the current page URL, resolves it through the backend Extension API, and passes the result toward future card UI.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, and shows a compact read-only rating card for found entities.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -272,10 +272,18 @@ Extension URL Detection is initialized:
 - Content script reads the current page URL on supported HTTP/HTTPS pages.
 - Background worker calls backend `GET /extension/resolve?url=...`.
 - Resolve results are cached per tab in the background worker.
-- Content script publishes `reviewo:resolve-result` for future card UI integration.
+- Content script publishes `reviewo:resolve-result` for card integration.
 - Popup can read the active tab resolve result through background messaging.
 - Manifest includes `tabs` permission and localhost API host permissions.
-- Rating card UI, auth, quick rating UI, and site-specific parsers are intentionally not implemented.
+
+Extension Rating Card MVP is initialized:
+
+- Content script renders a compact fixed-position card for `found` resolve results.
+- Card displays entity title, average score, votes count, and trust confidence.
+- Card includes a dismiss control and a **More details** link to the web entity page.
+- Card uses Shadow DOM for style isolation and does not render for `not_found`.
+- Extension build injects `EXTENSION_WEB_BASE_URL` (default `http://localhost:3001`).
+- Extension auth, submit-rating writes, lazy entity creation, and site-specific parsers are intentionally not implemented.
 
 Roadmap update:
 
@@ -358,3 +366,5 @@ Stage 22 created the read-only web profile only. It did not add profile editing,
 Stage 23 created the browser extension skeleton only. It did not add URL detection, backend API calls, rating card UI, auth, or site-specific parsers.
 
 Stage 24 created extension URL detection only. It did not add rating card UI, auth, quick rating UI, or site-specific parsers.
+
+Stage 25 created the extension read-only rating card for `found` entities only. It did not add extension auth, submit-rating writes, lazy entity creation, or site-specific parsers.
