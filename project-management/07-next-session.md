@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 22 - Web Profile MVP is completed.
+Stage 24 - Extension URL Detection is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, Web Home/Search foundation, Web Entity Creation MVP foundation, Web Entity Page MVP foundation, and Web Profile MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, and passes the result toward future card UI. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, Web Home/Search foundation, Web Entity Creation MVP foundation, Web Entity Page MVP foundation, Web Profile MVP foundation, and Browser Extension Skeleton foundation.
 
 ## Already Done
 
@@ -522,15 +522,59 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker web `GET /profile` smoke
   - Docker backend `POST /auth/register`
   - Docker backend `GET /auth/me`
+- Stage 23 Browser Extension Skeleton was added:
+  - `apps/extension/package.json`
+  - `apps/extension/tsconfig.json`
+  - `apps/extension/public/manifest.json`
+  - `apps/extension/public/popup.html`
+  - `apps/extension/public/popup.css`
+  - `apps/extension/scripts/build.mjs`
+  - `apps/extension/scripts/verify-build.mjs`
+  - `apps/extension/src/background/index.ts`
+  - `apps/extension/src/content/index.ts`
+  - `apps/extension/src/popup/index.ts`
+  - `apps/extension/src/shared/messages.ts`
+  - `docker-compose.dev.yml` now starts the extension watch build
+  - `docker/extension/Dockerfile` now runs extension dev/test commands
+  - `pnpm-workspace.yaml` now allows `esbuild` build scripts
+- Stage 23 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed extension/Docker files
+  - Extension build artifact verification in `apps/extension/dist`
+- Stage 24 Extension URL Detection was added:
+  - `apps/extension/src/env.d.ts`
+  - `apps/extension/src/shared/config.ts`
+  - `apps/extension/src/shared/page-url.ts`
+  - `apps/extension/src/shared/types/resolve.ts`
+  - `apps/extension/src/background/resolve-url.ts`
+  - `apps/extension/src/background/tab-resolve-cache.ts`
+  - `apps/extension/public/manifest.json` now includes `tabs` permission and localhost API host permissions
+  - `apps/extension/scripts/build.mjs` now injects `EXTENSION_API_BASE_URL`
+  - Content script reads page URL and requests background resolve
+  - Background worker calls backend `GET /extension/resolve?url=...`
+  - Content script publishes `reviewo:resolve-result`
+  - Popup shows active-tab resolve status
+- Stage 24 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm --filter @reviewo/extension test`
+  - IDE diagnostics check for changed extension files
+  - Docker backend `GET /extension/resolve?url=...` smoke for unknown URL
 
 ## Remaining Work
 
-- Stage 23 - Browser Extension Skeleton.
-- Do not start Stage 23 until the user confirms and exact Browser Extension Skeleton scope is agreed.
+- Stage 25 - Extension Rating Card MVP.
+- Do not start Stage 25 until the user confirms and exact Extension Rating Card MVP scope is agreed.
 
 ## Next Stage
 
-Stage 23 - Browser Extension Skeleton, but only after explicit user confirmation and scope confirmation.
+Stage 25 - Extension Rating Card MVP, but only after explicit user confirmation and scope confirmation.
 
 ## Documents To Read First
 
@@ -604,7 +648,16 @@ Stage 23 - Browser Extension Skeleton, but only after explicit user confirmation
 - Profile page uses backend `GET /auth/me`.
 - Profile page reuses the shared minimal web auth panel.
 - Profile displays current user id, display name, email, username, and status.
-- Review pagination, review likes UI, profile editing, recent activity endpoints, account settings, recommendations, moderation, full auth UI, and extension UI are not implemented yet.
+- Review pagination, review likes UI, profile editing, recent activity endpoints, account settings, recommendations, moderation, full auth UI, and extension product UI are not implemented yet.
+- Browser extension skeleton exists under `apps/extension`.
+- Extension uses Chrome Manifest V3 with `background`, `content`, and `popup` entry points.
+- Extension build outputs loadable artifacts under `apps/extension/dist`.
+- Extension content and popup scripts exchange ping/pong messages with the background worker.
+- Extension content script reads current HTTP/HTTPS page URLs and requests background resolve.
+- Extension background worker calls backend `GET /extension/resolve?url=...`.
+- Extension content script publishes `reviewo:resolve-result` for future card UI integration.
+- Extension popup can read active-tab resolve status through background messaging.
+- Rating card UI, auth, quick rating UI, and site-specific parsers are not implemented yet.
 - Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
 - Rating scale is integer `1..5`.
 - One active rating exists per user per entity; repeated rating updates the existing record.
@@ -642,9 +695,11 @@ Stage 23 - Browser Extension Skeleton, but only after explicit user confirmation
 - Stage 20 implemented Web Entity Creation MVP only.
 - Stage 21 implemented Web Entity Page MVP only.
 - Stage 22 implemented Web Profile MVP only.
-- Stage 23 should implement Browser Extension Skeleton only after user confirmation and exact scope confirmation.
+- Stage 23 implemented Browser Extension Skeleton only.
+- Stage 24 implemented Extension URL Detection only.
+- Stage 25 should implement Extension Rating Card MVP only after user confirmation and exact scope confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
-- Web Docker service runs the Next.js dev server. Extension Docker service still uses a placeholder command because the extension app does not exist yet.
+- Web Docker service runs the Next.js dev server. Extension Docker service runs the extension watch build.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.
 - Dev Compose now uses source bind mounts and Docker-managed dependency volumes; code changes should not require rebuilding images.
 - Keep the dev stack running for routine checks; do not rebuild, stop containers, or run `down -v` after every stage.

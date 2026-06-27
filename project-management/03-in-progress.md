@@ -52,41 +52,45 @@ Stage 21 - Web Entity Page MVP is completed.
 
 Stage 22 - Web Profile MVP is completed.
 
-Stage 23 - Browser Extension Skeleton is next, pending explicit user confirmation.
+Stage 23 - Browser Extension Skeleton is completed.
+
+Stage 24 - Extension URL Detection is completed.
+
+Stage 25 - Extension Rating Card MVP is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Browser Extension Skeleton after user confirmation.
+Prepare Extension Rating Card MVP after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 23 implementation.
+To be confirmed before Stage 25 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 23 implementation.
+To be confirmed before Stage 25 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 23 should implement the browser extension skeleton after user confirmation.
-- Extension scope should be confirmed before implementation.
-- Do not add extension product UI, production auth, ratings UI, content parsing, or site-specific logic in Stage 23 unless explicitly confirmed.
+- Stage 25 should implement extension rating card UI after user confirmation.
+- Rating card scope should be confirmed before implementation.
+- Do not add quick rating UI, production auth, site-specific parsers, or entity auto-creation in Stage 25 unless explicitly confirmed.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 23.
-- [ ] Confirm exact Browser Extension Skeleton scope before implementation.
-- [ ] Describe Stage 23 goal, files, and architectural decisions before editing.
-- [ ] Implement Browser Extension Skeleton only.
+- [ ] Wait for user confirmation to start Stage 25.
+- [ ] Confirm exact Extension Rating Card MVP scope before implementation.
+- [ ] Describe Stage 25 goal, files, and architectural decisions before editing.
+- [ ] Implement Extension Rating Card MVP only.
 - [ ] Verify lint/typecheck/build behavior.
 
 ## Current Progress
 
-Stage 22 is complete. Stage 23 has not started.
+Stage 24 is complete. Stage 25 has not started.
 
 ## Open Questions
 
-Stage 23 requires confirmation of exact Browser Extension Skeleton scope before implementation.
+Stage 25 requires confirmation of exact Extension Rating Card MVP scope before implementation.
 
 ## Blockers
 
@@ -94,6 +98,6 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 23.
-- Confirm extension manifest/build/tooling scope.
-- Do not add extension product UI, production auth, ratings UI, content parsing, or site-specific logic until their dedicated stages.
+- Wait for user confirmation before Stage 25.
+- Confirm rating card UI placement and interaction scope.
+- Do not add quick rating UI, production auth, site-specific parsers, or entity auto-creation until their dedicated stages.

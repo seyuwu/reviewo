@@ -1600,3 +1600,83 @@ This keeps auth behavior consistent across creation, entity interactions, and pr
 - Create a separate profile-only login form.
 - Add a global authenticated navigation shell.
 - Use a temporary bearer-token field on the profile page.
+
+## 2026-06-27 - Extension Skeleton Uses Chrome MV3 Entry Points
+
+### Problem
+
+The browser extension needs a loadable foundation before URL detection, backend integration, or rating card UI can be added.
+
+### Decision
+
+Stage 23 creates `@reviewo/extension` with Manifest V3 `background`, `content`, and `popup` entry points plus a local build output under `apps/extension/dist`.
+
+### Reason
+
+This establishes the minimum extension package structure and build pipeline required for later Chrome loading and feature stages.
+
+### Alternatives
+
+- Delay extension code until URL detection is implemented.
+- Use a single bundled script for all extension behavior.
+- Add product popup UI in Stage 23.
+
+## 2026-06-27 - Extension Messaging Uses Shared Contracts
+
+### Problem
+
+Background, content, and popup scripts need a minimal communication path without introducing backend or product logic.
+
+### Decision
+
+Add shared message contracts under `apps/extension/src/shared` and implement ping/pong messaging between content/popup and the background worker.
+
+### Reason
+
+This verifies the extension runtime wiring while keeping business logic out of the skeleton stage.
+
+### Alternatives
+
+- Use ad hoc string messages without shared contracts.
+- Call backend APIs directly from content scripts in Stage 23.
+- Defer all messaging until Stage 24.
+
+## 2026-06-27 - Extension URL Resolve Runs In Background Worker
+
+### Problem
+
+The extension needs to detect the current page URL and resolve it against the backend without putting API calls or business logic in content scripts.
+
+### Decision
+
+Content scripts read the current HTTP/HTTPS page URL and send a resolve message to the background worker. The background worker calls backend `GET /extension/resolve?url=...` and returns the result through extension messaging.
+
+### Reason
+
+This keeps backend communication centralized in the background worker and matches the Chrome MV3 architecture used by later extension stages.
+
+### Alternatives
+
+- Call the backend directly from content scripts.
+- Resolve URLs only from the popup.
+- Add site-specific URL parsers in Stage 24.
+
+## 2026-06-27 - Extension Resolve Results Feed Future Card UI Through Events
+
+### Problem
+
+Stage 24 must pass resolve results toward future card UI without implementing the card itself.
+
+### Decision
+
+The content script publishes a `reviewo:resolve-result` browser event with the backend resolve payload after a successful background resolve. The background worker also caches resolve results per tab for popup reads.
+
+### Reason
+
+This gives Stage 25 a stable integration point while keeping Stage 24 focused on URL detection and backend resolve only.
+
+### Alternatives
+
+- Inject card UI immediately in Stage 24.
+- Store resolve results only in popup-local state.
+- Persist resolve cache across browser restarts.

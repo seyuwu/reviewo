@@ -1,0 +1,23 @@
+{
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Reviewo"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": ["content.js"],
+      "matches": ["<all_urls>"],
+      "run_at": "document_idle"
+    }
+  ],
+  "description": "Reviewo browser extension.",
+  "host_permissions": ["http://localhost:3000/*", "http://127.0.0.1:3000/*"],
+  "manifest_version": 3,
+  "name": "Reviewo",
+  "permissions": ["tabs"],
+  "version": "0.0.0"
+}

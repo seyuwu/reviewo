@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 23
-- Stage status: Stage 22 completed
-- MVP readiness: 22%
-- Last completed stage: Stage 22 - Web Profile MVP
-- Next stage: Stage 23 - Browser Extension Skeleton
+- Current stage: Waiting for user confirmation before Stage 25
+- Stage status: Stage 24 completed
+- MVP readiness: 24%
+- Last completed stage: Stage 24 - Extension URL Detection
+- Next stage: Stage 25 - Extension Rating Card MVP
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now has a Chrome MV3 skeleton with background, content, and popup entry points plus a local build output. The extension reads the current page URL, resolves it through the backend Extension API, and passes the result toward future card UI.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -256,7 +256,26 @@ The Web Profile MVP is initialized:
 - The profile page uses the shared minimal web auth panel for sign in/out.
 - Profile displays current user id, display name, email, username, and status.
 - No backend profile endpoints or database tables were added.
-- Profile editing, recent ratings/reviews, user activity endpoints, account settings, recommendations, moderation, full auth UI, and extension UI are intentionally not implemented.
+- Profile editing, recent ratings/reviews, user activity endpoints, account settings, recommendations, moderation, full auth UI, and extension product UI are intentionally not implemented.
+
+The Browser Extension Skeleton is initialized:
+
+- `@reviewo/extension` exists as a Chrome Manifest V3 extension package.
+- Extension structure includes `background`, `content`, and `popup` entry points.
+- Shared message contracts live under `apps/extension/src/shared`.
+- Content and popup scripts can ping the background worker and receive pong responses.
+- Extension build outputs loadable artifacts under `apps/extension/dist`.
+- Docker development extension service runs the extension watch build.
+
+Extension URL Detection is initialized:
+
+- Content script reads the current page URL on supported HTTP/HTTPS pages.
+- Background worker calls backend `GET /extension/resolve?url=...`.
+- Resolve results are cached per tab in the background worker.
+- Content script publishes `reviewo:resolve-result` for future card UI integration.
+- Popup can read the active tab resolve result through background messaging.
+- Manifest includes `tabs` permission and localhost API host permissions.
+- Rating card UI, auth, quick rating UI, and site-specific parsers are intentionally not implemented.
 
 Roadmap update:
 
@@ -296,7 +315,7 @@ Stage 1 created only the monorepo foundation and workspace structure. Backend, f
 
 Stage 3 created Docker infrastructure only. It did not add backend, frontend, extension framework code, database migrations, or business modules.
 
-The web container now runs the Next.js dev server in development. The extension container still uses a temporary placeholder command because the extension app is not implemented yet.
+The web container now runs the Next.js dev server in development. The extension container now runs the extension watch build in development.
 
 Stage 4 created shared package boundaries only. These packages must remain free of business logic unless a future stage explicitly introduces approved shared contracts or technical utilities.
 
@@ -335,3 +354,7 @@ Stage 20 created the web entity creation flow only. It did not add full auth UI,
 Stage 21 created the base web entity page only. It did not add review pagination, review likes UI, recommendations, moderation, profile UI, full auth UI, or extension UI.
 
 Stage 22 created the read-only web profile only. It did not add profile editing, recent activity endpoints, account settings, recommendations, moderation, full auth UI, or extension UI.
+
+Stage 23 created the browser extension skeleton only. It did not add URL detection, backend API calls, rating card UI, auth, or site-specific parsers.
+
+Stage 24 created extension URL detection only. It did not add rating card UI, auth, quick rating UI, or site-specific parsers.

@@ -16,13 +16,13 @@ FROM base AS development
 ENV NODE_ENV=development
 ENV APP_NAME=extension
 
-CMD ["corepack", "pnpm", "check"]
+CMD ["corepack", "pnpm", "--filter", "@reviewo/extension", "dev"]
 
 FROM base AS production
 
 ENV NODE_ENV=production
 ENV APP_NAME=extension
 
-RUN corepack pnpm build
+RUN corepack pnpm --filter @reviewo/extension build
 
-CMD ["corepack", "pnpm", "check"]
+CMD ["corepack", "pnpm", "--filter", "@reviewo/extension", "test"]

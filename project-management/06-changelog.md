@@ -862,3 +862,80 @@
   - Profile data is read-only in Stage 22.
   - No backend profile endpoints, user activity endpoints, or database tables were added.
   - Profile editing, recent ratings/reviews, account settings, recommendations, moderation, full auth UI, and extension UI were not added.
+
+## 2026-06-27 - Stage 23 - Browser Extension Skeleton
+
+- Stage: 23
+- Summary: Added the Chrome MV3 browser extension skeleton with background/content/popup entry points, shared messaging contracts, esbuild output, and Docker dev watch build integration.
+- Created modules:
+  - `@reviewo/extension`
+- Changed modules:
+  - Docker extension development/runtime infrastructure
+- Created files:
+  - `apps/extension/package.json`
+  - `apps/extension/tsconfig.json`
+  - `apps/extension/public/manifest.json`
+  - `apps/extension/public/popup.html`
+  - `apps/extension/public/popup.css`
+  - `apps/extension/scripts/build.mjs`
+  - `apps/extension/scripts/verify-build.mjs`
+  - `apps/extension/src/background/index.ts`
+  - `apps/extension/src/content/index.ts`
+  - `apps/extension/src/popup/index.ts`
+  - `apps/extension/src/shared/messages.ts`
+- Changed files:
+  - `docker-compose.dev.yml`
+  - `docker/extension/Dockerfile`
+  - `pnpm-lock.yaml`
+  - `pnpm-workspace.yaml`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Extension uses Chrome Manifest V3 with `background`, `content`, and `popup` entry points.
+  - Shared extension message contracts live under `apps/extension/src/shared`.
+  - Content and popup scripts exchange ping/pong messages with the background worker.
+  - Extension build outputs loadable artifacts under `apps/extension/dist`.
+  - Docker development extension service runs the extension watch build.
+  - URL detection, backend API calls, rating card UI, auth, and site-specific parsers were not added.
+
+## 2026-06-27 - Stage 24 - Extension URL Detection
+
+- Stage: 24
+- Summary: Added extension URL detection with content-script page URL reads, background resolve calls to `GET /extension/resolve`, tab-scoped resolve caching, popup active-tab status, and a content event for future card UI integration.
+- Created modules:
+  - Extension URL detection in `@reviewo/extension`
+- Changed modules:
+  - `@reviewo/extension`
+- Created files:
+  - `apps/extension/src/env.d.ts`
+  - `apps/extension/src/shared/config.ts`
+  - `apps/extension/src/shared/page-url.ts`
+  - `apps/extension/src/shared/types/resolve.ts`
+  - `apps/extension/src/background/resolve-url.ts`
+  - `apps/extension/src/background/tab-resolve-cache.ts`
+- Changed files:
+  - `apps/extension/public/manifest.json`
+  - `apps/extension/public/popup.html`
+  - `apps/extension/scripts/build.mjs`
+  - `apps/extension/src/background/index.ts`
+  - `apps/extension/src/content/index.ts`
+  - `apps/extension/src/popup/index.ts`
+  - `apps/extension/src/shared/messages.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Content script reads current HTTP/HTTPS page URLs and requests resolve through background messaging.
+  - Background worker calls backend `GET /extension/resolve?url=...` using build-time `EXTENSION_API_BASE_URL` (default `http://localhost:3000`).
+  - Resolve results are cached per tab in the background worker.
+  - Content script publishes `reviewo:resolve-result` for future card UI integration.
+  - Popup reads active-tab resolve status through background messaging.
+  - Manifest now includes `tabs` permission and localhost API host permissions.
+  - Rating card UI, auth, quick rating UI, and site-specific parsers were not added.

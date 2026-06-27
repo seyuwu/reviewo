@@ -65,7 +65,12 @@ services:
     environment:
       NODE_ENV: development
     volumes: *dev-workspace-volumes
-    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+    command:
+      [
+        "sh",
+        "-c",
+        "corepack pnpm install --frozen-lockfile --store-dir /pnpm/store && corepack pnpm --filter @reviewo/extension dev"
+      ]
 
 volumes:
   dev_pnpm_store:

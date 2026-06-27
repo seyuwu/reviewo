@@ -409,7 +409,7 @@ Verification:
 - User sees their data.
 - Profile does not mix rating or review business logic.
 
-### 23. ⬜ Browser Extension Skeleton
+### 23. ✅ Browser Extension Skeleton
 
 Goal: create the minimum extension structure.
 
@@ -425,7 +425,7 @@ Verification:
 - Extension can be loaded locally.
 - Background and content scripts exchange messages.
 
-### 24. ⬜ Extension URL Detection
+### 24. ✅ Extension URL Detection
 
 Goal: detect the current URL and send it to the backend.
 
