@@ -1,0 +1,150 @@
+# MVP Deployment
+
+Stage 32 production-readiness notes for the first Reviewo deployment.
+
+## Prerequisites
+
+- Docker and Docker Compose
+- Node.js 20+ and Corepack-managed pnpm (for local builds without Docker)
+- PostgreSQL 17+ (provided by Compose in the default stack)
+
+## Environment files
+
+1. Copy `.env.example` to `.env.production`.
+2. Replace all `change_me` placeholders.
+3. Set production values at minimum:
+
+| Variable | Notes |
+| -------- | ----- |
+| `NODE_ENV` | `production` |
+| `JWT_SECRET` | At least 32 characters; must not start with `change_me` |
+| `POSTGRES_PASSWORD` | Strong password used by Compose Postgres |
+| `DATABASE_URL` | Built automatically in Compose from Postgres vars; for external DB set explicitly on API |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated public web origins, e.g. `https://app.example.com` |
+| `NEXT_PUBLIC_API_BASE_URL` | Public API URL embedded into the web build, e.g. `https://api.example.com` |
+
+Optional:
+
+| Variable | Notes |
+| -------- | ----- |
+| `ADMIN_EMAIL` | After a user registers, `pnpm db:seed` promotes this email to `ADMIN` |
+
+API startup validates required production settings and fails fast on placeholders.
+
+## Docker Compose production stack
+
+The production override starts API and web services. Postgres, Redis, and MinIO use the base Compose services.
+
+```bash
+# Linux / macOS
+make prod
+
+# Or explicitly
+docker compose --env-file .env.production \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  up -d --build
+```
+
+Default ports (override in `.env.production`):
+
+- API: `API_PORT` (default `3000`)
+- Web: `WEB_PORT` mapped to container port `3000` (default host `3001`)
+
+### API startup
+
+Production API runs:
+
+```text
+prisma migrate deploy → node dist/main.js
+```
+
+Migrations apply automatically on container start. For manual runs against the dev stack:
+
+```bash
+make migrate
+corepack pnpm db:migrate
+```
+
+### Seed / admin promotion
+
+Seed does not create demo users. Register a user first, then set `ADMIN_EMAIL` and run:
+
+```bash
+make seed
+corepack pnpm db:seed
+```
+
+Inside a running API container:
+
+```bash
+docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml \
+  exec api corepack pnpm --filter @reviewo/api db:seed
+```
+
+## Local production build (without Compose)
+
+```bash
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+```
+
+Individual packages:
+
+```bash
+corepack pnpm --filter @reviewo/api build
+NEXT_PUBLIC_API_BASE_URL=https://api.example.com corepack pnpm --filter @reviewo/web build
+corepack pnpm --filter @reviewo/extension build
+```
+
+Start API after migrations:
+
+```bash
+cd apps/api
+DATABASE_URL=postgresql://... JWT_SECRET=... NODE_ENV=production \
+  CORS_ALLOWED_ORIGINS=https://app.example.com \
+  corepack pnpm start:prod
+```
+
+Start web:
+
+```bash
+cd apps/web
+corepack pnpm start
+```
+
+## Browser extension
+
+The extension is not a long-running server. Build artifacts for manual install:
+
+```bash
+corepack pnpm --filter @reviewo/extension build
+```
+
+Load unpacked from `apps/extension/dist` in Chrome.
+
+Optional Compose profile to build extension artifacts inside Docker:
+
+```bash
+docker compose --env-file .env.production \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  --profile extension-artifacts build extension
+```
+
+## Health check
+
+```bash
+curl http://localhost:3000/health
+```
+
+Expect `{"status":"ok","checks":{"database":"ok"}}`.
+
+## Logging
+
+API uses `AppLogger` with NestJS console output. In production, log level is limited to `log`, `warn`, `error`, and `fatal` (no `debug` / `verbose`).
+
+## Related
+
+- [../testing/mvp-smoke-checklist.md](../testing/mvp-smoke-checklist.md)
+- [../testing/mvp-e2e-flow.md](../testing/mvp-e2e-flow.md)

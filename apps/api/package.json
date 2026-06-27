@@ -14,6 +14,7 @@
     "dev": "corepack pnpm build && node dist/main.js",
     "lint": "eslint .",
     "start": "node dist/main.js",
+    "start:prod": "corepack pnpm db:migrate && node dist/main.js",
     "test": "corepack pnpm build && node scripts/run-tests.mjs",
     "typecheck": "corepack pnpm db:generate && tsc -p tsconfig.json --noEmit"
   },

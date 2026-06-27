@@ -3,11 +3,11 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 32
-- Stage status: Stage 31 completed
-- MVP readiness: 31%
-- Last completed stage: Stage 31 - MVP End-To-End Flow
-- Next stage: Stage 32 - Production Readiness MVP
+- Current stage: Waiting for user confirmation before Stage 33
+- Stage status: Stage 32 completed
+- MVP readiness: 32%
+- Last completed stage: Stage 32 - Production Readiness MVP
+- Next stage: Stage 33 - MVP Stabilization
 
 ## Implemented Capabilities
 
@@ -395,3 +395,5 @@ Stage 29 created content hiding for entities and reviews per RFC 0008. It did no
 Stage 30 created the testing baseline with API unit/integration coverage, web route smoke tests, extension unit/build smoke tests, and a manual MVP checklist. It did not add full browser E2E automation.
 
 Stage 31 created automated API E2E coverage for the main MVP user journey (extension lazy-create path and manual web create fallback), shared integration test harness, and E2E flow documentation. It did not add browser extension Playwright/Cypress automation.
+
+Stage 32 added production environment validation (required `DATABASE_URL` and `CORS_ALLOWED_ORIGINS` in production), production log levels, `start:prod` with automatic migrations, root `db:migrate`/`db:seed` scripts, fixed production Compose commands for API and web, web Docker build arg for `NEXT_PUBLIC_API_BASE_URL`, and MVP deployment documentation. It did not add cloud-specific IaC or managed hosting automation.

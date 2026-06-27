@@ -5,23 +5,28 @@ services:
     environment:
       NODE_ENV: production
     restart: always
-    command: ["sh", "-c", "corepack pnpm --filter @reviewo/api start"]
+    command:
+      ["sh", "-c", "corepack pnpm --filter @reviewo/api start:prod"]
 
   web:
     build:
       target: production
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3000}
     environment:
       NODE_ENV: production
     restart: always
-    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+    command: ["sh", "-c", "corepack pnpm --filter @reviewo/web start"]
 
   extension:
     build:
       target: production
     environment:
       NODE_ENV: production
-    restart: always
-    command: ["sh", "-c", "corepack pnpm check && sleep infinity"]
+    restart: "no"
+    profiles:
+      - extension-artifacts
+    command: ["sh", "-c", "corepack pnpm --filter @reviewo/extension build"]
 
   postgres:
     restart: always

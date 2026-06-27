@@ -25,4 +25,4 @@ ENV APP_NAME=api
 
 RUN corepack pnpm build
 
-CMD ["corepack", "pnpm", "--filter", "@reviewo/api", "start"]
+CMD ["corepack", "pnpm", "--filter", "@reviewo/api", "start:prod"]

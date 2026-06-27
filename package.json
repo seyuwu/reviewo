@@ -8,6 +8,8 @@
   "scripts": {
     "check": "node -e \"console.log('Workspace initialized')\"",
     "build": "corepack pnpm -r --if-present build",
+    "db:migrate": "corepack pnpm --filter @reviewo/api db:migrate",
+    "db:seed": "corepack pnpm --filter @reviewo/api db:seed",
     "dev": "corepack pnpm -r --if-present dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

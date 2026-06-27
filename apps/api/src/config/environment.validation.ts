@@ -24,7 +24,7 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     config["CORS_ALLOWED_ORIGINS"],
     nodeEnvironment
   );
-  const databaseUrl = parseDatabaseUrl(config["DATABASE_URL"]);
+  const databaseUrl = parseDatabaseUrl(config["DATABASE_URL"], nodeEnvironment);
   const jwtSecret = parseJwtSecret(config["JWT_SECRET"], nodeEnvironment);
   const jwtAccessTokenTtlSeconds = parseJwtAccessTokenTtlSeconds(
     config["JWT_ACCESS_TOKEN_TTL_SECONDS"]
@@ -42,7 +42,11 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
 
 function parseCorsAllowedOrigins(value: unknown, nodeEnvironment: NodeEnvironment): string[] {
   if (value === undefined || value === null || value === "") {
-    return nodeEnvironment === "development" ? DEFAULT_DEVELOPMENT_CORS_ALLOWED_ORIGINS : [];
+    if (nodeEnvironment === "production") {
+      throw new Error("CORS_ALLOWED_ORIGINS must be set in production");
+    }
+
+    return DEFAULT_DEVELOPMENT_CORS_ALLOWED_ORIGINS;
   }
 
   if (typeof value !== "string") {
@@ -95,8 +99,12 @@ function parsePort(value: unknown): number {
   return port;
 }
 
-function parseDatabaseUrl(value: unknown): string {
+function parseDatabaseUrl(value: unknown, nodeEnvironment: NodeEnvironment): string {
   if (value === undefined || value === null || value === "") {
+    if (nodeEnvironment === "production") {
+      throw new Error("DATABASE_URL must be set in production");
+    }
+
     return DEFAULT_DATABASE_URL;
   }
 

@@ -1159,3 +1159,31 @@
 - Verification:
   - `corepack pnpm test` — 28 API unit tests pass (E2E skipped by default)
   - `docker exec -e E2E_TESTS=true reviewo-dev-api-1 sh -c "cd /workspace && corepack pnpm --filter @reviewo/api test"` — 30 tests pass including 2 E2E journey tests
+
+## 2026-06-27 - Stage 32 - Production Readiness MVP
+
+- Stage: 32
+- Summary: Prepared MVP for first deployment — stricter production env validation, `start:prod` with migrations, production Compose fixes, deployment docs, and Makefile migrate/seed helpers.
+- Reference: `docs/deployment/mvp-deploy.md`
+- Created files:
+  - `apps/api/src/config/environment.validation.test.ts`
+  - `docs/deployment/mvp-deploy.md`
+- Changed files:
+  - `apps/api/package.json`
+  - `apps/api/src/config/environment.validation.ts`
+  - `apps/api/src/common/logger/app-logger.service.ts`
+  - `docker/api/Dockerfile`
+  - `docker/web/Dockerfile`
+  - `docker-compose.prod.yml`
+  - `package.json`
+  - `Makefile`
+  - `.env.example`
+  - `docs/README.md`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Verification:
+  - `corepack pnpm test` — 33 API unit tests + web + extension
+  - `corepack pnpm build` — api, web, extension production builds succeed

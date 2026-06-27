@@ -20,9 +20,11 @@ CMD ["corepack", "pnpm", "--filter", "@reviewo/web", "dev"]
 
 FROM base AS production
 
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NODE_ENV=production
 ENV APP_NAME=web
 
-RUN corepack pnpm build
+RUN corepack pnpm --filter @reviewo/web build
 
 CMD ["corepack", "pnpm", "--filter", "@reviewo/web", "start"]
