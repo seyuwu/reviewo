@@ -8,11 +8,12 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --watch",
     "lint": "eslint .",
-    "test": "node scripts/build.mjs && node scripts/verify-build.mjs",
+    "test": "node scripts/build.mjs && node scripts/verify-build.mjs && tsc -p tsconfig.test.json && node --test dist-test/shared/page-url.test.js dist-test/content/rating-card/format-display.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.37",
+    "@types/node": "^26.0.0",
     "esbuild": "^0.27.3"
   }
 }

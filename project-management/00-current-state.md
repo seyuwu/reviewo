@@ -3,11 +3,11 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 30
-- Stage status: Stage 29 completed
-- MVP readiness: 29%
-- Last completed stage: Stage 29 - Content Hiding (Moderation MVP Foundation)
-- Next stage: Stage 30 - Testing Baseline
+- Current stage: Waiting for user confirmation before Stage 32
+- Stage status: Stage 31 completed
+- MVP readiness: 31%
+- Last completed stage: Stage 31 - MVP End-To-End Flow
+- Next stage: Stage 32 - Production Readiness MVP
 
 ## Implemented Capabilities
 
@@ -391,3 +391,7 @@ Stage 27 created extension submit-rating for existing `found` entities only. It 
 Stage 28 created lazy entity creation for extension by-url rating only. It did not add web lazy flows, review-triggered lazy creation, or site-specific parsers.
 
 Stage 29 created content hiding for entities and reviews per RFC 0008. It did not add reports, queues, admin UI, or workflow statuses.
+
+Stage 30 created the testing baseline with API unit/integration coverage, web route smoke tests, extension unit/build smoke tests, and a manual MVP checklist. It did not add full browser E2E automation.
+
+Stage 31 created automated API E2E coverage for the main MVP user journey (extension lazy-create path and manual web create fallback), shared integration test harness, and E2E flow documentation. It did not add browser extension Playwright/Cypress automation.

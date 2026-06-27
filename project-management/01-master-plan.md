@@ -534,7 +534,7 @@ Reference: `docs/11-rfc/0008-content-hiding-moderation-mvp.md`
 
 **Prerequisite:** RFC 0008 confirmed before any Stage 29 code.
 
-### 30. ⬜ Testing Baseline
+### 30. ✅ Testing Baseline
 
 Goal: cover critical MVP scenarios.
 
@@ -550,7 +550,7 @@ Verification:
 - Tests run with one command.
 - Critical MVP flow is covered.
 
-### 31. ⬜ MVP End-To-End Flow
+### 31. ✅ MVP End-To-End Flow
 
 Goal: verify the main user journey.
 

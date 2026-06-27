@@ -1131,3 +1131,31 @@
 - Stage: 29
 - Summary: Implemented RFC 0008 — content hiding for entities and reviews with admin-only API; internal `hidden` vs `not_found` resolution; extension maps hidden to `not_found`.
 - Reference: `docs/11-rfc/0008-content-hiding-moderation-mvp.md`
+
+## 2026-06-27 - Stage 30 - Testing Baseline
+
+- Stage: 30
+- Summary: Added cross-workspace testing baseline — API unit tests (URL normalization, ratings, trust), optional integration tests, web route smoke tests, extension unit/build smoke tests, unified `pnpm test`, and manual MVP checklist.
+- Reference: `docs/testing/mvp-smoke-checklist.md`
+
+## 2026-06-27 - Stage 31 - MVP End-To-End Flow
+
+- Stage: 31
+- Summary: Added automated API E2E tests for the main MVP user journey — extension lazy-create from unknown URL and manual web create fallback — plus shared integration harness and E2E documentation.
+- Reference: `docs/testing/mvp-e2e-flow.md`
+- Created files:
+  - `apps/api/src/test/integration/test-app.harness.ts`
+  - `apps/api/src/test/integration/mvp-user-journey.integration.test.ts`
+  - `docs/testing/mvp-e2e-flow.md`
+- Changed files:
+  - `apps/api/src/test/integration/critical-endpoints.integration.test.ts`
+  - `docs/README.md`
+  - `docs/testing/mvp-smoke-checklist.md`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Verification:
+  - `corepack pnpm test` — 28 API unit tests pass (E2E skipped by default)
+  - `docker exec -e E2E_TESTS=true reviewo-dev-api-1 sh -c "cd /workspace && corepack pnpm --filter @reviewo/api test"` — 30 tests pass including 2 E2E journey tests
