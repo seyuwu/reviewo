@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 27
-- Stage status: Stage 26 completed
-- MVP readiness: 26%
-- Last completed stage: Stage 26 - Extension Authentication
-- Next stage: Stage 27 - Extension Submit Rating
+- Current stage: Waiting for user confirmation before Stage 28
+- Stage status: Stage 27 completed
+- MVP readiness: 27%
+- Last completed stage: Stage 27 - Extension Submit Rating
+- Next stage: Stage 28 - Lazy Entity Creation
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, and shows a compact read-only rating card for found entities.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, shows a compact rating card for found entities, and lets authenticated users submit ratings from the card.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -283,7 +283,6 @@ Extension Rating Card MVP is initialized:
 - Card includes a dismiss control and a **More details** link to the web entity page.
 - Card uses Shadow DOM for style isolation and does not render for `not_found`.
 - Extension build injects `EXTENSION_WEB_BASE_URL` (default `http://localhost:3001`).
-- Submit-rating writes, lazy entity creation, and site-specific parsers are intentionally not implemented.
 
 Extension Authentication is initialized:
 
@@ -292,7 +291,14 @@ Extension Authentication is initialized:
 - Background worker handles login, register, sign-out, session reads, and authenticated API requests.
 - Popup can verify the stored session through background `GET /auth/me`.
 - Content scripts and popup can request authenticated API calls via `AUTHENTICATED_API_REQUEST` messages.
-- Submit-rating writes, lazy entity creation, and full auth product UI are intentionally not implemented.
+
+Extension Submit Rating is initialized:
+
+- Rating card shows 1–5 rating controls for authenticated users on `found` entities.
+- Rating writes go through background `PUT /extension/entities/:entityId/my-rating`; the card does not call the API directly.
+- Card updates average score, votes count, trust confidence, and selected rating after a successful write.
+- Unauthenticated users see a sign-in hint and disabled rating controls.
+- Lazy entity creation, `not_found` rating flow, and site-specific parsers are intentionally not implemented.
 
 Roadmap update:
 
@@ -379,3 +385,5 @@ Stage 24 created extension URL detection only. It did not add rating card UI, au
 Stage 25 created the extension read-only rating card for `found` entities only. It did not add extension auth, submit-rating writes, lazy entity creation, or site-specific parsers.
 
 Stage 26 created extension authentication only. It did not add submit-rating writes, lazy entity creation, or full auth product UI.
+
+Stage 27 created extension submit-rating for existing `found` entities only. It did not add lazy entity creation, `not_found` rating flow, or site-specific parsers.

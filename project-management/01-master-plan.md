@@ -472,7 +472,7 @@ Verification:
 - Token persists across popup reopen.
 - Extension does not implement full auth product UI.
 
-### 27. ⬜ Extension Submit Rating
+### 27. ✅ Extension Submit Rating
 
 Goal: allow rating existing entities from the extension.
 

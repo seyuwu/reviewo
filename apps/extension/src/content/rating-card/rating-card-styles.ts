@@ -96,6 +96,80 @@ export const RATING_CARD_STYLES = `
   line-height: 1.4;
 }
 
+.reviewo-rate-section {
+  margin-bottom: 0.875rem;
+}
+
+.reviewo-rate-label {
+  margin: 0 0 0.5rem;
+  color: #525252;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.reviewo-rate-controls {
+  display: grid;
+  gap: 0.375rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 0.5rem;
+}
+
+.reviewo-rate-button {
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.65rem;
+  color: #171717;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  padding: 0.5rem 0;
+}
+
+.reviewo-rate-button:hover:not(:disabled),
+.reviewo-rate-button:focus-visible:not(:disabled) {
+  background: #f5f5f5;
+  border-color: #d4d4d4;
+}
+
+.reviewo-rate-button.is-selected {
+  background: #171717;
+  border-color: #171717;
+  color: #ffffff;
+}
+
+.reviewo-rate-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.reviewo-rate-hint {
+  margin: 0;
+  color: #737373;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.reviewo-rate-hint.is-hidden {
+  display: none;
+}
+
+.reviewo-rate-status {
+  margin: 0.35rem 0 0;
+  color: #525252;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.reviewo-rate-status.is-error {
+  color: #b91c1c;
+}
+
+.reviewo-rate-status.is-success {
+  color: #166534;
+}
+
 .reviewo-details {
   align-items: center;
   background: #171717;

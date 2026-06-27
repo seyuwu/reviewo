@@ -4,42 +4,43 @@
 
 No active implementation stage.
 
-Stage 26 - Extension Authentication is completed.
+Stage 27 - Extension Submit Rating is completed.
 
-Stage 27 - Extension Submit Rating is next, pending explicit user confirmation.
+Stage 28 - Lazy Entity Creation is next, pending explicit user confirmation and RFC 0007 scope reconfirmation.
 
 ## Goal
 
-Prepare Extension Submit Rating after user confirmation.
+Prepare Lazy Entity Creation (RFC 0007) after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 27 implementation.
+To be confirmed before Stage 28 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 27 implementation.
+To be confirmed before Stage 28 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 27 should implement submit-rating for existing entities after user confirmation.
-- Do not add lazy entity creation, site-specific parsers, or rating UI changes beyond submit flow unless explicitly confirmed.
+- Stage 28 should implement lazy entity creation per RFC 0007 after user confirmation.
+- Use application-level `RateSiteUseCase` orchestration; do not let Ratings/Reviews call Entities directly.
+- Do not change web lazy flows in Stage 28 unless explicitly confirmed.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 27.
-- [ ] Confirm exact Extension Submit Rating scope before implementation.
-- [ ] Describe Stage 27 goal, files, and architectural decisions before editing.
-- [ ] Implement Extension Submit Rating only.
+- [ ] Wait for user confirmation to start Stage 28.
+- [ ] Reconfirm RFC 0007 scope before implementation.
+- [ ] Describe Stage 28 goal, files, and architectural decisions before editing.
+- [ ] Implement Lazy Entity Creation only.
 - [ ] Verify lint/typecheck/build behavior.
 
 ## Current Progress
 
-Stage 26 is complete. Stage 27 has not started.
+Stage 27 is complete. Stage 28 has not started.
 
 ## Open Questions
 
-Stage 27 requires confirmation of exact Extension Submit Rating scope before implementation.
+Stage 28 requires confirmation before implementing RFC 0007 lazy entity creation.
 
 ## Blockers
 
@@ -47,6 +48,6 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 27.
-- Confirm rating submit UX in card for `found` entities.
-- Do not add lazy entity creation or site-specific parsers until their dedicated stages.
+- Wait for user confirmation before Stage 28.
+- Implement `ensureEntityForUrl`, `RateSiteUseCase`, and extension by-url rating endpoint.
+- Do not change web lazy flows until a later stage unless explicitly confirmed.

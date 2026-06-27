@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 26 - Extension Authentication is completed.
+Stage 27 - Extension Submit Rating is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, and shows a compact read-only rating card for found entities. RFC 0007 Lazy Entity Creation is confirmed for Stage 28. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, Web Home/Search foundation, Web Entity Creation MVP foundation, Web Entity Page MVP foundation, Web Profile MVP foundation, Browser Extension Skeleton foundation, Extension URL Detection foundation, and Extension Rating Card MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, shows a compact rating card for found entities, and lets authenticated users submit ratings from the card. RFC 0007 Lazy Entity Creation is confirmed for Stage 28. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, Web Home/Search foundation, Web Entity Creation MVP foundation, Web Entity Page MVP foundation, Web Profile MVP foundation, Browser Extension Skeleton foundation, Extension URL Detection foundation, and Extension Rating Card MVP foundation.
 
 ## Already Done
 
@@ -599,15 +599,32 @@ The first product capabilities are implemented: users can register, sign in, rea
   - `corepack pnpm format:check`
   - `corepack pnpm --filter @reviewo/extension test`
   - IDE diagnostics check for changed extension files
+- Stage 27 Extension Submit Rating was added:
+  - `apps/extension/src/content/extension-messaging.ts`
+  - `apps/extension/src/content/rating-card/auth-session-state.ts`
+  - `apps/extension/src/content/rating-card/merge-rating-response.ts`
+  - `apps/extension/src/content/rating-card/submit-entity-rating.ts`
+  - `apps/extension/src/shared/types/quick-rating.ts`
+  - Rating card 1–5 controls for authenticated users on `found` entities
+  - Background quick-rating writes via `PUT /extension/entities/:entityId/my-rating`
+  - Card aggregate/trust refresh after successful rating
+- Stage 27 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm --filter @reviewo/extension test`
+  - IDE diagnostics check for changed extension files
+  - Docker backend `PUT /extension/entities/:entityId/my-rating` smoke
 
 ## Remaining Work
 
-- Stage 27 - Extension Submit Rating.
-- Do not start Stage 27 until the user confirms and exact Extension Submit Rating scope is agreed.
+- Stage 28 - Lazy Entity Creation (RFC 0007).
+- Do not start Stage 28 until the user confirms and RFC scope is reconfirmed.
 
 ## Next Stage
 
-Stage 27 - Extension Submit Rating, but only after explicit user confirmation and scope confirmation.
+Stage 28 - Lazy Entity Creation, but only after explicit user confirmation and RFC 0007 scope reconfirmation.
 
 ## Documents To Read First
 
@@ -695,7 +712,9 @@ Stage 27 - Extension Submit Rating, but only after explicit user confirmation an
 - Extension popup provides minimal register/login UI through background messaging.
 - Extension auth sessions persist in `chrome.storage.local` under `reviewo.extensionAuth`.
 - Background worker handles authenticated API requests for popup/content via messaging.
-- Submit-rating writes, lazy entity creation, and site-specific parsers are not implemented yet.
+- Extension rating card exposes 1–5 controls for authenticated users on `found` entities.
+- Extension rating writes use background quick-rating API; card updates aggregates/trust after save.
+- Lazy entity creation, `not_found` rating flow, and site-specific parsers are not implemented yet.
 - Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
 - Rating scale is integer `1..5`.
 - One active rating exists per user per entity; repeated rating updates the existing record.
@@ -735,8 +754,8 @@ Stage 27 - Extension Submit Rating, but only after explicit user confirmation an
 - Stage 22 implemented Web Profile MVP only.
 - Stage 23 implemented Browser Extension Skeleton only.
 - Stage 24 implemented Extension URL Detection only.
-- Stage 26 implemented Extension Authentication only.
-- Stage 27 should implement Extension Submit Rating only after user confirmation and exact scope confirmation.
+- Stage 27 implemented Extension Submit Rating only.
+- Stage 28 should implement Lazy Entity Creation (RFC 0007) only after user confirmation and scope reconfirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web Docker service runs the Next.js dev server. Extension Docker service runs the extension watch build.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

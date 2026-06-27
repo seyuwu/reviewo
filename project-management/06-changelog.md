@@ -1027,3 +1027,32 @@
   - `AUTHENTICATED_API_REQUEST` messages allow popup/content to call protected backend endpoints through background.
   - Manifest now includes `storage` permission.
   - Submit-rating writes, lazy entity creation, and full auth product UI were not added.
+
+## 2026-06-27 - Stage 27 - Extension Submit Rating
+
+- Stage: 27
+- Summary: Added authenticated 1–5 rating controls to the extension rating card for existing `found` entities, with background quick-rating writes and live aggregate/trust updates.
+- Changed modules:
+  - `@reviewo/extension`
+- Created files:
+  - `apps/extension/src/content/extension-messaging.ts`
+  - `apps/extension/src/content/rating-card/auth-session-state.ts`
+  - `apps/extension/src/content/rating-card/merge-rating-response.ts`
+  - `apps/extension/src/content/rating-card/submit-entity-rating.ts`
+  - `apps/extension/src/shared/types/quick-rating.ts`
+- Changed files:
+  - `apps/extension/src/content/rating-card/rating-card-styles.ts`
+  - `apps/extension/src/content/rating-card/rating-card.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Rating card exposes 1–5 controls for authenticated users on `found` entities.
+  - Rating writes use background `AUTHENTICATED_API_REQUEST` to `PUT /extension/entities/:entityId/my-rating`.
+  - Card updates average score, votes count, trust confidence, and selected rating from the quick-rating response.
+  - Unauthenticated users see disabled controls and a popup sign-in hint.
+  - Card listens for auth storage changes to refresh control state after popup sign-in.
+  - Lazy entity creation, `not_found` rating flow, and site-specific parsers were not added.

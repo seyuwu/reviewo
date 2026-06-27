@@ -1795,3 +1795,23 @@ This centralizes token access in the background worker, matches MV3 security bou
 - Store tokens in popup `localStorage` only.
 - Perform authenticated fetches directly from content scripts.
 - Build full auth product UI in Stage 26.
+
+## 2026-06-27 - Extension Rating Writes Use Background Messaging Only
+
+### Problem
+
+The rating card must submit ratings without calling the backend directly from page context or breaking the resolve-first architecture.
+
+### Decision
+
+Rating card sends scores through background `AUTHENTICATED_API_REQUEST` to `PUT /extension/entities/:entityId/my-rating`, then updates displayed aggregates from the quick-rating response.
+
+### Reason
+
+This keeps tokens and authenticated fetches in the background worker while preserving the card as a presentation layer over resolve and write results.
+
+### Alternatives
+
+- Call the rating endpoint directly from the content script.
+- Add a dedicated rating-card fetch helper inside the card module.
+- Enable lazy creation for `not_found` in Stage 27.
