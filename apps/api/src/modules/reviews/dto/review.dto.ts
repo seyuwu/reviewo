@@ -1,3 +1,5 @@
+import type { ReviewVisibility } from "@prisma/client";
+
 export class ReviewDto {
   authorId!: string;
   createdAt!: string;
@@ -7,4 +9,5 @@ export class ReviewDto {
   likesCount!: number;
   text!: string;
   updatedAt!: string;
+  visibility!: ReviewVisibility;
 }

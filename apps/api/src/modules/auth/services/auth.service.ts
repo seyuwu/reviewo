@@ -109,6 +109,7 @@ function toAuthenticatedUser(user: User): AuthenticatedUser {
     displayName: user.displayName,
     email: user.email,
     id: user.id,
+    role: user.role === "ADMIN" ? "ADMIN" : "USER",
     status: user.status,
     username: user.username
   };

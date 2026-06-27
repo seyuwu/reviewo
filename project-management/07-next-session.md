@@ -4,6 +4,10 @@
 
 Stage 28 - Lazy Entity Creation is completed.
 
+Stage 29 - Content Hiding (Moderation MVP Foundation) is completed.
+
+RFC 0008 is **confirmed** and implemented.
+
 The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, shows a compact rating card for found and not-found URLs, lets authenticated users submit ratings from the card, and lazily creates entities on first rating for unknown URLs. RFC 0007 Lazy Entity Creation is implemented. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, Web Home/Search foundation, Web Entity Creation MVP foundation, Web Entity Page MVP foundation, Web Profile MVP foundation, Browser Extension Skeleton foundation, Extension URL Detection foundation, Extension Rating Card MVP foundation, Extension Authentication foundation, Extension Submit Rating foundation, and Lazy Entity Creation foundation.
 
 ## Already Done
@@ -646,12 +650,12 @@ The first product capabilities are implemented: users can register, sign in, rea
 
 ## Remaining Work
 
-- Stage 29 - Moderation MVP Foundation.
-- Do not start Stage 29 until the user confirms.
+- Stage 30 — Testing Baseline.
+- Do not start Stage 30 until the user confirms.
 
 ## Next Stage
 
-Stage 29 - Moderation MVP Foundation, but only after explicit user confirmation.
+Stage 30 - Testing Baseline, but only after explicit user confirmation.
 
 ## Documents To Read First
 
@@ -788,7 +792,7 @@ Stage 29 - Moderation MVP Foundation, but only after explicit user confirmation.
 - Stage 24 implemented Extension URL Detection only.
 - Stage 27 implemented Extension Submit Rating only.
 - Stage 28 implemented Lazy Entity Creation (RFC 0007) only.
-- Stage 29 should implement Moderation MVP Foundation only after user confirmation.
+- Stage 29 should implement Content Hiding (RFC 0008) only after RFC confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web Docker service runs the Next.js dev server. Extension Docker service runs the extension watch build.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

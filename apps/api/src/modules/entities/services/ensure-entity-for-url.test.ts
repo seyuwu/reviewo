@@ -12,6 +12,7 @@ const currentUser: AuthenticatedUser = {
   displayName: "Tester",
   email: "tester@example.com",
   id: "11111111-1111-4111-8111-111111111111",
+  role: "USER",
   status: "active",
   username: null
 };
@@ -28,6 +29,7 @@ function createEntity(overrides: Partial<Record<string, unknown>> = {}) {
     title: "lazy-create.example",
     type: EntityType.website,
     updatedAt: new Date("2026-06-27T00:00:00.000Z"),
+    visibility: "ACTIVE",
     ...overrides
   };
 }

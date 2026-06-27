@@ -13,12 +13,21 @@ model User {
   username       String?            @unique
   displayName    String             @map("display_name")
   avatarUrl      String?            @map("avatar_url")
+  role           UserRole           @default(USER)
   status         String             @default("active")
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
   authIdentities UserAuthIdentity[]
 
   @@map("users")
+  @@schema("users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+
+  @@map("user_role")
   @@schema("users")
 }
 
@@ -58,23 +67,33 @@ enum EntityType {
   @@schema("entities")
 }
 
+enum EntityVisibility {
+  ACTIVE
+  HIDDEN
+
+  @@map("entity_visibility")
+  @@schema("entities")
+}
+
 model Entity {
-  id           String     @id @default(uuid()) @db.Uuid
+  id           String           @id @default(uuid()) @db.Uuid
   title        String
-  slug         String     @unique
+  slug         String           @unique
   type         EntityType
+  visibility   EntityVisibility @default(ACTIVE)
   description  String?
-  canonicalUrl String?    @unique @map("canonical_url")
-  parentId     String?    @map("parent_id") @db.Uuid
-  createdBy    String?    @map("created_by") @db.Uuid
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
-  parent       Entity?    @relation("EntityTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children     Entity[]   @relation("EntityTree")
+  canonicalUrl String?          @unique @map("canonical_url")
+  parentId     String?          @map("parent_id") @db.Uuid
+  createdBy    String?          @map("created_by") @db.Uuid
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  parent       Entity?          @relation("EntityTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Entity[]         @relation("EntityTree")
 
   @@index([type])
   @@index([parentId])
   @@index([createdBy])
+  @@index([visibility])
   @@map("entities")
   @@schema("entities")
 }
@@ -110,18 +129,28 @@ model RatingAggregate {
   @@schema("ratings")
 }
 
+enum ReviewVisibility {
+  ACTIVE
+  HIDDEN
+
+  @@map("review_visibility")
+  @@schema("reviews")
+}
+
 model Review {
-  id        String       @id @default(uuid()) @db.Uuid
-  entityId  String       @map("entity_id") @db.Uuid
-  authorId  String       @map("author_id") @db.Uuid
-  text      String
-  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
-  votes     ReviewVote[]
+  id         String           @id @default(uuid()) @db.Uuid
+  entityId   String           @map("entity_id") @db.Uuid
+  authorId   String           @map("author_id") @db.Uuid
+  text       String
+  visibility ReviewVisibility @default(ACTIVE)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  votes      ReviewVote[]
 
   @@unique([authorId, entityId])
   @@index([entityId])
   @@index([authorId])
+  @@index([visibility])
   @@map("reviews")
   @@schema("reviews")
 }

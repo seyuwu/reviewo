@@ -3,11 +3,11 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 29
-- Stage status: Stage 28 completed
-- MVP readiness: 28%
-- Last completed stage: Stage 28 - Lazy Entity Creation
-- Next stage: Stage 29 - Moderation MVP Foundation
+- Current stage: Waiting for user confirmation before Stage 30
+- Stage status: Stage 29 completed
+- MVP readiness: 29%
+- Last completed stage: Stage 29 - Content Hiding (Moderation MVP Foundation)
+- Next stage: Stage 30 - Testing Baseline
 
 ## Implemented Capabilities
 
@@ -389,3 +389,5 @@ Stage 26 created extension authentication only. It did not add submit-rating wri
 Stage 27 created extension submit-rating for existing `found` entities only. It did not add lazy entity creation, `not_found` rating flow, or site-specific parsers.
 
 Stage 28 created lazy entity creation for extension by-url rating only. It did not add web lazy flows, review-triggered lazy creation, or site-specific parsers.
+
+Stage 29 created content hiding for entities and reviews per RFC 0008. It did not add reports, queues, admin UI, or workflow statuses.

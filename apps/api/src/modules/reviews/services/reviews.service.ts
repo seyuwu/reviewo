@@ -1,4 +1,5 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { ReviewVisibility } from "@prisma/client";
 
 import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
@@ -75,6 +76,44 @@ export class ReviewsService implements ReviewsPort {
     return this.reviewsRepository.countByEntity(entityId);
   }
 
+  async hideReview(reviewId: string): Promise<ReviewDto> {
+    const review = await this.reviewsRepository.findById(reviewId);
+
+    if (!review) {
+      throw createReviewNotFoundException();
+    }
+
+    if (review.visibility === ReviewVisibility.HIDDEN) {
+      return toReviewDto(review);
+    }
+
+    const updatedReview = await this.reviewsRepository.updateVisibility(
+      reviewId,
+      ReviewVisibility.HIDDEN
+    );
+
+    return toReviewDto(updatedReview);
+  }
+
+  async unhideReview(reviewId: string): Promise<ReviewDto> {
+    const review = await this.reviewsRepository.findById(reviewId);
+
+    if (!review) {
+      throw createReviewNotFoundException();
+    }
+
+    if (review.visibility === ReviewVisibility.ACTIVE) {
+      return toReviewDto(review);
+    }
+
+    const updatedReview = await this.reviewsRepository.updateVisibility(
+      reviewId,
+      ReviewVisibility.ACTIVE
+    );
+
+    return toReviewDto(updatedReview);
+  }
+
   async getMyReview(entityId: string, currentUser: AuthenticatedUser): Promise<ReviewDto | null> {
     await this.ensureEntityExists(entityId);
 
@@ -86,7 +125,7 @@ export class ReviewsService implements ReviewsPort {
   async likeReview(reviewId: string, currentUser: AuthenticatedUser): Promise<ReviewDto> {
     const review = await this.reviewsRepository.findById(reviewId);
 
-    if (!review) {
+    if (!review || review.visibility === ReviewVisibility.HIDDEN) {
       throw createReviewNotFoundException();
     }
 
@@ -104,7 +143,7 @@ export class ReviewsService implements ReviewsPort {
   async unlikeReview(reviewId: string, currentUser: AuthenticatedUser): Promise<ReviewDto> {
     const review = await this.reviewsRepository.findById(reviewId);
 
-    if (!review) {
+    if (!review || review.visibility === ReviewVisibility.HIDDEN) {
       throw createReviewNotFoundException();
     }
 
@@ -143,7 +182,8 @@ function toReviewDto(review: ReviewWithVotes, currentUserId?: string): ReviewDto
       : false,
     likesCount: review._count.votes,
     text: review.text,
-    updatedAt: review.updatedAt.toISOString()
+    updatedAt: review.updatedAt.toISOString(),
+    visibility: review.visibility
   };
 }
 

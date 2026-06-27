@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Prisma, Review, ReviewVote } from "@prisma/client";
+import type { Prisma, Review, ReviewVisibility, ReviewVote } from "@prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 
@@ -60,7 +60,8 @@ export class ReviewsRepository {
       ],
       take: limit,
       where: {
-        entityId
+        entityId,
+        visibility: "ACTIVE"
       }
     });
   }
@@ -68,7 +69,8 @@ export class ReviewsRepository {
   async countByEntity(entityId: string): Promise<number> {
     return this.prismaService.review.count({
       where: {
-        entityId
+        entityId,
+        visibility: "ACTIVE"
       }
     });
   }
@@ -114,6 +116,18 @@ export class ReviewsRepository {
       where: {
         reviewId,
         userId
+      }
+    });
+  }
+
+  async updateVisibility(id: string, visibility: ReviewVisibility): Promise<ReviewWithVotes> {
+    return this.prismaService.review.update({
+      data: {
+        visibility
+      },
+      include: getReviewInclude(),
+      where: {
+        id
       }
     });
   }

@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import type { Entity } from "@prisma/client";
-import { EntityType } from "@prisma/client";
+import { EntityType, EntityVisibility } from "@prisma/client";
 
 import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
@@ -106,7 +106,49 @@ export class EntitiesService implements EntitiesPort {
   async findEntityById(id: string): Promise<EntityDto | null> {
     const entity = await this.entitiesRepository.findById(id);
 
-    return entity ? toEntityDto(entity) : null;
+    if (!entity || entity.visibility !== EntityVisibility.ACTIVE) {
+      return null;
+    }
+
+    return toEntityDto(entity);
+  }
+
+  async hideEntity(entityId: string): Promise<EntityDto> {
+    const entity = await this.entitiesRepository.findById(entityId);
+
+    if (!entity) {
+      throw createEntityNotFoundException();
+    }
+
+    if (entity.visibility === EntityVisibility.HIDDEN) {
+      return toEntityDto(entity);
+    }
+
+    const updatedEntity = await this.entitiesRepository.updateVisibility(
+      entityId,
+      EntityVisibility.HIDDEN
+    );
+
+    return toEntityDto(updatedEntity);
+  }
+
+  async unhideEntity(entityId: string): Promise<EntityDto> {
+    const entity = await this.entitiesRepository.findById(entityId);
+
+    if (!entity) {
+      throw createEntityNotFoundException();
+    }
+
+    if (entity.visibility === EntityVisibility.ACTIVE) {
+      return toEntityDto(entity);
+    }
+
+    const updatedEntity = await this.entitiesRepository.updateVisibility(
+      entityId,
+      EntityVisibility.ACTIVE
+    );
+
+    return toEntityDto(updatedEntity);
   }
 
   async resolveEntityByUrl(url: string): Promise<ResolveEntityByUrlResult> {
@@ -122,10 +164,29 @@ export class EntitiesService implements EntitiesPort {
 
     const entity = await this.entitiesRepository.findByCanonicalUrl(canonicalUrl);
 
+    if (!entity) {
+      return {
+        canonicalUrl,
+        entity: null,
+        inputUrl: url.trim(),
+        resolution: "not_found"
+      };
+    }
+
+    if (entity.visibility === EntityVisibility.HIDDEN) {
+      return {
+        canonicalUrl,
+        entity: null,
+        inputUrl: url.trim(),
+        resolution: "hidden"
+      };
+    }
+
     return {
       canonicalUrl,
-      entity: entity ? toEntityDto(entity) : null,
-      inputUrl: url.trim()
+      entity: toEntityDto(entity),
+      inputUrl: url.trim(),
+      resolution: "found"
     };
   }
 
@@ -135,6 +196,10 @@ export class EntitiesService implements EntitiesPort {
     currentUser: AuthenticatedUser
   ): Promise<EnsureEntityForUrlResult> {
     const resolved = await this.resolveEntityByUrl(url);
+
+    if (resolved.resolution === "hidden") {
+      throw createEntityUnavailableException();
+    }
 
     if (resolved.entity) {
       return {
@@ -175,6 +240,10 @@ export class EntitiesService implements EntitiesPort {
         );
 
         if (existingEntity) {
+          if (existingEntity.visibility === EntityVisibility.HIDDEN) {
+            throw createEntityUnavailableException();
+          }
+
           return {
             entity: toEntityDto(existingEntity),
             mode: "existing"
@@ -206,7 +275,7 @@ export class EntitiesService implements EntitiesPort {
     if (normalizedUrl) {
       const entity = await this.entitiesRepository.findByCanonicalUrl(normalizedUrl);
 
-      if (entity) {
+      if (entity && entity.visibility === EntityVisibility.ACTIVE) {
         return [toEntityDto(entity)];
       }
 
@@ -248,8 +317,25 @@ function toEntityDto(entity: Entity): EntityDto {
     slug: entity.slug,
     title: entity.title,
     type: entity.type,
-    updatedAt: entity.updatedAt.toISOString()
+    updatedAt: entity.updatedAt.toISOString(),
+    visibility: entity.visibility
   };
+}
+
+function createEntityNotFoundException(): Error {
+  return createAppException({
+    code: AppErrorCode.NotFound,
+    message: "Entity was not found",
+    statusCode: HttpStatus.NOT_FOUND
+  });
+}
+
+function createEntityUnavailableException(): Error {
+  return createAppException({
+    code: AppErrorCode.NotFound,
+    message: "This site is not available on Reviewo",
+    statusCode: HttpStatus.NOT_FOUND
+  });
 }
 
 function createSlug(title: string): string {

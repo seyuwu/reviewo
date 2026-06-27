@@ -509,21 +509,30 @@ Verification:
 
 Reference: `docs/11-rfc/0007-lazy-entity-creation.md`
 
-### 29. ⬜ Moderation MVP Foundation
+### 29. ✅ Content Hiding (Moderation MVP Foundation)
 
-Goal: create the minimum moderation foundation.
+Goal: hide junk entities and junk reviews — not a moderation platform (RFC 0008).
 
 Result:
 
-- `moderation_flags` table.
-- Endpoint for reporting an entity or review.
-- Basic report status.
-- No complex admin UI in this stage.
+- `EntityVisibility`: `ACTIVE` | `HIDDEN`.
+- `ReviewVisibility`: `ACTIVE` | `HIDDEN`.
+- Minimal admin role (`USER` | `ADMIN`).
+- Admin-only hide/unhide API (`POST /moderation/entities/:id/hide`, `POST /moderation/reviews/:id/hide`).
+- Public reads exclude hidden content; extension resolve treats hidden entity as `not_found`.
+- Block lazy/by-url rating on hidden canonical URLs.
 
 Verification:
 
-- Moderation flag can be created.
-- Moderation stays isolated in its module.
+- Admin hides spam entity → search/resolve/page/extension show nothing public.
+- Admin hides spam review → review absent from public lists; entity still visible.
+- Non-admin hide → `403`.
+- Stage 28 flows unchanged for `ACTIVE` content.
+- No reports, queues, workflow, or admin UI.
+
+Reference: `docs/11-rfc/0008-content-hiding-moderation-mvp.md`
+
+**Prerequisite:** RFC 0008 confirmed before any Stage 29 code.
 
 ### 30. ⬜ Testing Baseline
 

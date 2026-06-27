@@ -1843,3 +1843,35 @@ This matches RFC 0007, keeps Ratings working only with `entityId`, and sequences
 - Let Ratings module call Entities repository directly.
 - Create entities on resolve instead of first rating.
 - Implement web lazy creation in the same stage.
+
+## 2026-06-27 - RFC 0008 Content Hiding Narrowed Stage 29 Scope
+
+### Problem
+
+"Moderation" easily expands into reports, queues, roles, admin UI, and multiple follow-on stages. After Stage 28 the MVP core is complete; the next need is simply removing spam entities and reviews.
+
+### Decision
+
+Before Stage 29 code, propose **RFC 0008 — Content Hiding**:
+
+- Stage 29 = hide junk entity + hide junk review only.
+- Status model: `ACTIVE` | `HIDDEN` on entity and review rows.
+- Admin-only hide/unhide API; no reports, queues, workflow, or admin UI.
+- Public reads exclude hidden content; extension resolve treats hidden entity as `not_found`.
+- Block lazy/by-url rating on hidden canonical URLs.
+- Minimal role model: `USER` | `ADMIN`.
+- Stages 30–33 unchanged: Testing → E2E → Production Readiness → Stabilization.
+
+### Reason
+
+Matches product intent to ship MVP without a moderation platform. RFC-first approach mirrors RFC 0007 / Stage 28 success.
+
+### Alternatives
+
+- Original Stage 29 plan with `moderation_flags` and user reports.
+- Full RBAC and moderation queue in MVP.
+- Soft-delete without explicit visibility enum.
+
+**Status:** Confirmed — implemented at Stage 29.
+
+## 2026-06-27 - Stage 29 Content Hiding Implemented Per RFC 0008

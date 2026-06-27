@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Entity, EntityType, Prisma } from "@prisma/client";
+import type { Entity, EntityType, EntityVisibility, Prisma } from "@prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 
@@ -92,7 +92,19 @@ export class EntitiesRepository {
               mode: "insensitive"
             }
           }
-        ]
+        ],
+        visibility: "ACTIVE"
+      }
+    });
+  }
+
+  async updateVisibility(id: string, visibility: EntityVisibility): Promise<Entity> {
+    return this.prismaService.entity.update({
+      data: {
+        visibility
+      },
+      where: {
+        id
       }
     });
   }

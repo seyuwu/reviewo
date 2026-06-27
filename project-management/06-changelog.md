@@ -1102,3 +1102,32 @@
   - Successful by-url rating converts card to `found` state in-place without page reload.
   - Resolve endpoint remains read-only.
   - Web lazy flows were not changed.
+
+## 2026-06-27 - RFC 0008 Content Hiding (Moderation MVP Foundation) Proposed
+
+- Stage: documentation / roadmap (not an implementation stage)
+- Summary: Proposed narrow Stage 29 scope — hide junk entities and hide junk reviews via `ACTIVE`/`HIDDEN` statuses and admin-only API; no reports, queues, workflow, or admin UI.
+- Created files:
+  - `docs/11-rfc/0008-content-hiding-moderation-mvp.md`
+- Changed files:
+  - `docs/README.md`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural decisions (proposed, pending confirmation):
+  - Moderation MVP = content hiding only, not a moderation platform.
+  - `EntityVisibility` and `ReviewVisibility`: `ACTIVE` | `HIDDEN`.
+  - Minimal admin role `USER` | `ADMIN`; hide/unhide via Moderation module calling domain ports.
+  - Hidden entity: public `404`, extension resolve `not_found`, block lazy by-url rating on reserved canonical URL.
+  - Hidden review: omitted from public lists; author still sees via `my-review`.
+  - Stages 30–33 remain Testing, E2E, Production Readiness, Stabilization — moderation does not expand the roadmap.
+- No code, migrations, or API changes were made.
+
+## 2026-06-27 - Stage 29 - Content Hiding (Moderation MVP Foundation)
+
+- Stage: 29
+- Summary: Implemented RFC 0008 — content hiding for entities and reviews with admin-only API; internal `hidden` vs `not_found` resolution; extension maps hidden to `not_found`.
+- Reference: `docs/11-rfc/0008-content-hiding-moderation-mvp.md`

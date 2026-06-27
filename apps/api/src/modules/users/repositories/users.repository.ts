@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Prisma, User } from "@prisma/client";
+import type { Prisma, User, UserRole } from "@prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 
@@ -37,6 +37,17 @@ export class UsersRepository {
 
   async findById(id: string): Promise<User | null> {
     return this.prismaService.user.findUnique({
+      where: {
+        id
+      }
+    });
+  }
+
+  async updateRole(id: string, role: UserRole): Promise<User> {
+    return this.prismaService.user.update({
+      data: {
+        role
+      },
       where: {
         id
       }

@@ -34,7 +34,7 @@ export class ExtensionApiService {
   async resolveUrl(url: string): Promise<ExtensionResolveResponseDto> {
     const resolvedEntity = await this.entitiesPort.resolveEntityByUrl(url);
 
-    if (!resolvedEntity.entity) {
+    if (!resolvedEntity.entity || resolvedEntity.resolution !== "found") {
       return {
         canCreateEntity: true,
         status: "not_found",

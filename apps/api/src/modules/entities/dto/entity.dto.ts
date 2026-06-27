@@ -1,4 +1,4 @@
-import type { EntityType } from "@prisma/client";
+import type { EntityType, EntityVisibility } from "@prisma/client";
 
 export class EntityDto {
   canonicalUrl!: string | null;
@@ -11,4 +11,5 @@ export class EntityDto {
   title!: string;
   type!: EntityType;
   updatedAt!: string;
+  visibility!: EntityVisibility;
 }

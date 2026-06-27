@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-import type { Prisma, User } from "@prisma/client";
+import type { Prisma, User, UserRole } from "@prisma/client";
 
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
@@ -119,7 +119,12 @@ function toAuthenticatedUser(user: User): AuthenticatedUser {
     displayName: user.displayName,
     email: user.email,
     id: user.id,
+    role: toUserRole(user.role),
     status: user.status,
     username: user.username
   };
+}
+
+function toUserRole(role: UserRole): AuthenticatedUser["role"] {
+  return role === "ADMIN" ? "ADMIN" : "USER";
 }

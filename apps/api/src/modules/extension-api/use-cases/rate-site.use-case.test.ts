@@ -12,6 +12,7 @@ const currentUser: AuthenticatedUser = {
   displayName: "Tester",
   email: "tester@example.com",
   id: "11111111-1111-4111-8111-111111111111",
+  role: "USER",
   status: "active",
   username: null
 };
@@ -26,13 +27,34 @@ const entity = {
   slug: "rate-site-example",
   title: "rate-site.example",
   type: EntityType.website,
-  updatedAt: "2026-06-27T00:00:00.000Z"
+  updatedAt: "2026-06-27T00:00:00.000Z",
+  visibility: "ACTIVE" as const
 };
+
+function createEntitiesPort(overrides: Partial<EntitiesPort>): EntitiesPort {
+  return {
+    ensureEntityForUrl: async () => ({
+      entity,
+      mode: "created"
+    }),
+    findEntityById: async () => entity,
+    hideEntity: async () => entity,
+    resolveEntityByUrl: async () => ({
+      canonicalUrl: "https://rate-site.example/",
+      entity: null,
+      inputUrl: "https://rate-site.example/",
+      resolution: "not_found"
+    }),
+    searchEntities: async () => [],
+    unhideEntity: async () => entity,
+    ...overrides
+  };
+}
 
 describe("RateSiteUseCase", () => {
   it("ensures entity by URL before rating", async () => {
     const calls: string[] = [];
-    const entitiesPort: EntitiesPort = {
+    const entitiesPort = createEntitiesPort({
       ensureEntityForUrl: async () => {
         calls.push("ensure");
         return {
@@ -40,14 +62,13 @@ describe("RateSiteUseCase", () => {
           mode: "created"
         };
       },
-      findEntityById: async () => entity,
       resolveEntityByUrl: async () => ({
         canonicalUrl: "https://rate-site.example/",
         entity: null,
-        inputUrl: "https://rate-site.example/"
-      }),
-      searchEntities: async () => []
-    };
+        inputUrl: "https://rate-site.example/",
+        resolution: "not_found"
+      })
+    });
     const ratingsPort: RatingsPort = {
       getAggregate: async () => {
         throw new Error("not used");
@@ -96,19 +117,18 @@ describe("RateSiteUseCase", () => {
   });
 
   it("reuses existing entity for known URL", async () => {
-    const entitiesPort: EntitiesPort = {
+    const entitiesPort = createEntitiesPort({
       ensureEntityForUrl: async () => ({
         entity,
         mode: "existing"
       }),
-      findEntityById: async () => entity,
       resolveEntityByUrl: async () => ({
         canonicalUrl: "https://rate-site.example/",
         entity,
-        inputUrl: "https://rate-site.example/"
-      }),
-      searchEntities: async () => []
-    };
+        inputUrl: "https://rate-site.example/",
+        resolution: "found"
+      })
+    });
     const ratingsPort: RatingsPort = {
       getAggregate: async () => {
         throw new Error("not used");
