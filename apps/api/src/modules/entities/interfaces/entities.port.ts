@@ -21,6 +21,7 @@ export interface EntitiesPort {
   ): Promise<EnsureEntityForUrlResult>;
   findEntityById(id: string): Promise<EntityDto | null>;
   hideEntity(entityId: string): Promise<EntityDto>;
+  listChildEntities(parentId: string, limit: number): Promise<EntityDto[]>;
   resolveEntityByUrl(url: string): Promise<ResolveEntityByUrlResult>;
   searchEntities(query: string): Promise<EntityDto[]>;
   unhideEntity(entityId: string): Promise<EntityDto>;

@@ -24,4 +24,5 @@ export interface StoredAuthSession {
   accessToken: string;
   displayName: string;
   email: string | null;
+  userId: string;
 }

@@ -8,7 +8,9 @@ import { ExtensionByUrlRatingResponseDto } from "../dto/extension-by-url-rating-
 import { ExtensionQuickRatingResponseDto } from "../dto/extension-quick-rating-response.dto.js";
 import { ExtensionRateByUrlDto } from "../dto/extension-rate-by-url.dto.js";
 import { ExtensionResolveQueryDto } from "../dto/extension-resolve-query.dto.js";
-import { ExtensionResolveResponseDto } from "../dto/extension-resolve-response.dto.js";
+import { ExtensionEntityChildrenQueryDto } from "../dto/extension-entity-children-query.dto.js";
+import { ExtensionEntityChildrenResponseDto } from "../dto/extension-entity-children-response.dto.js";
+import type { ExtensionResolveResponseDto } from "../dto/extension-resolve-response.dto.js";
 import { ExtensionApiService } from "../services/extension-api.service.js";
 
 @Controller("extension")
@@ -18,6 +20,14 @@ export class ExtensionApiController {
   @Get("resolve")
   async resolveUrl(@Query() query: ExtensionResolveQueryDto): Promise<ExtensionResolveResponseDto> {
     return this.extensionApiService.resolveUrl(query.url);
+  }
+
+  @Get("entities/:parentId/children")
+  async listEntityChildren(
+    @Param("parentId", new ParseUUIDPipe({ version: "4" })) parentId: string,
+    @Query() query: ExtensionEntityChildrenQueryDto
+  ): Promise<ExtensionEntityChildrenResponseDto> {
+    return this.extensionApiService.listEntityChildren(parentId, query.limit);
   }
 
   @Put("entities/by-url/my-rating")

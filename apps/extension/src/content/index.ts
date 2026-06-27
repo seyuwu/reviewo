@@ -1,9 +1,18 @@
-import { showRatingCard } from "./rating-card/rating-card.js";
+import {
+  guardExtensionContext,
+  installExtensionContextGuards,
+  sendRuntimeMessage
+} from "./extension-context.js";
+import { showRatingCardForResolveResult } from "./rating-card/rating-card.js";
+import { requestShowRatingCardIfAllowed } from "./rating-card/rating-card-session.js";
+import { watchPageUrlChanges } from "./page-resolve-watcher.js";
 import { createResolvePageUrlMessage, ExtensionMessageType } from "../shared/messages.js";
-import { isResolvablePageUrl, readCurrentPageUrl } from "../shared/page-url.js";
+import { isReviewoWebPage } from "../shared/reviewo-web-page.js";
 import type { ExtensionResolveResponse } from "../shared/types/resolve.js";
 
-export const REVIEWO_RESOLVE_RESULT_EVENT = "reviewo:resolve-result";
+installExtensionContextGuards();
+
+const REVIEWO_RESOLVE_RESULT_EVENT = "reviewo:resolve-result";
 
 function publishResolveResult(result: ExtensionResolveResponse): void {
   window.dispatchEvent(
@@ -13,40 +22,41 @@ function publishResolveResult(result: ExtensionResolveResponse): void {
   );
 }
 
-function requestResolveForCurrentPage(): void {
-  const pageUrl = readCurrentPageUrl();
-
-  if (!isResolvablePageUrl(pageUrl)) {
+function resolvePageUrl(pageUrl: string): void {
+  if (!guardExtensionContext() || isReviewoWebPage(pageUrl)) {
     return;
   }
 
-  chrome.runtime.sendMessage(createResolvePageUrlMessage(pageUrl), (response) => {
-    if (chrome.runtime.lastError) {
-      console.warn(
-        "Reviewo content script could not resolve page URL:",
-        chrome.runtime.lastError.message
-      );
-      return;
-    }
+  sendRuntimeMessage(createResolvePageUrlMessage(pageUrl), (response) => {
+    const callbackResponse = response as {
+      payload?: {
+        message?: string;
+        result?: ExtensionResolveResponse;
+      };
+      type?: string;
+    };
 
     if (response?.type === ExtensionMessageType.ResolvePageUrlResult) {
-      console.info("Reviewo content script received resolve result.", response.payload);
-      publishResolveResult(response.payload.result);
+      const result = callbackResponse.payload?.result;
 
-      if (
-        response.payload.result.status === "found" ||
-        response.payload.result.status === "not_found"
-      ) {
-        showRatingCard(response.payload.result);
+      if (!result) {
+        return;
       }
+
+      console.info("Reviewo content script received resolve result.", callbackResponse.payload);
+      publishResolveResult(result);
+
+      requestShowRatingCardIfAllowed(result.url.canonical, () => {
+        void showRatingCardForResolveResult(result);
+      });
 
       return;
     }
 
     if (response?.type === ExtensionMessageType.ResolvePageUrlError) {
-      console.warn("Reviewo content script resolve failed.", response.payload);
+      console.warn("Reviewo content script resolve failed.", callbackResponse.payload);
     }
   });
 }
 
-requestResolveForCurrentPage();
+watchPageUrlChanges(resolvePageUrl);

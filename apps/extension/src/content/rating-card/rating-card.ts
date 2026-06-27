@@ -1,14 +1,24 @@
+import {
+  addStorageChangedListener,
+  guardExtensionContext,
+  markExtensionContextInvalidated,
+  removeStorageChangedListener
+} from "../extension-context.js";
+import { readExtensionPreferences } from "../../shared/extension-preferences-storage.js";
+import type { ExtensionUserPreferences } from "../../shared/preferences.js";
 import { extensionConfig } from "../../shared/config.js";
 import type { ExtensionResolveFoundResponse } from "../../shared/types/resolve.js";
 import type { ExtensionResolveResponse } from "../../shared/types/resolve.js";
 import { hasAuthenticatedExtensionSession } from "./auth-session-state.js";
+import { bindAutoDismiss, clearAutoDismiss } from "./auto-dismiss.js";
+import { buildCardDisplayContext, getRateTargetEntityId } from "./card-display.js";
 import { toFoundResponseFromByUrlRating } from "./convert-by-url-rating.js";
-import { buildRatingCardSummary } from "./format-display.js";
 import { mergeQuickRatingIntoFoundResponse } from "./merge-rating-response.js";
 import { readPageSourceTitle } from "./read-page-title.js";
 import { RATING_CARD_STYLES } from "./rating-card-styles.js";
 import { submitEntityRating } from "./submit-entity-rating.js";
 import { submitEntityRatingByUrl } from "./submit-entity-rating-by-url.js";
+import { requestDismissRatingCard } from "./rating-card-session.js";
 import { deriveTitleFromCanonicalUrl } from "./title-from-url.js";
 
 const RATING_CARD_HOST_ID = "reviewo-rating-card-host";
@@ -17,19 +27,28 @@ const RATING_SCORES = [1, 2, 3, 4, 5] as const;
 
 type StorageListener = Parameters<typeof chrome.storage.onChanged.addListener>[0];
 
+type RatingCardHost = HTMLElement & {
+  reviewoStorageListener?: StorageListener;
+};
+
 export function hideRatingCard(): void {
-  const host = document.getElementById(RATING_CARD_HOST_ID) as
-    | (HTMLElement & { reviewoStorageListener?: StorageListener })
-    | null;
+  const host = document.getElementById(RATING_CARD_HOST_ID) as RatingCardHost | null;
 
   if (host?.reviewoStorageListener) {
-    chrome.storage.onChanged.removeListener(host.reviewoStorageListener);
+    removeStorageChangedListener(host.reviewoStorageListener);
+  }
+
+  if (host) {
+    clearAutoDismiss(host);
   }
 
   host?.remove();
 }
 
-export function showRatingCard(resolveResponse: ExtensionResolveResponse): void {
+export function showRatingCard(
+  resolveResponse: ExtensionResolveResponse,
+  preferences: ExtensionUserPreferences
+): void {
   hideRatingCard();
 
   const host = document.createElement("div");
@@ -45,16 +64,17 @@ export function showRatingCard(resolveResponse: ExtensionResolveResponse): void 
   cardElement.setAttribute("role", "complementary");
   cardElement.setAttribute("aria-label", "Reviewo rating summary");
 
-  applyHostPosition(host);
   shadowRoot.append(styleElement, cardElement);
   document.documentElement.append(host);
 
   const cardState: {
+    displayTarget: ExtensionUserPreferences["cardDisplayTarget"];
     isAuthenticated: boolean;
     isSubmitting: boolean;
     myRatingScore: number | null;
     resolveResponse: ExtensionResolveResponse;
   } = {
+    displayTarget: preferences.cardDisplayTarget,
     isAuthenticated: false,
     isSubmitting: false,
     myRatingScore: null,
@@ -67,31 +87,27 @@ export function showRatingCard(resolveResponse: ExtensionResolveResponse): void 
   }
 
   function renderCard(): void {
-    const cardTitle = getCardTitle(cardState.resolveResponse);
-    const statsMarkup =
-      cardState.resolveResponse.status === "found"
-        ? renderFoundStats(cardState.resolveResponse)
-        : renderNotFoundStats();
-    const detailsMarkup =
-      cardState.resolveResponse.status === "found"
-        ? `<a class="reviewo-details" href="${escapeHtmlAttribute(buildEntityPageUrl(cardState.resolveResponse.web.entityPagePath))}" target="_blank" rel="noopener noreferrer">More details</a>`
-        : "";
-    const isFound = cardState.resolveResponse.status === "found";
+    if (cardState.resolveResponse.status !== "found") {
+      renderNotFoundCard();
+      return;
+    }
+
+    const display = buildCardDisplayContext(
+      cardState.resolveResponse,
+      cardState.displayTarget,
+      escapeHtmlText
+    );
 
     cardElement.innerHTML = `
       <header class="reviewo-card-header">
-        <span class="reviewo-eyebrow">Reviewo</span>
+        <span class="reviewo-eyebrow">${escapeHtmlText(display.eyebrowLabel)}</span>
         <button type="button" class="reviewo-dismiss" aria-label="Dismiss Reviewo card">&times;</button>
       </header>
-      <h2 class="reviewo-title" title="${escapeHtmlAttribute(cardTitle)}">${escapeHtmlText(cardTitle)}</h2>
-      ${statsMarkup}
+      <h2 class="reviewo-title" title="${escapeHtmlAttribute(display.title)}">${escapeHtmlText(display.title)}</h2>
+      ${display.primaryStatsMarkup}
+      ${display.secondaryStatsMarkup}
       <div class="reviewo-rate-section">
-        <p class="reviewo-rate-label">${isFound ? "Your rating" : "Be the first to rate this site"}</p>
-        ${
-          isFound
-            ? ""
-            : `<p class="reviewo-first-rating-copy">No Reviewo page exists yet. Your rating will create it.</p>`
-        }
+        <p class="reviewo-rate-label">Your rating</p>
         <div class="reviewo-rate-controls" role="group" aria-label="Rate this site">
           ${RATING_SCORES.map((score) => {
             const isSelected = cardState.myRatingScore === score;
@@ -115,10 +131,56 @@ export function showRatingCard(resolveResponse: ExtensionResolveResponse): void 
         </p>
         <p class="reviewo-rate-status" hidden></p>
       </div>
-      ${detailsMarkup}
+      <a class="reviewo-details" href="${escapeHtmlAttribute(buildEntityPageUrl(display.detailsEntityPagePath))}" target="_blank" rel="noopener noreferrer">More details</a>
     `;
 
+    bindCardActions();
+  }
+
+  function renderNotFoundCard(): void {
+    const cardTitle = getCardTitle(cardState.resolveResponse);
+
+    cardElement.innerHTML = `
+      <header class="reviewo-card-header">
+        <span class="reviewo-eyebrow">Reviewo</span>
+        <button type="button" class="reviewo-dismiss" aria-label="Dismiss Reviewo card">&times;</button>
+      </header>
+      <h2 class="reviewo-title" title="${escapeHtmlAttribute(cardTitle)}">${escapeHtmlText(cardTitle)}</h2>
+      ${renderNotFoundStats()}
+      <div class="reviewo-rate-section">
+        <p class="reviewo-rate-label">Be the first to rate this site</p>
+        <p class="reviewo-first-rating-copy">No Reviewo page exists yet. Your rating will create it.</p>
+        <div class="reviewo-rate-controls" role="group" aria-label="Rate this site">
+          ${RATING_SCORES.map((score) => {
+            const isSelected = cardState.myRatingScore === score;
+            const isDisabled = !cardState.isAuthenticated || cardState.isSubmitting;
+
+            return `
+              <button
+                type="button"
+                class="reviewo-rate-button${isSelected ? " is-selected" : ""}"
+                data-score="${score}"
+                aria-pressed="${isSelected}"
+                ${isDisabled ? "disabled" : ""}
+              >
+                ${score}
+              </button>
+            `;
+          }).join("")}
+        </div>
+        <p class="reviewo-rate-hint${cardState.isAuthenticated ? " is-hidden" : ""}">
+          Sign in through the extension popup to rate.
+        </p>
+        <p class="reviewo-rate-status" hidden></p>
+      </div>
+    `;
+
+    bindCardActions();
+  }
+
+  function bindCardActions(): void {
     cardElement.querySelector(".reviewo-dismiss")?.addEventListener("click", () => {
+      requestDismissRatingCard(cardState.resolveResponse.url.canonical);
       hideRatingCard();
     });
 
@@ -165,7 +227,10 @@ export function showRatingCard(resolveResponse: ExtensionResolveResponse): void 
     renderCard();
 
     if (cardState.resolveResponse.status === "found") {
-      const submitResult = await submitEntityRating(cardState.resolveResponse.entity.id, score);
+      const submitResult = await submitEntityRating(
+        getRateTargetEntityId(cardState.resolveResponse, cardState.displayTarget),
+        score
+      );
       cardState.isSubmitting = false;
 
       if (submitResult.result) {
@@ -222,42 +287,50 @@ export function showRatingCard(resolveResponse: ExtensionResolveResponse): void 
   }
 
   const storageListener: StorageListener = (changes, areaName) => {
-    if (areaName !== "local" || !("reviewo.extensionAuth" in changes)) {
-      return;
-    }
+    try {
+      if (!guardExtensionContext()) {
+        return;
+      }
 
-    void refreshAuthState();
+      if (areaName !== "local" || !("reviewo.extensionAuth" in changes)) {
+        return;
+      }
+
+      void refreshAuthState();
+    } catch {
+      markExtensionContextInvalidated();
+    }
   };
 
-  (host as HTMLElement & { reviewoStorageListener?: StorageListener }).reviewoStorageListener =
-    storageListener;
-  chrome.storage.onChanged.addListener(storageListener);
+  (host as RatingCardHost).reviewoStorageListener = storageListener;
+  addStorageChangedListener(storageListener);
+
+  if (shouldAutoDismissCard(resolveResponse, preferences.autoDismissSeconds)) {
+    bindAutoDismiss(host, preferences.autoDismissSeconds);
+  }
 
   void refreshAuthState();
 }
 
-export function showRatingCardForFoundEntity(response: ExtensionResolveFoundResponse): void {
-  showRatingCard(response);
+export async function showRatingCardForResolveResult(
+  response: ExtensionResolveResponse
+): Promise<void> {
+  const preferences = await readExtensionPreferences();
+  showRatingCard(response, preferences);
 }
 
-function renderFoundStats(response: ExtensionResolveFoundResponse): string {
-  const { averageScoreLabel, metaLabel } = buildRatingCardSummary(response);
-
-  return `
-    <div class="reviewo-stats">
-      <div class="reviewo-rating-row">
-        <span class="reviewo-rating-value">${escapeHtmlText(averageScoreLabel)}</span>
-        <span class="reviewo-rating-scale">/ 5</span>
-      </div>
-      <p class="reviewo-meta">${escapeHtmlText(metaLabel)}</p>
-    </div>
-  `;
+/** @deprecated Use showRatingCardForResolveResult */
+export async function showRatingCardForFoundEntity(
+  response: ExtensionResolveFoundResponse
+): Promise<void> {
+  await showRatingCardForResolveResult(response);
 }
 
 function renderNotFoundStats(): string {
   return `
-    <div class="reviewo-stats">
-      <p class="reviewo-meta">This site is not in Reviewo yet.</p>
+    <div class="reviewo-stats reviewo-stats-empty">
+      <p class="reviewo-no-ratings">No ratings yet</p>
+      <p class="reviewo-meta">Be the first to rate this site</p>
     </div>
   `;
 }
@@ -270,13 +343,19 @@ function getCardTitle(response: ExtensionResolveResponse): string {
   return readPageSourceTitle() ?? deriveTitleFromCanonicalUrl(response.url.canonical);
 }
 
-function applyHostPosition(host: HTMLElement): void {
-  host.style.all = "initial";
-  host.style.position = "fixed";
-  host.style.right = "1rem";
-  host.style.bottom = "1rem";
-  host.style.zIndex = "2147483646";
-  host.style.pointerEvents = "auto";
+function shouldAutoDismissCard(
+  resolveResponse: ExtensionResolveResponse,
+  autoDismissSeconds: number
+): boolean {
+  if (autoDismissSeconds <= 0) {
+    return false;
+  }
+
+  if (resolveResponse.status === "not_found") {
+    return false;
+  }
+
+  return resolveResponse.rating.votesCount > 0;
 }
 
 function buildEntityPageUrl(entityPagePath: string): string {

@@ -8,6 +8,18 @@ export function formatVotesCount(votesCount: number): string {
   return votesCount === 1 ? "1 rating" : `${votesCount} ratings`;
 }
 
+export function hasEntityRatings(votesCount: number): boolean {
+  return votesCount > 0;
+}
+
+export function formatRatingStatsLine(avgScore: number, votesCount: number): string {
+  if (!hasEntityRatings(votesCount)) {
+    return "No ratings yet · Be the first to rate";
+  }
+
+  return `${formatAverageScore(avgScore)} / 5 · ${formatVotesCount(votesCount)}`;
+}
+
 export function formatTrustConfidence(confidence: number): string {
   const percentage = Math.round(confidence * 100);
 
@@ -17,11 +29,17 @@ export function formatTrustConfidence(confidence: number): string {
 export function buildRatingCardSummary(response: ExtensionResolveFoundResponse): {
   averageScoreLabel: string;
   entityTitle: string;
+  hasRatings: boolean;
   metaLabel: string;
 } {
+  const hasRatings = hasEntityRatings(response.rating.votesCount);
+
   return {
-    averageScoreLabel: formatAverageScore(response.rating.avgScore),
+    averageScoreLabel: hasRatings ? formatAverageScore(response.rating.avgScore) : "—",
     entityTitle: response.entity.title,
-    metaLabel: `${formatVotesCount(response.rating.votesCount)} · ${formatTrustConfidence(response.trust.confidence)}`
+    hasRatings,
+    metaLabel: hasRatings
+      ? `${formatVotesCount(response.rating.votesCount)} · ${formatTrustConfidence(response.trust.confidence)}`
+      : "No ratings yet · Be the first to rate"
   };
 }

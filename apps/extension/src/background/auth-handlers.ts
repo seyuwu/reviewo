@@ -5,6 +5,7 @@ import {
   registerWithApi
 } from "./auth-api.js";
 import { clearAuthSession, getStoredAuthSession } from "./auth-session.js";
+import { syncAuthFromWebJson } from "./web-auth-sync.js";
 import {
   createAuthOperationErrorMessage,
   createAuthOperationSuccessMessage,
@@ -15,7 +16,8 @@ import {
   isExtensionAuthLoginMessage,
   isExtensionAuthRegisterMessage,
   isExtensionAuthSignOutMessage,
-  isExtensionGetAuthSessionMessage
+  isExtensionGetAuthSessionMessage,
+  isExtensionSyncWebAuthMessage
 } from "../shared/messages.js";
 
 export function handleAuthMessage(
@@ -80,6 +82,19 @@ export function handleAuthMessage(
       })
       .catch(() => {
         sendResponse(createAuthOperationErrorMessage("Could not sign out."));
+      });
+
+    return true;
+  }
+
+  if (isExtensionSyncWebAuthMessage(message)) {
+    void syncAuthFromWebJson(message.payload.rawAuthJson)
+      .then(async () => {
+        const session = await getStoredAuthSession();
+        sendResponse(createAuthSessionResultMessage(session));
+      })
+      .catch(() => {
+        sendResponse(createAuthSessionResultMessage(null));
       });
 
     return true;

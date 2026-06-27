@@ -21,8 +21,16 @@ export class ExtensionWebLinkDto {
   entityPagePath!: string;
 }
 
+export class ExtensionResolveEntityBundleDto {
+  entity!: ExtensionEntitySummaryDto;
+  rating!: RatingAggregateDto;
+  trust!: TrustConfidenceDto;
+  web!: ExtensionWebLinkDto;
+}
+
 export class ExtensionResolveFoundResponseDto {
   entity!: ExtensionEntitySummaryDto;
+  parent?: ExtensionResolveEntityBundleDto;
   rating!: RatingAggregateDto;
   status!: "found";
   trust!: TrustConfidenceDto;

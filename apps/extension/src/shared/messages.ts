@@ -14,12 +14,16 @@ export const ExtensionMessageType = {
   AuthenticatedApiResult: "AUTHENTICATED_API_RESULT",
   GetActiveTabResolve: "GET_ACTIVE_TAB_RESOLVE",
   GetAuthSession: "GET_AUTH_SESSION",
+  CheckRatingCardDismissed: "CHECK_RATING_CARD_DISMISSED",
+  DismissRatingCard: "DISMISS_RATING_CARD",
+  RatingCardDismissedResult: "RATING_CARD_DISMISSED_RESULT",
   PingFromContent: "PING_FROM_CONTENT",
   PingFromPopup: "PING_FROM_POPUP",
   PongFromBackground: "PONG_FROM_BACKGROUND",
   ResolvePageUrl: "RESOLVE_PAGE_URL",
   ResolvePageUrlError: "RESOLVE_PAGE_URL_ERROR",
-  ResolvePageUrlResult: "RESOLVE_PAGE_URL_RESULT"
+  ResolvePageUrlResult: "RESOLVE_PAGE_URL_RESULT",
+  SyncWebAuth: "SYNC_WEB_AUTH"
 } as const;
 
 export type ExtensionMessageSource = "content" | "popup";
@@ -79,6 +83,27 @@ export interface ExtensionGetAuthSessionMessage {
   type: typeof ExtensionMessageType.GetAuthSession;
 }
 
+export interface ExtensionCheckRatingCardDismissedMessage {
+  payload: {
+    canonicalUrl: string;
+  };
+  type: typeof ExtensionMessageType.CheckRatingCardDismissed;
+}
+
+export interface ExtensionRatingCardDismissedResultMessage {
+  payload: {
+    dismissed: boolean;
+  };
+  type: typeof ExtensionMessageType.RatingCardDismissedResult;
+}
+
+export interface ExtensionDismissRatingCardMessage {
+  payload: {
+    canonicalUrl: string;
+  };
+  type: typeof ExtensionMessageType.DismissRatingCard;
+}
+
 export interface ExtensionAuthSessionResultMessage {
   payload: {
     session: ExtensionStoredAuthSession | null;
@@ -105,6 +130,13 @@ export interface ExtensionAuthRegisterMessage {
 
 export interface ExtensionAuthSignOutMessage {
   type: typeof ExtensionMessageType.AuthSignOut;
+}
+
+export interface ExtensionSyncWebAuthMessage {
+  payload: {
+    rawAuthJson: string | null;
+  };
+  type: typeof ExtensionMessageType.SyncWebAuth;
 }
 
 export interface ExtensionAuthOperationSuccessMessage {
@@ -158,11 +190,15 @@ export type ExtensionMessage =
   | ExtensionAuthenticatedApiResultMessage
   | ExtensionGetActiveTabResolveMessage
   | ExtensionGetAuthSessionMessage
+  | ExtensionCheckRatingCardDismissedMessage
+  | ExtensionDismissRatingCardMessage
+  | ExtensionRatingCardDismissedResultMessage
   | ExtensionPingMessage
   | ExtensionPongMessage
   | ExtensionResolvePageUrlErrorMessage
   | ExtensionResolvePageUrlMessage
-  | ExtensionResolvePageUrlResultMessage;
+  | ExtensionResolvePageUrlResultMessage
+  | ExtensionSyncWebAuthMessage;
 
 export function createPingMessage(source: ExtensionMessageSource): ExtensionPingMessage {
   return {
@@ -247,6 +283,39 @@ export function createGetAuthSessionMessage(): ExtensionGetAuthSessionMessage {
   };
 }
 
+export function createCheckRatingCardDismissedMessage(
+  canonicalUrl: string
+): ExtensionCheckRatingCardDismissedMessage {
+  return {
+    payload: {
+      canonicalUrl
+    },
+    type: ExtensionMessageType.CheckRatingCardDismissed
+  };
+}
+
+export function createDismissRatingCardMessage(
+  canonicalUrl: string
+): ExtensionDismissRatingCardMessage {
+  return {
+    payload: {
+      canonicalUrl
+    },
+    type: ExtensionMessageType.DismissRatingCard
+  };
+}
+
+export function createRatingCardDismissedResultMessage(
+  dismissed: boolean
+): ExtensionRatingCardDismissedResultMessage {
+  return {
+    payload: {
+      dismissed
+    },
+    type: ExtensionMessageType.RatingCardDismissedResult
+  };
+}
+
 export function createAuthSessionResultMessage(
   session: ExtensionStoredAuthSession | null
 ): ExtensionAuthSessionResultMessage {
@@ -286,6 +355,15 @@ export function createAuthRegisterMessage(
 export function createAuthSignOutMessage(): ExtensionAuthSignOutMessage {
   return {
     type: ExtensionMessageType.AuthSignOut
+  };
+}
+
+export function createSyncWebAuthMessage(rawAuthJson: string | null): ExtensionSyncWebAuthMessage {
+  return {
+    payload: {
+      rawAuthJson
+    },
+    type: ExtensionMessageType.SyncWebAuth
   };
 }
 
@@ -403,6 +481,36 @@ export function isExtensionGetAuthSessionMessage(
   return (message as ExtensionGetAuthSessionMessage).type === ExtensionMessageType.GetAuthSession;
 }
 
+export function isExtensionCheckRatingCardDismissedMessage(
+  message: unknown
+): message is ExtensionCheckRatingCardDismissedMessage {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+
+  const candidate = message as ExtensionCheckRatingCardDismissedMessage;
+
+  return (
+    candidate.type === ExtensionMessageType.CheckRatingCardDismissed &&
+    typeof candidate.payload?.canonicalUrl === "string"
+  );
+}
+
+export function isExtensionDismissRatingCardMessage(
+  message: unknown
+): message is ExtensionDismissRatingCardMessage {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+
+  const candidate = message as ExtensionDismissRatingCardMessage;
+
+  return (
+    candidate.type === ExtensionMessageType.DismissRatingCard &&
+    typeof candidate.payload?.canonicalUrl === "string"
+  );
+}
+
 export function isExtensionAuthLoginMessage(
   message: unknown
 ): message is ExtensionAuthLoginMessage {
@@ -444,6 +552,21 @@ export function isExtensionAuthSignOutMessage(
   }
 
   return (message as ExtensionAuthSignOutMessage).type === ExtensionMessageType.AuthSignOut;
+}
+
+export function isExtensionSyncWebAuthMessage(
+  message: unknown
+): message is ExtensionSyncWebAuthMessage {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+
+  const candidate = message as ExtensionSyncWebAuthMessage;
+
+  return (
+    candidate.type === ExtensionMessageType.SyncWebAuth &&
+    (candidate.payload?.rawAuthJson === null || typeof candidate.payload?.rawAuthJson === "string")
+  );
 }
 
 export function isExtensionAuthenticatedApiRequestMessage(

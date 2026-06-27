@@ -11,6 +11,8 @@ import type { ReviewsPort } from "../../reviews/interfaces/reviews.port.js";
 import { TRUST_PORT } from "../../trust/interfaces/trust.port.js";
 import type { TrustPort } from "../../trust/interfaces/trust.port.js";
 import { EntityPageResponseDto } from "../dto/entity-page-response.dto.js";
+import type { EntityPageParentSummaryDto } from "../dto/entity-page-parent-summary.dto.js";
+import type { EntityDto } from "../../entities/dto/entity.dto.js";
 
 const ENTITY_PAGE_REVIEWS_LIMIT = 10;
 
@@ -38,11 +40,12 @@ export class EntityPageService {
       });
     }
 
-    const [rating, trust, reviews, reviewsCount] = await Promise.all([
+    const [rating, trust, reviews, reviewsCount, parent] = await Promise.all([
       this.ratingsPort.getAggregate(entityId),
       this.trustPort.getEntityTrust(entityId),
       this.reviewsPort.listTopReviewsForEntity(entityId, ENTITY_PAGE_REVIEWS_LIMIT),
-      this.reviewsPort.getReviewCountForEntity(entityId)
+      this.reviewsPort.getReviewCountForEntity(entityId),
+      this.resolveParentSummary(entity.parentId)
     ]);
 
     return {
@@ -50,9 +53,35 @@ export class EntityPageService {
       meta: {
         reviewsCount
       },
+      ...(parent ? { parent } : {}),
       rating,
       reviews,
       trust
     };
   }
+
+  private async resolveParentSummary(
+    parentId: string | null
+  ): Promise<EntityPageParentSummaryDto | undefined> {
+    if (!parentId) {
+      return undefined;
+    }
+
+    const parent = await this.entitiesPort.findEntityById(parentId);
+
+    if (!parent) {
+      return undefined;
+    }
+
+    return toEntityPageParentSummaryDto(parent);
+  }
+}
+
+function toEntityPageParentSummaryDto(entity: EntityDto): EntityPageParentSummaryDto {
+  return {
+    canonicalUrl: entity.canonicalUrl,
+    id: entity.id,
+    slug: entity.slug,
+    title: entity.title
+  };
 }

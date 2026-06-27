@@ -33,6 +33,13 @@ describe("UrlNormalizationService", () => {
     assert.equal(service.normalize("example.com/docs"), "https://example.com/docs");
   });
 
+  it("derives site root canonical URL from deep links", () => {
+    assert.equal(
+      service.getSiteRootCanonicalUrl("https://www.youtube.com/watch?v=abc&utm_source=x"),
+      "https://youtube.com/"
+    );
+  });
+
   it("returns null for invalid URLs", () => {
     assert.equal(service.normalize("not a url"), null);
     assert.equal(service.normalize("ftp://example.com"), null);

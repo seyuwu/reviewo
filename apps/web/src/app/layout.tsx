@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ReactNode } from "react";
 
+import { AppChrome } from "../components/app-chrome";
 import { AppProviders } from "./providers";
 import "./globals.css";
 
@@ -17,7 +18,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
       <body>
-        <AppProviders>{children}</AppProviders>
+        <AppProviders>
+          <AppChrome>{children}</AppChrome>
+        </AppProviders>
       </body>
     </html>
   );

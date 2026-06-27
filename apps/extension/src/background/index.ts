@@ -1,17 +1,34 @@
 import { handleAuthMessage } from "./auth-handlers.js";
+import {
+  dismissRatingCardForTab,
+  isRatingCardDismissedForTab
+} from "./card-dismissal.js";
 import { resolveUrlWithApi } from "./resolve-url.js";
 import { cacheTabResolveResult, getCachedTabResolveResult } from "./tab-resolve-cache.js";
 import {
   createActiveTabResolveResultMessage,
   createPongMessage,
+  createRatingCardDismissedResultMessage,
   createResolvePageUrlErrorMessage,
   createResolvePageUrlResultMessage,
+  isExtensionCheckRatingCardDismissedMessage,
+  isExtensionDismissRatingCardMessage,
   isExtensionGetActiveTabResolveMessage,
   isExtensionPingMessage,
   isExtensionResolvePageUrlMessage,
   type ExtensionMessageSource
 } from "../shared/messages.js";
 import { isResolvablePageUrl } from "../shared/page-url.js";
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "reviewo-content-script") {
+    return;
+  }
+
+  port.onDisconnect.addListener(() => {
+    void chrome.runtime.lastError;
+  });
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (handleAuthMessage(message, sendResponse)) {
@@ -21,6 +38,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (isExtensionPingMessage(message)) {
     const source = message.payload.source as ExtensionMessageSource;
     sendResponse(createPongMessage(source));
+    return false;
+  }
+
+  if (isExtensionCheckRatingCardDismissedMessage(message)) {
+    const tabId = sender.tab?.id;
+
+    if (tabId === undefined) {
+      sendResponse(createRatingCardDismissedResultMessage(false));
+      return false;
+    }
+
+    sendResponse(
+      createRatingCardDismissedResultMessage(
+        isRatingCardDismissedForTab(tabId, message.payload.canonicalUrl)
+      )
+    );
+
+    return false;
+  }
+
+  if (isExtensionDismissRatingCardMessage(message)) {
+    const tabId = sender.tab?.id;
+
+    if (tabId !== undefined) {
+      dismissRatingCardForTab(tabId, message.payload.canonicalUrl);
+    }
+
+    sendResponse(createRatingCardDismissedResultMessage(true));
     return false;
   }
 

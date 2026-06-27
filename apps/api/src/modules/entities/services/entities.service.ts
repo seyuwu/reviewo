@@ -212,12 +212,19 @@ export class EntitiesService implements EntitiesPort {
     const slug = createSlugFromCanonicalUrl(resolved.canonicalUrl);
 
     try {
+      const siteRootCanonicalUrl = this.urlNormalizer.getSiteRootCanonicalUrl(resolved.canonicalUrl);
+      const parentId =
+        siteRootCanonicalUrl !== resolved.canonicalUrl
+          ? (await this.entitiesRepository.findByCanonicalUrl(siteRootCanonicalUrl))?.id
+          : undefined;
+
       const entity = await this.entitiesRepository.create({
         canonicalUrl: resolved.canonicalUrl,
         createdBy: currentUser.id,
         slug,
         title,
-        type: EntityType.website
+        type: EntityType.website,
+        ...(parentId ? { parentId } : {})
       });
       const entityDto = toEntityDto(entity);
 
@@ -267,6 +274,22 @@ export class EntitiesService implements EntitiesPort {
     }
 
     return entity;
+  }
+
+  async listChildEntities(parentId: string, limit: number): Promise<EntityDto[]> {
+    const parent = await this.entitiesRepository.findById(parentId);
+
+    if (!parent || parent.visibility !== EntityVisibility.ACTIVE) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Entity was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    const children = await this.entitiesRepository.findChildrenByParentId(parentId, limit);
+
+    return children.map(toEntityDto);
   }
 
   async searchEntities(query: string): Promise<EntityDto[]> {

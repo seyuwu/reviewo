@@ -9,8 +9,20 @@
   },
   "content_scripts": [
     {
+      "js": ["history-hook-bootstrap.js"],
+      "matches": ["<all_urls>"],
+      "exclude_matches": ["http://localhost:3001/*", "http://127.0.0.1:3001/*"],
+      "run_at": "document_start"
+    },
+    {
       "js": ["content.js"],
       "matches": ["<all_urls>"],
+      "exclude_matches": ["http://localhost:3001/*", "http://127.0.0.1:3001/*"],
+      "run_at": "document_idle"
+    },
+    {
+      "js": ["web-auth-content.js"],
+      "matches": ["http://localhost:3001/*", "http://127.0.0.1:3001/*"],
       "run_at": "document_idle"
     }
   ],
@@ -19,5 +31,5 @@
   "manifest_version": 3,
   "name": "Reviewo",
   "permissions": ["storage", "tabs"],
-  "version": "0.0.0"
+  "version": "0.0.2"
 }

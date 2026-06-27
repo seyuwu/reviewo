@@ -19,7 +19,8 @@ const currentUser: AuthenticatedUser = {
 
 function createService(repository: EntitiesRepository) {
   const urlNormalizer: UrlNormalizer = {
-    normalize: (input) => input
+    normalize: (input) => input,
+    getSiteRootCanonicalUrl: (canonicalUrl) => new URL(canonicalUrl).origin + "/"
   };
   const eventBus = { publish: async () => undefined } as unknown as DomainEventBus;
 

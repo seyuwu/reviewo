@@ -39,6 +39,7 @@ function createEntitiesPort(overrides: Partial<EntitiesPort>): EntitiesPort {
     }),
     findEntityById: async () => entity,
     hideEntity: async () => entity,
+    listChildEntities: async () => [],
     resolveEntityByUrl: async () => ({
       canonicalUrl: "https://rate-site.example/",
       entity: null,

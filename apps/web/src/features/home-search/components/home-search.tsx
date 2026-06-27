@@ -1,16 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useId, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { FormEvent, useEffect, useId, useState } from "react";
 
 import { useEntitySearch } from "../hooks/use-entity-search";
 import type { SearchEntityResult } from "../types/search-entities";
 
 export function HomeSearch() {
   const inputId = useId();
-  const [query, setQuery] = useState("");
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("q")?.trim() ?? "";
+  const [query, setQuery] = useState(initialQuery);
   const trimmedQuery = query.trim();
   const searchQuery = useEntitySearch(query);
+
+  useEffect(() => {
+    setQuery(searchParams.get("q")?.trim() ?? "");
+  }, [searchParams]);
   const results = searchQuery.data?.results ?? [];
   const shouldShowCreateHint =
     Boolean(searchQuery.data?.canCreateEntity) &&
@@ -55,7 +62,7 @@ export function HomeSearch() {
         {trimmedQuery && searchQuery.isFetching ? <SearchLoadingState /> : null}
         {trimmedQuery && searchQuery.isError ? <SearchErrorState /> : null}
         {trimmedQuery && !searchQuery.isFetching && !searchQuery.isError && results.length > 0 ? (
-          <SearchResults results={results} />
+          <SearchResults query={trimmedQuery} results={results} />
         ) : null}
         {shouldShowCreateHint ? (
           <CreateEntityHint query={searchQuery.data?.query ?? trimmedQuery} />
@@ -92,10 +99,11 @@ function SearchErrorState() {
 }
 
 interface SearchResultsProps {
+  query: string;
   results: SearchEntityResult[];
 }
 
-function SearchResults({ results }: SearchResultsProps) {
+function SearchResults({ query, results }: SearchResultsProps) {
   return (
     <div className="results-list" aria-label="Search results">
       {results.map((entity) => (
@@ -105,7 +113,10 @@ function SearchResults({ results }: SearchResultsProps) {
             <h2>{entity.title}</h2>
             <p>{entity.description ?? entity.canonicalUrl ?? entity.slug}</p>
           </div>
-          <Link className="result-action" href={`/entities/${entity.id}`}>
+          <Link
+            className="result-action"
+            href={`/entities/${entity.id}?q=${encodeURIComponent(query)}`}
+          >
             Open
           </Link>
         </article>

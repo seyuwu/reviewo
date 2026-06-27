@@ -1,11 +1,20 @@
 export const RATING_CARD_STYLES = `
 :host {
-  all: initial;
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 2147483647;
+  width: min(18rem, calc(100vw - 2rem));
+  max-width: min(18rem, calc(100vw - 2rem));
+  pointer-events: auto;
 }
 
 .reviewo-card {
   box-sizing: border-box;
-  width: min(18rem, calc(100vw - 2rem));
+  width: 100%;
   border: 1px solid #e5e7eb;
   border-radius: 1rem;
   background: #ffffff;
@@ -67,6 +76,18 @@ export const RATING_CARD_STYLES = `
 
 .reviewo-stats {
   margin-bottom: 0.875rem;
+}
+
+.reviewo-stats-empty {
+  margin-bottom: 0.875rem;
+}
+
+.reviewo-no-ratings {
+  color: #171717;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0 0 0.25rem;
 }
 
 .reviewo-rating-row {
@@ -175,6 +196,28 @@ export const RATING_CARD_STYLES = `
 
 .reviewo-rate-status.is-success {
   color: #166534;
+}
+
+.reviewo-parent-stats {
+  border-top: 1px solid #f0f0f0;
+  margin-bottom: 0.875rem;
+  padding-top: 0.75rem;
+}
+
+.reviewo-parent-label {
+  color: #737373;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.25rem;
+  text-transform: uppercase;
+}
+
+.reviewo-parent-title {
+  color: #171717;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
 }
 
 .reviewo-details {

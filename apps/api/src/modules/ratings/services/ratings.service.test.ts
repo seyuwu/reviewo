@@ -65,6 +65,7 @@ describe("RatingsService", () => {
       },
       findEntityById: async () => null,
       hideEntity: async () => entity,
+      listChildEntities: async () => [],
       resolveEntityByUrl: async () => ({
         canonicalUrl: entity.canonicalUrl!,
         entity: null,
@@ -91,6 +92,7 @@ describe("RatingsService", () => {
       },
       findEntityById: async () => entity,
       hideEntity: async () => entity,
+      listChildEntities: async () => [],
       resolveEntityByUrl: async () => ({
         canonicalUrl: entity.canonicalUrl!,
         entity,
@@ -129,6 +131,7 @@ describe("RatingsService", () => {
       },
       findEntityById: async () => entity,
       hideEntity: async () => entity,
+      listChildEntities: async () => [],
       resolveEntityByUrl: async () => ({
         canonicalUrl: entity.canonicalUrl!,
         entity,

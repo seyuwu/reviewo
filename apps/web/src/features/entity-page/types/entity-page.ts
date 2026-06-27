@@ -60,9 +60,17 @@ export interface EntityPageMeta {
   reviewsCount: number;
 }
 
+export interface EntityPageParentSummary {
+  canonicalUrl: string | null;
+  id: string;
+  slug: string;
+  title: string;
+}
+
 export interface EntityPageResponse {
   entity: Entity;
   meta: EntityPageMeta;
+  parent?: EntityPageParentSummary;
   rating: RatingAggregate;
   reviews: Review[];
   trust: TrustConfidence;

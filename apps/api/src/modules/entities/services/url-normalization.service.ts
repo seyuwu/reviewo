@@ -28,6 +28,15 @@ const TRACKING_QUERY_PARAMETERS = new Set([
 
 @Injectable()
 export class UrlNormalizationService implements UrlNormalizer {
+  getSiteRootCanonicalUrl(canonicalUrl: string): string {
+    const parsed = new URL(canonicalUrl);
+    parsed.pathname = "/";
+    parsed.search = "";
+    parsed.hash = "";
+
+    return this.normalize(parsed.toString()) ?? parsed.toString();
+  }
+
   normalize(input: string): string | null {
     const url = parseHttpUrl(input);
 

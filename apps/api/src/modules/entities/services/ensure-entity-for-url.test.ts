@@ -45,7 +45,8 @@ describe("EntitiesService.ensureEntityForUrl", () => {
       isUniqueConstraintError: () => false
     } as unknown as EntitiesRepository;
     const urlNormalizer: UrlNormalizer = {
-      normalize: (input) => input
+      normalize: (input) => input,
+      getSiteRootCanonicalUrl: (canonicalUrl) => new URL(canonicalUrl).origin + "/"
     };
     const eventBus = { publish: async () => undefined } as unknown as DomainEventBus;
     const service = new EntitiesService(repository, eventBus, urlNormalizer);
@@ -72,7 +73,8 @@ describe("EntitiesService.ensureEntityForUrl", () => {
       isUniqueConstraintError: () => false
     } as unknown as EntitiesRepository;
     const urlNormalizer: UrlNormalizer = {
-      normalize: (input) => input
+      normalize: (input) => input,
+      getSiteRootCanonicalUrl: (canonicalUrl) => new URL(canonicalUrl).origin + "/"
     };
     const eventBus = { publish: async () => undefined } as unknown as DomainEventBus;
     const service = new EntitiesService(repository, eventBus, urlNormalizer);
@@ -106,7 +108,8 @@ describe("EntitiesService.ensureEntityForUrl", () => {
         typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002"
     } as unknown as EntitiesRepository;
     const urlNormalizer: UrlNormalizer = {
-      normalize: (input) => input
+      normalize: (input) => input,
+      getSiteRootCanonicalUrl: (canonicalUrl) => new URL(canonicalUrl).origin + "/"
     };
     const eventBus = { publish: async () => undefined } as unknown as DomainEventBus;
     const service = new EntitiesService(repository, eventBus, urlNormalizer);

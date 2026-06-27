@@ -27,8 +27,16 @@ export interface ExtensionWebLink {
   entityPagePath: string;
 }
 
+export interface ExtensionResolveEntityBundle {
+  entity: ExtensionEntitySummary;
+  rating: ExtensionRatingAggregate;
+  trust: ExtensionTrustConfidence;
+  web: ExtensionWebLink;
+}
+
 export interface ExtensionResolveFoundResponse {
   entity: ExtensionEntitySummary;
+  parent?: ExtensionResolveEntityBundle;
   rating: ExtensionRatingAggregate;
   status: "found";
   trust: ExtensionTrustConfidence;

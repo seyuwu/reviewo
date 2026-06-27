@@ -1,6 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { MinimalAuthPanel } from "../../auth/components/minimal-auth-panel";
@@ -21,6 +23,8 @@ interface EntityPageViewProps {
 }
 
 export function EntityPageView({ entityId }: EntityPageViewProps) {
+  const searchParams = useSearchParams();
+  const returnQuery = searchParams.get("q")?.trim() ?? "";
   const queryClient = useQueryClient();
   const { authSession, isAuthSessionLoaded, signOut, storeAuthSession } = useAuthSession();
   const accessToken = authSession?.accessToken;
@@ -138,12 +142,12 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   }
 
   if (entityPageQuery.isError || !pageData) {
-    return <EntityPageErrorState />;
+    return <EntityPageErrorState returnQuery={returnQuery} />;
   }
 
   return (
     <section className="entity-page" aria-labelledby="entity-page-heading">
-      <EntityHero pageData={pageData} />
+      <EntityHero pageData={pageData} returnQuery={returnQuery} />
 
       <div className="entity-page-grid">
         <div className="entity-page-main">
@@ -240,10 +244,31 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   );
 }
 
-function EntityHero({ pageData }: { pageData: EntityPageResponse }) {
+function EntityHero({
+  pageData,
+  returnQuery
+}: {
+  pageData: EntityPageResponse;
+  returnQuery: string;
+}) {
+  const parentHref = pageData.parent
+    ? buildEntityHref(pageData.parent.id, returnQuery)
+    : null;
+
   return (
     <header className="entity-hero">
       <div>
+        {pageData.parent ? (
+          <nav className="entity-breadcrumb" aria-label="Entity hierarchy">
+            <Link className="entity-breadcrumb-link" href={parentHref ?? "#"}>
+              {pageData.parent.title}
+            </Link>
+            <span className="entity-breadcrumb-separator" aria-hidden="true">
+              →
+            </span>
+            <span className="entity-breadcrumb-current">{pageData.entity.title}</span>
+          </nav>
+        ) : null}
         <p className="eyebrow">{pageData.entity.type}</p>
         <h1 id="entity-page-heading">{pageData.entity.title}</h1>
         <p className="hero-copy">
@@ -251,6 +276,13 @@ function EntityHero({ pageData }: { pageData: EntityPageResponse }) {
             pageData.entity.canonicalUrl ??
             "This entity is ready for public ratings and reviews."}
         </p>
+        {pageData.parent ? (
+          <p className="entity-parent-link-row">
+            <Link className="entity-parent-link" href={parentHref ?? "#"}>
+              View site reviews for {pageData.parent.title}
+            </Link>
+          </p>
+        ) : null}
       </div>
 
       <div className="entity-stat-grid" aria-label="Entity statistics">
@@ -366,7 +398,9 @@ function EntityPageLoadingState() {
   );
 }
 
-function EntityPageErrorState() {
+function EntityPageErrorState({ returnQuery }: { returnQuery: string }) {
+  const searchHref = returnQuery ? `/?q=${encodeURIComponent(returnQuery)}` : "/";
+
   return (
     <section className="creation-card entity-placeholder-card">
       <p className="eyebrow">Entity page</p>
@@ -374,6 +408,9 @@ function EntityPageErrorState() {
       <p className="hero-copy">
         The entity may not exist or the API may be temporarily unavailable.
       </p>
+      <Link className="entity-back-button" href={searchHref}>
+        ← Назад к поиску
+      </Link>
     </section>
   );
 }
@@ -410,4 +447,14 @@ function getDistributionCount(
   score: (typeof RATING_SCORES)[number]
 ): number {
   return rating.distribution[String(score) as keyof typeof rating.distribution];
+}
+
+function buildEntityHref(entityId: string, returnQuery: string): string {
+  const path = `/entities/${entityId}`;
+
+  if (!returnQuery) {
+    return path;
+  }
+
+  return `${path}?q=${encodeURIComponent(returnQuery)}`;
 }

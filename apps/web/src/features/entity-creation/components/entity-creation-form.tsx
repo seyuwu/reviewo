@@ -50,7 +50,11 @@ export function EntityCreationForm() {
         authSession.accessToken
       );
 
-      router.push(`/entities/${entity.id}`);
+      router.push(
+        initialQuery.trim()
+          ? `/entities/${entity.id}?q=${encodeURIComponent(initialQuery.trim())}`
+          : `/entities/${entity.id}`
+      );
     } catch {
       setErrorMessage("Entity creation failed. Check the form and try again.");
     } finally {

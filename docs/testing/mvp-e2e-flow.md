@@ -78,14 +78,14 @@ corepack pnpm test
 
 Use this when validating the real browser extension UX after `apps/extension/dist` is built.
 
-1. Load unpacked extension from `apps/extension/dist`.
-2. Open an unknown site.
-3. Sign in through the popup.
-4. Select a 1–5 rating on the card.
-5. Confirm the card switches to **found** without reloading the page.
-6. Confirm average score and votes count update after rating.
+1. Load unpacked extension from `apps/extension/dist` in **Chrome** or **Edge**.
+2. Open a known site (`found`) — floating rating card appears automatically.
+3. Dismiss the card — it stays hidden until the tab is closed.
+4. Open an unknown site — no floating card; use popup Home → Open page to rate.
+5. Popup: search → entity → Back navigation works.
+6. Sign in via header; rate from card or entity screen.
 
-Target: complete steps 3–5 in under 5 seconds once authenticated.
+Target: rate a known site in under 5 seconds once authenticated.
 
 ## Related
 

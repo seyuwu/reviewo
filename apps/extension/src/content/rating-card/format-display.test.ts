@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   buildRatingCardSummary,
   formatAverageScore,
+  formatRatingStatsLine,
   formatTrustConfidence,
   formatVotesCount
 } from "./format-display.js";
@@ -51,5 +52,42 @@ describe("rating card display formatting", () => {
     assert.equal(summary.entityTitle, "Example");
     assert.equal(summary.averageScoreLabel, "4.5");
     assert.equal(summary.metaLabel, "2 ratings · Trust 2%");
+  });
+
+  it("builds empty-state summary when entity has no ratings", () => {
+    const response = {
+      entity: {
+        canonicalUrl: "https://example.com/",
+        description: null,
+        id: "22222222-2222-4222-8222-222222222222",
+        slug: "example",
+        title: "Example",
+        type: "website"
+      },
+      rating: {
+        avgScore: 0,
+        entityId: "22222222-2222-4222-8222-222222222222",
+        updatedAt: "2026-06-27T00:00:00.000Z",
+        votesCount: 0
+      },
+      status: "found",
+      trust: {
+        confidence: 0
+      },
+      url: {
+        canonical: "https://example.com/",
+        input: "https://example.com/"
+      },
+      web: {
+        entityPagePath: "/entities/22222222-2222-4222-8222-222222222222"
+      }
+    } satisfies ExtensionResolveFoundResponse;
+
+    const summary = buildRatingCardSummary(response);
+
+    assert.equal(summary.hasRatings, false);
+    assert.equal(summary.averageScoreLabel, "—");
+    assert.equal(summary.metaLabel, "No ratings yet · Be the first to rate");
+    assert.equal(formatRatingStatsLine(0, 0), "No ratings yet · Be the first to rate");
   });
 });

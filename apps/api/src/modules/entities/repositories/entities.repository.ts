@@ -98,6 +98,19 @@ export class EntitiesRepository {
     });
   }
 
+  async findChildrenByParentId(parentId: string, limit: number): Promise<Entity[]> {
+    return this.prismaService.entity.findMany({
+      orderBy: {
+        updatedAt: "desc"
+      },
+      take: limit,
+      where: {
+        parentId,
+        visibility: "ACTIVE"
+      }
+    });
+  }
+
   async updateVisibility(id: string, visibility: EntityVisibility): Promise<Entity> {
     return this.prismaService.entity.update({
       data: {

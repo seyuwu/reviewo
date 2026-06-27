@@ -12,7 +12,7 @@ import { UrlNormalizationService } from "./services/url-normalization.service.js
 
 @Module({
   controllers: [EntitiesController],
-  exports: [ENTITIES_PORT, EntitiesService],
+  exports: [ENTITIES_PORT, EntitiesService, URL_NORMALIZER],
   imports: [AuthModule, DomainEventsModule, UsersModule],
   providers: [
     EntitiesRepository,
