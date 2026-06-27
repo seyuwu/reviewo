@@ -18,6 +18,6 @@
   "host_permissions": ["http://localhost:3000/*", "http://127.0.0.1:3000/*"],
   "manifest_version": 3,
   "name": "Reviewo",
-  "permissions": ["tabs"],
+  "permissions": ["storage", "tabs"],
   "version": "0.0.0"
 }

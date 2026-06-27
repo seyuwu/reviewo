@@ -1,3 +1,4 @@
+import { handleAuthMessage } from "./auth-handlers.js";
 import { resolveUrlWithApi } from "./resolve-url.js";
 import { cacheTabResolveResult, getCachedTabResolveResult } from "./tab-resolve-cache.js";
 import {
@@ -13,6 +14,10 @@ import {
 import { isResolvablePageUrl } from "../shared/page-url.js";
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (handleAuthMessage(message, sendResponse)) {
+    return true;
+  }
+
   if (isExtensionPingMessage(message)) {
     const source = message.payload.source as ExtensionMessageSource;
     sendResponse(createPongMessage(source));

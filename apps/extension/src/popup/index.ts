@@ -1,6 +1,8 @@
+import { mountAuthPanel } from "./auth-panel.js";
 import { createGetActiveTabResolveMessage, ExtensionMessageType } from "../shared/messages.js";
 import type { ExtensionResolveResponse } from "../shared/types/resolve.js";
 
+const authRoot = document.querySelector<HTMLElement>("#auth-root");
 const statusElement = document.querySelector<HTMLParagraphElement>("#status");
 const refreshButton = document.querySelector<HTMLButtonElement>("#refresh-button");
 
@@ -69,6 +71,10 @@ function requestActiveTabResolve(): void {
 
     setStatus("Background returned an unexpected resolve response.", "error");
   });
+}
+
+if (authRoot) {
+  mountAuthPanel(authRoot);
 }
 
 refreshButton?.addEventListener("click", () => {

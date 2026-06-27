@@ -456,7 +456,7 @@ Verification:
 - Card appears for a found entity.
 - "More details" opens the web entity page.
 
-### 26. ⬜ Extension Authentication
+### 26. ✅ Extension Authentication
 
 Goal: allow authenticated writes from the extension.
 

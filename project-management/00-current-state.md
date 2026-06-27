@@ -3,11 +3,11 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 26
-- Stage status: Stage 25 completed
-- MVP readiness: 25%
-- Last completed stage: Stage 25 - Extension Rating Card MVP
-- Next stage: Stage 26 - Extension Authentication
+- Current stage: Waiting for user confirmation before Stage 27
+- Stage status: Stage 26 completed
+- MVP readiness: 26%
+- Last completed stage: Stage 26 - Extension Authentication
+- Next stage: Stage 27 - Extension Submit Rating
 
 ## Implemented Capabilities
 
@@ -283,7 +283,16 @@ Extension Rating Card MVP is initialized:
 - Card includes a dismiss control and a **More details** link to the web entity page.
 - Card uses Shadow DOM for style isolation and does not render for `not_found`.
 - Extension build injects `EXTENSION_WEB_BASE_URL` (default `http://localhost:3001`).
-- Extension auth, submit-rating writes, lazy entity creation, and site-specific parsers are intentionally not implemented.
+- Submit-rating writes, lazy entity creation, and site-specific parsers are intentionally not implemented.
+
+Extension Authentication is initialized:
+
+- Popup provides minimal register/login UI through background messaging.
+- Access tokens are stored in `chrome.storage.local` under `reviewo.extensionAuth`.
+- Background worker handles login, register, sign-out, session reads, and authenticated API requests.
+- Popup can verify the stored session through background `GET /auth/me`.
+- Content scripts and popup can request authenticated API calls via `AUTHENTICATED_API_REQUEST` messages.
+- Submit-rating writes, lazy entity creation, and full auth product UI are intentionally not implemented.
 
 Roadmap update:
 
@@ -368,3 +377,5 @@ Stage 23 created the browser extension skeleton only. It did not add URL detecti
 Stage 24 created extension URL detection only. It did not add rating card UI, auth, quick rating UI, or site-specific parsers.
 
 Stage 25 created the extension read-only rating card for `found` entities only. It did not add extension auth, submit-rating writes, lazy entity creation, or site-specific parsers.
+
+Stage 26 created extension authentication only. It did not add submit-rating writes, lazy entity creation, or full auth product UI.

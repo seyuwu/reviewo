@@ -1775,3 +1775,23 @@ This keeps web link generation explicit and environment-configurable without har
 
 - Hardcode `http://localhost:3001` in content script source.
 - Ask the backend resolve endpoint to return absolute web URLs.
+
+## 2026-06-27 - Extension Auth Uses Background Worker And chrome.storage.local
+
+### Problem
+
+The extension needs authenticated backend writes without exposing tokens to arbitrary page scripts or duplicating auth logic in popup and content contexts.
+
+### Decision
+
+Store extension auth sessions in `chrome.storage.local` under `reviewo.extensionAuth`. Handle register/login/sign-out and authenticated API requests in the background worker through extension messaging.
+
+### Reason
+
+This centralizes token access in the background worker, matches MV3 security boundaries, and prepares Stage 27 rating writes without adding a new auth model.
+
+### Alternatives
+
+- Store tokens in popup `localStorage` only.
+- Perform authenticated fetches directly from content scripts.
+- Build full auth product UI in Stage 26.

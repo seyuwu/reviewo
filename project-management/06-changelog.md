@@ -993,3 +993,37 @@
   - **More details** opens the web entity page via `EXTENSION_WEB_BASE_URL` + `web.entityPagePath`.
   - Card can be dismissed without affecting resolve behavior.
   - Extension auth, submit-rating writes, lazy entity creation, and site-specific parsers were not added.
+
+## 2026-06-27 - Stage 26 - Extension Authentication
+
+- Stage: 26
+- Summary: Added minimal extension authentication with popup register/login UI, `chrome.storage.local` session persistence, background auth handlers, and authenticated API request messaging.
+- Changed modules:
+  - `@reviewo/extension`
+- Created files:
+  - `apps/extension/src/shared/types/auth.ts`
+  - `apps/extension/src/background/api-request.ts`
+  - `apps/extension/src/background/auth-api.ts`
+  - `apps/extension/src/background/auth-handlers.ts`
+  - `apps/extension/src/background/auth-session.ts`
+  - `apps/extension/src/popup/auth-panel.ts`
+- Changed files:
+  - `apps/extension/public/manifest.json`
+  - `apps/extension/public/popup.css`
+  - `apps/extension/public/popup.html`
+  - `apps/extension/src/background/index.ts`
+  - `apps/extension/src/popup/index.ts`
+  - `apps/extension/src/shared/messages.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Popup provides minimal register/login through background messaging.
+  - Auth sessions persist in `chrome.storage.local` under `reviewo.extensionAuth`.
+  - Background worker handles login, register, sign-out, session reads, and authenticated API requests.
+  - `AUTHENTICATED_API_REQUEST` messages allow popup/content to call protected backend endpoints through background.
+  - Manifest now includes `storage` permission.
+  - Submit-rating writes, lazy entity creation, and full auth product UI were not added.
