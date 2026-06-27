@@ -12,9 +12,12 @@ import type { RatingsPort } from "../../ratings/interfaces/ratings.port.js";
 import { TRUST_PORT } from "../../trust/interfaces/trust.port.js";
 import type { TrustPort } from "../../trust/interfaces/trust.port.js";
 import { ExtensionQuickRatingResponseDto } from "../dto/extension-quick-rating-response.dto.js";
+import type { ExtensionByUrlRatingResponseDto } from "../dto/extension-by-url-rating-response.dto.js";
+import type { ExtensionRateByUrlDto } from "../dto/extension-rate-by-url.dto.js";
 import type { ExtensionResolveResponseDto } from "../dto/extension-resolve-response.dto.js";
 import type { ExtensionEntitySummaryDto } from "../dto/extension-resolve-response.dto.js";
 import type { ExtensionWebLinkDto } from "../dto/extension-resolve-response.dto.js";
+import { RateSiteUseCase } from "../use-cases/rate-site.use-case.js";
 
 @Injectable()
 export class ExtensionApiService {
@@ -24,7 +27,8 @@ export class ExtensionApiService {
     @Inject(RATINGS_PORT)
     private readonly ratingsPort: RatingsPort,
     @Inject(TRUST_PORT)
-    private readonly trustPort: TrustPort
+    private readonly trustPort: TrustPort,
+    private readonly rateSiteUseCase: RateSiteUseCase
   ) {}
 
   async resolveUrl(url: string): Promise<ExtensionResolveResponseDto> {
@@ -80,6 +84,20 @@ export class ExtensionApiService {
       trust,
       web: toExtensionWebLinkDto(entity.id)
     };
+  }
+
+  async rateSiteByUrl(
+    input: ExtensionRateByUrlDto,
+    currentUser: AuthenticatedUser
+  ): Promise<ExtensionByUrlRatingResponseDto> {
+    return this.rateSiteUseCase.execute(
+      {
+        score: input.score,
+        url: input.url,
+        ...(input.sourceTitle === undefined ? {} : { sourceTitle: input.sourceTitle })
+      },
+      currentUser
+    );
   }
 }
 

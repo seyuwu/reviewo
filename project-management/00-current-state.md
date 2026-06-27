@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 28
-- Stage status: Stage 27 completed
-- MVP readiness: 27%
-- Last completed stage: Stage 27 - Extension Submit Rating
-- Next stage: Stage 28 - Lazy Entity Creation
+- Current stage: Waiting for user confirmation before Stage 29
+- Stage status: Stage 28 completed
+- MVP readiness: 28%
+- Last completed stage: Stage 28 - Lazy Entity Creation
+- Next stage: Stage 29 - Moderation MVP Foundation
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, shows a compact rating card for found entities, and lets authenticated users submit ratings from the card.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, shows a compact rating card for found and not-found URLs, lets authenticated users submit ratings from the card, and lazily creates entities on first rating for unknown URLs.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -387,3 +387,5 @@ Stage 25 created the extension read-only rating card for `found` entities only. 
 Stage 26 created extension authentication only. It did not add submit-rating writes, lazy entity creation, or full auth product UI.
 
 Stage 27 created extension submit-rating for existing `found` entities only. It did not add lazy entity creation, `not_found` rating flow, or site-specific parsers.
+
+Stage 28 created lazy entity creation for extension by-url rating only. It did not add web lazy flows, review-triggered lazy creation, or site-specific parsers.

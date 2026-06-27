@@ -1055,4 +1055,50 @@
   - Card updates average score, votes count, trust confidence, and selected rating from the quick-rating response.
   - Unauthenticated users see disabled controls and a popup sign-in hint.
   - Card listens for auth storage changes to refresh control state after popup sign-in.
-  - Lazy entity creation, `not_found` rating flow, and site-specific parsers were not added.
+
+## 2026-06-27 - Stage 28 - Lazy Entity Creation
+
+- Stage: 28
+- Summary: Added lazy entity creation on first extension rating for unknown URLs via `RateSiteUseCase`, `ensureEntityForUrl`, and `PUT /extension/entities/by-url/my-rating`; extension card now supports `not_found` rating flow without page reload.
+- Changed modules:
+  - `@reviewo/api`
+  - `@reviewo/extension`
+- Created files:
+  - `apps/api/src/modules/entities/interfaces/ensure-entity-for-url.ts`
+  - `apps/api/src/modules/entities/services/lazy-entity-title.ts`
+  - `apps/api/src/modules/entities/services/ensure-entity-for-url.test.ts`
+  - `apps/api/src/modules/entities/services/lazy-entity-title.test.ts`
+  - `apps/api/src/modules/extension-api/dto/extension-by-url-rating-response.dto.ts`
+  - `apps/api/src/modules/extension-api/dto/extension-rate-by-url.dto.ts`
+  - `apps/api/src/modules/extension-api/use-cases/rate-site.use-case.ts`
+  - `apps/api/src/modules/extension-api/use-cases/rate-site.use-case.test.ts`
+  - `apps/api/src/modules/extension-api/controllers/extension-api.auth.test.ts`
+  - `apps/extension/src/content/rating-card/convert-by-url-rating.ts`
+  - `apps/extension/src/content/rating-card/read-page-title.ts`
+  - `apps/extension/src/content/rating-card/submit-entity-rating-by-url.ts`
+  - `apps/extension/src/content/rating-card/title-from-url.ts`
+- Changed files:
+  - `apps/api/src/modules/entities/interfaces/entities.port.ts`
+  - `apps/api/src/modules/entities/services/entities.service.ts`
+  - `apps/api/src/modules/extension-api/controllers/extension-api.controller.ts`
+  - `apps/api/src/modules/extension-api/extension-api.module.ts`
+  - `apps/api/src/modules/extension-api/services/extension-api.service.ts`
+  - `apps/api/package.json`
+  - `apps/extension/src/content/index.ts`
+  - `apps/extension/src/content/rating-card/rating-card-styles.ts`
+  - `apps/extension/src/content/rating-card/rating-card.ts`
+  - `apps/extension/src/shared/types/quick-rating.ts`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - `EntitiesPort.ensureEntityForUrl` owns lazy entity provisioning with `UrlNormalizationService`, `createdBy = current user`, and P2002 concurrency recovery.
+  - `RateSiteUseCase` orchestrates resolve → ensure entity → rate → trust without Ratings calling Entities directly.
+  - `PUT /extension/entities/by-url/my-rating` is registered before `:entityId` route; existing `PUT /extension/entities/:entityId/my-rating` unchanged.
+  - Extension rating card shows for `found` and `not_found`; `not_found` copy includes "Be the first to rate this site" and sign-in hint.
+  - Successful by-url rating converts card to `found` state in-place without page reload.
+  - Resolve endpoint remains read-only.
+  - Web lazy flows were not changed.

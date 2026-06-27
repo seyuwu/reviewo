@@ -30,3 +30,13 @@ export interface ExtensionQuickRatingResponse {
     entityPagePath: string;
   };
 }
+
+export interface ExtensionByUrlRatingResponse extends ExtensionQuickRatingResponse {
+  entityProvision: {
+    mode: "created" | "existing";
+  };
+  url: {
+    canonical: string;
+    input: string;
+  };
+}

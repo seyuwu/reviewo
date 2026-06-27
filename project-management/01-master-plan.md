@@ -489,7 +489,7 @@ Verification:
 - Extension does not calculate rating itself.
 - `not_found` lazy creation is not implemented yet.
 
-### 28. ⬜ Lazy Entity Creation
+### 28. ✅ Lazy Entity Creation
 
 Goal: create entities on first rating against an unknown URL (RFC 0007).
 

@@ -109,6 +109,13 @@ export const RATING_CARD_STYLES = `
   text-transform: uppercase;
 }
 
+.reviewo-first-rating-copy {
+  margin: 0 0 0.5rem;
+  color: #525252;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
 .reviewo-rate-controls {
   display: grid;
   gap: 0.375rem;

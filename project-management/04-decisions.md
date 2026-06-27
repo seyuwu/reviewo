@@ -1815,3 +1815,31 @@ This keeps tokens and authenticated fetches in the background worker while prese
 - Call the rating endpoint directly from the content script.
 - Add a dedicated rating-card fetch helper inside the card module.
 - Enable lazy creation for `not_found` in Stage 27.
+
+## 2026-06-27 - Stage 28 Lazy Entity Creation Implemented Per RFC 0007
+
+### Problem
+
+Unknown URLs resolve as `not_found`, blocking extension rating until manual entity creation. Lazy creation must preserve domain boundaries, URL normalization parity with resolve, and concurrency safety.
+
+### Decision
+
+Implement RFC 0007 in Stage 28:
+
+- `EntitiesPort.ensureEntityForUrl` owns provisioning in Entities domain using existing `UrlNormalizationService`.
+- `RateSiteUseCase` in Extension API orchestrates ensure → rate → trust.
+- New `PUT /extension/entities/by-url/my-rating` endpoint; existing `PUT /extension/entities/:entityId/my-rating` unchanged.
+- `createdBy` is the authenticated user who initiated the first lazy action.
+- P2002 unique constraint on canonical URL triggers re-fetch of existing entity (concurrency recovery).
+- Extension card supports `not_found` rating flow and switches to `found` in-place after success.
+- Resolve remains read-only; web lazy flows deferred.
+
+### Reason
+
+This matches RFC 0007, keeps Ratings working only with `entityId`, and sequences extension UX after found-entity rating was proven in Stage 27.
+
+### Alternatives
+
+- Let Ratings module call Entities repository directly.
+- Create entities on resolve instead of first rating.
+- Implement web lazy creation in the same stage.

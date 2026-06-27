@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import type { Entity } from "@prisma/client";
+import { EntityType } from "@prisma/client";
 
 import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
@@ -8,12 +9,15 @@ import type { AuthenticatedUser } from "../../../common/interfaces/authenticated
 import { CreateEntityDto } from "../dto/create-entity.dto.js";
 import { EntityDto } from "../dto/entity.dto.js";
 import { createEntityCreatedEvent } from "../events/entity-created.event.js";
+import type { EnsureEntityForUrlInput } from "../interfaces/ensure-entity-for-url.js";
+import type { EnsureEntityForUrlResult } from "../interfaces/ensure-entity-for-url.js";
 import type { EntitiesPort } from "../interfaces/entities.port.js";
 import type { ResolveEntityByUrlResult } from "../interfaces/entities.port.js";
 import { URL_NORMALIZER } from "../interfaces/url-normalizer.js";
 import type { UrlNormalizer } from "../interfaces/url-normalizer.js";
 import type { CreateEntityRecordInput } from "../repositories/entities.repository.js";
 import { EntitiesRepository } from "../repositories/entities.repository.js";
+import { sanitizeLazyEntityTitle } from "./lazy-entity-title.js";
 
 @Injectable()
 export class EntitiesService implements EntitiesPort {
@@ -125,6 +129,63 @@ export class EntitiesService implements EntitiesPort {
     };
   }
 
+  async ensureEntityForUrl(
+    url: string,
+    input: EnsureEntityForUrlInput,
+    currentUser: AuthenticatedUser
+  ): Promise<EnsureEntityForUrlResult> {
+    const resolved = await this.resolveEntityByUrl(url);
+
+    if (resolved.entity) {
+      return {
+        entity: resolved.entity,
+        mode: "existing"
+      };
+    }
+
+    const title = sanitizeLazyEntityTitle(input.sourceTitle, resolved.canonicalUrl);
+    const slug = createSlugFromCanonicalUrl(resolved.canonicalUrl);
+
+    try {
+      const entity = await this.entitiesRepository.create({
+        canonicalUrl: resolved.canonicalUrl,
+        createdBy: currentUser.id,
+        slug,
+        title,
+        type: EntityType.website
+      });
+      const entityDto = toEntityDto(entity);
+
+      await this.domainEventBus.publish(
+        createEntityCreatedEvent({
+          createdBy: entityDto.createdBy,
+          entityId: entityDto.id,
+          type: entityDto.type
+        })
+      );
+
+      return {
+        entity: entityDto,
+        mode: "created"
+      };
+    } catch (error) {
+      if (this.entitiesRepository.isUniqueConstraintError(error)) {
+        const existingEntity = await this.entitiesRepository.findByCanonicalUrl(
+          resolved.canonicalUrl
+        );
+
+        if (existingEntity) {
+          return {
+            entity: toEntityDto(existingEntity),
+            mode: "existing"
+          };
+        }
+      }
+
+      throw error;
+    }
+  }
+
   async getEntityById(id: string): Promise<EntityDto> {
     const entity = await this.findEntityById(id);
 
@@ -202,6 +263,13 @@ function createSlug(title: string): string {
     .slice(0, 120);
 
   return slug || "entity";
+}
+
+function createSlugFromCanonicalUrl(canonicalUrl: string): string {
+  const url = new URL(canonicalUrl);
+  const raw = url.pathname === "/" ? url.hostname : `${url.hostname}${url.pathname}`;
+
+  return createSlug(raw);
 }
 
 function normalizeOptionalString(value: string | undefined): string | undefined {

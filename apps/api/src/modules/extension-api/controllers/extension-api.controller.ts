@@ -4,7 +4,9 @@ import { CurrentUser } from "../../../common/decorators/current-user.decorator.j
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import { RateEntityDto } from "../../ratings/dto/rate-entity.dto.js";
+import { ExtensionByUrlRatingResponseDto } from "../dto/extension-by-url-rating-response.dto.js";
 import { ExtensionQuickRatingResponseDto } from "../dto/extension-quick-rating-response.dto.js";
+import { ExtensionRateByUrlDto } from "../dto/extension-rate-by-url.dto.js";
 import { ExtensionResolveQueryDto } from "../dto/extension-resolve-query.dto.js";
 import { ExtensionResolveResponseDto } from "../dto/extension-resolve-response.dto.js";
 import { ExtensionApiService } from "../services/extension-api.service.js";
@@ -16,6 +18,15 @@ export class ExtensionApiController {
   @Get("resolve")
   async resolveUrl(@Query() query: ExtensionResolveQueryDto): Promise<ExtensionResolveResponseDto> {
     return this.extensionApiService.resolveUrl(query.url);
+  }
+
+  @Put("entities/by-url/my-rating")
+  @UseGuards(JwtAuthGuard)
+  async rateSiteByUrl(
+    @Body() input: ExtensionRateByUrlDto,
+    @CurrentUser() currentUser: AuthenticatedUser
+  ): Promise<ExtensionByUrlRatingResponseDto> {
+    return this.extensionApiService.rateSiteByUrl(input, currentUser);
   }
 
   @Put("entities/:entityId/my-rating")

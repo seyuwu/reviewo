@@ -14,7 +14,7 @@
     "dev": "corepack pnpm build && node dist/main.js",
     "lint": "eslint .",
     "start": "node dist/main.js",
-    "test": "node -e \"console.log('No API tests configured yet')\"",
+    "test": "corepack pnpm build && node --test dist/modules/entities/services/lazy-entity-title.test.js dist/modules/entities/services/ensure-entity-for-url.test.js dist/modules/extension-api/use-cases/rate-site.use-case.test.js dist/modules/extension-api/controllers/extension-api.auth.test.js",
     "typecheck": "corepack pnpm db:generate && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
