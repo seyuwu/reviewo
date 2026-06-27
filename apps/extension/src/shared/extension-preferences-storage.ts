@@ -1,8 +1,9 @@
 import {
   DEFAULT_EXTENSION_PREFERENCES,
   EXTENSION_PREFERENCES_STORAGE_KEY,
-  type CardDisplayTarget,
-  type ExtensionUserPreferences
+  type CardPlacement,
+  type ExtensionUserPreferences,
+  type PopupReviewDisplayMode
 } from "./preferences.js";
 
 export async function readExtensionPreferences(): Promise<ExtensionUserPreferences> {
@@ -21,12 +22,16 @@ export async function readExtensionPreferences(): Promise<ExtensionUserPreferenc
   }
 
   const record = candidate as Partial<ExtensionUserPreferences>;
-  const cardDisplayTarget = normalizeCardDisplayTarget(record.cardDisplayTarget);
   const autoDismissSeconds = normalizeAutoDismissSeconds(record.autoDismissSeconds);
+  const cardPlacement = normalizeCardPlacement(record.cardPlacement);
+  const popupReviewDisplayMode = normalizePopupReviewDisplayMode(record.popupReviewDisplayMode);
+  const popupReviewsLimit = normalizePopupReviewsLimit(record.popupReviewsLimit);
 
   return {
     autoDismissSeconds,
-    cardDisplayTarget
+    cardPlacement,
+    popupReviewDisplayMode,
+    popupReviewsLimit
   };
 }
 
@@ -35,7 +40,9 @@ export async function saveExtensionPreferences(
 ): Promise<ExtensionUserPreferences> {
   const normalized = {
     autoDismissSeconds: normalizeAutoDismissSeconds(preferences.autoDismissSeconds),
-    cardDisplayTarget: normalizeCardDisplayTarget(preferences.cardDisplayTarget)
+    cardPlacement: normalizeCardPlacement(preferences.cardPlacement),
+    popupReviewDisplayMode: normalizePopupReviewDisplayMode(preferences.popupReviewDisplayMode),
+    popupReviewsLimit: normalizePopupReviewsLimit(preferences.popupReviewsLimit)
   };
 
   try {
@@ -49,12 +56,17 @@ export async function saveExtensionPreferences(
   return normalized;
 }
 
-function normalizeCardDisplayTarget(value: unknown): CardDisplayTarget {
-  if (value === "current" || value === "parent" || value === "both") {
+function normalizeCardPlacement(value: unknown): CardPlacement {
+  if (
+    value === "bottom-left" ||
+    value === "bottom-right" ||
+    value === "top-left" ||
+    value === "top-right"
+  ) {
     return value;
   }
 
-  return DEFAULT_EXTENSION_PREFERENCES.cardDisplayTarget;
+  return DEFAULT_EXTENSION_PREFERENCES.cardPlacement;
 }
 
 function normalizeAutoDismissSeconds(value: unknown): number {
@@ -63,4 +75,20 @@ function normalizeAutoDismissSeconds(value: unknown): number {
   }
 
   return Math.min(30, Math.max(0, Math.round(value)));
+}
+
+function normalizePopupReviewDisplayMode(value: unknown): PopupReviewDisplayMode {
+  if (value === "compact" || value === "full") {
+    return value;
+  }
+
+  return DEFAULT_EXTENSION_PREFERENCES.popupReviewDisplayMode;
+}
+
+function normalizePopupReviewsLimit(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_EXTENSION_PREFERENCES.popupReviewsLimit;
+  }
+
+  return Math.min(50, Math.max(1, Math.round(value)));
 }

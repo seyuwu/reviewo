@@ -63,5 +63,15 @@ describe("validateEnvironment", () => {
       config.DATABASE_URL,
       "postgresql://reviewo:reviewo_password@localhost:5432/reviewo"
     );
+    assert.equal(config.JWT_ACCESS_TOKEN_TTL_SECONDS, 120 * 86_400);
+  });
+
+  it("accepts a 120-day JWT access token TTL", () => {
+    const config = validateEnvironment({
+      ...productionBase,
+      JWT_ACCESS_TOKEN_TTL_SECONDS: "10368000"
+    });
+
+    assert.equal(config.JWT_ACCESS_TOKEN_TTL_SECONDS, 10368000);
   });
 });

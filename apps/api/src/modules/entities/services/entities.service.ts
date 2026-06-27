@@ -17,7 +17,8 @@ import { URL_NORMALIZER } from "../interfaces/url-normalizer.js";
 import type { UrlNormalizer } from "../interfaces/url-normalizer.js";
 import type { CreateEntityRecordInput } from "../repositories/entities.repository.js";
 import { EntitiesRepository } from "../repositories/entities.repository.js";
-import { sanitizeLazyEntityTitle } from "./lazy-entity-title.js";
+import { createSlug, createSlugFromCanonicalUrl } from "./entity-slug.js";
+import { sanitizeLazyEntityTitle, isGenericLazyEntityTitle } from "./lazy-entity-title.js";
 
 @Injectable()
 export class EntitiesService implements EntitiesPort {
@@ -202,8 +203,14 @@ export class EntitiesService implements EntitiesPort {
     }
 
     if (resolved.entity) {
+      const upgradedEntity = await this.upgradeGenericEntityTitleIfNeeded(
+        resolved.entity,
+        input.sourceTitle,
+        resolved.canonicalUrl
+      );
+
       return {
-        entity: resolved.entity,
+        entity: upgradedEntity,
         mode: "existing"
       };
     }
@@ -260,6 +267,29 @@ export class EntitiesService implements EntitiesPort {
 
       throw error;
     }
+  }
+
+  private async upgradeGenericEntityTitleIfNeeded(
+    entity: EntityDto,
+    sourceTitle: string | undefined,
+    canonicalUrl: string
+  ): Promise<EntityDto> {
+    if (!sourceTitle?.trim()) {
+      return entity;
+    }
+
+    const nextTitle = sanitizeLazyEntityTitle(sourceTitle, canonicalUrl);
+
+    if (
+      !isGenericLazyEntityTitle(entity.title, canonicalUrl) ||
+      isGenericLazyEntityTitle(nextTitle, canonicalUrl)
+    ) {
+      return entity;
+    }
+
+    const updatedEntity = await this.entitiesRepository.updateTitle(entity.id, nextTitle);
+
+    return toEntityDto(updatedEntity);
   }
 
   async getEntityById(id: string): Promise<EntityDto> {
@@ -359,26 +389,6 @@ function createEntityUnavailableException(): Error {
     message: "This site is not available on Reviewo",
     statusCode: HttpStatus.NOT_FOUND
   });
-}
-
-function createSlug(title: string): string {
-  const slug = title
-    .trim()
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 120);
-
-  return slug || "entity";
-}
-
-function createSlugFromCanonicalUrl(canonicalUrl: string): string {
-  const url = new URL(canonicalUrl);
-  const raw = url.pathname === "/" ? url.hostname : `${url.hostname}${url.pathname}`;
-
-  return createSlug(raw);
 }
 
 function normalizeOptionalString(value: string | undefined): string | undefined {

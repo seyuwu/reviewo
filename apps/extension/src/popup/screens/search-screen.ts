@@ -2,6 +2,8 @@ import { searchEntities, type SearchEntityResult } from "../services/search-enti
 import { entityViewFromSearchResult, escapeHtml } from "../view-helpers.js";
 import type { EntityViewModel } from "../types.js";
 
+const SEARCH_DEBOUNCE_MS = 250;
+
 export interface SearchScreenActions {
   onOpenEntity: (entity: EntityViewModel) => void;
   onQueryChange: (query: string) => void;
@@ -27,35 +29,88 @@ export async function renderSearchScreen(
         </label>
         <button type="submit" class="primary-button">Search</button>
       </form>
-      <div data-search-results>
-        <p class="muted-copy">Searching...</p>
+      <div class="search-results-panel" data-search-results>
+        <div class="search-state search-state-loading">
+          <span class="state-dot state-dot-loading" aria-hidden="true"></span>
+          Searching...
+        </div>
       </div>
     </section>
   `;
 
+  const form = container.querySelector<HTMLFormElement>("[data-search-form]");
+  const input = container.querySelector<HTMLInputElement>('input[name="query"]');
   const resultsHost = container.querySelector<HTMLElement>("[data-search-results]");
 
-  container.querySelector("[data-search-form]")?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const form = event.target as HTMLFormElement;
-    const nextQuery = String(new FormData(form).get("query") ?? "").trim();
-
-    if (nextQuery) {
-      actions.onQueryChange(nextQuery);
-    }
-  });
-
-  if (!resultsHost) {
+  if (!form || !input || !resultsHost) {
     return;
   }
 
-  try {
-    const response = await searchEntities(query);
-    resultsHost.innerHTML = renderSearchResults(response.results, response.canCreateEntity);
-    bindSearchResults(resultsHost, response.results, actions);
-  } catch {
-    resultsHost.innerHTML = `<p class="status-copy-error">Search failed. Check that the API is running.</p>`;
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let activeRequestId = 0;
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void runSearch(input.value.trim(), true);
+  });
+
+  input.addEventListener("input", () => {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(() => {
+      void runSearch(input.value.trim(), false);
+    }, SEARCH_DEBOUNCE_MS);
+  });
+
+  async function runSearch(nextQuery: string, syncNavigationImmediately: boolean): Promise<void> {
+    if (syncNavigationImmediately && nextQuery) {
+      actions.onQueryChange(nextQuery);
+    } else if (nextQuery) {
+      actions.onQueryChange(nextQuery);
+    }
+
+    if (!nextQuery) {
+      resultsHost.innerHTML = `
+        <div class="search-state">
+          <span class="state-dot" aria-hidden="true"></span>
+          Type to search Reviewo.
+        </div>
+      `;
+      return;
+    }
+
+    const requestId = ++activeRequestId;
+    resultsHost.classList.add("is-loading");
+
+    if (!resultsHost.querySelector(".entity-list, .search-results-empty")) {
+      resultsHost.innerHTML = `
+        <div class="search-state search-state-loading">
+          <span class="state-dot state-dot-loading" aria-hidden="true"></span>
+          Searching...
+        </div>
+      `;
+    }
+
+    try {
+      const response = await searchEntities(nextQuery);
+
+      if (requestId !== activeRequestId) {
+        return;
+      }
+
+      resultsHost.classList.remove("is-loading");
+      resultsHost.innerHTML = renderSearchResults(response.results, response.canCreateEntity);
+      bindSearchResults(resultsHost, response.results, actions);
+    } catch {
+      if (requestId !== activeRequestId) {
+        return;
+      }
+
+      resultsHost.classList.remove("is-loading");
+      resultsHost.innerHTML = `<p class="status-copy-error">Search failed. Check that the API is running.</p>`;
+    }
   }
+
+  await runSearch(query.trim(), true);
 }
 
 function renderSearchResults(results: SearchEntityResult[], canCreateEntity: boolean): string {

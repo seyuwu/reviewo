@@ -7,6 +7,7 @@ import type { ExtensionResolveResponse } from "../../shared/types/resolve.js";
 import { sendExtensionMessage } from "./popup-messaging.js";
 
 export interface ActiveTabResolveState {
+  pageTitle?: string;
   result: ExtensionResolveResponse | null;
   url: string | null;
 }
@@ -24,6 +25,7 @@ export async function fetchActiveTabResolve(): Promise<ActiveTabResolveState> {
   }
 
   return {
+    pageTitle: response.payload.pageTitle,
     result: response.payload.result,
     url: response.payload.url
   };

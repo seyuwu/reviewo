@@ -1,18 +1,31 @@
 import { formatRatingStatsLine } from "../../content/rating-card/format-display.js";
+import { resolveMyEntityRatingScore } from "../../content/rating-card/resolve-my-entity-rating.js";
+import { createGetAuthSessionMessage, ExtensionMessageType } from "../../shared/messages.js";
+import { readExtensionPreferences } from "../../shared/extension-preferences-storage.js";
+import { readPersistedEntityRatingByCanonical } from "../../shared/entity-rating-sync.js";
 import type { ExtensionEntityChildItem } from "../../shared/types/children.js";
-import type { ExtensionResolveEntityBundle } from "../../shared/types/resolve.js";
+import type { ExtensionResolveEntityBundle, ExtensionResolveFoundResponse } from "../../shared/types/resolve.js";
 import type { ActiveTabResolveState } from "../services/active-tab-resolve.js";
 import { listRecentEntities } from "../services/recent-entities.js";
 import { fetchEntityChildren } from "../services/entity-children.js";
+import { rateEntityViewModel } from "../services/rate-entity-view-model.js";
 import {
   getDomainTreeRoot,
   shortenCanonicalUrlForTree
 } from "../domain-tree.js";
 import type { EntityViewModel, RecentEntityRecord } from "../types.js";
 import { buildEntityPageUrl, entityViewFromResolve, escapeHtml } from "../view-helpers.js";
+import { sendExtensionMessage } from "../services/popup-messaging.js";
 import { entityViewFromChildItem } from "../domain-tree.js";
+import {
+  bindEntityReviewsSection,
+  loadEntityReviewsSectionState,
+  renderEntityReviewsSectionMarkup
+} from "../entity-reviews-section.js";
+import { renderPopupRatePanel } from "../popup-rate-panel.js";
 
 export interface HomeScreenActions {
+  onCurrentPageRated: () => void;
   onOpenChild: (entity: EntityViewModel) => void;
   onOpenCurrentPage: (entity: EntityViewModel) => void;
   onOpenRecent: (record: RecentEntityRecord) => void;
@@ -25,7 +38,19 @@ export async function renderHomeScreen(
   actions: HomeScreenActions
 ): Promise<void> {
   const recent = await listRecentEntities();
-  const currentPageMarkup = renderCurrentPageSection(activeTab);
+  const sessionResponse = await sendExtensionMessage<{
+    payload?: { session?: { accessToken: string } | null };
+    type?: string;
+  }>(createGetAuthSessionMessage());
+  const isAuthenticated =
+    sessionResponse?.type === ExtensionMessageType.AuthSessionResult &&
+    Boolean(sessionResponse.payload?.session?.accessToken);
+  const currentUserId =
+    sessionResponse?.type === ExtensionMessageType.AuthSessionResult
+      ? sessionResponse.payload?.session?.userId
+      : undefined;
+  const preferences = await readExtensionPreferences();
+  const currentPageMarkup = await renderCurrentPageSection(activeTab, isAuthenticated, preferences);
   const domainTree = await buildDomainTreeSection(activeTab);
 
   container.innerHTML = `
@@ -44,7 +69,7 @@ export async function renderHomeScreen(
       </form>
       ${currentPageMarkup}
       ${domainTree.markup}
-      <section class="recent-section">
+      <section class="recent-section card-section">
         <h2>Recent</h2>
         ${
           recent.length === 0
@@ -81,8 +106,42 @@ export async function renderHomeScreen(
       return;
     }
 
-    actions.onOpenCurrentPage(entityViewFromResolve(activeTab.url, activeTab.result));
+    actions.onOpenCurrentPage(
+      entityViewFromResolve(activeTab.url, activeTab.result, activeTab.pageTitle)
+    );
   });
+
+  container.querySelectorAll<HTMLButtonElement>("[data-home-rate-score]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!activeTab.result || !activeTab.url) {
+        return;
+      }
+
+      const score = Number(button.dataset.homeRateScore);
+
+      if (!Number.isInteger(score)) {
+        return;
+      }
+
+      void submitHomeRating(activeTab, score, container, actions);
+    });
+  });
+
+  const reviewsHost = container.querySelector<HTMLElement>("[data-home-reviews-host]");
+
+  if (
+    reviewsHost &&
+    activeTab.result?.status === "found" &&
+    activeTab.result.entity.id
+  ) {
+    await mountHomeReviewsSection(
+      reviewsHost,
+      activeTab.result.entity.id,
+      isAuthenticated,
+      currentUserId,
+      preferences
+    );
+  }
 
   container.querySelectorAll<HTMLButtonElement>("[data-recent-id]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -195,7 +254,19 @@ function renderDomainTreeItem(
   `;
 }
 
-function renderCurrentPageSection(activeTab: ActiveTabResolveState): string {
+function renderCurrentPageSection(
+  activeTab: ActiveTabResolveState,
+  isAuthenticated: boolean,
+  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>
+): Promise<string> {
+  return buildCurrentPageSectionMarkup(activeTab, isAuthenticated, preferences);
+}
+
+async function buildCurrentPageSectionMarkup(
+  activeTab: ActiveTabResolveState,
+  isAuthenticated: boolean,
+  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>
+): Promise<string> {
   if (!activeTab.url) {
     return `
       <section class="current-page-card">
@@ -214,6 +285,18 @@ function renderCurrentPageSection(activeTab: ActiveTabResolveState): string {
     `;
   }
 
+  const myRatingScore = await resolveCurrentPageMyRating(activeTab, isAuthenticated);
+  const ratePanelMarkup = renderPopupRatePanel({
+    isAuthenticated,
+    myRatingScore,
+    rateScoreDataAttribute: "data-home-rate-score",
+    statusSelector: 'data-home-rate-status'
+  });
+  const reviewsHostMarkup =
+    activeTab.result.status === "found"
+      ? `<div class="home-reviews-host" data-home-reviews-host hidden></div>`
+      : "";
+
   if (activeTab.result.status === "found") {
     const parentMarkup = renderParentSiteSection(activeTab.result);
     const ratingLine = formatRatingStatsLine(
@@ -227,6 +310,8 @@ function renderCurrentPageSection(activeTab: ActiveTabResolveState): string {
         <p class="status-line success-line">✓ ${escapeHtml(activeTab.result.entity.title)} found</p>
         <p class="muted-copy${activeTab.result.rating.votesCount === 0 ? " emphasis-copy" : ""}">${escapeHtml(ratingLine)}</p>
         ${parentMarkup}
+        ${ratePanelMarkup}
+        ${reviewsHostMarkup}
         <button type="button" class="secondary-button" data-open-current-page>Open page</button>
       </section>
     `;
@@ -236,10 +321,101 @@ function renderCurrentPageSection(activeTab: ActiveTabResolveState): string {
     <section class="current-page-card is-not-found">
       <h2>Current page</h2>
       <p class="status-line">Not in Reviewo yet</p>
-      <p class="muted-copy">Search for it or open the page to rate it.</p>
+      <p class="muted-copy">Rate it here if you missed the on-page card.</p>
+      ${ratePanelMarkup}
+      ${reviewsHostMarkup}
       <button type="button" class="secondary-button" data-open-current-page>Open page</button>
     </section>
   `;
+}
+
+async function resolveCurrentPageMyRating(
+  activeTab: ActiveTabResolveState,
+  isAuthenticated: boolean
+): Promise<number | null> {
+  if (!isAuthenticated || !activeTab.result) {
+    return null;
+  }
+
+  if (activeTab.result.status === "found") {
+    return resolveMyEntityRatingScore(activeTab.result.entity.id);
+  }
+
+  const persisted = await readPersistedEntityRatingByCanonical(activeTab.result.url.canonical);
+
+  return persisted?.score ?? null;
+}
+
+async function mountHomeReviewsSection(
+  host: HTMLElement,
+  entityId: string,
+  isAuthenticated: boolean,
+  currentUserId: string | undefined,
+  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>
+): Promise<void> {
+  host.hidden = false;
+  host.innerHTML = `<p class="muted-copy">Loading reviews...</p>`;
+
+  const loaded = await loadEntityReviewsSectionState(entityId, isAuthenticated, currentUserId, {
+    displayMode: preferences.popupReviewDisplayMode,
+    hideMyReviewWhenSaved: false,
+    reviewsLimit: preferences.popupReviewsLimit
+  });
+
+  if (!loaded.state) {
+    host.innerHTML = `<p class="status-copy-error">${escapeHtml(
+      loaded.errorMessage ?? "Could not load reviews."
+    )}</p>`;
+    return;
+  }
+
+  host.innerHTML = renderEntityReviewsSectionMarkup(loaded.state, loaded.myReviewText ?? "", undefined, {
+    hideMyReviewWhenSaved: false
+  });
+  bindEntityReviewsSection(host, entityId, loaded.state, loaded.myReviewText ?? "", {
+    hideMyReviewWhenSaved: false
+  });
+}
+
+async function submitHomeRating(
+  activeTab: ActiveTabResolveState,
+  score: number,
+  container: HTMLElement,
+  actions: HomeScreenActions
+): Promise<void> {
+  if (!activeTab.result || !activeTab.url) {
+    return;
+  }
+
+  const statusElement = container.querySelector<HTMLParagraphElement>("[data-home-rate-status]");
+
+  if (statusElement) {
+    statusElement.hidden = false;
+    statusElement.textContent = "Saving rating...";
+    statusElement.classList.remove("status-copy-error", "status-copy-success");
+  }
+
+  const entity = entityViewFromResolve(activeTab.url, activeTab.result, activeTab.pageTitle);
+  const result = await rateEntityViewModel(entity, score);
+
+  if (result.updated) {
+    if (statusElement) {
+      statusElement.hidden = false;
+      statusElement.textContent = "Rating saved.";
+      statusElement.classList.remove("status-copy-error");
+      statusElement.classList.add("status-copy-success");
+    }
+
+    actions.onCurrentPageRated();
+    return;
+  }
+
+  if (statusElement) {
+    statusElement.hidden = false;
+    statusElement.textContent = result.errorMessage ?? "Could not save rating.";
+    statusElement.classList.remove("status-copy-success");
+    statusElement.classList.add("status-copy-error");
+  }
 }
 
 function renderParentSiteSection(result: ExtensionResolveFoundResponse): string {

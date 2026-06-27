@@ -7,6 +7,7 @@ import type {
 } from "../shared/types/auth.js";
 import { apiRequest } from "./api-request.js";
 import { clearAuthSession, getStoredAuthSession, saveAuthSession } from "./auth-session.js";
+import { shouldClearExtensionSessionOn401 } from "../shared/web-auth-sync-policy.js";
 
 export async function loginWithApi(input: ExtensionLoginInput): Promise<ExtensionAuthResponse> {
   const response = await apiRequest<ExtensionAuthResponse>({
@@ -55,6 +56,7 @@ export async function getCurrentUserWithApi(accessToken: string): Promise<Extens
 export async function authenticatedApiRequest<TData = unknown>(options: {
   accessToken?: string;
   body?: unknown;
+  clearSessionOnUnauthorized?: boolean;
   method?: "DELETE" | "GET" | "POST" | "PUT";
   path: string;
 }): Promise<{ data: TData; status: number }> {
@@ -72,7 +74,15 @@ export async function authenticatedApiRequest<TData = unknown>(options: {
   });
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (
+      response.status === 401 &&
+      shouldClearExtensionSessionOn401({
+        ...(options.clearSessionOnUnauthorized === undefined
+          ? {}
+          : { clearSessionOnUnauthorized: options.clearSessionOnUnauthorized }),
+        ...(options.method === undefined ? {} : { method: options.method })
+      })
+    ) {
       await clearAuthSession();
     }
 

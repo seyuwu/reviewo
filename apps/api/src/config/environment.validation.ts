@@ -13,7 +13,9 @@ const DEFAULT_API_PORT = 3000;
 const DEFAULT_NODE_ENV: NodeEnvironment = "development";
 const DEFAULT_DEVELOPMENT_CORS_ALLOWED_ORIGINS = ["http://localhost:3001"];
 const DEFAULT_DATABASE_URL = "postgresql://reviewo:reviewo_password@localhost:5432/reviewo";
-const DEFAULT_JWT_ACCESS_TOKEN_TTL_SECONDS = 900;
+const SECONDS_PER_DAY = 86_400;
+const DEFAULT_JWT_ACCESS_TOKEN_TTL_SECONDS = 120 * SECONDS_PER_DAY;
+const MAX_JWT_ACCESS_TOKEN_TTL_SECONDS = 365 * SECONDS_PER_DAY;
 const DEFAULT_JWT_SECRET = "reviewo_development_jwt_secret_change_me";
 const VALID_NODE_ENVIRONMENTS = new Set<NodeEnvironment>(["development", "production", "test"]);
 
@@ -156,8 +158,10 @@ function parseJwtAccessTokenTtlSeconds(value: unknown): number {
 
   const ttlSeconds = Number(value);
 
-  if (!Number.isInteger(ttlSeconds) || ttlSeconds < 60 || ttlSeconds > 86400) {
-    throw new Error("JWT_ACCESS_TOKEN_TTL_SECONDS must be an integer between 60 and 86400");
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds < 60 || ttlSeconds > MAX_JWT_ACCESS_TOKEN_TTL_SECONDS) {
+    throw new Error(
+      `JWT_ACCESS_TOKEN_TTL_SECONDS must be an integer between 60 and ${MAX_JWT_ACCESS_TOKEN_TTL_SECONDS}`
+    );
   }
 
   return ttlSeconds;

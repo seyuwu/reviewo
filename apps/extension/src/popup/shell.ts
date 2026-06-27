@@ -8,6 +8,7 @@ export interface PopupShellElements {
   footer: HTMLElement;
   header: HTMLElement;
   logoutButton: HTMLButtonElement;
+  openEntityLink: HTMLAnchorElement;
   settingsButton: HTMLButtonElement;
 }
 
@@ -26,6 +27,14 @@ export function createPopupShell(root: HTMLElement): PopupShellElements {
       <main class="popup-body" data-popup-body></main>
       <footer class="popup-footer">
         <button type="button" class="footer-button" data-settings-button>Settings</button>
+        <a
+          class="footer-button footer-entity-link"
+          data-open-entity-link
+          href="#"
+          target="_blank"
+          rel="noopener noreferrer"
+          hidden
+        >Open page</a>
         <button type="button" class="footer-button" data-logout-button hidden>Logout</button>
       </footer>
     </div>
@@ -37,6 +46,7 @@ export function createPopupShell(root: HTMLElement): PopupShellElements {
   const footer = root.querySelector<HTMLElement>(".popup-footer");
   const header = root.querySelector<HTMLElement>(".popup-header");
   const logoutButton = root.querySelector<HTMLButtonElement>("[data-logout-button]");
+  const openEntityLink = root.querySelector<HTMLAnchorElement>("[data-open-entity-link]");
   const settingsButton = root.querySelector<HTMLButtonElement>("[data-settings-button]");
 
   if (
@@ -46,6 +56,7 @@ export function createPopupShell(root: HTMLElement): PopupShellElements {
     !footer ||
     !header ||
     !logoutButton ||
+    !openEntityLink ||
     !settingsButton
   ) {
     throw new Error("Popup shell could not be initialized.");
@@ -58,6 +69,7 @@ export function createPopupShell(root: HTMLElement): PopupShellElements {
     footer,
     header,
     logoutButton,
+    openEntityLink,
     settingsButton
   };
 }
@@ -73,22 +85,64 @@ export function updateShellChrome(
   }
 ): void {
   elements.backButton.hidden = !options.canGoBack;
-  elements.accountButton.textContent = options.isSessionLoaded
-    ? formatAccountLabel(options.session)
-    : "…";
   elements.logoutButton.hidden = !options.session;
   elements.accountButton.hidden = Boolean(options.session && !options.showAuthPrompt);
+
+  if (options.session) {
+    elements.accountButton.textContent = options.isSessionLoaded
+      ? formatAccountLabel(options.session)
+      : "…";
+    elements.accountButton.setAttribute("aria-expanded", "false");
+    return;
+  }
+
+  elements.accountButton.textContent = options.showAuthPrompt ? "Close" : "Sign in";
+  elements.accountButton.setAttribute("aria-expanded", String(options.showAuthPrompt));
 }
 
-export function renderAuthPromptSlot(
-  container: HTMLElement,
-  session: ExtensionStoredAuthSession | null
-): HTMLElement {
+export function updateFooterEntityLink(
+  elements: PopupShellElements,
+  entityPageUrl: string | null
+): void {
+  if (!entityPageUrl) {
+    elements.openEntityLink.hidden = true;
+    elements.openEntityLink.removeAttribute("href");
+    return;
+  }
+
+  elements.openEntityLink.hidden = false;
+  elements.openEntityLink.href = entityPageUrl;
+}
+
+export function ensureAuthPromptSlot(container: HTMLElement): HTMLElement {
+  const existingMount = container.querySelector<HTMLElement>("[data-auth-prompt-mount]");
+
+  if (existingMount) {
+    return existingMount;
+  }
+
   const slot = document.createElement("section");
   slot.className = "auth-prompt-slot";
-  slot.hidden = Boolean(session);
+  slot.setAttribute("aria-hidden", "true");
+
+  const mount = document.createElement("div");
+  mount.className = "auth-prompt-mount";
+  mount.dataset.authPromptMount = "true";
+  slot.append(mount);
   container.prepend(slot);
-  return slot;
+
+  return mount;
+}
+
+export function setAuthPromptVisible(container: HTMLElement, isVisible: boolean): void {
+  const slot = container.querySelector<HTMLElement>(".auth-prompt-slot");
+
+  if (!slot) {
+    return;
+  }
+
+  slot.classList.toggle("is-visible", isVisible);
+  slot.setAttribute("aria-hidden", String(!isVisible));
 }
 
 export function renderScreenHeading(title: string, subtitle?: string): string {

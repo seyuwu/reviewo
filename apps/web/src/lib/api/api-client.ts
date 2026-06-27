@@ -1,5 +1,6 @@
 import { ApiError } from "./api-error";
 import { publicEnv } from "../config/public-env";
+import { clearAuthSession } from "../../features/auth/lib/auth-session-storage";
 
 export interface ApiRequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
@@ -27,6 +28,14 @@ export async function apiRequest<TResponse>(
   const responseBody = await parseResponseBody(response);
 
   if (!response.ok) {
+    if (
+      response.status === 401 &&
+      typeof window !== "undefined" &&
+      !isAuthEndpoint(path)
+    ) {
+      clearAuthSession();
+    }
+
     throw new ApiError("API request failed", response.status, responseBody);
   }
 
@@ -35,6 +44,10 @@ export async function apiRequest<TResponse>(
 
 function createApiUrl(path: string): URL {
   return new URL(path, publicEnv.apiBaseUrl);
+}
+
+function isAuthEndpoint(path: string): boolean {
+  return path === "/auth/login" || path === "/auth/register";
 }
 
 async function parseResponseBody(response: Response): Promise<unknown> {

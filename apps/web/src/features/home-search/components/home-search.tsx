@@ -12,17 +12,34 @@ export function HomeSearch() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q")?.trim() ?? "";
   const [query, setQuery] = useState(initialQuery);
-  const trimmedQuery = query.trim();
-  const searchQuery = useEntitySearch(query);
+  const {
+    data: searchData,
+    debouncedQuery,
+    isDebouncing,
+    isError,
+    isFetching,
+    isPending,
+    trimmedQuery
+  } = useEntitySearch(query);
 
   useEffect(() => {
     setQuery(searchParams.get("q")?.trim() ?? "");
   }, [searchParams]);
-  const results = searchQuery.data?.results ?? [];
+
+  const results = searchData?.results ?? [];
+  const isSearchActive = trimmedQuery.length > 0;
+  const isWaitingForResults =
+    isSearchActive && (isDebouncing || isPending || (isFetching && results.length === 0));
+  const showResults = isSearchActive && !isError && results.length > 0;
+  const showEmptyState =
+    isSearchActive &&
+    !isDebouncing &&
+    !isPending &&
+    !isFetching &&
+    !isError &&
+    results.length === 0;
   const shouldShowCreateHint =
-    Boolean(searchQuery.data?.canCreateEntity) &&
-    trimmedQuery.length > 0 &&
-    !searchQuery.isFetching;
+    Boolean(searchData?.canCreateEntity) && showEmptyState && debouncedQuery.length > 0;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,15 +74,44 @@ export function HomeSearch() {
         </button>
       </form>
 
-      <div className="search-panel" aria-live="polite">
-        {!trimmedQuery ? <SearchIdleState /> : null}
-        {trimmedQuery && searchQuery.isFetching ? <SearchLoadingState /> : null}
-        {trimmedQuery && searchQuery.isError ? <SearchErrorState /> : null}
-        {trimmedQuery && !searchQuery.isFetching && !searchQuery.isError && results.length > 0 ? (
-          <SearchResults query={trimmedQuery} results={results} />
-        ) : null}
-        {shouldShowCreateHint ? (
-          <CreateEntityHint query={searchQuery.data?.query ?? trimmedQuery} />
+      <div
+        className={`search-panel${isSearchActive ? " search-panel-active" : ""}${isFetching ? " search-panel-fetching" : ""}`}
+        aria-live="polite"
+      >
+        {!isSearchActive ? <SearchIdleState /> : null}
+
+        {isSearchActive ? (
+          <div className="search-panel-body">
+            {isWaitingForResults && !showResults ? (
+              <div className="search-state search-state-loading">
+                <span className="state-dot state-dot-loading" aria-hidden="true" />
+                Searching...
+              </div>
+            ) : null}
+
+            {isError ? (
+              <div className="search-state search-state-error ui-fade-soft">
+                Search is temporarily unavailable. Please try again.
+              </div>
+            ) : null}
+
+            {showResults ? (
+              <div className={`search-results-stage${isFetching ? " is-refreshing" : ""}`}>
+                <SearchResults query={debouncedQuery || trimmedQuery} results={results} />
+              </div>
+            ) : null}
+
+            {showEmptyState && !shouldShowCreateHint ? (
+              <div className="search-state ui-fade-soft">
+                <span className="state-dot" aria-hidden="true" />
+                No entities found for "{debouncedQuery}".
+              </div>
+            ) : null}
+
+            {shouldShowCreateHint ? (
+              <CreateEntityHint query={searchData?.query ?? debouncedQuery} />
+            ) : null}
+          </div>
         ) : null}
       </div>
     </section>
@@ -77,23 +123,6 @@ function SearchIdleState() {
     <div className="search-state">
       <span className="state-dot" aria-hidden="true" />
       Start typing to search the public opinion layer.
-    </div>
-  );
-}
-
-function SearchLoadingState() {
-  return (
-    <div className="search-state">
-      <span className="state-dot state-dot-loading" aria-hidden="true" />
-      Searching...
-    </div>
-  );
-}
-
-function SearchErrorState() {
-  return (
-    <div className="search-state search-state-error">
-      Search is temporarily unavailable. Please try again.
     </div>
   );
 }
@@ -133,7 +162,7 @@ function CreateEntityHint({ query }: CreateEntityHintProps) {
   const createEntityHref = `/entities/new?query=${encodeURIComponent(query)}`;
 
   return (
-    <div className="create-hint">
+    <div className="create-hint ui-fade-soft">
       <div>
         <p className="result-type">No entity found</p>
         <h2>Create a new page for "{query}"</h2>

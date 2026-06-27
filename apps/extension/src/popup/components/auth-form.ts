@@ -19,6 +19,7 @@ export function mountAuthForm(options: AuthFormOptions): { refresh: () => Promis
   let authMode: AuthMode = "login";
   let authSession: ExtensionStoredAuthSession | null = null;
   let isSubmitting = false;
+  let hasRendered = false;
 
   async function loadAuthSession(): Promise<void> {
     const response = await sendExtensionMessage<{
@@ -47,71 +48,110 @@ export function mountAuthForm(options: AuthFormOptions): { refresh: () => Promis
     statusElement.textContent = message;
     statusElement.classList.toggle("status-copy-success", tone === "success");
     statusElement.classList.toggle("status-copy-error", tone === "error");
+    options.root
+      .querySelector<HTMLElement>("[data-auth-feedback-slot]")
+      ?.classList.toggle("is-visible", Boolean(message));
+  }
+
+  function setAuthMode(nextMode: AuthMode): void {
+    authMode = nextMode;
+    setStatus("");
+
+    options.root.querySelectorAll<HTMLButtonElement>("[data-auth-mode]").forEach((button) => {
+      const isActive = button.dataset.authMode === authMode;
+      button.setAttribute("aria-pressed", String(isActive));
+    });
+
+    const displayNameSlot = options.root.querySelector<HTMLElement>("[data-auth-display-name-slot]");
+    const displayNameInput = options.root.querySelector<HTMLInputElement>('input[name="displayName"]');
+
+    if (displayNameSlot) {
+      displayNameSlot.classList.toggle("is-visible", authMode === "register");
+      displayNameSlot.setAttribute("aria-hidden", String(authMode !== "register"));
+    }
+
+    if (displayNameInput) {
+      displayNameInput.required = authMode === "register";
+      displayNameInput.tabIndex = authMode === "register" ? 0 : -1;
+    }
+
+    const submitButton = options.root.querySelector<HTMLButtonElement>("[data-auth-submit]");
+
+    if (submitButton) {
+      submitButton.textContent = authMode === "register" ? "Register" : "Login";
+    }
   }
 
   function render(): void {
     if (authSession) {
       options.root.innerHTML = `
-        <div class="auth-inline signed-in-inline">
+        <div class="auth-inline signed-in-inline ui-fade-soft">
           <p>Signed in as <strong>${escapeHtml(authSession.displayName)}</strong></p>
         </div>
       `;
+      hasRendered = false;
       return;
     }
 
-    options.root.innerHTML = `
-      <div class="auth-inline">
-        <div class="segmented-control" role="group" aria-label="Authentication mode">
-          <button type="button" data-auth-mode="register" aria-pressed="${authMode === "register"}">Register</button>
-          <button type="button" data-auth-mode="login" aria-pressed="${authMode === "login"}">Login</button>
-        </div>
-        <form data-auth-form class="form-stack">
-          ${
-            authMode === "register"
-              ? `
+    if (!hasRendered) {
+      options.root.innerHTML = `
+        <div class="auth-inline">
+          <div class="segmented-control" role="group" aria-label="Authentication mode">
+            <button type="button" data-auth-mode="register" aria-pressed="${authMode === "register"}">Register</button>
+            <button type="button" data-auth-mode="login" aria-pressed="${authMode === "login"}">Login</button>
+          </div>
+          <form data-auth-form class="form-stack">
+            <div class="auth-display-name-slot${authMode === "register" ? " is-visible" : ""}" data-auth-display-name-slot aria-hidden="${authMode !== "register"}">
+              <div class="auth-display-name-slot__inner">
+                <label class="field-label">
+                  Display name
+                  <input name="displayName" autocomplete="name" maxlength="100" minlength="1" ${authMode === "register" ? "required" : 'tabindex="-1"'} />
+                </label>
+              </div>
+            </div>
             <label class="field-label">
-              Display name
-              <input name="displayName" autocomplete="name" maxlength="100" minlength="1" required />
+              Email
+              <input name="email" type="email" autocomplete="email" maxlength="320" required />
             </label>
-          `
-              : ""
-          }
-          <label class="field-label">
-            Email
-            <input name="email" type="email" autocomplete="email" maxlength="320" required />
-          </label>
-          <label class="field-label">
-            Password
-            <input
-              name="password"
-              type="password"
-              autocomplete="${authMode === "register" ? "new-password" : "current-password"}"
-              maxlength="128"
-              minlength="8"
-              required
-            />
-          </label>
-          <button type="submit" class="primary-button">${authMode === "register" ? "Register" : "Login"}</button>
-        </form>
-        <p class="muted-copy auth-hint">
-          Extension sign-in is stored separately from the web app. Use the same email and password, or register here once.
-        </p>
-        <p data-auth-status class="status-copy" hidden></p>
-      </div>
-    `;
+            <label class="field-label">
+              Password
+              <input
+                name="password"
+                type="password"
+                autocomplete="${authMode === "register" ? "new-password" : "current-password"}"
+                maxlength="128"
+                minlength="8"
+                required
+              />
+            </label>
+            <button type="submit" class="primary-button" data-auth-submit>${authMode === "register" ? "Register" : "Login"}</button>
+          </form>
+          <p class="muted-copy auth-hint">
+            Extension sign-in is stored separately from the web app. Use the same email and password, or register here once.
+          </p>
+          <div class="form-feedback-slot" data-auth-feedback-slot>
+            <div class="form-feedback-slot__inner">
+              <p data-auth-status class="status-copy" hidden></p>
+            </div>
+          </div>
+        </div>
+      `;
+      hasRendered = true;
 
-    options.root.querySelectorAll<HTMLButtonElement>("[data-auth-mode]").forEach((button) => {
-      button.addEventListener("click", () => {
-        authMode = button.dataset.authMode === "login" ? "login" : "register";
-        setStatus("");
-        render();
+      options.root.querySelectorAll<HTMLButtonElement>("[data-auth-mode]").forEach((button) => {
+        button.addEventListener("click", () => {
+          setAuthMode(button.dataset.authMode === "login" ? "login" : "register");
+        });
       });
-    });
 
-    options.root.querySelector("[data-auth-form]")?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void submitAuthForm(event.target as HTMLFormElement);
-    });
+      options.root.querySelector("[data-auth-form]")?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void submitAuthForm(event.target as HTMLFormElement);
+      });
+      return;
+    }
+
+    setAuthMode(authMode);
   }
 
   async function submitAuthForm(form: HTMLFormElement): Promise<void> {

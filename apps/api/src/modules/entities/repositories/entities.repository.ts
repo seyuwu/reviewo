@@ -122,6 +122,17 @@ export class EntitiesRepository {
     });
   }
 
+  async updateTitle(id: string, title: string): Promise<Entity> {
+    return this.prismaService.entity.update({
+      data: {
+        title
+      },
+      where: {
+        id
+      }
+    });
+  }
+
   isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
     return (
       typeof error === "object" &&

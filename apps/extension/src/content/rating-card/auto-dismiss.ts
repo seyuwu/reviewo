@@ -1,5 +1,7 @@
 import { hideRatingCard } from "./rating-card.js";
 
+const HOVER_LEAVE_AUTO_DISMISS_MS = 2000;
+
 type DismissHost = HTMLElement & {
   reviewoDismissTimer?: ReturnType<typeof setTimeout>;
 };
@@ -11,23 +13,31 @@ export function bindAutoDismiss(host: DismissHost, autoDismissSeconds: number): 
     return;
   }
 
-  const scheduleDismiss = (): void => {
+  const scheduleDismiss = (delayMs: number): void => {
     clearAutoDismiss(host);
     host.reviewoDismissTimer = setTimeout(() => {
-      hideRatingCard();
-    }, autoDismissSeconds * 1000);
+      if (document.getElementById(host.id) !== host) {
+        return;
+      }
+
+      hideRatingCard({ animated: true });
+    }, delayMs);
   };
 
-  host.addEventListener("mouseenter", () => {
+  const pauseDismiss = (): void => {
     clearAutoDismiss(host);
-  });
-  host.addEventListener("mouseleave", scheduleDismiss);
-  host.addEventListener("focusin", () => {
-    clearAutoDismiss(host);
-  });
-  host.addEventListener("focusout", scheduleDismiss);
+  };
 
-  scheduleDismiss();
+  const scheduleAfterPointerLeave = (): void => {
+    scheduleDismiss(HOVER_LEAVE_AUTO_DISMISS_MS);
+  };
+
+  host.addEventListener("mouseenter", pauseDismiss);
+  host.addEventListener("mouseleave", scheduleAfterPointerLeave);
+  host.addEventListener("focusin", pauseDismiss);
+  host.addEventListener("focusout", scheduleAfterPointerLeave);
+
+  scheduleDismiss(autoDismissSeconds * 1000);
 }
 
 export function clearAutoDismiss(host: DismissHost): void {

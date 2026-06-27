@@ -10,3 +10,13 @@ export async function hasAuthenticatedExtensionSession(): Promise<boolean> {
     response.payload?.session !== undefined
   );
 }
+
+export async function getExtensionSessionUserId(): Promise<string | undefined> {
+  const response = await sendExtensionMessage(createGetAuthSessionMessage());
+
+  if (response?.type !== ExtensionMessageType.AuthSessionResult) {
+    return undefined;
+  }
+
+  return response.payload?.session?.userId;
+}

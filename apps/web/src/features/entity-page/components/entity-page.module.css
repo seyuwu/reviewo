@@ -1,0 +1,86 @@
+.pageGrid {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+.mainColumn,
+.asideColumn {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+.constrainedPanel {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.ratingBreakdown {
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.ratingBreakdownRow {
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.ratingBar {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.reviewList {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+.reviewCard {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.reviewTextWrap {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.reviewText {
+  margin: 0;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.savedReviewPreview {
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.5rem;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.875rem 1rem;
+  width: 100%;
+}
+
+.reviewLengthCounter {
+  margin: -0.25rem 0 0;
+  text-align: right;
+}

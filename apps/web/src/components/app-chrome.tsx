@@ -12,6 +12,8 @@ interface AppChromeProps {
 export function AppChrome({ children }: AppChromeProps) {
   const { authSession, isAuthSessionLoaded, signOut } = useAuthSession();
 
+  const authNavState = !isAuthSessionLoaded ? "loading" : authSession ? "signed-in" : "guest";
+
   return (
     <div className="app-layout">
       <header className="app-chrome">
@@ -23,21 +25,22 @@ export function AppChrome({ children }: AppChromeProps) {
             <Link className="app-nav-link app-nav-link-emphasis" href="/">
               Поиск
             </Link>
-            {isAuthSessionLoaded && authSession ? (
-              <>
-                <span className="app-nav-user">{authSession.displayName}</span>
+            <div className="app-chrome-auth" data-state={authNavState}>
+              <div className="app-chrome-auth-cluster guest-cluster">
+                <Link className="app-nav-link app-nav-link-emphasis" href="/profile">
+                  Sign in
+                </Link>
+              </div>
+              <div className="app-chrome-auth-cluster signed-in-cluster">
+                <span className="app-nav-user">{authSession?.displayName ?? "Account"}</span>
                 <Link className="app-nav-link" href="/profile">
                   Profile
                 </Link>
                 <button type="button" className="app-nav-button" onClick={signOut}>
                   Sign out
                 </button>
-              </>
-            ) : (
-              <Link className="app-nav-link app-nav-link-emphasis" href="/profile">
-                Sign in
-              </Link>
-            )}
+              </div>
+            </div>
           </nav>
         </div>
       </header>

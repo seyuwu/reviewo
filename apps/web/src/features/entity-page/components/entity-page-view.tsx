@@ -1,12 +1,14 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { FormFeedback } from "../../../components/form-feedback";
 import { MinimalAuthPanel } from "../../auth/components/minimal-auth-panel";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
+import { ApiError } from "../../../lib/api/api-error";
 import {
   getEntityPage,
   getMyRating,
@@ -15,8 +17,11 @@ import {
   upsertMyReview
 } from "../api/entity-page";
 import type { EntityPageResponse, RatingAggregate, Review } from "../types/entity-page";
+import styles from "./entity-page.module.css";
+import { ReviewTextContent } from "./review-text-content";
 
 const RATING_SCORES = [1, 2, 3, 4, 5] as const;
+const MAX_REVIEW_TEXT_LENGTH = 5000;
 
 interface EntityPageViewProps {
   entityId: string;
@@ -30,12 +35,16 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   const accessToken = authSession?.accessToken;
   const [selectedScore, setSelectedScore] = useState<number | null>(null);
   const [reviewText, setReviewText] = useState("");
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [ratingStatusMessage, setRatingStatusMessage] = useState<string | null>(null);
+  const [ratingErrorMessage, setRatingErrorMessage] = useState<string | null>(null);
+  const [reviewStatusMessage, setReviewStatusMessage] = useState<string | null>(null);
+  const [reviewErrorMessage, setReviewErrorMessage] = useState<string | null>(null);
+  const hasHydratedReviewRef = useRef(false);
 
   const entityPageQuery = useQuery({
     queryFn: () => getEntityPage(entityId),
-    queryKey: ["entity-page", entityId]
+    queryKey: ["entity-page", entityId],
+    placeholderData: keepPreviousData
   });
 
   const myRatingQuery = useQuery({
@@ -58,13 +67,19 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
 
       return rateEntity(entityId, score, accessToken);
     },
-    onError: () => {
-      setErrorMessage("Rating update failed. Please try again.");
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 401) {
+        signOut();
+        setRatingErrorMessage("Session expired. Sign in again to update your rating.");
+        return;
+      }
+
+      setRatingErrorMessage(readApiErrorMessage(error) ?? "Rating update failed. Please try again.");
     },
-    onSuccess: async () => {
-      setStatusMessage("Rating saved.");
-      setErrorMessage(null);
-      await invalidateEntityPageData(queryClient, entityId);
+    onSuccess: () => {
+      setRatingStatusMessage("Rating saved.");
+      setRatingErrorMessage(null);
+      void invalidateEntityPageData(queryClient, entityId);
     }
   });
 
@@ -76,13 +91,24 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
 
       return upsertMyReview(entityId, text, accessToken);
     },
-    onError: () => {
-      setErrorMessage("Review update failed. Please try again.");
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 401) {
+        signOut();
+        setReviewErrorMessage("Session expired. Sign in again to update your review.");
+        return;
+      }
+
+      setReviewErrorMessage(readApiErrorMessage(error) ?? "Review update failed. Please try again.");
     },
-    onSuccess: async () => {
-      setStatusMessage("Review saved.");
-      setErrorMessage(null);
-      await invalidateEntityPageData(queryClient, entityId);
+    onSuccess: (savedReview) => {
+      setReviewStatusMessage("Review saved.");
+      setReviewErrorMessage(null);
+
+      if (accessToken) {
+        queryClient.setQueryData(["entity-page", "my-review", entityId, accessToken], savedReview);
+      }
+
+      void queryClient.invalidateQueries({ queryKey: ["entity-page", entityId] });
     }
   });
 
@@ -91,28 +117,38 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   }, [myRatingQuery.data?.score]);
 
   useEffect(() => {
-    if (myReviewQuery.data?.text) {
-      setReviewText(myReviewQuery.data.text);
+    hasHydratedReviewRef.current = false;
+    setReviewText("");
+  }, [entityId, accessToken]);
+
+  useEffect(() => {
+    if (!myReviewQuery.isSuccess || hasHydratedReviewRef.current) {
+      return;
     }
-  }, [myReviewQuery.data?.text]);
+
+    setReviewText(myReviewQuery.data?.text ?? "");
+    hasHydratedReviewRef.current = true;
+  }, [myReviewQuery.isSuccess, myReviewQuery.data?.text]);
 
   const pageData = entityPageQuery.data;
   const canInteract = Boolean(accessToken);
   const trimmedReviewText = reviewText.trim();
-  const isSubmitting = rateMutation.isPending || reviewMutation.isPending;
+  const savedReview = myReviewQuery.data;
+  const hasSavedReview = Boolean(savedReview?.text?.trim());
+  const reviewSaveLabel = hasSavedReview ? "Update review" : "Save review";
 
   function handleRatingSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setStatusMessage(null);
-    setErrorMessage(null);
+    setRatingStatusMessage(null);
+    setRatingErrorMessage(null);
 
     if (!canInteract) {
-      setErrorMessage("Sign in before rating this entity.");
+      setRatingErrorMessage("Sign in before rating this entity.");
       return;
     }
 
     if (!selectedScore) {
-      setErrorMessage("Choose a score from 1 to 5.");
+      setRatingErrorMessage("Choose a score from 1 to 5.");
       return;
     }
 
@@ -121,16 +157,16 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
 
   function handleReviewSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setStatusMessage(null);
-    setErrorMessage(null);
+    setReviewStatusMessage(null);
+    setReviewErrorMessage(null);
 
     if (!canInteract) {
-      setErrorMessage("Sign in before reviewing this entity.");
+      setReviewErrorMessage("Sign in before reviewing this entity.");
       return;
     }
 
     if (!trimmedReviewText) {
-      setErrorMessage("Write a review before submitting.");
+      setReviewErrorMessage("Write a review before submitting.");
       return;
     }
 
@@ -138,7 +174,7 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   }
 
   if (entityPageQuery.isLoading) {
-    return <EntityPageLoadingState />;
+    return <EntityPageSkeleton />;
   }
 
   if (entityPageQuery.isError || !pageData) {
@@ -146,32 +182,42 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   }
 
   return (
-    <section className="entity-page" aria-labelledby="entity-page-heading">
+    <section className="entity-page ui-fade-in" aria-labelledby="entity-page-heading">
       <EntityHero pageData={pageData} returnQuery={returnQuery} />
 
-      <div className="entity-page-grid">
-        <div className="entity-page-main">
+      <div
+        className={`entity-page-grid ${styles.pageGrid}`}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 26rem)",
+          maxWidth: "100%",
+          minWidth: 0,
+          overflow: "hidden",
+          width: "100%"
+        }}
+      >
+        <div className={`entity-page-main ${styles.mainColumn}`}>
           <RatingSummary rating={pageData.rating} />
           <TrustSummary confidence={pageData.trust.confidence} />
           <ReviewsList reviews={pageData.reviews} reviewsCount={pageData.meta.reviewsCount} />
         </div>
 
-        <aside className="entity-page-aside" aria-label="Your contribution">
+        <aside className={`entity-page-aside ${styles.asideColumn}`} aria-label="Your contribution">
           <MinimalAuthPanel
             authSession={authSession}
             contextLabel="Sign in to rate and review"
             onAuthSuccess={(authResponse) => {
               const storedSession = storeAuthSession(authResponse);
-              setStatusMessage(`Signed in as ${storedSession.displayName}.`);
-              setErrorMessage(null);
+              setReviewStatusMessage(`Signed in as ${storedSession.displayName}.`);
+              setReviewErrorMessage(null);
             }}
             onSignOut={() => {
               signOut();
-              setStatusMessage("Signed out from entity interactions.");
+              setReviewStatusMessage("Signed out from entity interactions.");
             }}
           />
 
-          <form className="panel-card form-stack" onSubmit={handleRatingSubmit}>
+          <form className={`panel-card form-stack ${styles.constrainedPanel}`} onSubmit={handleRatingSubmit}>
             <div className="section-heading">
               <p className="result-type">Your rating</p>
               <h2>Rate this entity</h2>
@@ -185,7 +231,7 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
                   className={
                     selectedScore === score ? "rating-choice rating-choice-active" : "rating-choice"
                   }
-                  disabled={!canInteract || !isAuthSessionLoaded || isSubmitting}
+                  disabled={!canInteract || !isAuthSessionLoaded || rateMutation.isPending}
                   aria-pressed={selectedScore === score}
                   onClick={() => {
                     setSelectedScore(score);
@@ -198,46 +244,61 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
 
             <button
               type="submit"
-              className="primary-button"
-              disabled={!canInteract || !selectedScore || isSubmitting}
+              className="primary-button primary-button-stable-label"
+              disabled={!canInteract || !selectedScore || rateMutation.isPending}
+              aria-busy={rateMutation.isPending}
             >
               {rateMutation.isPending ? "Saving rating..." : "Save rating"}
             </button>
+
+            <FormFeedback errorMessage={ratingErrorMessage} statusMessage={ratingStatusMessage} />
           </form>
 
-          <form className="panel-card form-stack" onSubmit={handleReviewSubmit}>
+          <form className={`panel-card form-stack ${styles.constrainedPanel}`} onSubmit={handleReviewSubmit}>
             <div className="section-heading">
               <p className="result-type">Your review</p>
               <h2>Share useful context</h2>
             </div>
 
+            {hasSavedReview && savedReview ? (
+              <div className={styles.savedReviewPreview} aria-label="Your saved review">
+                <p className="result-type">Published on Reviewo</p>
+                <div className={styles.reviewTextWrap}>
+                  <ReviewTextContent text={savedReview.text} />
+                </div>
+                <p className="muted-copy">Last updated {formatDate(savedReview.updatedAt)}</p>
+              </div>
+            ) : null}
+
             <label className="field-label">
               Review text
               <textarea
-                maxLength={5000}
+                maxLength={MAX_REVIEW_TEXT_LENGTH}
                 minLength={1}
                 rows={7}
                 value={reviewText}
-                disabled={!canInteract || isSubmitting}
+                disabled={!canInteract || reviewMutation.isPending}
                 onChange={(event) => {
                   setReviewText(event.target.value);
                 }}
               />
             </label>
 
+            <p className={`muted-copy ${styles.reviewLengthCounter}`} aria-live="polite">
+              {reviewText.length} / {MAX_REVIEW_TEXT_LENGTH}
+            </p>
+
             <button
               type="submit"
-              className="primary-button"
-              disabled={!canInteract || !trimmedReviewText || isSubmitting}
+              className="primary-button primary-button-stable-label"
+              disabled={!canInteract || !trimmedReviewText || reviewMutation.isPending}
+              aria-busy={reviewMutation.isPending}
             >
-              {reviewMutation.isPending ? "Saving review..." : "Save review"}
+              {reviewMutation.isPending ? "Saving review..." : reviewSaveLabel}
             </button>
-          </form>
 
-          <div className="form-feedback" aria-live="polite">
-            {statusMessage ? <p className="success-message">{statusMessage}</p> : null}
-            {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
-          </div>
+            <FormFeedback errorMessage={reviewErrorMessage} statusMessage={reviewStatusMessage} />
+          </form>
         </aside>
       </div>
     </section>
@@ -311,22 +372,22 @@ function RatingSummary({ rating }: { rating: RatingAggregate }) {
   );
 
   return (
-    <section className="panel-card entity-section" aria-labelledby="rating-summary-heading">
+    <section className={`panel-card entity-section ${styles.constrainedPanel}`} aria-labelledby="rating-summary-heading">
       <div className="section-heading">
         <p className="result-type">Rating</p>
         <h2 id="rating-summary-heading">{formatScore(rating.avgScore)} average score</h2>
       </div>
       <p className="muted-copy">Based on {rating.votesCount} user ratings.</p>
 
-      <div className="rating-breakdown">
+      <div className={`rating-breakdown ${styles.ratingBreakdown}`}>
         {[...RATING_SCORES].reverse().map((score) => {
           const count = getDistributionCount(rating, score);
           const widthPercent = Math.round((count / maxVotes) * 100);
 
           return (
-            <div className="rating-breakdown-row" key={score}>
+            <div className={`rating-breakdown-row ${styles.ratingBreakdownRow}`} key={score}>
               <span>{score}</span>
-              <div className="rating-bar" aria-hidden="true">
+              <div className={`rating-bar ${styles.ratingBar}`} aria-hidden="true">
                 <span style={{ width: `${widthPercent}%` }} />
               </div>
               <strong>{count}</strong>
@@ -340,7 +401,7 @@ function RatingSummary({ rating }: { rating: RatingAggregate }) {
 
 function TrustSummary({ confidence }: { confidence: number }) {
   return (
-    <section className="panel-card entity-section" aria-labelledby="trust-summary-heading">
+    <section className={`panel-card entity-section ${styles.constrainedPanel}`} aria-labelledby="trust-summary-heading">
       <div className="section-heading">
         <p className="result-type">Trust</p>
         <h2 id="trust-summary-heading">{formatPercent(confidence)} confidence</h2>
@@ -358,7 +419,7 @@ function TrustSummary({ confidence }: { confidence: number }) {
 
 function ReviewsList({ reviews, reviewsCount }: { reviews: Review[]; reviewsCount: number }) {
   return (
-    <section className="panel-card entity-section" aria-labelledby="reviews-heading">
+    <section className={`panel-card entity-section ${styles.constrainedPanel}`} aria-labelledby="reviews-heading">
       <div className="section-heading section-heading-row">
         <div>
           <p className="result-type">Reviews</p>
@@ -368,10 +429,10 @@ function ReviewsList({ reviews, reviewsCount }: { reviews: Review[]; reviewsCoun
       </div>
 
       {reviews.length > 0 ? (
-        <div className="review-list">
+        <div className={`review-list ${styles.reviewList}`}>
           {reviews.map((review) => (
-            <article className="review-card" key={review.id}>
-              <p>{review.text}</p>
+            <article className={`review-card ${styles.reviewCard}`} key={review.id}>
+              <ReviewTextContent text={review.text} />
               <div className="review-meta">
                 <span>{review.likesCount} likes</span>
                 <span>Updated {formatDate(review.updatedAt)}</span>
@@ -386,14 +447,32 @@ function ReviewsList({ reviews, reviewsCount }: { reviews: Review[]; reviewsCoun
   );
 }
 
-function EntityPageLoadingState() {
+function EntityPageSkeleton() {
   return (
-    <section className="creation-card entity-placeholder-card">
-      <p className="eyebrow">Entity page</p>
-      <h1>Loading entity data.</h1>
-      <p className="hero-copy">
-        Fetching rating, trust, and reviews from the backend composition API.
-      </p>
+    <section className="entity-page entity-page-skeleton" aria-hidden="true">
+      <div className="entity-hero">
+        <div className="ui-skeleton ui-skeleton-line ui-skeleton-line-short" />
+        <div className="ui-skeleton ui-skeleton-heading" />
+        <div className="ui-skeleton ui-skeleton-copy" />
+      </div>
+      <div className="entity-page-grid entity-page-skeleton-grid">
+        <div className="entity-page-main">
+          <div className="panel-card">
+            <div className="ui-skeleton ui-skeleton-line" />
+            <div className="ui-skeleton ui-skeleton-field-row" />
+            <div className="ui-skeleton ui-skeleton-field-row" />
+            <div className="ui-skeleton ui-skeleton-field-row" />
+          </div>
+        </div>
+        <aside className="entity-page-aside">
+          <div className="panel-card auth-form-skeleton">
+            <div className="ui-skeleton ui-skeleton-segment" />
+            <div className="ui-skeleton ui-skeleton-field" />
+            <div className="ui-skeleton ui-skeleton-field" />
+            <div className="ui-skeleton ui-skeleton-button" />
+          </div>
+        </aside>
+      </div>
     </section>
   );
 }
@@ -402,7 +481,7 @@ function EntityPageErrorState({ returnQuery }: { returnQuery: string }) {
   const searchHref = returnQuery ? `/?q=${encodeURIComponent(returnQuery)}` : "/";
 
   return (
-    <section className="creation-card entity-placeholder-card">
+    <section className="creation-card entity-placeholder-card ui-fade-in">
       <p className="eyebrow">Entity page</p>
       <h1>Entity page is unavailable.</h1>
       <p className="hero-copy">
@@ -457,4 +536,20 @@ function buildEntityHref(entityId: string, returnQuery: string): string {
   }
 
   return `${path}?q=${encodeURIComponent(returnQuery)}`;
+}
+
+function readApiErrorMessage(error: unknown): string | null {
+  if (!(error instanceof ApiError)) {
+    return null;
+  }
+
+  if (error.body && typeof error.body === "object" && "error" in error.body) {
+    const apiError = (error.body as { error?: { message?: string } }).error;
+
+    if (apiError?.message) {
+      return apiError.message;
+    }
+  }
+
+  return null;
 }

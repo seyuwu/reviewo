@@ -11,17 +11,24 @@ export function buildEntityPageUrl(entityPagePath: string): string {
 
 export function entityViewFromResolve(
   pageUrl: string,
-  result: ExtensionResolveResponse
+  result: ExtensionResolveResponse,
+  pageTitle?: string
 ): EntityViewModel {
   if (result.status === "found") {
+    const displayTitle =
+      pageTitle && isGenericStoredEntityTitle(result.entity.title, result.url.canonical)
+        ? pageTitle
+        : result.entity.title;
+
     return {
       avgScore: result.rating.avgScore,
       canonicalUrl: result.url.canonical,
       entityId: result.entity.id,
       entityPagePath: result.web.entityPagePath,
       pageUrl,
+      pageTitle,
       status: "found",
-      title: result.entity.title,
+      title: displayTitle,
       trustConfidence: result.trust.confidence,
       votesCount: result.rating.votesCount,
       ...(result.parent
@@ -37,9 +44,26 @@ export function entityViewFromResolve(
   return {
     canonicalUrl: result.url.canonical,
     pageUrl,
+    pageTitle,
     status: "not_found",
-    title: deriveTitleFromCanonicalUrl(result.url.canonical)
+    title: pageTitle ?? deriveTitleFromCanonicalUrl(result.url.canonical)
   };
+}
+
+function isGenericStoredEntityTitle(entityTitle: string, canonicalUrl: string): boolean {
+  const normalizedTitle = entityTitle.trim().toLowerCase();
+
+  if (!normalizedTitle) {
+    return true;
+  }
+
+  const hostname = deriveTitleFromCanonicalUrl(canonicalUrl).toLowerCase();
+
+  return (
+    normalizedTitle === hostname ||
+    normalizedTitle === `www.${hostname}` ||
+    normalizedTitle === hostname.split(".")[0]
+  );
 }
 
 export function entityViewFromSearchResult(result: SearchEntityResult): EntityViewModel {

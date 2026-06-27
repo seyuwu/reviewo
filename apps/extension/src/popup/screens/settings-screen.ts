@@ -2,9 +2,7 @@ import {
   readExtensionPreferences,
   saveExtensionPreferences
 } from "../../shared/extension-preferences-storage.js";
-import type { CardDisplayTarget } from "../../shared/preferences.js";
-import { extensionConfig } from "../../shared/config.js";
-import { escapeHtml } from "../view-helpers.js";
+import type { CardPlacement, ExtensionUserPreferences, PopupReviewDisplayMode } from "../../shared/preferences.js";
 
 export async function renderSettingsScreen(container: HTMLElement): Promise<void> {
   const preferences = await readExtensionPreferences();
@@ -17,18 +15,22 @@ export async function renderSettingsScreen(container: HTMLElement): Promise<void
       </div>
       <form class="settings-form" data-settings-form>
         <fieldset class="settings-fieldset">
-          <legend>Popup & card focus</legend>
+          <legend>Card position</legend>
           <label class="settings-radio">
-            <input type="radio" name="cardDisplayTarget" value="current" ${preferences.cardDisplayTarget === "current" ? "checked" : ""} />
-            <span>Current page only</span>
+            <input type="radio" name="cardPlacement" value="bottom-right" ${preferences.cardPlacement === "bottom-right" ? "checked" : ""} />
+            <span>Bottom right</span>
           </label>
           <label class="settings-radio">
-            <input type="radio" name="cardDisplayTarget" value="parent" ${preferences.cardDisplayTarget === "parent" ? "checked" : ""} />
-            <span>Parent website only</span>
+            <input type="radio" name="cardPlacement" value="bottom-left" ${preferences.cardPlacement === "bottom-left" ? "checked" : ""} />
+            <span>Bottom left</span>
           </label>
           <label class="settings-radio">
-            <input type="radio" name="cardDisplayTarget" value="both" ${preferences.cardDisplayTarget === "both" ? "checked" : ""} />
-            <span>Both (current page + parent site)</span>
+            <input type="radio" name="cardPlacement" value="top-right" ${preferences.cardPlacement === "top-right" ? "checked" : ""} />
+            <span>Top right</span>
+          </label>
+          <label class="settings-radio">
+            <input type="radio" name="cardPlacement" value="top-left" ${preferences.cardPlacement === "top-left" ? "checked" : ""} />
+            <span>Top left</span>
           </label>
         </fieldset>
         <label class="field-label">
@@ -42,31 +44,31 @@ export async function renderSettingsScreen(container: HTMLElement): Promise<void
             value="${preferences.autoDismissSeconds}"
           />
         </label>
-        <p class="muted-copy">Use 0 to keep the card open until you dismiss it. Timer pauses while you hover the card.</p>
-        <button type="submit" class="primary-button">Save settings</button>
-        <p data-settings-status class="status-copy" hidden></p>
+        <p class="muted-copy">Use 0 to keep the card open until you dismiss it. The timer pauses while you hover the card. After you move away, it closes in 2 seconds.</p>
+        <fieldset class="settings-fieldset">
+          <legend>Popup reviews</legend>
+          <label class="field-label">
+            Reviews to load
+            <input
+              name="popupReviewsLimit"
+              type="number"
+              min="1"
+              max="50"
+              step="1"
+              value="${preferences.popupReviewsLimit}"
+            />
+          </label>
+          <label class="settings-radio">
+            <input type="radio" name="popupReviewDisplayMode" value="compact" ${preferences.popupReviewDisplayMode === "compact" ? "checked" : ""} />
+            <span>Compact previews (first 2 sentences)</span>
+          </label>
+          <label class="settings-radio">
+            <input type="radio" name="popupReviewDisplayMode" value="full" ${preferences.popupReviewDisplayMode === "full" ? "checked" : ""} />
+            <span>Full review text</span>
+          </label>
+        </fieldset>
+        <p data-settings-status class="status-copy" hidden aria-live="polite"></p>
       </form>
-      <dl class="settings-list">
-        <div>
-          <dt>Accounts</dt>
-          <dd>Signing in on the Reviewo web app syncs into the extension when you have a localhost:3001 tab open. You can still sign in here directly.</dd>
-        </div>
-        <div>
-          <dt>API</dt>
-          <dd>${escapeHtml(extensionConfig.apiBaseUrl)}</dd>
-        </div>
-        <div>
-          <dt>Web app</dt>
-          <dd>${escapeHtml(extensionConfig.webBaseUrl)}</dd>
-        </div>
-        <div>
-          <dt>Version</dt>
-          <dd>0.0.1 (RFC 0009 phase 1)</dd>
-        </div>
-      </dl>
-      <a class="secondary-button link-button" href="${escapeHtml(extensionConfig.webBaseUrl)}" target="_blank" rel="noopener noreferrer">
-        Open Reviewo web
-      </a>
     </section>
   `;
 
@@ -75,21 +77,39 @@ export async function renderSettingsScreen(container: HTMLElement): Promise<void
 
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
-    void (async () => {
-      const formData = new FormData(form);
-      const cardDisplayTarget = String(formData.get("cardDisplayTarget") ?? "both") as CardDisplayTarget;
-      const autoDismissSeconds = Number(formData.get("autoDismissSeconds") ?? 3);
-
-      await saveExtensionPreferences({
-        autoDismissSeconds,
-        cardDisplayTarget
-      });
-
-      if (statusElement) {
-        statusElement.hidden = false;
-        statusElement.textContent = "Settings saved.";
-        statusElement.classList.add("status-copy-success");
-      }
-    })();
   });
+
+  form?.querySelectorAll<HTMLInputElement>('input[type="radio"], input[type="number"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      void persistSettings(form, statusElement);
+    });
+  });
+}
+
+function readPreferencesFromForm(form: HTMLFormElement): ExtensionUserPreferences {
+  const formData = new FormData(form);
+
+  return {
+    autoDismissSeconds: Number(formData.get("autoDismissSeconds") ?? 3),
+    cardPlacement: String(formData.get("cardPlacement") ?? "bottom-right") as CardPlacement,
+    popupReviewDisplayMode: String(
+      formData.get("popupReviewDisplayMode") ?? "compact"
+    ) as PopupReviewDisplayMode,
+    popupReviewsLimit: Number(formData.get("popupReviewsLimit") ?? 10)
+  };
+}
+
+async function persistSettings(
+  form: HTMLFormElement,
+  statusElement: HTMLParagraphElement | null
+): Promise<void> {
+  await saveExtensionPreferences(readPreferencesFromForm(form));
+
+  if (!statusElement) {
+    return;
+  }
+
+  statusElement.hidden = false;
+  statusElement.textContent = "Saved.";
+  statusElement.classList.add("status-copy-success");
 }

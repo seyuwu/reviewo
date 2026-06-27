@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
+import { FormFeedback } from "../../../components/form-feedback";
 import { MinimalAuthPanel } from "../../auth/components/minimal-auth-panel";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { createEntity } from "../api/create-entity";
@@ -158,10 +159,7 @@ export function EntityCreationForm() {
         </form>
       </div>
 
-      <div className="form-feedback" aria-live="polite">
-        {statusMessage ? <p className="success-message">{statusMessage}</p> : null}
-        {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
-      </div>
+      <FormFeedback errorMessage={errorMessage} statusMessage={statusMessage} />
     </section>
   );
 }

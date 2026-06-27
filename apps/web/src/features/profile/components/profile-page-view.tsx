@@ -8,6 +8,8 @@ import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { getCurrentUserProfile } from "../api/profile";
 import type { CurrentUserProfile } from "../types/profile";
 
+type ProfileFlowState = "loading" | "guest" | "authenticated";
+
 export function ProfilePageView() {
   const { authSession, isAuthSessionLoaded, signOut, storeAuthSession } = useAuthSession();
   const accessToken = authSession?.accessToken;
@@ -18,46 +20,112 @@ export function ProfilePageView() {
     queryKey: ["profile", "me", accessToken]
   });
 
+  const flowState: ProfileFlowState = !isAuthSessionLoaded
+    ? "loading"
+    : !authSession
+      ? "guest"
+      : "authenticated";
+
   return (
-    <section className="profile-page" aria-labelledby="profile-heading">
-      <div className="profile-hero">
-        <p className="eyebrow">Profile</p>
-        <h1 id="profile-heading">Your Reviewo account.</h1>
-        <p className="hero-copy">
-          A minimal read-only profile for the current authenticated user. Profile editing and
-          activity feeds are intentionally deferred.
-        </p>
-      </div>
+    <section
+      className={`profile-flow-shell profile-flow-shell-${flowState}`}
+      aria-busy={flowState === "loading" || profileQuery.isLoading}
+    >
+      {flowState === "loading" ? (
+        <AuthFlowSkeleton />
+      ) : flowState === "guest" ? (
+        <div key="guest" className="auth-center-page ui-fade-in">
+          <div className="auth-center-card">
+            <header className="auth-center-header">
+              <p className="eyebrow">Account</p>
+              <h1 id="auth-heading">Sign in to Reviewo</h1>
+              <p className="muted-copy">
+                Register or log in to rate pages, leave reviews, and keep your session in sync with
+                the browser extension.
+              </p>
+            </header>
 
-      <div className="profile-grid">
-        <MinimalAuthPanel
-          authSession={authSession}
-          contextLabel="Sign in to view profile"
-          onAuthSuccess={(authResponse) => {
-            storeAuthSession(authResponse);
-          }}
-          onSignOut={signOut}
-        />
-
-        <div className="panel-card profile-panel">
-          {!isAuthSessionLoaded ? <ProfileStateMessage message="Loading local session..." /> : null}
-          {isAuthSessionLoaded && !authSession ? (
-            <ProfileStateMessage message="Sign in to load your account details from the API." />
-          ) : null}
-          {profileQuery.isLoading ? <ProfileStateMessage message="Loading profile..." /> : null}
-          {profileQuery.isError ? (
-            <ProfileStateMessage message="Profile could not be loaded. Sign in again and retry." />
-          ) : null}
-          {profileQuery.data ? <ProfileDetails profile={profileQuery.data} /> : null}
+            <MinimalAuthPanel
+              authSession={authSession}
+              contextLabel="Register or sign in"
+              onAuthSuccess={(authResponse) => {
+                storeAuthSession(authResponse);
+              }}
+              onSignOut={signOut}
+            />
+          </div>
         </div>
-      </div>
+      ) : (
+        <div key="authenticated" className="profile-page profile-page-authenticated ui-fade-in">
+          <div className="profile-hero">
+            <p className="eyebrow">Profile</p>
+            <h1 id="profile-heading">Your Reviewo account.</h1>
+            <p className="hero-copy">
+              A minimal read-only profile for the current authenticated user. Profile editing and
+              activity feeds are intentionally deferred.
+            </p>
+          </div>
+
+          <div className="profile-panel-centered">
+            <div className="panel-card profile-panel">
+              {profileQuery.isLoading ? <ProfilePanelSkeleton /> : null}
+              {profileQuery.isError ? (
+                <ProfileStateMessage message="Profile could not be loaded. Sign in again and retry." />
+              ) : null}
+              {profileQuery.data ? (
+                <ProfileDetails profile={profileQuery.data} onSignOut={signOut} />
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
 
-function ProfileDetails({ profile }: { profile: CurrentUserProfile }) {
+function AuthFlowSkeleton() {
   return (
-    <div className="profile-details">
+    <div className="auth-center-page" aria-hidden="true">
+      <div className="auth-center-card">
+        <div className="ui-skeleton ui-skeleton-heading" />
+        <div className="ui-skeleton ui-skeleton-copy" />
+        <div className="panel-card auth-form-skeleton">
+          <div className="ui-skeleton ui-skeleton-segment" />
+          <div className="ui-skeleton ui-skeleton-field" />
+          <div className="ui-skeleton ui-skeleton-field" />
+          <div className="ui-skeleton ui-skeleton-field" />
+          <div className="ui-skeleton ui-skeleton-button" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfilePanelSkeleton() {
+  return (
+    <div className="profile-details" aria-hidden="true">
+      <div className="ui-skeleton ui-skeleton-avatar" />
+      <div className="ui-skeleton ui-skeleton-line ui-skeleton-line-short" />
+      <div className="ui-skeleton ui-skeleton-line" />
+      <div className="profile-fields">
+        <div className="ui-skeleton ui-skeleton-field-row" />
+        <div className="ui-skeleton ui-skeleton-field-row" />
+        <div className="ui-skeleton ui-skeleton-field-row" />
+        <div className="ui-skeleton ui-skeleton-field-row" />
+      </div>
+    </div>
+  );
+}
+
+function ProfileDetails({
+  profile,
+  onSignOut
+}: {
+  profile: CurrentUserProfile;
+  onSignOut: () => void;
+}) {
+  return (
+    <div className="profile-details ui-fade-in">
       <div className="profile-avatar" aria-hidden="true">
         {getInitials(profile.displayName)}
       </div>
@@ -79,9 +147,14 @@ function ProfileDetails({ profile }: { profile: CurrentUserProfile }) {
           Recent ratings and reviews are not shown yet because user activity endpoints are outside
           this stage.
         </p>
-        <Link className="primary-link" href="/">
-          Back to search
-        </Link>
+        <div className="profile-actions">
+          <Link className="primary-link" href="/">
+            Back to search
+          </Link>
+          <button type="button" className="secondary-button" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -97,7 +170,7 @@ function ProfileField({ label, value }: { label: string; value: string }) {
 }
 
 function ProfileStateMessage({ message }: { message: string }) {
-  return <p className="muted-copy">{message}</p>;
+  return <p className="muted-copy ui-fade-in">{message}</p>;
 }
 
 function getInitials(displayName: string): string {

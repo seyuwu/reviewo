@@ -30,10 +30,12 @@ export interface EntityViewModel {
   canonicalUrl: string;
   entityId?: string;
   entityPagePath?: string;
+  myRatingScore?: number | null;
   pageUrl: string;
   parentEntityId?: string;
   parentEntityPagePath?: string;
   parentTitle?: string;
+  pageTitle?: string;
   status: "found" | "not_found";
   title: string;
   trustConfidence?: number;

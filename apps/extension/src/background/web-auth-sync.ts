@@ -1,5 +1,6 @@
 import { getCurrentUserWithApi } from "./auth-api.js";
-import { clearAuthSession, getStoredAuthSession, saveAuthSession } from "./auth-session.js";
+import { getStoredAuthSession, saveAuthSession } from "./auth-session.js";
+import { shouldApplyWebAuthToExtension } from "../shared/web-auth-sync-policy.js";
 
 interface WebStoredAuthSession {
   accessToken?: unknown;
@@ -8,9 +9,17 @@ interface WebStoredAuthSession {
   userId?: unknown;
 }
 
+async function isAccessTokenValid(accessToken: string): Promise<boolean> {
+  try {
+    await getCurrentUserWithApi(accessToken);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function syncAuthFromWebJson(rawAuthJson: string | null): Promise<void> {
   if (!rawAuthJson) {
-    await clearAuthSession();
     return;
   }
 
@@ -23,15 +32,24 @@ export async function syncAuthFromWebJson(rawAuthJson: string | null): Promise<v
   }
 
   if (typeof parsed.accessToken !== "string" || typeof parsed.displayName !== "string") {
-    await clearAuthSession();
     return;
   }
 
   const currentSession = await getStoredAuthSession();
+  const [webTokenValid, extensionTokenValid] = await Promise.all([
+    isAccessTokenValid(parsed.accessToken),
+    currentSession?.accessToken
+      ? isAccessTokenValid(currentSession.accessToken)
+      : Promise.resolve(false)
+  ]);
 
   if (
-    currentSession?.accessToken === parsed.accessToken &&
-    currentSession.displayName === parsed.displayName
+    !shouldApplyWebAuthToExtension({
+      currentExtensionAccessToken: currentSession?.accessToken ?? null,
+      extensionTokenValid,
+      webAccessToken: parsed.accessToken,
+      webTokenValid
+    })
   ) {
     return;
   }

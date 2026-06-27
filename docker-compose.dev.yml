@@ -38,6 +38,10 @@ services:
       target: development
     environment:
       NODE_ENV: development
+      # Dev sessions should stay logged in; do not inherit a short host JWT TTL (e.g. 900s).
+      JWT_ACCESS_TOKEN_TTL_SECONDS: "10368000"
+      # Keep API DB credentials aligned with postgres when the dev stack is recreated partially.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-reviewo}:${POSTGRES_PASSWORD:-reviewo_password}@postgres:5432/${POSTGRES_DB:-reviewo}
     volumes: *dev-workspace-volumes
     command:
       [

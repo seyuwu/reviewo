@@ -2,7 +2,7 @@ import { ProfilePageView } from "../../features/profile/components/profile-page-
 
 export default function ProfilePage() {
   return (
-    <main className="shell">
+    <main className="shell shell-auth">
       <ProfilePageView />
     </main>
   );

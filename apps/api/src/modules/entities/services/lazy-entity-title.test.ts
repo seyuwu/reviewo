@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { deriveTitleFromCanonicalUrl, sanitizeLazyEntityTitle } from "./lazy-entity-title.js";
+import { deriveTitleFromCanonicalUrl, isGenericLazyEntityTitle, sanitizeLazyEntityTitle } from "./lazy-entity-title.js";
 
 describe("sanitizeLazyEntityTitle", () => {
   it("trims, collapses whitespace, and limits title length", () => {
@@ -14,6 +14,23 @@ describe("sanitizeLazyEntityTitle", () => {
     const title = sanitizeLazyEntityTitle("   ", "https://github.com/");
 
     assert.equal(title, "github.com");
+  });
+
+  it("removes trailing YouTube suffix from source titles", () => {
+    const title = sanitizeLazyEntityTitle(
+      "My Video Title - YouTube",
+      "https://youtube.com/watch?v=abc"
+    );
+
+    assert.equal(title, "My Video Title");
+  });
+
+  it("treats hostname-only titles as generic", () => {
+    assert.equal(isGenericLazyEntityTitle("youtube.com", "https://youtube.com/watch?v=abc"), true);
+    assert.equal(
+      isGenericLazyEntityTitle("My Video Title", "https://youtube.com/watch?v=abc"),
+      false
+    );
   });
 });
 

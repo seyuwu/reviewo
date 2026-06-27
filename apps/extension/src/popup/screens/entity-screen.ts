@@ -1,7 +1,14 @@
 import { createGetAuthSessionMessage, ExtensionMessageType } from "../../shared/messages.js";
-import { submitEntityRating } from "../../content/rating-card/submit-entity-rating.js";
-import { submitEntityRatingByUrl } from "../../content/rating-card/submit-entity-rating-by-url.js";
+import { readExtensionPreferences } from "../../shared/extension-preferences-storage.js";
 import { buildRatingCardSummary } from "../../content/rating-card/format-display.js";
+import { resolveMyEntityRatingScore } from "../../content/rating-card/resolve-my-entity-rating.js";
+import {
+  bindEntityReviewsSection,
+  loadEntityReviewsSectionState,
+  renderEntityReviewsSectionMarkup
+} from "../entity-reviews-section.js";
+import { rateEntityViewModel } from "../services/rate-entity-view-model.js";
+import { renderPopupRatePanel } from "../popup-rate-panel.js";
 import { sendExtensionMessage } from "../services/popup-messaging.js";
 import { buildEntityPageUrl, escapeHtml } from "../view-helpers.js";
 import type { EntityViewModel } from "../types.js";
@@ -20,9 +27,20 @@ export async function renderEntityScreen(
     payload?: { session?: { accessToken: string } | null };
     type?: string;
   }>(createGetAuthSessionMessage());
-  const isAuthenticated =
-    sessionResponse?.type === ExtensionMessageType.AuthSessionResult &&
-    Boolean(sessionResponse.payload?.session?.accessToken);
+  const session =
+    sessionResponse?.type === ExtensionMessageType.AuthSessionResult
+      ? sessionResponse.payload?.session ?? null
+      : null;
+  const isAuthenticated = Boolean(session?.accessToken);
+  const currentUserId = session?.userId;
+  const preferences = await readExtensionPreferences();
+  const myRatingScore = await resolveEntityMyRatingScore(entity, isAuthenticated);
+  const ratePanelMarkup = renderPopupRatePanel({
+    isAuthenticated,
+    myRatingScore,
+    rateScoreDataAttribute: "data-score",
+    showLabel: false
+  });
 
   const statsMarkup =
     entity.status === "found" && entity.avgScore !== undefined && entity.votesCount !== undefined
@@ -35,6 +53,12 @@ export async function renderEntityScreen(
     ? `<a class="primary-button link-button" href="${escapeHtml(buildEntityPageUrl(entityPagePath))}" target="_blank" rel="noopener noreferrer">Open page</a>`
     : "";
   const breadcrumbMarkup = renderEntityBreadcrumb(entity);
+  const rateSectionMarkup = `
+    <section class="rate-panel">
+      <h2>${entity.status === "found" ? "Your rating" : "Be the first to rate"}</h2>
+      ${ratePanelMarkup}
+    </section>
+  `;
 
   container.innerHTML = `
     <section class="screen entity-screen">
@@ -46,24 +70,22 @@ export async function renderEntityScreen(
       </div>
       <div class="entity-stats">${statsMarkup}</div>
       ${openPageMarkup}
-      <section class="rate-panel">
-        <h2>${entity.status === "found" ? "Your rating" : "Be the first to rate"}</h2>
-        <div class="reviewo-rate-controls popup-rate-controls" role="group" aria-label="Rate this site">
-          ${[1, 2, 3, 4, 5]
-            .map(
-              (score) => `
-            <button type="button" class="reviewo-rate-button" data-score="${score}" ${isAuthenticated ? "" : "disabled"}>
-              ${score}
-            </button>
-          `
-            )
-            .join("")}
-        </div>
-        <p class="muted-copy ${isAuthenticated ? "is-hidden" : ""}">Sign in to rate.</p>
-        <p class="rate-status" data-rate-status hidden></p>
-      </section>
+      ${rateSectionMarkup}
+      <div class="entity-reviews-host" data-entity-reviews-host${
+        entity.status === "found" && entity.entityId ? "" : ' hidden="true"'
+      }></div>
     </section>
   `;
+
+  if (entity.status === "found" && entity.entityId) {
+    await mountEntityReviewsSection(
+      container.querySelector<HTMLElement>("[data-entity-reviews-host]"),
+      entity.entityId,
+      isAuthenticated,
+      currentUserId,
+      preferences
+    );
+  }
 
   container.querySelectorAll<HTMLButtonElement>("[data-score]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -93,6 +115,41 @@ export async function renderEntityScreen(
   });
 }
 
+async function mountEntityReviewsSection(
+  host: HTMLElement | null,
+  entityId: string,
+  isAuthenticated: boolean,
+  currentUserId: string | undefined,
+  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>
+): Promise<void> {
+  if (!host) {
+    return;
+  }
+
+  host.hidden = false;
+  host.innerHTML = `<p class="muted-copy">Loading reviews...</p>`;
+
+  const loaded = await loadEntityReviewsSectionState(entityId, isAuthenticated, currentUserId, {
+    displayMode: preferences.popupReviewDisplayMode,
+    hideMyReviewWhenSaved: false,
+    reviewsLimit: preferences.popupReviewsLimit
+  });
+
+  if (!loaded.state) {
+    host.innerHTML = `<p class="status-copy-error">${escapeHtml(
+      loaded.errorMessage ?? "Could not load reviews."
+    )}</p>`;
+    return;
+  }
+
+  host.innerHTML = renderEntityReviewsSectionMarkup(loaded.state, loaded.myReviewText ?? "", undefined, {
+    hideMyReviewWhenSaved: false
+  });
+  bindEntityReviewsSection(host, entityId, loaded.state, loaded.myReviewText ?? "", {
+    hideMyReviewWhenSaved: false
+  });
+}
+
 function renderEntityBreadcrumb(entity: EntityViewModel): string {
   if (!entity.parentEntityId || !entity.parentTitle) {
     return "";
@@ -109,6 +166,25 @@ function renderEntityBreadcrumb(entity: EntityViewModel): string {
   `;
 }
 
+async function resolveEntityMyRatingScore(
+  entity: EntityViewModel,
+  isAuthenticated: boolean
+): Promise<number | null> {
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  if (typeof entity.myRatingScore === "number") {
+    return entity.myRatingScore;
+  }
+
+  if (entity.entityId) {
+    return resolveMyEntityRatingScore(entity.entityId);
+  }
+
+  return null;
+}
+
 async function submitRating(
   entity: EntityViewModel,
   score: number,
@@ -123,55 +199,18 @@ async function submitRating(
     statusElement.classList.remove("status-copy-error", "status-copy-success");
   }
 
-  if (entity.status === "found" && entity.entityId) {
-    const result = await submitEntityRating(entity.entityId, score);
+  const result = await rateEntityViewModel(entity, score);
 
-    if (result.result) {
-      const updated: EntityViewModel = {
-        ...entity,
-        avgScore: result.result.rating.avgScore,
-        entityPagePath: result.result.web.entityPagePath,
-        status: "found",
-        title: result.result.entity.title,
-        trustConfidence: result.result.trust.confidence,
-        votesCount: result.result.rating.votesCount
-      };
-      actions.onEntityUpdate(updated);
-      setRateStatus(container, "Rating saved.", "success");
-      await renderEntityScreen(container, updated, actions);
-      return;
-    }
-
-    setRateStatus(container, result.errorMessage ?? "Could not save rating.", "error");
-    return;
-  }
-
-  const result = await submitEntityRatingByUrl(entity.pageUrl, score, entity.title);
-
-  if (result.result) {
-    const updated: EntityViewModel = {
-      avgScore: result.result.rating.avgScore,
-      canonicalUrl: result.result.entity.canonicalUrl ?? entity.canonicalUrl,
-      entityId: result.result.entity.id,
-      entityPagePath: result.result.web.entityPagePath,
-      pageUrl: entity.pageUrl,
-      status: "found",
-      title: result.result.entity.title,
-      trustConfidence: result.result.trust.confidence,
-      votesCount: result.result.rating.votesCount,
-      parentEntityId: entity.parentEntityId,
-      parentEntityPagePath: entity.parentEntityPagePath,
-      parentTitle: entity.parentTitle
-    };
-    actions.onEntityUpdate(updated);
+  if (result.updated) {
+    actions.onEntityUpdate(result.updated);
     setRateStatus(
       container,
-      result.result.entityProvision.mode === "created"
+      entity.status === "not_found" && result.updated.entityId
         ? "You created the first Reviewo page for this site."
         : "Rating saved.",
       "success"
     );
-    await renderEntityScreen(container, updated, actions);
+    await renderEntityScreen(container, result.updated, actions);
     return;
   }
 

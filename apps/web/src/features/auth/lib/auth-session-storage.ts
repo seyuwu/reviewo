@@ -1,8 +1,14 @@
 import type { AuthResponse, StoredAuthSession } from "../types/auth";
+import { notifyWebAuthChanged, notifyWebSignOut } from "./web-auth-bridge";
 
 const AUTH_STORAGE_KEY = "reviewo.webAuth";
+export const WEB_SIGNED_OUT_KEY = "reviewo.webSignedOut";
 
 export function getStoredAuthSession(): StoredAuthSession | null {
+  if (window.localStorage.getItem(WEB_SIGNED_OUT_KEY) === "1") {
+    return null;
+  }
+
   const storedAuth = window.localStorage.getItem(AUTH_STORAGE_KEY);
 
   if (!storedAuth) {
@@ -32,13 +38,15 @@ export function saveAuthSession(authResponse: AuthResponse): StoredAuthSession {
     userId: authResponse.user.id
   };
 
+  window.localStorage.removeItem(WEB_SIGNED_OUT_KEY);
   window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authSession));
-  window.dispatchEvent(new Event("reviewo:web-auth-changed"));
+  notifyWebAuthChanged();
 
   return authSession;
 }
 
 export function clearAuthSession(): void {
+  window.localStorage.setItem(WEB_SIGNED_OUT_KEY, "1");
   window.localStorage.removeItem(AUTH_STORAGE_KEY);
-  window.dispatchEvent(new Event("reviewo:web-auth-changed"));
+  notifyWebSignOut();
 }

@@ -1,4 +1,5 @@
 import type { ExtensionStoredAuthSession } from "./types/auth.js";
+import type { ExtensionQuickRatingResponse } from "./types/quick-rating.js";
 import type { ExtensionResolveResponse } from "./types/resolve.js";
 
 export const ExtensionMessageType = {
@@ -12,13 +13,21 @@ export const ExtensionMessageType = {
   AuthenticatedApiError: "AUTHENTICATED_API_ERROR",
   AuthenticatedApiRequest: "AUTHENTICATED_API_REQUEST",
   AuthenticatedApiResult: "AUTHENTICATED_API_RESULT",
+  EntityRatingUpdated: "ENTITY_RATING_UPDATED",
   GetActiveTabResolve: "GET_ACTIVE_TAB_RESOLVE",
+  GetPageSourceTitle: "GET_PAGE_SOURCE_TITLE",
   GetAuthSession: "GET_AUTH_SESSION",
+  PageSourceTitleResult: "PAGE_SOURCE_TITLE_RESULT",
   CheckRatingCardDismissed: "CHECK_RATING_CARD_DISMISSED",
   DismissRatingCard: "DISMISS_RATING_CARD",
+  MarkEntityRatedOnTab: "MARK_ENTITY_RATED_ON_TAB",
   RatingCardDismissedResult: "RATING_CARD_DISMISSED_RESULT",
+  RequestShowRatingCard: "REQUEST_SHOW_RATING_CARD",
   PingFromContent: "PING_FROM_CONTENT",
   PingFromPopup: "PING_FROM_POPUP",
+  PublicApiError: "PUBLIC_API_ERROR",
+  PublicApiRequest: "PUBLIC_API_REQUEST",
+  PublicApiResult: "PUBLIC_API_RESULT",
   PongFromBackground: "PONG_FROM_BACKGROUND",
   ResolvePageUrl: "RESOLVE_PAGE_URL",
   ResolvePageUrlError: "RESOLVE_PAGE_URL_ERROR",
@@ -71,8 +80,20 @@ export interface ExtensionGetActiveTabResolveMessage {
   type: typeof ExtensionMessageType.GetActiveTabResolve;
 }
 
+export interface ExtensionGetPageSourceTitleMessage {
+  type: typeof ExtensionMessageType.GetPageSourceTitle;
+}
+
+export interface ExtensionPageSourceTitleResultMessage {
+  payload: {
+    title?: string;
+  };
+  type: typeof ExtensionMessageType.PageSourceTitleResult;
+}
+
 export interface ExtensionActiveTabResolveResultMessage {
   payload: {
+    pageTitle?: string;
     result: ExtensionResolveResponse | null;
     url: string | null;
   };
@@ -86,6 +107,7 @@ export interface ExtensionGetAuthSessionMessage {
 export interface ExtensionCheckRatingCardDismissedMessage {
   payload: {
     canonicalUrl: string;
+    siteHostname: string;
   };
   type: typeof ExtensionMessageType.CheckRatingCardDismissed;
 }
@@ -102,6 +124,27 @@ export interface ExtensionDismissRatingCardMessage {
     canonicalUrl: string;
   };
   type: typeof ExtensionMessageType.DismissRatingCard;
+}
+
+export interface ExtensionMarkEntityRatedOnTabMessage {
+  payload: {
+    canonicalUrl: string;
+  };
+  type: typeof ExtensionMessageType.MarkEntityRatedOnTab;
+}
+
+export interface ExtensionRequestShowRatingCardMessage {
+  type: typeof ExtensionMessageType.RequestShowRatingCard;
+}
+
+export interface ExtensionEntityRatingUpdatedMessage {
+  payload: {
+    canonicalUrl: string;
+    entityId: string;
+    quickRating?: ExtensionQuickRatingResponse;
+    score: number;
+  };
+  type: typeof ExtensionMessageType.EntityRatingUpdated;
 }
 
 export interface ExtensionAuthSessionResultMessage {
@@ -134,7 +177,7 @@ export interface ExtensionAuthSignOutMessage {
 
 export interface ExtensionSyncWebAuthMessage {
   payload: {
-    rawAuthJson: string | null;
+    rawAuthJson: string;
   };
   type: typeof ExtensionMessageType.SyncWebAuth;
 }
@@ -177,6 +220,28 @@ export interface ExtensionAuthenticatedApiErrorMessage {
   type: typeof ExtensionMessageType.AuthenticatedApiError;
 }
 
+export interface ExtensionPublicApiRequestMessage {
+  payload: {
+    path: string;
+  };
+  type: typeof ExtensionMessageType.PublicApiRequest;
+}
+
+export interface ExtensionPublicApiResultMessage {
+  payload: {
+    data: unknown;
+    status: number;
+  };
+  type: typeof ExtensionMessageType.PublicApiResult;
+}
+
+export interface ExtensionPublicApiErrorMessage {
+  payload: {
+    message: string;
+  };
+  type: typeof ExtensionMessageType.PublicApiError;
+}
+
 export type ExtensionMessage =
   | ExtensionActiveTabResolveResultMessage
   | ExtensionAuthLoginMessage
@@ -189,11 +254,19 @@ export type ExtensionMessage =
   | ExtensionAuthenticatedApiRequestMessage
   | ExtensionAuthenticatedApiResultMessage
   | ExtensionGetActiveTabResolveMessage
+  | ExtensionGetPageSourceTitleMessage
   | ExtensionGetAuthSessionMessage
+  | ExtensionPageSourceTitleResultMessage
   | ExtensionCheckRatingCardDismissedMessage
   | ExtensionDismissRatingCardMessage
+  | ExtensionEntityRatingUpdatedMessage
+  | ExtensionMarkEntityRatedOnTabMessage
+  | ExtensionRequestShowRatingCardMessage
   | ExtensionRatingCardDismissedResultMessage
   | ExtensionPingMessage
+  | ExtensionPublicApiErrorMessage
+  | ExtensionPublicApiRequestMessage
+  | ExtensionPublicApiResultMessage
   | ExtensionPongMessage
   | ExtensionResolvePageUrlErrorMessage
   | ExtensionResolvePageUrlMessage
@@ -264,12 +337,29 @@ export function createGetActiveTabResolveMessage(): ExtensionGetActiveTabResolve
   };
 }
 
+export function createGetPageSourceTitleMessage(): ExtensionGetPageSourceTitleMessage {
+  return {
+    type: ExtensionMessageType.GetPageSourceTitle
+  };
+}
+
+export function createPageSourceTitleResultMessage(
+  title?: string
+): ExtensionPageSourceTitleResultMessage {
+  return {
+    payload: title === undefined ? {} : { title },
+    type: ExtensionMessageType.PageSourceTitleResult
+  };
+}
+
 export function createActiveTabResolveResultMessage(
   url: string | null,
-  result: ExtensionResolveResponse | null
+  result: ExtensionResolveResponse | null,
+  pageTitle?: string
 ): ExtensionActiveTabResolveResultMessage {
   return {
     payload: {
+      ...(pageTitle === undefined ? {} : { pageTitle }),
       result,
       url
     },
@@ -284,11 +374,13 @@ export function createGetAuthSessionMessage(): ExtensionGetAuthSessionMessage {
 }
 
 export function createCheckRatingCardDismissedMessage(
-  canonicalUrl: string
+  canonicalUrl: string,
+  siteHostname: string
 ): ExtensionCheckRatingCardDismissedMessage {
   return {
     payload: {
-      canonicalUrl
+      canonicalUrl,
+      siteHostname
     },
     type: ExtensionMessageType.CheckRatingCardDismissed
   };
@@ -302,6 +394,32 @@ export function createDismissRatingCardMessage(
       canonicalUrl
     },
     type: ExtensionMessageType.DismissRatingCard
+  };
+}
+
+export function createMarkEntityRatedOnTabMessage(
+  canonicalUrl: string
+): ExtensionMarkEntityRatedOnTabMessage {
+  return {
+    payload: {
+      canonicalUrl
+    },
+    type: ExtensionMessageType.MarkEntityRatedOnTab
+  };
+}
+
+export function createRequestShowRatingCardMessage(): ExtensionRequestShowRatingCardMessage {
+  return {
+    type: ExtensionMessageType.RequestShowRatingCard
+  };
+}
+
+export function createEntityRatingUpdatedMessage(
+  payload: ExtensionEntityRatingUpdatedMessage["payload"]
+): ExtensionEntityRatingUpdatedMessage {
+  return {
+    payload,
+    type: ExtensionMessageType.EntityRatingUpdated
   };
 }
 
@@ -358,7 +476,7 @@ export function createAuthSignOutMessage(): ExtensionAuthSignOutMessage {
   };
 }
 
-export function createSyncWebAuthMessage(rawAuthJson: string | null): ExtensionSyncWebAuthMessage {
+export function createSyncWebAuthMessage(rawAuthJson: string): ExtensionSyncWebAuthMessage {
   return {
     payload: {
       rawAuthJson
@@ -428,6 +546,52 @@ export function createAuthenticatedApiErrorMessage(
   };
 }
 
+export function createPublicApiRequestMessage(path: string): ExtensionPublicApiRequestMessage {
+  return {
+    payload: {
+      path
+    },
+    type: ExtensionMessageType.PublicApiRequest
+  };
+}
+
+export function createPublicApiResultMessage(
+  data: unknown,
+  status: number
+): ExtensionPublicApiResultMessage {
+  return {
+    payload: {
+      data,
+      status
+    },
+    type: ExtensionMessageType.PublicApiResult
+  };
+}
+
+export function createPublicApiErrorMessage(message: string): ExtensionPublicApiErrorMessage {
+  return {
+    payload: {
+      message
+    },
+    type: ExtensionMessageType.PublicApiError
+  };
+}
+
+export function isExtensionPublicApiRequestMessage(
+  message: unknown
+): message is ExtensionPublicApiRequestMessage {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+
+  const candidate = message as ExtensionPublicApiRequestMessage;
+
+  return (
+    candidate.type === ExtensionMessageType.PublicApiRequest &&
+    typeof candidate.payload?.path === "string"
+  );
+}
+
 export function isExtensionPingMessage(message: unknown): message is ExtensionPingMessage {
   if (!message || typeof message !== "object") {
     return false;
@@ -471,6 +635,19 @@ export function isExtensionGetActiveTabResolveMessage(
   );
 }
 
+export function isExtensionGetPageSourceTitleMessage(
+  message: unknown
+): message is ExtensionGetPageSourceTitleMessage {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+
+  return (
+    (message as ExtensionGetPageSourceTitleMessage).type ===
+    ExtensionMessageType.GetPageSourceTitle
+  );
+}
+
 export function isExtensionGetAuthSessionMessage(
   message: unknown
 ): message is ExtensionGetAuthSessionMessage {
@@ -492,7 +669,8 @@ export function isExtensionCheckRatingCardDismissedMessage(
 
   return (
     candidate.type === ExtensionMessageType.CheckRatingCardDismissed &&
-    typeof candidate.payload?.canonicalUrl === "string"
+    typeof candidate.payload?.canonicalUrl === "string" &&
+    typeof candidate.payload?.siteHostname === "string"
   );
 }
 
@@ -508,6 +686,49 @@ export function isExtensionDismissRatingCardMessage(
   return (
     candidate.type === ExtensionMessageType.DismissRatingCard &&
     typeof candidate.payload?.canonicalUrl === "string"
+  );
+}
+
+export function isExtensionMarkEntityRatedOnTabMessage(
+  message: unknown
+): message is ExtensionMarkEntityRatedOnTabMessage {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+
+  const candidate = message as ExtensionMarkEntityRatedOnTabMessage;
+
+  return (
+    candidate.type === ExtensionMessageType.MarkEntityRatedOnTab &&
+    typeof candidate.payload?.canonicalUrl === "string"
+  );
+}
+
+export function isExtensionRequestShowRatingCardMessage(
+  message: unknown
+): message is ExtensionRequestShowRatingCardMessage {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+
+  return (message as ExtensionRequestShowRatingCardMessage).type ===
+    ExtensionMessageType.RequestShowRatingCard;
+}
+
+export function isExtensionEntityRatingUpdatedMessage(
+  message: unknown
+): message is ExtensionEntityRatingUpdatedMessage {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+
+  const candidate = message as ExtensionEntityRatingUpdatedMessage;
+
+  return (
+    candidate.type === ExtensionMessageType.EntityRatingUpdated &&
+    typeof candidate.payload?.canonicalUrl === "string" &&
+    typeof candidate.payload?.entityId === "string" &&
+    typeof candidate.payload?.score === "number"
   );
 }
 
@@ -565,7 +786,7 @@ export function isExtensionSyncWebAuthMessage(
 
   return (
     candidate.type === ExtensionMessageType.SyncWebAuth &&
-    (candidate.payload?.rawAuthJson === null || typeof candidate.payload?.rawAuthJson === "string")
+    typeof candidate.payload?.rawAuthJson === "string"
   );
 }
 
