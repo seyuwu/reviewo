@@ -1560,3 +1560,43 @@ This keeps aggregate recalculation, one-rating-per-user, and one-review-per-user
 - Calculate rating aggregates optimistically in frontend state.
 - Append reviews locally without refetching composition data.
 - Add frontend-specific write endpoints.
+
+## 2026-06-27 - Web Profile Is Read-Only In MVP
+
+### Problem
+
+The roadmap calls for a minimal web profile, but profile editing and user activity feeds would require additional backend contracts.
+
+### Decision
+
+Stage 22 implements a read-only `/profile` page that loads current user data through existing `GET /auth/me`.
+
+### Reason
+
+This gives users a real account page without adding premature profile editing, account settings, or user activity APIs.
+
+### Alternatives
+
+- Add profile editing endpoints in Stage 22.
+- Add user-scoped rating/review activity endpoints in Stage 22.
+- Build a profile placeholder without calling the API.
+
+## 2026-06-27 - Profile Reuses Shared Minimal Web Auth
+
+### Problem
+
+The profile page requires an access token, but the full auth product surface is still outside the current scope.
+
+### Decision
+
+Reuse the shared minimal web auth panel and stored auth session from `apps/web/src/features/auth`.
+
+### Reason
+
+This keeps auth behavior consistent across creation, entity interactions, and profile without adding a global auth shell or account settings.
+
+### Alternatives
+
+- Create a separate profile-only login form.
+- Add a global authenticated navigation shell.
+- Use a temporary bearer-token field on the profile page.

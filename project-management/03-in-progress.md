@@ -50,41 +50,43 @@ Stage 20 - Web Entity Creation MVP is completed.
 
 Stage 21 - Web Entity Page MVP is completed.
 
-Stage 22 - Web Profile MVP is next, pending explicit user confirmation.
+Stage 22 - Web Profile MVP is completed.
+
+Stage 23 - Browser Extension Skeleton is next, pending explicit user confirmation.
 
 ## Goal
 
-Prepare Web Profile MVP after user confirmation.
+Prepare Browser Extension Skeleton after user confirmation.
 
 ## Files To Create
 
-To be confirmed before Stage 22 implementation.
+To be confirmed before Stage 23 implementation.
 
 ## Files To Change
 
-To be confirmed before Stage 22 implementation.
+To be confirmed before Stage 23 implementation.
 
 ## Architectural Decisions For This Stage
 
-- Stage 22 should implement the minimal web profile after user confirmation.
-- Profile scope should be confirmed before implementation.
-- Do not add recommendations, moderation, extension UI, or unrelated account settings in Stage 22 unless explicitly confirmed.
+- Stage 23 should implement the browser extension skeleton after user confirmation.
+- Extension scope should be confirmed before implementation.
+- Do not add extension product UI, production auth, ratings UI, content parsing, or site-specific logic in Stage 23 unless explicitly confirmed.
 
 ## Tasks
 
-- [ ] Wait for user confirmation to start Stage 22.
-- [ ] Confirm exact Web Profile MVP scope before implementation.
-- [ ] Describe Stage 22 goal, files, and architectural decisions before editing.
-- [ ] Implement Web Profile MVP only.
-- [ ] Verify frontend/backend lint/typecheck/build behavior.
+- [ ] Wait for user confirmation to start Stage 23.
+- [ ] Confirm exact Browser Extension Skeleton scope before implementation.
+- [ ] Describe Stage 23 goal, files, and architectural decisions before editing.
+- [ ] Implement Browser Extension Skeleton only.
+- [ ] Verify lint/typecheck/build behavior.
 
 ## Current Progress
 
-Stage 21 is complete. Stage 22 has not started.
+Stage 22 is complete. Stage 23 has not started.
 
 ## Open Questions
 
-Stage 22 requires confirmation of exact Web Profile MVP scope before implementation.
+Stage 23 requires confirmation of exact Browser Extension Skeleton scope before implementation.
 
 ## Blockers
 
@@ -92,6 +94,6 @@ None.
 
 ## Remaining Work
 
-- Wait for user confirmation before Stage 22.
-- Confirm profile data, auth behavior, and whether profile is read-only or editable.
-- Do not add recommendations, moderation, extension UI, or unrelated account settings until their dedicated stages.
+- Wait for user confirmation before Stage 23.
+- Confirm extension manifest/build/tooling scope.
+- Do not add extension product UI, production auth, ratings UI, content parsing, or site-specific logic until their dedicated stages.

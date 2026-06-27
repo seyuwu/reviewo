@@ -834,3 +834,31 @@
   - Minimal web auth moved into `apps/web/src/features/auth` and is reused by entity creation and entity page interactions.
   - Frontend does not recalculate rating aggregates or trust confidence.
   - Review pagination, review likes UI, recommendations, moderation, profile UI, full auth UI, and extension UI were not added.
+
+## 2026-06-27 - Stage 22 - Web Profile MVP
+
+- Stage: 22
+- Summary: Added a minimal read-only web profile page backed by the existing `GET /auth/me` endpoint and shared minimal web auth.
+- Created modules:
+  - `Profile` frontend feature
+- Changed modules:
+  - `@reviewo/web` routing and global styles
+- Created files:
+  - `apps/web/src/app/profile/page.tsx`
+  - `apps/web/src/features/profile/api/profile.ts`
+  - `apps/web/src/features/profile/components/profile-page-view.tsx`
+  - `apps/web/src/features/profile/types/profile.ts`
+- Changed files:
+  - `apps/web/src/app/globals.css`
+  - `project-management/00-current-state.md`
+  - `project-management/01-master-plan.md`
+  - `project-management/03-in-progress.md`
+  - `project-management/04-decisions.md`
+  - `project-management/06-changelog.md`
+  - `project-management/07-next-session.md`
+- Important architectural changes:
+  - Profile page uses existing backend `GET /auth/me`.
+  - Profile page reuses shared minimal web auth from `apps/web/src/features/auth`.
+  - Profile data is read-only in Stage 22.
+  - No backend profile endpoints, user activity endpoints, or database tables were added.
+  - Profile editing, recent ratings/reviews, account settings, recommendations, moderation, full auth UI, and extension UI were not added.

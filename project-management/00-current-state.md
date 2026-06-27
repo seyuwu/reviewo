@@ -3,15 +3,15 @@
 ## Snapshot
 
 - Date: 2026-06-27
-- Current stage: Waiting for user confirmation before Stage 22
-- Stage status: Stage 21 completed
-- MVP readiness: 21%
-- Last completed stage: Stage 21 - Web Entity Page MVP
-- Next stage: Stage 22 - Web Profile MVP
+- Current stage: Waiting for user confirmation before Stage 23
+- Stage status: Stage 22 completed
+- MVP readiness: 22%
+- Last completed stage: Stage 22 - Web Profile MVP
+- Next stage: Stage 23 - Browser Extension Skeleton
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, and a base entity page with rating/review interactions.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -232,7 +232,6 @@ The Web Entity Creation MVP is initialized:
 - `/entities/new` contains a short entity creation form.
 - The creation form uses the shared minimal web auth panel.
 - Creation uses backend `POST /entities` with a JWT access token.
-- Created entities redirect to `/entities/:id`.
 - Created entities redirect to the base web entity page.
 - Home search missing-result hint links to `/entities/new?query=...`.
 - Backend still validates submitted entity data and normalizes canonical URLs.
@@ -249,6 +248,15 @@ The Web Entity Page MVP is initialized:
 - Entity page refreshes composed data through TanStack Query invalidation after rating/review updates.
 - Minimal web auth is shared between entity creation and entity page interactions.
 - Review pagination, review likes UI, recommendations, moderation, profile UI, full auth UI, and extension UI are intentionally not implemented.
+
+The Web Profile MVP is initialized:
+
+- `/profile` renders a minimal read-only profile page.
+- Profile data is loaded from backend `GET /auth/me`.
+- The profile page uses the shared minimal web auth panel for sign in/out.
+- Profile displays current user id, display name, email, username, and status.
+- No backend profile endpoints or database tables were added.
+- Profile editing, recent ratings/reviews, user activity endpoints, account settings, recommendations, moderation, full auth UI, and extension UI are intentionally not implemented.
 
 Roadmap update:
 
@@ -325,3 +333,5 @@ Stage 19 created the web home/search UX only. It did not add entity creation flo
 Stage 20 created the web entity creation flow only. It did not add full auth UI, full entity page UI, ratings UI, reviews UI, or extension UI.
 
 Stage 21 created the base web entity page only. It did not add review pagination, review likes UI, recommendations, moderation, profile UI, full auth UI, or extension UI.
+
+Stage 22 created the read-only web profile only. It did not add profile editing, recent activity endpoints, account settings, recommendations, moderation, full auth UI, or extension UI.

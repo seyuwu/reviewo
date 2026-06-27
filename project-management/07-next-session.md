@@ -2,9 +2,9 @@
 
 ## Current State
 
-Stage 21 - Web Entity Page MVP is completed.
+Stage 22 - Web Profile MVP is completed.
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, and a base entity page with rating/review interactions. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, Web Home/Search foundation, Web Entity Creation MVP foundation, and Web Entity Page MVP foundation.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The backend also has a minimal in-process domain events foundation with publish points for entity creation, rating create/update, and review create/update. The project currently has project management documentation, the base monorepo structure, baseline TypeScript/ESLint/Prettier tooling, Docker infrastructure, shared package boundaries, a NestJS backend skeleton, Prisma database infrastructure, centralized backend error/validation response infrastructure, Users/Auth MVP foundation, Entity MVP foundation, URL Normalization MVP, Ratings MVP foundation, Reviews MVP foundation, Trust MVP foundation, Backend Domain Events MVP foundation, Search MVP foundation, Entity Page API Composition foundation, Extension API MVP foundation, Frontend Skeleton foundation, Web Home/Search foundation, Web Entity Creation MVP foundation, Web Entity Page MVP foundation, and Web Profile MVP foundation.
 
 ## Already Done
 
@@ -505,15 +505,32 @@ The first product capabilities are implemented: users can register, sign in, rea
   - Docker backend `PUT /reviews/entities/:entityId/my-review`
   - Docker backend `GET /entities/:entityId/page`
   - Docker web `GET /entities/:id` route smoke
+- Stage 22 Web Profile MVP was added:
+  - `apps/web/src/app/profile/page.tsx`
+  - `apps/web/src/features/profile/api/profile.ts`
+  - `apps/web/src/features/profile/components/profile-page-view.tsx`
+  - `apps/web/src/features/profile/types/profile.ts`
+  - `apps/web/src/app/globals.css` now includes profile page styles
+- Stage 22 was verified with:
+  - `corepack pnpm lint`
+  - `corepack pnpm typecheck`
+  - `corepack pnpm build`
+  - `corepack pnpm format:check`
+  - `corepack pnpm test`
+  - IDE diagnostics check for changed web files
+  - Persistent Docker dev stack web service restart without rebuild
+  - Docker web `GET /profile` smoke
+  - Docker backend `POST /auth/register`
+  - Docker backend `GET /auth/me`
 
 ## Remaining Work
 
-- Stage 22 - Web Profile MVP.
-- Do not start Stage 22 until the user confirms and exact Web Profile MVP scope is agreed.
+- Stage 23 - Browser Extension Skeleton.
+- Do not start Stage 23 until the user confirms and exact Browser Extension Skeleton scope is agreed.
 
 ## Next Stage
 
-Stage 22 - Web Profile MVP, but only after explicit user confirmation and scope confirmation.
+Stage 23 - Browser Extension Skeleton, but only after explicit user confirmation and scope confirmation.
 
 ## Documents To Read First
 
@@ -583,7 +600,11 @@ Stage 22 - Web Profile MVP, but only after explicit user confirmation and scope 
 - Entity page rating form writes to `PUT /ratings/entities/:entityId/my-rating`.
 - Entity page review form writes to `PUT /reviews/entities/:entityId/my-review`.
 - Entity page refreshes composed data through TanStack Query invalidation after writes.
-- Review pagination, review likes UI, recommendations, moderation, profile UI, full auth UI, and extension UI are not implemented yet.
+- `/profile` renders a minimal read-only web profile.
+- Profile page uses backend `GET /auth/me`.
+- Profile page reuses the shared minimal web auth panel.
+- Profile displays current user id, display name, email, username, and status.
+- Review pagination, review likes UI, profile editing, recent activity endpoints, account settings, recommendations, moderation, full auth UI, and extension UI are not implemented yet.
 - Ratings MVP supports `PUT /ratings/entities/:entityId/my-rating`, `GET /ratings/entities/:entityId`, and `GET /ratings/entities/:entityId/my-rating`.
 - Rating scale is integer `1..5`.
 - One active rating exists per user per entity; repeated rating updates the existing record.
@@ -620,7 +641,8 @@ Stage 22 - Web Profile MVP, but only after explicit user confirmation and scope 
 - Stage 19 implemented Web Home And Search only.
 - Stage 20 implemented Web Entity Creation MVP only.
 - Stage 21 implemented Web Entity Page MVP only.
-- Stage 22 should implement Web Profile MVP only after user confirmation and exact scope confirmation.
+- Stage 22 implemented Web Profile MVP only.
+- Stage 23 should implement Browser Extension Skeleton only after user confirmation and exact scope confirmation.
 - Parallel commands that both run `prisma generate` can hit `EBUSY` on Windows; run typecheck/build sequentially after Prisma schema changes.
 - Web Docker service runs the Next.js dev server. Extension Docker service still uses a placeholder command because the extension app does not exist yet.
 - Use `docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml ...` for development, or `make dev` where `make` is installed.

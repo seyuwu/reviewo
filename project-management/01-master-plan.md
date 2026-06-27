@@ -394,7 +394,7 @@ Verification:
 - User can open an entity, rate it, and leave a review.
 - Page uses the composition endpoint.
 
-### 22. ⬜ Web Profile MVP
+### 22. ✅ Web Profile MVP
 
 Goal: implement a minimal user profile.
 
