@@ -1,3 +1,5 @@
+import { LOCALE_PREFERENCE_STORAGE_KEY, normalizeLocalePreference } from "@reviewo/i18n";
+
 import {
   DEFAULT_EXTENSION_PREFERENCES,
   EXTENSION_PREFERENCES_STORAGE_KEY,
@@ -5,6 +7,7 @@ import {
   type ExtensionUserPreferences,
   type PopupReviewDisplayMode
 } from "./preferences.js";
+import { normalizeRatingCardHotkey } from "./rating-card-hotkey.js";
 
 export async function readExtensionPreferences(): Promise<ExtensionUserPreferences> {
   let stored: Record<string, unknown>;
@@ -26,12 +29,20 @@ export async function readExtensionPreferences(): Promise<ExtensionUserPreferenc
   const cardPlacement = normalizeCardPlacement(record.cardPlacement);
   const popupReviewDisplayMode = normalizePopupReviewDisplayMode(record.popupReviewDisplayMode);
   const popupReviewsLimit = normalizePopupReviewsLimit(record.popupReviewsLimit);
+  const onSiteRatingCardEnabled = normalizeOnSiteRatingCardEnabled(record.onSiteRatingCardEnabled);
+  const ratingCardHotkey = normalizeRatingCardHotkey(record.ratingCardHotkey);
+  const ratingCardHotkeyEnabled = normalizeRatingCardHotkeyEnabled(record.ratingCardHotkeyEnabled);
+  const locale = normalizeLocalePreference(record.locale);
 
   return {
     autoDismissSeconds,
     cardPlacement,
+    locale,
+    onSiteRatingCardEnabled,
     popupReviewDisplayMode,
-    popupReviewsLimit
+    popupReviewsLimit,
+    ratingCardHotkey,
+    ratingCardHotkeyEnabled
   };
 }
 
@@ -41,13 +52,18 @@ export async function saveExtensionPreferences(
   const normalized = {
     autoDismissSeconds: normalizeAutoDismissSeconds(preferences.autoDismissSeconds),
     cardPlacement: normalizeCardPlacement(preferences.cardPlacement),
+    locale: normalizeLocalePreference(preferences.locale),
+    onSiteRatingCardEnabled: normalizeOnSiteRatingCardEnabled(preferences.onSiteRatingCardEnabled),
     popupReviewDisplayMode: normalizePopupReviewDisplayMode(preferences.popupReviewDisplayMode),
-    popupReviewsLimit: normalizePopupReviewsLimit(preferences.popupReviewsLimit)
+    popupReviewsLimit: normalizePopupReviewsLimit(preferences.popupReviewsLimit),
+    ratingCardHotkey: normalizeRatingCardHotkey(preferences.ratingCardHotkey),
+    ratingCardHotkeyEnabled: normalizeRatingCardHotkeyEnabled(preferences.ratingCardHotkeyEnabled)
   };
 
   try {
     await chrome.storage.local.set({
-      [EXTENSION_PREFERENCES_STORAGE_KEY]: normalized
+      [EXTENSION_PREFERENCES_STORAGE_KEY]: normalized,
+      [LOCALE_PREFERENCE_STORAGE_KEY]: normalized.locale
     });
   } catch {
     return normalized;
@@ -91,4 +107,20 @@ function normalizePopupReviewsLimit(value: unknown): number {
   }
 
   return Math.min(50, Math.max(1, Math.round(value)));
+}
+
+function normalizeOnSiteRatingCardEnabled(value: unknown): boolean {
+  if (typeof value !== "boolean") {
+    return DEFAULT_EXTENSION_PREFERENCES.onSiteRatingCardEnabled;
+  }
+
+  return value;
+}
+
+function normalizeRatingCardHotkeyEnabled(value: unknown): boolean {
+  if (typeof value !== "boolean") {
+    return DEFAULT_EXTENSION_PREFERENCES.ratingCardHotkeyEnabled;
+  }
+
+  return value;
 }

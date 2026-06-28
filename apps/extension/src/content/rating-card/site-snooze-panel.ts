@@ -1,3 +1,5 @@
+import type { MessageKey, TranslateFn } from "@reviewo/i18n";
+
 import {
   readSiteHostname,
   SITE_SNOOZE_DURATIONS,
@@ -5,24 +7,33 @@ import {
   type SiteSnoozeDuration
 } from "../../shared/site-snooze.js";
 
-export function renderSiteSnoozePanelMarkup(): string {
-  const optionsMarkup = SITE_SNOOZE_DURATIONS.map(
-    (duration) => `
+const SNOOZE_DURATION_MESSAGE_KEYS: Record<SiteSnoozeDuration, MessageKey> = {
+  "24h": "snooze.duration.24h",
+  "7d": "snooze.duration.7d",
+  "30d": "snooze.duration.30d",
+  "1y": "snooze.duration.1y"
+};
+
+export function renderSiteSnoozePanelMarkup(t: TranslateFn): string {
+  const optionsMarkup = SITE_SNOOZE_DURATIONS.map((duration) => {
+    const durationLabel = t(SNOOZE_DURATION_MESSAGE_KEYS[duration]);
+
+    return `
       <button
         type="button"
         class="reviewo-site-snooze-button"
         data-site-snooze="${duration}"
-        title="Скрыть Reviewo на этом сайте на ${duration}"
+        title="${escapeHtmlAttribute(t("snooze.panel.durationTooltip", { duration: durationLabel }))}"
       >
-        ${duration}
+        ${escapeHtmlText(durationLabel)}
       </button>
-    `
-  ).join("");
+    `;
+  }).join("");
 
   return `
     <div class="reviewo-site-snooze">
-      <span class="reviewo-site-snooze-label">Отключить на этом сайте</span>
-      <div class="reviewo-site-snooze-options" role="group" aria-label="Срок отключения Reviewo на сайте">
+      <span class="reviewo-site-snooze-label">${escapeHtmlText(t("snooze.panel.label"))}</span>
+      <div class="reviewo-site-snooze-options" role="group" aria-label="${escapeHtmlAttribute(t("snooze.panel.durationAriaLabel"))}">
         ${optionsMarkup}
       </div>
     </div>
@@ -54,4 +65,12 @@ export function bindSiteSnoozePanel(
 
 function isSiteSnoozeDuration(value: string | undefined): value is SiteSnoozeDuration {
   return value === "24h" || value === "7d" || value === "30d" || value === "1y";
+}
+
+function escapeHtmlText(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return escapeHtmlText(value).replaceAll('"', "&quot;");
 }

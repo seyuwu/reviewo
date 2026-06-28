@@ -6,8 +6,16 @@ import type {
   UserRating
 } from "../types/entity-page";
 
-export function getEntityPage(entityId: string): Promise<EntityPageResponse> {
-  return apiRequest<EntityPageResponse>(`/entities/${entityId}/page`);
+export function getEntityPage(entityId: string, accessToken?: string): Promise<EntityPageResponse> {
+  if (!accessToken) {
+    return apiRequest<EntityPageResponse>(`/entities/${entityId}/page`);
+  }
+
+  return apiRequest<EntityPageResponse>(`/entities/${entityId}/page`, {
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    }
+  });
 }
 
 export function getMyRating(entityId: string, accessToken: string): Promise<UserRating | null> {
@@ -55,5 +63,23 @@ export function upsertMyReview(
       authorization: `Bearer ${accessToken}`
     },
     method: "PUT"
+  });
+}
+
+export function likeReview(reviewId: string, accessToken: string): Promise<Review> {
+  return apiRequest<Review>(`/reviews/${reviewId}/like`, {
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    },
+    method: "POST"
+  });
+}
+
+export function unlikeReview(reviewId: string, accessToken: string): Promise<Review> {
+  return apiRequest<Review>(`/reviews/${reviewId}/like`, {
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    },
+    method: "DELETE"
   });
 }

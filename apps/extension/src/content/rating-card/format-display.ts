@@ -1,32 +1,54 @@
+import type { TranslateFn } from "@reviewo/i18n";
+import { formatRatingVotesLabel } from "@reviewo/i18n";
+
 import type { ExtensionResolveFoundResponse } from "../../shared/types/resolve.js";
 
 export function formatAverageScore(avgScore: number): string {
   return avgScore.toFixed(1);
 }
 
-export function formatVotesCount(votesCount: number): string {
-  return votesCount === 1 ? "1 rating" : `${votesCount} ratings`;
+export function formatVotesCount(t: TranslateFn, votesCount: number): string {
+  return formatRatingVotesLabel(t, votesCount);
 }
 
 export function hasEntityRatings(votesCount: number): boolean {
   return votesCount > 0;
 }
 
-export function formatRatingStatsLine(avgScore: number, votesCount: number): string {
+export function formatRatingStatsLine(t: TranslateFn, avgScore: number, votesCount: number): string {
   if (!hasEntityRatings(votesCount)) {
-    return "No ratings yet · Be the first to rate";
+    return t("rating.stats.empty");
   }
 
-  return `${formatAverageScore(avgScore)} / 5 · ${formatVotesCount(votesCount)}`;
+  return t("rating.stats.line", {
+    avg: formatAverageScore(avgScore),
+    votes: formatVotesCount(t, votesCount)
+  });
 }
 
-export function formatTrustConfidence(confidence: number): string {
-  const percentage = Math.round(confidence * 100);
-
-  return `Trust ${percentage}%`;
+export function formatTrustConfidence(t: TranslateFn, confidence: number): string {
+  return t("rating.confidence", { percent: Math.round(confidence * 100) });
 }
 
-export function buildRatingCardSummary(response: ExtensionResolveFoundResponse): {
+export function formatRatingStatsLineWithConfidence(
+  t: TranslateFn,
+  avgScore: number,
+  votesCount: number,
+  confidence: number
+): string {
+  const baseLine = formatRatingStatsLine(t, avgScore, votesCount);
+
+  if (!hasEntityRatings(votesCount)) {
+    return baseLine;
+  }
+
+  return `${baseLine} · ${formatTrustConfidence(t, confidence)}`;
+}
+
+export function buildRatingCardSummary(
+  t: TranslateFn,
+  response: ExtensionResolveFoundResponse
+): {
   averageScoreLabel: string;
   entityTitle: string;
   hasRatings: boolean;
@@ -35,11 +57,11 @@ export function buildRatingCardSummary(response: ExtensionResolveFoundResponse):
   const hasRatings = hasEntityRatings(response.rating.votesCount);
 
   return {
-    averageScoreLabel: hasRatings ? formatAverageScore(response.rating.avgScore) : "—",
+    averageScoreLabel: hasRatings ? formatAverageScore(response.rating.avgScore) : t("rating.noScore"),
     entityTitle: response.entity.title,
     hasRatings,
     metaLabel: hasRatings
-      ? `${formatVotesCount(response.rating.votesCount)} · ${formatTrustConfidence(response.trust.confidence)}`
-      : "No ratings yet · Be the first to rate"
+      ? `${formatVotesCount(t, response.rating.votesCount)} · ${formatTrustConfidence(t, response.trust.confidence)}`
+      : t("rating.stats.empty")
   };
 }

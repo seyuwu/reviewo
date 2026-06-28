@@ -602,3 +602,29 @@ Verification:
 - MVP is stable.
 - Known limitations are explicit.
 - Next roadmap can be planned without rewriting the core.
+
+### 34. ✅ Entity Live Chat MVP (post-MVP)
+
+Goal: add per-entity live chat without breaking existing rating/review/reputation/extension resolve flows.
+
+Scope:
+
+- PostgreSQL `chat.entity_chat_messages` table only (optional `is_hidden` / `hidden_reason`).
+- Redis presence (`chat:entity:{entityId}:online`).
+- WebSocket namespace `/chat`, room id = `entityId`.
+- REST: latest messages, cursor pagination, active now, online count.
+- Extension popup chat drawer (`↑ Обсуждение`) with scroll-up history load.
+- Active Now from deterministic message activity ranking (no AI).
+- Soft anti-spam via reputation trust score cooldowns.
+
+Out of scope (v1):
+
+- DMs, reactions, replies, attachments, edits/deletes, AI moderation/summary.
+
+Verification:
+
+- Chat send/receive works for an entity.
+- Popup drawer expands without replacing entity summary card.
+- Last 100 messages load; older messages load by cursor.
+- Active Now shows genuinely active entities.
+- Existing rating/review/reputation/extension flows remain intact.

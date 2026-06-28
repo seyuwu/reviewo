@@ -4,10 +4,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useId, useState } from "react";
 
+import { useTranslation } from "../../i18n/locale-provider";
+import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
 import { useEntitySearch } from "../hooks/use-entity-search";
 import type { SearchEntityResult } from "../types/search-entities";
 
 export function HomeSearch() {
+  const t = useTranslation();
   const inputId = useId();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q")?.trim() ?? "";
@@ -47,22 +50,19 @@ export function HomeSearch() {
 
   return (
     <section className="home-search-card" aria-labelledby="home-search-heading">
-      <p className="eyebrow">Reviewo</p>
-      <h1 id="home-search-heading">Что хотите оценить?</h1>
-      <p className="hero-copy">
-        Найдите сайт, продукт, компанию или любое другое явление. Reviewo покажет, что о нем думают
-        люди.
-      </p>
+      <p className="eyebrow">{t("brand.name")}</p>
+      <h1 id="home-search-heading">{t("web.home.title")}</h1>
+      <p className="hero-copy">{t("web.home.subtitle")}</p>
 
       <form className="search-form" role="search" onSubmit={handleSubmit}>
         <label className="sr-only" htmlFor={inputId}>
-          Search entities
+          {t("web.home.searchLabel")}
         </label>
         <input
           id={inputId}
           autoComplete="off"
           maxLength={200}
-          placeholder="Например: github.com, iPhone, Cursor..."
+          placeholder={t("web.home.searchPlaceholder")}
           type="search"
           value={query}
           onChange={(event) => {
@@ -70,7 +70,7 @@ export function HomeSearch() {
           }}
         />
         <button type="submit" disabled={!trimmedQuery}>
-          Search
+          {t("common.search")}
         </button>
       </form>
 
@@ -85,13 +85,13 @@ export function HomeSearch() {
             {isWaitingForResults && !showResults ? (
               <div className="search-state search-state-loading">
                 <span className="state-dot state-dot-loading" aria-hidden="true" />
-                Searching...
+                {t("web.home.searching")}
               </div>
             ) : null}
 
             {isError ? (
               <div className="search-state search-state-error ui-fade-soft">
-                Search is temporarily unavailable. Please try again.
+                {t("web.home.searchError")}
               </div>
             ) : null}
 
@@ -104,7 +104,7 @@ export function HomeSearch() {
             {showEmptyState && !shouldShowCreateHint ? (
               <div className="search-state ui-fade-soft">
                 <span className="state-dot" aria-hidden="true" />
-                No entities found for "{debouncedQuery}".
+                {t("web.home.noResults", { query: debouncedQuery })}
               </div>
             ) : null}
 
@@ -119,10 +119,12 @@ export function HomeSearch() {
 }
 
 function SearchIdleState() {
+  const t = useTranslation();
+
   return (
     <div className="search-state">
       <span className="state-dot" aria-hidden="true" />
-      Start typing to search the public opinion layer.
+      {t("web.home.idleHint")}
     </div>
   );
 }
@@ -133,12 +135,14 @@ interface SearchResultsProps {
 }
 
 function SearchResults({ query, results }: SearchResultsProps) {
+  const t = useTranslation();
+
   return (
-    <div className="results-list" aria-label="Search results">
+    <div className="results-list" aria-label={t("web.home.resultsAriaLabel")}>
       {results.map((entity) => (
         <article className="result-card" key={entity.id}>
           <div>
-            <p className="result-type">{entity.type}</p>
+            <p className="result-type">{formatEntityTypeLabel(t, entity.type)}</p>
             <h2>{entity.title}</h2>
             <p>{entity.description ?? entity.canonicalUrl ?? entity.slug}</p>
           </div>
@@ -146,7 +150,7 @@ function SearchResults({ query, results }: SearchResultsProps) {
             className="result-action"
             href={`/entities/${entity.id}?q=${encodeURIComponent(query)}`}
           >
-            Open
+            {t("common.open")}
           </Link>
         </article>
       ))}
@@ -159,17 +163,18 @@ interface CreateEntityHintProps {
 }
 
 function CreateEntityHint({ query }: CreateEntityHintProps) {
+  const t = useTranslation();
   const createEntityHref = `/entities/new?query=${encodeURIComponent(query)}`;
 
   return (
     <div className="create-hint ui-fade-soft">
       <div>
-        <p className="result-type">No entity found</p>
-        <h2>Create a new page for "{query}"</h2>
-        <p>Start a minimal entity page and let the backend validate the submitted data.</p>
+        <p className="result-type">{t("web.home.createHint.type")}</p>
+        <h2>{t("web.home.createHint.title", { query })}</h2>
+        <p>{t("web.home.createHint.body")}</p>
       </div>
       <Link className="primary-link" href={createEntityHref}>
-        Create page
+        {t("web.home.createHint.action")}
       </Link>
     </div>
   );

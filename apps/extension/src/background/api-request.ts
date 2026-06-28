@@ -14,6 +14,7 @@ export interface ApiRequestResult<TData = unknown> {
 }
 
 export interface ApiRequestError {
+  errorDetails?: unknown;
   errorMessage: string;
   ok: false;
   status: number;
@@ -45,6 +46,7 @@ export async function apiRequest<TData = unknown>(
 
   if (!response.ok) {
     return {
+      errorDetails: extractErrorDetails(data),
       errorMessage: extractErrorMessage(data, response.status),
       ok: false,
       status: response.status
@@ -82,4 +84,12 @@ function extractErrorMessage(data: unknown, status: number): string {
   }
 
   return `API request failed with status ${status}`;
+}
+
+function extractErrorDetails(data: unknown): unknown {
+  if (data && typeof data === "object" && "error" in data) {
+    return (data as { error?: { details?: unknown } }).error?.details;
+  }
+
+  return undefined;
 }

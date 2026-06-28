@@ -2,16 +2,16 @@
 
 ## Snapshot
 
-- Date: 2026-06-27
-- Current stage: MVP roadmap complete (Stages 1–33)
-- Stage status: Stage 33 completed
+- Date: 2026-06-28
+- Current stage: Post-MVP — Entity Live Chat MVP
+- Stage status: Entity Live Chat MVP completed
 - MVP readiness: **Ready for first deployment** (with documented limitations)
-- Last completed stage: Stage 33 - MVP Stabilization
-- Next stage: None in master plan — post-MVP RFCs
+- Last completed stage: Entity Live Chat MVP
+- Next stage: Deferred post-MVP items (see Stage 33 RFC backlog)
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, and read MVP trust confidence for an entity through the backend API. The web app now starts as a Next.js application with routing, layout, providers, TanStack Query, a base API client, home search UX backed by the Search API, minimal authenticated entity creation, a base entity page with rating/review interactions, and a read-only profile page. The browser extension now reads the current page URL, resolves it through the backend Extension API, shows a compact rating card for found and not-found URLs, lets authenticated users submit ratings from the card, and lazily creates entities on first rating for unknown URLs.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, read MVP trust confidence for an entity through the backend API, and participate in per-entity live chat from the extension popup. Entity Live Chat stores messages in PostgreSQL, tracks online presence in Redis, streams updates over WebSocket (`/chat` namespace), exposes REST endpoints for history/cursor pagination/active-now/online count, and applies soft send-rate limits based on reputation trust score.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 

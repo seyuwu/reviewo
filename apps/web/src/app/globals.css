@@ -215,11 +215,11 @@ button:disabled {
 }
 
 .ui-fade-in {
-  animation: ui-fade-in 260ms ease both;
+  animation: ui-fade-in 260ms ease forwards;
 }
 
 .page-transition {
-  animation: ui-page-enter 300ms ease both;
+  animation: ui-page-enter 300ms ease forwards;
   width: 100%;
 }
 
@@ -231,7 +231,7 @@ button:disabled {
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -243,7 +243,7 @@ button:disabled {
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -358,6 +358,32 @@ button:disabled {
   gap: 0.65rem;
 }
 
+.locale-switcher {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.locale-switcher-button,
+.locale-switcher-select {
+  background: #fff;
+  border: 1px solid var(--color-card-border);
+  border-radius: 999px;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 2.25rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.locale-switcher-button.is-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
 .app-chrome-auth {
   display: grid;
   min-height: 2rem;
@@ -458,8 +484,13 @@ h1 {
   color: var(--color-text-muted);
   font-size: clamp(1rem, 2vw, 1.25rem);
   line-height: 1.7;
-  overflow-wrap: anywhere;
-  word-break: break-all;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.home-search-card .hero-copy {
+  max-width: 36rem;
+  text-wrap: pretty;
 }
 
 .search-form {
@@ -1123,6 +1154,49 @@ h1 {
   flex-wrap: wrap;
   gap: 0.75rem;
   font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.review-card-footer {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: space-between;
+}
+
+.review-vote-controls {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.review-vote-button {
+  background: var(--color-card);
+  border: 1px solid var(--color-card-border);
+  border-radius: 999px;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  min-height: 1.85rem;
+  padding: 0.15rem 0.55rem;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.review-like-button.is-active {
+  background: rgba(212, 175, 55, 0.15);
+  border-color: var(--color-accent);
+}
+
+.review-vote-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.review-you-label {
+  color: var(--color-text-muted);
   font-weight: 700;
 }
 

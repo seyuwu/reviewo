@@ -1,5 +1,7 @@
-import { formatRatingStatsLine } from "../../content/rating-card/format-display.js";
+import { formatRatingStatsLine, formatRatingStatsLineWithConfidence } from "../../content/rating-card/format-display.js";
 import { resolveMyEntityRatingScore } from "../../content/rating-card/resolve-my-entity-rating.js";
+import type { TranslateFn } from "@reviewo/i18n";
+import { createExtensionTranslator } from "../../shared/extension-i18n.js";
 import { createGetAuthSessionMessage, ExtensionMessageType } from "../../shared/messages.js";
 import { readExtensionPreferences } from "../../shared/extension-preferences-storage.js";
 import { readPersistedEntityRatingByCanonical } from "../../shared/entity-rating-sync.js";
@@ -23,12 +25,24 @@ import {
   renderEntityReviewsSectionMarkup
 } from "../entity-reviews-section.js";
 import { renderPopupRatePanel } from "../popup-rate-panel.js";
+import {
+  bindChatDrawerToggle,
+  renderChatDrawerSectionMarkup
+} from "../components/chat-drawer.js";
+import {
+  mountActiveNowPanel,
+  renderActiveNowHostMarkup
+} from "../components/active-now-panel.js";
+import type { ActiveNowItem } from "../services/entity-chat-api.js";
 
 export interface HomeScreenActions {
   onCurrentPageRated: () => void;
+  onOpenActiveEntity?: (item: ActiveNowItem) => void;
   onOpenChild: (entity: EntityViewModel) => void;
   onOpenCurrentPage: (entity: EntityViewModel) => void;
   onOpenRecent: (record: RecentEntityRecord) => void;
+  onOpenSearchScreen: () => void;
+  onRequestSignIn: () => void;
   onSearch: (query: string) => void;
 }
 
@@ -37,6 +51,7 @@ export async function renderHomeScreen(
   activeTab: ActiveTabResolveState,
   actions: HomeScreenActions
 ): Promise<void> {
+  const t = await createExtensionTranslator();
   const recent = await listRecentEntities();
   const sessionResponse = await sendExtensionMessage<{
     payload?: { session?: { accessToken: string } | null };
@@ -50,30 +65,19 @@ export async function renderHomeScreen(
       ? sessionResponse.payload?.session?.userId
       : undefined;
   const preferences = await readExtensionPreferences();
-  const currentPageMarkup = await renderCurrentPageSection(activeTab, isAuthenticated, preferences);
-  const domainTree = await buildDomainTreeSection(activeTab);
+  const currentPageMarkup = await renderCurrentPageSection(activeTab, isAuthenticated, preferences, t);
+  const domainTree = await buildDomainTreeSection(activeTab, t);
 
   container.innerHTML = `
     <section class="screen home-screen">
-      <form class="search-entry" data-home-search-form>
-        <label class="field-label search-field-label">
-          Search Reviewo
-          <input
-            name="query"
-            type="search"
-            placeholder="youtube, github, steam..."
-            autocomplete="off"
-          />
-        </label>
-        <button type="submit" class="primary-button">Search</button>
-      </form>
       ${currentPageMarkup}
       ${domainTree.markup}
+      ${renderActiveNowHostMarkup()}
       <section class="recent-section card-section">
-        <h2>Recent</h2>
+        <h2>${escapeHtml(t("home.recent.title"))}</h2>
         ${
           recent.length === 0
-            ? `<p class="muted-copy">Pages you open will appear here.</p>`
+            ? `<p class="muted-copy">${escapeHtml(t("home.recent.empty"))}</p>`
             : `<ul class="entity-list">${recent
                 .map(
                   (item) => `
@@ -88,17 +92,16 @@ export async function renderHomeScreen(
                 .join("")}</ul>`
         }
       </section>
+      <div class="home-search-footer">
+        <button type="button" class="text-link-button" data-open-search-screen>
+          ${escapeHtml(t("home.openSearchLink"))}
+        </button>
+      </div>
     </section>
   `;
 
-  container.querySelector("[data-home-search-form]")?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const form = event.target as HTMLFormElement;
-    const query = new FormData(form).get("query");
-
-    if (typeof query === "string" && query.trim()) {
-      actions.onSearch(query.trim());
-    }
+  container.querySelector("[data-open-search-screen]")?.addEventListener("click", () => {
+    actions.onOpenSearchScreen();
   });
 
   container.querySelector("[data-open-current-page]")?.addEventListener("click", () => {
@@ -113,6 +116,11 @@ export async function renderHomeScreen(
 
   container.querySelectorAll<HTMLButtonElement>("[data-home-rate-score]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!isAuthenticated) {
+        actions.onRequestSignIn();
+        return;
+      }
+
       if (!activeTab.result || !activeTab.url) {
         return;
       }
@@ -123,25 +131,45 @@ export async function renderHomeScreen(
         return;
       }
 
-      void submitHomeRating(activeTab, score, container, actions);
+      void submitHomeRating(activeTab, score, container, actions, t);
     });
   });
 
+  bindAuthPromptTriggers(container, actions.onRequestSignIn);
+
   const reviewsHost = container.querySelector<HTMLElement>("[data-home-reviews-host]");
 
-  if (
-    reviewsHost &&
-    activeTab.result?.status === "found" &&
-    activeTab.result.entity.id
-  ) {
+  if (activeTab.result?.status === "found" && activeTab.result.entity.id) {
     await mountHomeReviewsSection(
       reviewsHost,
       activeTab.result.entity.id,
       isAuthenticated,
       currentUserId,
-      preferences
+      preferences,
+      t
     );
   }
+
+  if (activeTab.result?.status === "found" && activeTab.result.entity.id) {
+    mountHomeChatSection(
+      container,
+      activeTab.result.entity.id,
+      activeTab.result.entity.title,
+      isAuthenticated,
+      sessionResponse?.type === ExtensionMessageType.AuthSessionResult
+        ? sessionResponse.payload?.session?.accessToken ?? null
+        : null,
+      currentUserId,
+      t,
+      actions
+    );
+  }
+
+  void mountActiveNowPanel(
+    container.querySelector<HTMLElement>("[data-active-now-host]"),
+    t,
+    actions.onOpenActiveEntity
+  );
 
   container.querySelectorAll<HTMLButtonElement>("[data-recent-id]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -172,7 +200,10 @@ export async function renderHomeScreen(
   });
 }
 
-async function buildDomainTreeSection(activeTab: ActiveTabResolveState): Promise<{
+async function buildDomainTreeSection(
+  activeTab: ActiveTabResolveState,
+  t: TranslateFn
+): Promise<{
   children: ExtensionEntityChildItem[];
   markup: string;
   treeRoot: ExtensionResolveEntityBundle | null;
@@ -194,9 +225,11 @@ async function buildDomainTreeSection(activeTab: ActiveTabResolveState): Promise
       return { children: [], markup: "", treeRoot };
     }
 
-    const parentStatsLabel = formatRatingStatsLine(
+    const parentStatsLabel = formatRatingStatsLineWithConfidence(
+      t,
       treeRoot.rating.avgScore,
-      treeRoot.rating.votesCount
+      treeRoot.rating.votesCount,
+      treeRoot.trust.confidence
     );
     const currentEntityId = activeTab.result.entity.id;
 
@@ -204,15 +237,15 @@ async function buildDomainTreeSection(activeTab: ActiveTabResolveState): Promise
       children: response.children,
       markup: `
         <section class="domain-tree-section">
-          <h2>On this site</h2>
+          <h2>${escapeHtml(t("home.domainTree.title"))}</h2>
           <div class="domain-tree-header">
             <p><strong>${escapeHtml(treeRoot.entity.title)}</strong></p>
             <p class="muted-copy">${escapeHtml(parentStatsLabel)}</p>
-            <a class="text-link" href="${escapeHtml(buildEntityPageUrl(treeRoot.web.entityPagePath))}" target="_blank" rel="noopener noreferrer">Open site page</a>
+            <a class="text-link" href="${escapeHtml(buildEntityPageUrl(treeRoot.web.entityPagePath))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("home.domainTree.openSitePage"))}</a>
           </div>
           <ul class="domain-tree">
             ${response.children
-              .map((child, index) => renderDomainTreeItem(child, index, response.children.length, currentEntityId))
+              .map((child, index) => renderDomainTreeItem(child, index, response.children.length, currentEntityId, t))
               .join("")}
           </ul>
         </section>
@@ -228,13 +261,14 @@ function renderDomainTreeItem(
   child: ExtensionEntityChildItem,
   index: number,
   total: number,
-  currentEntityId: string
+  currentEntityId: string,
+  t: TranslateFn
 ): string {
   const isCurrent = child.entity.id === currentEntityId;
   const branch = index === total - 1 ? "└" : "├";
   const title = child.entity.title || shortenCanonicalUrlForTree(child.entity.canonicalUrl);
   const pathLabel = shortenCanonicalUrlForTree(child.entity.canonicalUrl);
-  const metaLabel = formatRatingStatsLine(child.rating.avgScore, child.rating.votesCount);
+  const metaLabel = formatRatingStatsLine(t, child.rating.avgScore, child.rating.votesCount);
 
   return `
     <li>
@@ -257,21 +291,23 @@ function renderDomainTreeItem(
 function renderCurrentPageSection(
   activeTab: ActiveTabResolveState,
   isAuthenticated: boolean,
-  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>
+  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>,
+  t: TranslateFn
 ): Promise<string> {
-  return buildCurrentPageSectionMarkup(activeTab, isAuthenticated, preferences);
+  return buildCurrentPageSectionMarkup(activeTab, isAuthenticated, preferences, t);
 }
 
 async function buildCurrentPageSectionMarkup(
   activeTab: ActiveTabResolveState,
   isAuthenticated: boolean,
-  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>
+  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>,
+  t: TranslateFn
 ): Promise<string> {
   if (!activeTab.url) {
     return `
       <section class="current-page-card">
-        <h2>Current page</h2>
-        <p class="muted-copy">Open a normal website tab to see its Reviewo status.</p>
+        <h2>${escapeHtml(t("home.currentPage.title"))}</h2>
+        <p class="muted-copy">${escapeHtml(t("home.currentPage.noTab"))}</p>
       </section>
     `;
   }
@@ -279,14 +315,14 @@ async function buildCurrentPageSectionMarkup(
   if (!activeTab.result) {
     return `
       <section class="current-page-card">
-        <h2>Current page</h2>
-        <p class="muted-copy">This page cannot be resolved by Reviewo.</p>
+        <h2>${escapeHtml(t("home.currentPage.title"))}</h2>
+        <p class="muted-copy">${escapeHtml(t("home.currentPage.unresolved"))}</p>
       </section>
     `;
   }
 
   const myRatingScore = await resolveCurrentPageMyRating(activeTab, isAuthenticated);
-  const ratePanelMarkup = renderPopupRatePanel({
+  const ratePanelMarkup = renderPopupRatePanel(t, {
     isAuthenticated,
     myRatingScore,
     rateScoreDataAttribute: "data-home-rate-score",
@@ -294,37 +330,42 @@ async function buildCurrentPageSectionMarkup(
   });
   const reviewsHostMarkup =
     activeTab.result.status === "found"
-      ? `<div class="home-reviews-host" data-home-reviews-host hidden></div>`
+      ? `<div class="home-reviews-host home-reviews-host-primary" data-home-reviews-host hidden></div>`
       : "";
 
   if (activeTab.result.status === "found") {
-    const parentMarkup = renderParentSiteSection(activeTab.result);
-    const ratingLine = formatRatingStatsLine(
+    const parentMarkup = renderParentSiteSection(activeTab.result, t);
+    const ratingLine = formatRatingStatsLineWithConfidence(
+      t,
       activeTab.result.rating.avgScore,
-      activeTab.result.rating.votesCount
+      activeTab.result.rating.votesCount,
+      activeTab.result.trust.confidence
     );
 
     return `
       <section class="current-page-card is-found">
-        <h2>Current page</h2>
-        <p class="status-line success-line">✓ ${escapeHtml(activeTab.result.entity.title)} found</p>
-        <p class="muted-copy${activeTab.result.rating.votesCount === 0 ? " emphasis-copy" : ""}">${escapeHtml(ratingLine)}</p>
-        ${parentMarkup}
-        ${ratePanelMarkup}
-        ${reviewsHostMarkup}
-        <button type="button" class="secondary-button" data-open-current-page>Open page</button>
+        <div class="current-page-card-scroll">
+          <h2>${escapeHtml(t("home.currentPage.title"))}</h2>
+          <p class="status-line success-line">✓ ${escapeHtml(t("home.currentPage.found", { title: activeTab.result.entity.title }))}</p>
+          <p class="muted-copy${activeTab.result.rating.votesCount === 0 ? " emphasis-copy" : ""}">${escapeHtml(ratingLine)}</p>
+          ${parentMarkup}
+          ${reviewsHostMarkup}
+          ${ratePanelMarkup}
+          <button type="button" class="secondary-button" data-open-current-page>${escapeHtml(t("entity.openPage"))}</button>
+        </div>
+        <div class="home-chat-actions" data-home-chat-actions hidden></div>
       </section>
     `;
   }
 
   return `
     <section class="current-page-card is-not-found">
-      <h2>Current page</h2>
-      <p class="status-line">Not in Reviewo yet</p>
-      <p class="muted-copy">Rate it here if you missed the on-page card.</p>
-      ${ratePanelMarkup}
+      <h2>${escapeHtml(t("home.currentPage.title"))}</h2>
+      <p class="status-line">${escapeHtml(t("home.currentPage.notFound"))}</p>
+      <p class="muted-copy">${escapeHtml(t("home.currentPage.notFoundHint"))}</p>
       ${reviewsHostMarkup}
-      <button type="button" class="secondary-button" data-open-current-page>Open page</button>
+      ${ratePanelMarkup}
+      <button type="button" class="secondary-button" data-open-current-page>${escapeHtml(t("entity.openPage"))}</button>
     </section>
   `;
 }
@@ -351,10 +392,11 @@ async function mountHomeReviewsSection(
   entityId: string,
   isAuthenticated: boolean,
   currentUserId: string | undefined,
-  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>
+  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>,
+  t: TranslateFn
 ): Promise<void> {
   host.hidden = false;
-  host.innerHTML = `<p class="muted-copy">Loading reviews...</p>`;
+  host.innerHTML = `<p class="muted-copy">${escapeHtml(t("reviews.loading"))}</p>`;
 
   const loaded = await loadEntityReviewsSectionState(entityId, isAuthenticated, currentUserId, {
     displayMode: preferences.popupReviewDisplayMode,
@@ -364,15 +406,15 @@ async function mountHomeReviewsSection(
 
   if (!loaded.state) {
     host.innerHTML = `<p class="status-copy-error">${escapeHtml(
-      loaded.errorMessage ?? "Could not load reviews."
+      loaded.errorMessage ?? t("reviews.loadError")
     )}</p>`;
     return;
   }
 
-  host.innerHTML = renderEntityReviewsSectionMarkup(loaded.state, loaded.myReviewText ?? "", undefined, {
+  host.innerHTML = renderEntityReviewsSectionMarkup(t, loaded.state, loaded.myReviewText ?? "", undefined, {
     hideMyReviewWhenSaved: false
   });
-  bindEntityReviewsSection(host, entityId, loaded.state, loaded.myReviewText ?? "", {
+  bindEntityReviewsSection(t, host, entityId, loaded.state, loaded.myReviewText ?? "", {
     hideMyReviewWhenSaved: false
   });
 }
@@ -381,7 +423,8 @@ async function submitHomeRating(
   activeTab: ActiveTabResolveState,
   score: number,
   container: HTMLElement,
-  actions: HomeScreenActions
+  actions: HomeScreenActions,
+  t: TranslateFn
 ): Promise<void> {
   if (!activeTab.result || !activeTab.url) {
     return;
@@ -391,7 +434,7 @@ async function submitHomeRating(
 
   if (statusElement) {
     statusElement.hidden = false;
-    statusElement.textContent = "Saving rating...";
+    statusElement.textContent = t("rating.saving");
     statusElement.classList.remove("status-copy-error", "status-copy-success");
   }
 
@@ -401,7 +444,7 @@ async function submitHomeRating(
   if (result.updated) {
     if (statusElement) {
       statusElement.hidden = false;
-      statusElement.textContent = "Rating saved.";
+      statusElement.textContent = t("rating.saved");
       statusElement.classList.remove("status-copy-error");
       statusElement.classList.add("status-copy-success");
     }
@@ -412,28 +455,65 @@ async function submitHomeRating(
 
   if (statusElement) {
     statusElement.hidden = false;
-    statusElement.textContent = result.errorMessage ?? "Could not save rating.";
+    statusElement.textContent = result.errorMessage ?? t("rating.saveError");
     statusElement.classList.remove("status-copy-success");
     statusElement.classList.add("status-copy-error");
   }
 }
 
-function renderParentSiteSection(result: ExtensionResolveFoundResponse): string {
+function mountHomeChatSection(
+  container: HTMLElement,
+  entityId: string,
+  entityTitle: string,
+  isAuthenticated: boolean,
+  accessToken: string | null,
+  currentUserId: string | undefined,
+  t: TranslateFn,
+  actions: HomeScreenActions
+): void {
+  const host = container.querySelector<HTMLElement>("[data-home-chat-actions]");
+
+  if (!host) {
+    return;
+  }
+
+  host.hidden = false;
+  host.innerHTML = renderChatDrawerSectionMarkup(t, entityId);
+  bindChatDrawerToggle(
+    host,
+    t,
+    entityId,
+    {
+      accessToken,
+      currentUserId,
+      entityId,
+      entityTitle,
+      isAuthenticated
+    },
+    {
+      onRequestSignIn: actions.onRequestSignIn
+    }
+  );
+}
+
+function renderParentSiteSection(result: ExtensionResolveFoundResponse, t: TranslateFn): string {
   if (!result.parent) {
     return "";
   }
 
-  const parentStatsLabel = formatRatingStatsLine(
+  const parentStatsLabel = formatRatingStatsLineWithConfidence(
+    t,
     result.parent.rating.avgScore,
-    result.parent.rating.votesCount
+    result.parent.rating.votesCount,
+    result.parent.trust.confidence
   );
 
   return `
     <div class="parent-site-row">
-      <p class="parent-site-label">Parent site</p>
+      <p class="parent-site-label">${escapeHtml(t("home.parentSite.label"))}</p>
       <p><strong>${escapeHtml(result.parent.entity.title)}</strong></p>
       <p class="muted-copy">${escapeHtml(parentStatsLabel)}</p>
-      <a class="text-link" href="${escapeHtml(buildEntityPageUrl(result.parent.web.entityPagePath))}" target="_blank" rel="noopener noreferrer">Open parent page</a>
+      <a class="text-link" href="${escapeHtml(buildEntityPageUrl(result.parent.web.entityPagePath))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("home.parentSite.openLink"))}</a>
     </div>
   `;
 }

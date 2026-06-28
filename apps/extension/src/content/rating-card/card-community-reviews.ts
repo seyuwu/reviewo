@@ -1,7 +1,16 @@
+import type { TranslateFn } from "@reviewo/i18n";
+
 import { breakLongUnbrokenText } from "../../shared/break-long-text.js";
 import type { PopupReviewDisplayMode } from "../../shared/preferences.js";
 import { isReviewByCurrentUser } from "../../shared/review-ownership.js";
 import { formatReviewSnippet } from "../../shared/review-snippet.js";
+import {
+  bindReviewCarouselNav,
+  clampReviewCarouselIndex,
+  renderReviewCarouselNavMarkup,
+  updateReviewCarouselNav
+} from "../../shared/review-carousel.js";
+import { animateRatingCardShellHeight } from "./card-shell-animation.js";
 import type { CardEntityReview } from "./fetch-entity-reviews.js";
 import { likeEntityReview, unlikeEntityReview } from "./fetch-entity-reviews.js";
 
@@ -46,7 +55,11 @@ function formatReviewDate(value: string): string {
   }
 }
 
-function renderReviewCard(review: CardEntityReview, state: CardCommunityReviewsState): string {
+function renderReviewCard(
+  t: TranslateFn,
+  review: CardEntityReview,
+  state: CardCommunityReviewsState
+): string {
   const isOwnReview = isReviewByCurrentUser(review.authorId, state.currentUserId);
   const likeClass = review.likedByCurrentUser ? " is-active" : "";
   const isCompact = state.displayMode === "compact";
@@ -60,14 +73,20 @@ function renderReviewCard(review: CardEntityReview, state: CardCommunityReviewsS
     <article class="${cardClass}" data-review-id="${escapeHtmlText(review.id)}">
       <p class="reviewo-review-text">${escapeHtmlText(breakLongUnbrokenText(displayText))}</p>
       <div class="reviewo-review-card-footer">
-        <div class="reviewo-review-vote-controls" role="group" aria-label="Review feedback">
+        <div class="reviewo-review-vote-controls" role="group" aria-label="${escapeHtmlAttribute(t("reviews.vote.groupAriaLabel"))}">
           <button
             type="button"
             class="reviewo-review-vote-button reviewo-review-like-button${likeClass}"
             data-like-review="${escapeHtmlText(review.id)}"
             aria-pressed="${review.likedByCurrentUser}"
             ${canVote ? "" : "disabled"}
-            title="${isOwnReview ? "You can't like your own review" : "Mark as helpful"}"
+            title="${escapeHtmlAttribute(
+              isOwnReview
+                ? t("reviews.vote.ownReviewTooltip")
+                : review.likedByCurrentUser
+                  ? t("reviews.vote.unlikeTooltip")
+                  : t("reviews.vote.likeTooltip")
+            )}"
           >
             👍 ${review.likesCount}
           </button>
@@ -76,14 +95,14 @@ function renderReviewCard(review: CardEntityReview, state: CardCommunityReviewsS
             class="reviewo-review-vote-button reviewo-review-unlike-button"
             data-unlike-review="${escapeHtmlText(review.id)}"
             ${canVote && review.likedByCurrentUser ? "" : "disabled"}
-            title="${isOwnReview ? "You can't like your own review" : "Remove your like"}"
+            title="${escapeHtmlAttribute(isOwnReview ? t("reviews.vote.ownReviewTooltip") : t("reviews.vote.unlikeTooltip"))}"
           >
             👎
           </button>
         </div>
         <span class="reviewo-review-date">${
           isOwnReview
-            ? `<span class="reviewo-review-you-label">You</span> · `
+            ? `<span class="reviewo-review-you-label">${escapeHtmlText(t("reviews.author.you"))}</span> · `
             : ""
         }${escapeHtmlText(formatReviewDate(review.updatedAt))}</span>
       </div>
@@ -91,31 +110,50 @@ function renderReviewCard(review: CardEntityReview, state: CardCommunityReviewsS
   `;
 }
 
-function renderReviewListMarkup(reviews: CardEntityReview[], state: CardCommunityReviewsState): string {
+function renderReviewAtIndexMarkup(
+  t: TranslateFn,
+  reviews: CardEntityReview[],
+  index: number,
+  state: CardCommunityReviewsState
+): string {
   if (reviews.length === 0) {
-    return `<p class="reviewo-muted-copy">No community reviews yet.</p>`;
+    return `<p class="reviewo-muted-copy">${escapeHtmlText(t("reviews.community.empty"))}</p>`;
   }
 
-  return reviews.map((review) => renderReviewCard(review, state)).join("");
+  const review = reviews[clampReviewCarouselIndex(index, reviews.length)]!;
+
+  return renderReviewCard(t, review, state);
+}
+
+export interface CardCommunityReviewsCarouselIndex {
+  getActiveIndex: () => number;
+  setActiveIndex: (index: number) => void;
 }
 
 export function renderCardCommunityReviewsMarkup(
+  t: TranslateFn,
   state: CardCommunityReviewsState,
-  errorMessage?: string | null
+  errorMessage?: string | null,
+  initialIndex = 0
 ): string {
   const sortedReviews = sortReviews(state.reviews, state.sort);
   const limitedReviews = sortedReviews.slice(0, state.reviewsLimit);
-  const reviewsMarkup = renderReviewListMarkup(limitedReviews, state);
+  const activeIndex = clampReviewCarouselIndex(initialIndex, limitedReviews.length);
+  const reviewsMarkup = renderReviewAtIndexMarkup(t, limitedReviews, activeIndex, state);
+  const carouselNavMarkup = renderReviewCarouselNavMarkup(t, activeIndex, limitedReviews.length, {
+    classPrefix: "reviewo-review",
+    escapeHtml: escapeHtmlAttribute
+  });
 
   return `
     <section class="reviewo-reviews-panel">
       <div class="reviewo-reviews-panel-header">
-        <p class="reviewo-rate-label">Community reviews</p>
+        <p class="reviewo-rate-label">${escapeHtmlText(t("reviews.community.title"))}</p>
         <label class="reviewo-review-sort-label">
-          Sort
+          ${escapeHtmlText(t("reviews.sort.label"))}
           <select data-review-sort>
-            <option value="likes"${state.sort === "likes" ? " selected" : ""}>Most helpful</option>
-            <option value="newest"${state.sort === "newest" ? " selected" : ""}>Newest</option>
+            <option value="likes"${state.sort === "likes" ? " selected" : ""}>${escapeHtmlText(t("reviews.sort.mostHelpful"))}</option>
+            <option value="newest"${state.sort === "newest" ? " selected" : ""}>${escapeHtmlText(t("reviews.sort.newest"))}</option>
           </select>
         </label>
       </div>
@@ -124,17 +162,18 @@ export function renderCardCommunityReviewsMarkup(
           ? `<p class="reviewo-muted-copy reviewo-reviews-error">${escapeHtmlText(errorMessage)}</p>`
           : ""
       }
-      <div class="reviewo-review-list-viewport" data-review-list-viewport>
-        <div class="reviewo-review-list" data-review-list>
-          ${reviewsMarkup}
+      <div class="reviewo-review-carousel" data-review-carousel>
+        <div class="reviewo-review-list-viewport" data-review-list-viewport>
+          <div class="reviewo-review-list" data-review-list>
+            ${reviewsMarkup}
+          </div>
         </div>
+        ${carouselNavMarkup}
       </div>
       ${
         sortedReviews.length > limitedReviews.length
-          ? `<p class="reviewo-muted-copy reviewo-review-list-hint">Showing ${limitedReviews.length} of ${sortedReviews.length}. Change the limit in Settings.</p>`
-          : limitedReviews.length > 1
-            ? `<p class="reviewo-muted-copy reviewo-review-list-hint">Scroll to read more reviews.</p>`
-            : ""
+          ? `<p class="reviewo-muted-copy reviewo-review-list-hint">${escapeHtmlText(t("reviews.list.showingLimited", { shown: limitedReviews.length, total: sortedReviews.length }))}</p>`
+          : ""
       }
     </section>
   `;
@@ -142,94 +181,204 @@ export function renderCardCommunityReviewsMarkup(
 
 export function bindCardCommunityReviews(
   container: ParentNode,
+  t: TranslateFn,
   getState: () => CardCommunityReviewsState,
-  onStateChange: (nextState: CardCommunityReviewsState) => void
+  onStateChange: (nextState: CardCommunityReviewsState) => void,
+  carouselIndex?: CardCommunityReviewsCarouselIndex
 ): void {
-  const rerenderList = (): void => {
+  const syncActiveReviewIndex = (index: number): number => {
+    const limitedReviews = getLimitedReviews();
+    const nextIndex = clampReviewCarouselIndex(index, limitedReviews.length);
+    carouselIndex?.setActiveIndex(nextIndex);
+
+    return nextIndex;
+  };
+
+  const getLimitedReviews = (): CardEntityReview[] => {
+    const state = getState();
+    const sortedReviews = sortReviews(state.reviews, state.sort);
+    return sortedReviews.slice(0, state.reviewsLimit);
+  };
+
+  let activeReviewIndex = syncActiveReviewIndex(carouselIndex?.getActiveIndex() ?? 0);
+
+  const setActiveReviewIndex = (index: number): void => {
+    activeReviewIndex = syncActiveReviewIndex(index);
+  };
+
+  const rerenderList = (options?: { animateShell?: boolean }): void => {
     const listElement = container.querySelector<HTMLElement>("[data-review-list]");
+    const carousel = container.querySelector<HTMLElement>("[data-review-carousel]");
 
     if (!listElement) {
       return;
     }
 
     const state = getState();
-    const sortedReviews = sortReviews(state.reviews, state.sort);
-    const limitedReviews = sortedReviews.slice(0, state.reviewsLimit);
-    listElement.innerHTML = renderReviewListMarkup(limitedReviews, state);
-    bindReviewVoteButtons(listElement);
-  };
+    const limitedReviews = getLimitedReviews();
+    activeReviewIndex = clampReviewCarouselIndex(activeReviewIndex, limitedReviews.length);
+    carouselIndex?.setActiveIndex(activeReviewIndex);
+    listElement.innerHTML = renderReviewAtIndexMarkup(t, limitedReviews, activeReviewIndex, state);
+    listElement.querySelector<HTMLElement>(".reviewo-review-text")?.scrollTo({ top: 0 });
 
-  const bindReviewVoteButtons = (root: ParentNode): void => {
-    root.querySelectorAll<HTMLButtonElement>("[data-like-review]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const reviewId = button.dataset.likeReview;
+    if (carousel) {
+      const existingNav = carousel.querySelector("[data-review-carousel-nav]");
+      const navMarkup = renderReviewCarouselNavMarkup(t, activeReviewIndex, limitedReviews.length, {
+        classPrefix: "reviewo-review",
+        escapeHtml: escapeHtmlAttribute
+      });
 
-        if (!reviewId) {
-          return;
+      if (navMarkup) {
+        if (existingNav) {
+          existingNav.outerHTML = navMarkup;
+        } else {
+          carousel.insertAdjacentHTML("beforeend", navMarkup);
         }
 
-        void toggleReviewLike(reviewId, button);
-      });
-    });
+        updateReviewCarouselNav(carousel, t, activeReviewIndex, limitedReviews.length);
+      } else {
+        existingNav?.remove();
+      }
+    }
 
-    root.querySelectorAll<HTMLButtonElement>("[data-unlike-review]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const reviewId = button.dataset.unlikeReview;
+    const cardShell = container.closest<HTMLElement>(".reviewo-card-shell");
 
-        if (!reviewId) {
-          return;
-        }
-
-        void removeReviewLike(reviewId);
-      });
-    });
+    if (
+      cardShell &&
+      !cardShell.classList.contains("is-chat-expanded") &&
+      options?.animateShell !== false
+    ) {
+      animateRatingCardShellHeight(cardShell);
+    }
   };
 
-  async function toggleReviewLike(reviewId: string, button: HTMLButtonElement): Promise<void> {
+
+  let pendingVoteReviewId: string | null = null;
+
+  const applyOptimisticReviewVote = (
+    review: CardEntityReview,
+    willLike: boolean
+  ): CardEntityReview => ({
+    ...review,
+    likedByCurrentUser: willLike,
+    likesCount: Math.max(0, review.likesCount + (willLike ? 1 : -1))
+  });
+
+  const updateReviewVoteInPlace = (review: CardEntityReview): void => {
     const state = getState();
-    const review = state.reviews.find((item) => item.id === reviewId);
+    const card = container.querySelector<HTMLElement>(
+      `[data-review-id="${CSS.escape(review.id)}"]`
+    );
 
-    if (!review || isReviewByCurrentUser(review.authorId, state.currentUserId)) {
+    if (!card) {
       return;
     }
 
-    button.disabled = true;
-    const result = review.likedByCurrentUser
-      ? await unlikeEntityReview(reviewId)
-      : await likeEntityReview(reviewId);
-    button.disabled = false;
+    const isOwnReview = isReviewByCurrentUser(review.authorId, state.currentUserId);
+    const canVote = state.isAuthenticated && !isOwnReview;
+    const likeButton = card.querySelector<HTMLButtonElement>("[data-like-review]");
+    const unlikeButton = card.querySelector<HTMLButtonElement>("[data-unlike-review]");
+
+    if (likeButton) {
+      likeButton.classList.toggle("is-active", review.likedByCurrentUser);
+      likeButton.setAttribute("aria-pressed", String(review.likedByCurrentUser));
+      likeButton.disabled = !canVote;
+      likeButton.title = isOwnReview
+        ? t("reviews.vote.ownReviewTooltip")
+        : review.likedByCurrentUser
+          ? t("reviews.vote.unlikeTooltip")
+          : t("reviews.vote.likeTooltip");
+      likeButton.textContent = `👍 ${review.likesCount}`;
+    }
+
+    if (unlikeButton) {
+      unlikeButton.disabled = !canVote || !review.likedByCurrentUser;
+      unlikeButton.title = isOwnReview
+        ? t("reviews.vote.ownReviewTooltip")
+        : t("reviews.vote.unlikeTooltip");
+    }
+  };
+
+  async function handleReviewVote(reviewId: string): Promise<void> {
+    if (pendingVoteReviewId === reviewId) {
+      return;
+    }
+
+    const state = getState();
+    const review = state.reviews.find((item) => item.id === reviewId);
+
+    if (
+      !review ||
+      !state.isAuthenticated ||
+      isReviewByCurrentUser(review.authorId, state.currentUserId)
+    ) {
+      return;
+    }
+
+    const willLike = !review.likedByCurrentUser;
+    const snapshot = state;
+    const optimisticReview = applyOptimisticReviewVote(review, willLike);
+
+    pendingVoteReviewId = reviewId;
+    onStateChange({
+      ...state,
+      reviews: state.reviews.map((item) => (item.id === reviewId ? optimisticReview : item))
+    });
+    updateReviewVoteInPlace(optimisticReview);
+
+    const result = willLike ? await likeEntityReview(reviewId) : await unlikeEntityReview(reviewId);
+    pendingVoteReviewId = null;
 
     if (!result.review) {
+      onStateChange(snapshot);
+      updateReviewVoteInPlace(review);
       return;
     }
 
     onStateChange({
-      ...state,
-      reviews: state.reviews.map((item) => (item.id === reviewId ? result.review! : item))
+      ...getState(),
+      reviews: getState().reviews.map((item) => (item.id === reviewId ? result.review! : item))
     });
-    rerenderList();
+    updateReviewVoteInPlace(result.review);
   }
 
-  async function removeReviewLike(reviewId: string): Promise<void> {
-    const state = getState();
-    const review = state.reviews.find((item) => item.id === reviewId);
-
-    if (!review?.likedByCurrentUser || isReviewByCurrentUser(review.authorId, state.currentUserId)) {
+  const bindReviewVoteControls = (root: ParentNode): void => {
+    if (!(root instanceof HTMLElement) || root.dataset.reviewVoteControlsBound === "true") {
       return;
     }
 
-    const result = await unlikeEntityReview(reviewId);
+    root.dataset.reviewVoteControlsBound = "true";
 
-    if (!result.review) {
-      return;
-    }
+    root.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
 
-    onStateChange({
-      ...state,
-      reviews: state.reviews.map((item) => (item.id === reviewId ? result.review! : item))
+      const likeButton = event.target.closest<HTMLButtonElement>("[data-like-review]:not(:disabled)");
+
+      if (likeButton) {
+        const reviewId = likeButton.dataset.likeReview;
+
+        if (reviewId) {
+          void handleReviewVote(reviewId);
+        }
+
+        return;
+      }
+
+      const unlikeButton = event.target.closest<HTMLButtonElement>(
+        "[data-unlike-review]:not(:disabled)"
+      );
+
+      if (unlikeButton) {
+        const reviewId = unlikeButton.dataset.unlikeReview;
+
+        if (reviewId) {
+          void handleReviewVote(reviewId);
+        }
+      }
     });
-    rerenderList();
-  }
+  };
 
   container.querySelector<HTMLSelectElement>("[data-review-sort]")?.addEventListener("change", (event) => {
     const value = (event.target as HTMLSelectElement).value;
@@ -242,8 +391,21 @@ export function bindCardCommunityReviews(
       ...getState(),
       sort: value
     });
+    setActiveReviewIndex(0);
     rerenderList();
   });
 
-  bindReviewVoteButtons(container);
+  bindReviewVoteControls(container);
+  bindReviewCarouselNav(container, {
+    getIndex: () => activeReviewIndex,
+    getTotal: () => getLimitedReviews().length,
+    onNavigate: (nextIndex) => {
+      setActiveReviewIndex(nextIndex);
+      rerenderList({ animateShell: false });
+    }
+  });
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return escapeHtmlText(value).replaceAll('"', "&quot;");
 }

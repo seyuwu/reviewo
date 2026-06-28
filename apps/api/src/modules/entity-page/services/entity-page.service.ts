@@ -8,8 +8,7 @@ import { RATINGS_PORT } from "../../ratings/interfaces/ratings.port.js";
 import type { RatingsPort } from "../../ratings/interfaces/ratings.port.js";
 import { REVIEWS_PORT } from "../../reviews/interfaces/reviews.port.js";
 import type { ReviewsPort } from "../../reviews/interfaces/reviews.port.js";
-import { TRUST_PORT } from "../../trust/interfaces/trust.port.js";
-import type { TrustPort } from "../../trust/interfaces/trust.port.js";
+import { ReputationDisplayService } from "../../reputation/services/reputation-display.service.js";
 import { EntityPageResponseDto } from "../dto/entity-page-response.dto.js";
 import type { EntityPageParentSummaryDto } from "../dto/entity-page-parent-summary.dto.js";
 import type { EntityDto } from "../../entities/dto/entity.dto.js";
@@ -25,11 +24,10 @@ export class EntityPageService {
     private readonly ratingsPort: RatingsPort,
     @Inject(REVIEWS_PORT)
     private readonly reviewsPort: ReviewsPort,
-    @Inject(TRUST_PORT)
-    private readonly trustPort: TrustPort
+    private readonly reputationDisplayService: ReputationDisplayService
   ) {}
 
-  async getEntityPage(entityId: string): Promise<EntityPageResponseDto> {
+  async getEntityPage(entityId: string, currentUserId?: string): Promise<EntityPageResponseDto> {
     const entity = await this.entitiesPort.findEntityById(entityId);
 
     if (!entity) {
@@ -42,8 +40,12 @@ export class EntityPageService {
 
     const [rating, trust, reviews, reviewsCount, parent] = await Promise.all([
       this.ratingsPort.getAggregate(entityId),
-      this.trustPort.getEntityTrust(entityId),
-      this.reviewsPort.listTopReviewsForEntity(entityId, ENTITY_PAGE_REVIEWS_LIMIT),
+      this.reputationDisplayService.resolveEntityTrustConfidence(entityId),
+      this.reviewsPort.listTopReviewsForEntity(
+        entityId,
+        ENTITY_PAGE_REVIEWS_LIMIT,
+        currentUserId
+      ),
       this.reviewsPort.getReviewCountForEntity(entityId),
       this.resolveParentSummary(entity.parentId)
     ]);

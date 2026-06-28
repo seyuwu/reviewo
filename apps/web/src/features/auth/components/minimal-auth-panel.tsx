@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 
+import { useTranslation } from "../../i18n/locale-provider";
 import { login, register } from "../api/authenticate";
 import { ApiError } from "../../../lib/api/api-error";
 import type { AuthResponse, StoredAuthSession } from "../types/auth";
@@ -21,6 +22,7 @@ export function MinimalAuthPanel({
   onAuthSuccess,
   onSignOut
 }: MinimalAuthPanelProps) {
+  const t = useTranslation();
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -48,7 +50,7 @@ export function MinimalAuthPanel({
 
       onAuthSuccess(authResponse);
     } catch (error) {
-      setErrorMessage(readAuthErrorMessage(error, authMode));
+      setErrorMessage(readAuthErrorMessage(error, authMode, t));
     } finally {
       setIsSubmittingAuth(false);
     }
@@ -62,7 +64,7 @@ export function MinimalAuthPanel({
   return (
     <form className="panel-card form-stack minimal-auth-panel" onSubmit={handleAuthSubmit}>
       <div className="section-heading">
-        <p className="result-type">Account</p>
+        <p className="result-type">{t("common.account")}</p>
         <h2>{contextLabel}</h2>
       </div>
 
@@ -72,16 +74,16 @@ export function MinimalAuthPanel({
       >
         {authSession ? (
           <div className="signed-in-box">
-            <p>Signed in as</p>
+            <p>{t("auth.signedInLabel")}</p>
             <strong>{authSession.displayName}</strong>
             <span>{authSession.email}</span>
             <button type="button" className="secondary-button" onClick={onSignOut}>
-              Use another account
+              {t("auth.useAnotherAccount")}
             </button>
           </div>
         ) : (
           <div className="auth-form-body">
-            <div className="segmented-control" aria-label="Authentication mode">
+            <div className="segmented-control" aria-label={t("auth.mode.ariaLabel")}>
               <button
                 type="button"
                 aria-pressed={authMode === "register"}
@@ -89,7 +91,7 @@ export function MinimalAuthPanel({
                   handleAuthModeChange("register");
                 }}
               >
-                Register
+                {t("auth.mode.register")}
               </button>
               <button
                 type="button"
@@ -98,7 +100,7 @@ export function MinimalAuthPanel({
                   handleAuthModeChange("login");
                 }}
               >
-                Login
+                {t("auth.mode.login")}
               </button>
             </div>
 
@@ -108,7 +110,7 @@ export function MinimalAuthPanel({
             >
               <div className="auth-display-name-slot__inner">
                 <label className="field-label">
-                  Display name
+                  {t("auth.field.displayName")}
                   <input
                     autoComplete="name"
                     maxLength={100}
@@ -125,7 +127,7 @@ export function MinimalAuthPanel({
             </div>
 
             <label className="field-label">
-              Email
+              {t("auth.field.email")}
               <input
                 autoComplete="email"
                 maxLength={320}
@@ -139,7 +141,7 @@ export function MinimalAuthPanel({
             </label>
 
             <label className="field-label">
-              Password
+              {t("auth.field.password")}
               <input
                 autoComplete={authMode === "register" ? "new-password" : "current-password"}
                 maxLength={128}
@@ -154,7 +156,11 @@ export function MinimalAuthPanel({
             </label>
 
             <button type="submit" className="primary-button" disabled={isSubmittingAuth}>
-              {isSubmittingAuth ? "Signing in..." : authMode === "register" ? "Register" : "Login"}
+              {isSubmittingAuth
+                ? t("auth.signingIn")
+                : authMode === "register"
+                  ? t("auth.mode.register")
+                  : t("auth.mode.login")}
             </button>
           </div>
         )}
@@ -172,7 +178,11 @@ export function MinimalAuthPanel({
   );
 }
 
-function readAuthErrorMessage(error: unknown, authMode: AuthMode): string {
+function readAuthErrorMessage(
+  error: unknown,
+  authMode: AuthMode,
+  t: ReturnType<typeof useTranslation>
+): string {
   if (error instanceof ApiError) {
     if (error.body && typeof error.body === "object" && "error" in error.body) {
       const apiError = (error.body as { error?: { message?: string } }).error;
@@ -183,17 +193,17 @@ function readAuthErrorMessage(error: unknown, authMode: AuthMode): string {
     }
 
     if (error.status >= 500) {
-      return "Reviewo API is temporarily unavailable. Try again in a moment.";
+      return t("auth.error.apiUnavailable");
     }
 
     if (error.status === 409 && authMode === "register") {
-      return "An account with this email already exists. Switch to Login.";
+      return t("auth.error.emailExists");
     }
 
     if (error.status === 401 && authMode === "login") {
-      return "Invalid email or password.";
+      return t("auth.error.invalidCredentials");
     }
   }
 
-  return "Authentication failed. Check the entered data and try again.";
+  return t("auth.error.checkData");
 }

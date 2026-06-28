@@ -1874,4 +1874,29 @@ Matches product intent to ship MVP without a moderation platform. RFC-first appr
 
 **Status:** Confirmed — implemented at Stage 29.
 
-## 2026-06-27 - Stage 29 Content Hiding Implemented Per RFC 0008
+## 2026-06-28 - Entity Live Chat MVP Architecture
+
+### Problem
+
+Reviewo needs lightweight per-entity discussion in the extension popup without introducing chat platform complexity or breaking existing MVP flows.
+
+### Decision
+
+- Store messages in `chat.entity_chat_messages` only; derive rooms from `entityId`.
+- Track online users in Redis sorted sets with TTL-based expiry.
+- Use Socket.IO namespace `/chat` for realtime; REST for history, cursor pagination, active now, and online count.
+- Rank Active Now by SQL over the last 30 minutes: `messageCount * 2 + participantCount`.
+- Apply soft send cooldown from `UserTrustProfile.trustScore` (3s / 10s / 30s tiers).
+- Retain messages up to 90 days and max 5000 per entity via in-process cleanup interval.
+
+### Reason
+
+Minimal additive module, no pre-created chat rooms/participants, deterministic activity ranking without LLM cost, reuses existing reputation signal for spam control.
+
+### Alternatives
+
+- Pre-created chat room tables and participant membership.
+- AI-generated Active Now summaries.
+- Bull/cron worker for retention (deferred).
+
+**Status:** Confirmed — implemented in Entity Live Chat MVP.

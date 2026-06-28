@@ -4,7 +4,7 @@ import { EntityType } from "@prisma/client";
 
 import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
 import type { RatingsPort } from "../../ratings/interfaces/ratings.port.js";
-import type { TrustPort } from "../../trust/interfaces/trust.port.js";
+import type { ReputationDisplayService } from "../../reputation/services/reputation-display.service.js";
 import type { UrlNormalizer } from "../../entities/interfaces/url-normalizer.js";
 import { ExtensionApiService } from "./extension-api.service.js";
 import { RateSiteUseCase } from "../use-cases/rate-site.use-case.js";
@@ -65,8 +65,10 @@ describe("ExtensionApiService.listEntityChildren", () => {
     const service = new ExtensionApiService(
       entitiesPort,
       ratingsPort,
-      {} as TrustPort,
       { getSiteRootCanonicalUrl: (url: string) => url } as UrlNormalizer,
+      {
+        resolveEntityTrustConfidence: async () => ({ confidence: 0.5 })
+      } as unknown as ReputationDisplayService,
       {} as RateSiteUseCase
     );
 

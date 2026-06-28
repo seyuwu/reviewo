@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["auth", "entities", "ratings", "reviews", "users"]
+  schemas  = ["auth", "chat", "entities", "ratings", "reviews", "users", "reputation"]
 }
 
 model User {
@@ -17,7 +17,8 @@ model User {
   status         String             @default("active")
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
-  authIdentities UserAuthIdentity[]
+  authIdentities     UserAuthIdentity[]
+  entityChatMessages EntityChatMessage[]
 
   @@map("users")
   @@schema("users")
@@ -167,4 +168,172 @@ model ReviewVote {
   @@index([userId])
   @@map("review_votes")
   @@schema("reviews")
+}
+
+model UserBehaviorMetrics {
+  userId                String    @id @map("user_id") @db.Uuid
+  totalRatings          Int       @default(0) @map("total_ratings")
+  uniqueEntityCount     Int       @default(0) @map("unique_entity_count")
+  uniqueEntityTypeCount Int       @default(0) @map("unique_entity_type_count")
+  uniqueRootDomainCount Int       @default(0) @map("unique_root_domain_count")
+  score1Count           Int       @default(0) @map("score_1_count")
+  score2Count           Int       @default(0) @map("score_2_count")
+  score3Count           Int       @default(0) @map("score_3_count")
+  score4Count           Int       @default(0) @map("score_4_count")
+  score5Count           Int       @default(0) @map("score_5_count")
+  firstRatingAt         DateTime? @map("first_rating_at") @db.Timestamptz(6)
+  lastRatingAt          DateTime? @map("last_rating_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("user_behavior_metrics")
+  @@schema("reputation")
+}
+
+model UserActivityDaily {
+  userId       String   @map("user_id") @db.Uuid
+  activityDate DateTime @map("activity_date") @db.Date
+  ratingCount  Int      @default(0) @map("rating_count")
+
+  @@id([userId, activityDate])
+  @@index([userId, activityDate(sort: Desc)])
+  @@map("user_activity_daily")
+  @@schema("reputation")
+}
+
+model UserEntityStats {
+  userId      String   @map("user_id") @db.Uuid
+  entityId    String   @map("entity_id") @db.Uuid
+  ratingCount Int      @default(0) @map("rating_count")
+  lastRatedAt DateTime @map("last_rated_at") @db.Timestamptz(6)
+
+  @@id([userId, entityId])
+  @@index([userId, ratingCount(sort: Desc)])
+  @@map("user_entity_stats")
+  @@schema("reputation")
+}
+
+model UserEntityTypeStats {
+  userId            String @map("user_id") @db.Uuid
+  entityType        String @map("entity_type")
+  parentContextType String @default("__root__") @map("parent_context_type")
+  ratingCount       Int    @default(0) @map("rating_count")
+
+  @@id([userId, entityType, parentContextType])
+  @@map("user_entity_type_stats")
+  @@schema("reputation")
+}
+
+model UserRootDomainStats {
+  userId      String @map("user_id") @db.Uuid
+  rootDomain  String @map("root_domain")
+  ratingCount Int    @default(0) @map("rating_count")
+
+  @@id([userId, rootDomain])
+  @@map("user_root_domain_stats")
+  @@schema("reputation")
+}
+
+model UserTrustProfile {
+  userId             String   @id @map("user_id") @db.Uuid
+  trustScore         Decimal  @map("trust_score") @db.Decimal(4, 3)
+  diversityScore     Decimal  @map("diversity_score") @db.Decimal(4, 3)
+  coverageScore      Decimal  @map("coverage_score") @db.Decimal(4, 3)
+  stabilityScore     Decimal  @map("stability_score") @db.Decimal(4, 3)
+  consensusScore     Decimal  @map("consensus_score") @db.Decimal(4, 3)
+  accountAgeBonus    Decimal  @map("account_age_bonus") @db.Decimal(4, 3)
+  anomalyPenalty     Decimal  @default(0) @map("anomaly_penalty") @db.Decimal(4, 3)
+  calculationVersion Int      @map("calculation_version")
+  calculatedAt       DateTime @map("calculated_at") @db.Timestamptz(6)
+
+  @@map("user_trust_profiles")
+  @@schema("reputation")
+}
+
+model VoteWeightSnapshot {
+  id                 String   @id @default(uuid()) @db.Uuid
+  ratingId           String   @unique @map("rating_id") @db.Uuid
+  userId             String   @map("user_id") @db.Uuid
+  entityId           String   @map("entity_id") @db.Uuid
+  score              Int      @db.SmallInt
+  voteWeight         Decimal  @map("vote_weight") @db.Decimal(4, 3)
+  weightFactors      Json     @default("{}") @map("weight_factors")
+  calculationVersion Int      @map("calculation_version")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityId])
+  @@index([userId])
+  @@map("vote_weight_snapshots")
+  @@schema("reputation")
+}
+
+model EntityAnomalyMetrics {
+  entityId         String    @id @map("entity_id") @db.Uuid
+  anomalyScore     Decimal   @default(0) @map("anomaly_score") @db.Decimal(4, 3)
+  burstScore       Decimal   @default(0) @map("burst_score") @db.Decimal(4, 3)
+  syncScore        Decimal   @default(0) @map("sync_score") @db.Decimal(4, 3)
+  clusterScore     Decimal   @default(0) @map("cluster_score") @db.Decimal(4, 3)
+  recentBurstCount Int       @default(0) @map("recent_burst_count")
+  lastAnomalyAt    DateTime? @map("last_anomaly_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("entity_anomaly_metrics")
+  @@schema("reputation")
+}
+
+model EntityActivityHourly {
+  entityId     String   @map("entity_id") @db.Uuid
+  activityHour DateTime @map("activity_hour") @db.Timestamptz(6)
+  ratingCount  Int      @default(0) @map("rating_count")
+
+  @@id([entityId, activityHour])
+  @@map("entity_activity_hourly")
+  @@schema("reputation")
+}
+
+model EntityConfidenceProfile {
+  entityId             String   @id @map("entity_id") @db.Uuid
+  confidenceScore      Decimal  @map("confidence_score") @db.Decimal(4, 3)
+  effectiveVoteMass    Decimal  @default(0) @map("effective_vote_mass") @db.Decimal(10, 2)
+  uniqueRatersCount    Int      @default(0) @map("unique_raters_count")
+  activityDurationDays Int      @default(0) @map("activity_duration_days")
+  scoreVariance        Decimal? @map("score_variance") @db.Decimal(6, 4)
+  anomalyScore         Decimal  @default(0) @map("anomaly_score") @db.Decimal(4, 3)
+  calculationVersion   Int      @map("calculation_version")
+  explanation          Json     @default("[]")
+  calculatedAt         DateTime @map("calculated_at") @db.Timestamptz(6)
+
+  @@map("entity_confidence_profiles")
+  @@schema("reputation")
+}
+
+model ReputationEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  type      String
+  userId    String?  @map("user_id") @db.Uuid
+  entityId  String?  @map("entity_id") @db.Uuid
+  ratingId  String?  @map("rating_id") @db.Uuid
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt])
+  @@index([entityId, createdAt])
+  @@index([type, createdAt])
+  @@map("reputation_events")
+  @@schema("reputation")
+}
+
+model EntityChatMessage {
+  id           String   @id @default(uuid()) @db.Uuid
+  entityId     String   @map("entity_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  message      String
+  isHidden     Boolean  @default(false) @map("is_hidden")
+  hiddenReason String?  @map("hidden_reason")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([entityId, createdAt])
+  @@index([createdAt])
+  @@map("entity_chat_messages")
+  @@schema("chat")
 }

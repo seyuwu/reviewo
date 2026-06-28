@@ -3,5 +3,7 @@ export enum DomainEventName {
   RatingCreated = "rating.created",
   RatingUpdated = "rating.updated",
   ReviewCreated = "review.created",
-  ReviewUpdated = "review.updated"
+  ReviewUpdated = "review.updated",
+  ReviewHidden = "review.hidden",
+  ReviewUnhidden = "review.unhidden"
 }

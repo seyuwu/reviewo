@@ -1,0 +1,3 @@
+export const REPUTATION_CALCULATION_VERSION = 1;
+
+export const REPUTATION_ROOT_CONTEXT_TYPE = "__root__";

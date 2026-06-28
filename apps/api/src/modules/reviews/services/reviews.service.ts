@@ -10,6 +10,10 @@ import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
 import { ReviewDto } from "../dto/review.dto.js";
 import { UpsertReviewDto } from "../dto/upsert-review.dto.js";
 import { createReviewCreatedEvent } from "../events/review-created.event.js";
+import {
+  createReviewHiddenEvent,
+  createReviewUnhiddenEvent
+} from "../events/review-hidden.event.js";
 import { createReviewUpdatedEvent } from "../events/review-updated.event.js";
 import type { ReviewsPort } from "../interfaces/reviews.port.js";
 import { ReviewsRepository } from "../repositories/reviews.repository.js";
@@ -62,12 +66,16 @@ export class ReviewsService implements ReviewsPort {
     return reviews.map((review) => toReviewDto(review, currentUserId));
   }
 
-  async listTopReviewsForEntity(entityId: string, limit: number): Promise<ReviewDto[]> {
+  async listTopReviewsForEntity(
+    entityId: string,
+    limit: number,
+    currentUserId?: string
+  ): Promise<ReviewDto[]> {
     await this.ensureEntityExists(entityId);
 
-    const reviews = await this.reviewsRepository.listByEntity(entityId, undefined, limit);
+    const reviews = await this.reviewsRepository.listByEntity(entityId, currentUserId, limit);
 
-    return reviews.map((review) => toReviewDto(review));
+    return reviews.map((review) => toReviewDto(review, currentUserId));
   }
 
   async getReviewCountForEntity(entityId: string): Promise<number> {
@@ -92,6 +100,14 @@ export class ReviewsService implements ReviewsPort {
       ReviewVisibility.HIDDEN
     );
 
+    await this.domainEventBus.publish(
+      createReviewHiddenEvent({
+        authorId: updatedReview.authorId,
+        entityId: updatedReview.entityId,
+        reviewId: updatedReview.id
+      })
+    );
+
     return toReviewDto(updatedReview);
   }
 
@@ -109,6 +125,14 @@ export class ReviewsService implements ReviewsPort {
     const updatedReview = await this.reviewsRepository.updateVisibility(
       reviewId,
       ReviewVisibility.ACTIVE
+    );
+
+    await this.domainEventBus.publish(
+      createReviewUnhiddenEvent({
+        authorId: updatedReview.authorId,
+        entityId: updatedReview.entityId,
+        reviewId: updatedReview.id
+      })
     );
 
     return toReviewDto(updatedReview);

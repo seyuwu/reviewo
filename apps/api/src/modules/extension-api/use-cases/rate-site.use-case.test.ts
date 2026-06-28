@@ -6,7 +6,7 @@ import type { AuthenticatedUser } from "../../../common/interfaces/authenticated
 import { RateSiteUseCase } from "./rate-site.use-case.js";
 import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
 import type { RatingsPort } from "../../ratings/interfaces/ratings.port.js";
-import type { TrustPort } from "../../trust/interfaces/trust.port.js";
+import type { ReputationDisplayService } from "../../reputation/services/reputation-display.service.js";
 
 const currentUser: AuthenticatedUser = {
   displayName: "Tester",
@@ -95,13 +95,17 @@ describe("RateSiteUseCase", () => {
         };
       }
     };
-    const trustPort: TrustPort = {
-      getEntityTrust: async () => ({
+    const reputationDisplayService = {
+      resolveEntityTrustConfidence: async () => ({
         confidence: 0.01
       })
-    };
+    } satisfies Pick<ReputationDisplayService, "resolveEntityTrustConfidence">;
 
-    const useCase = new RateSiteUseCase(entitiesPort, ratingsPort, trustPort);
+    const useCase = new RateSiteUseCase(
+      entitiesPort,
+      ratingsPort,
+      reputationDisplayService as unknown as ReputationDisplayService
+    );
     const result = await useCase.execute(
       {
         score: 4,
@@ -152,13 +156,17 @@ describe("RateSiteUseCase", () => {
         }
       })
     };
-    const trustPort: TrustPort = {
-      getEntityTrust: async () => ({
+    const reputationDisplayService = {
+      resolveEntityTrustConfidence: async () => ({
         confidence: 0.01
       })
-    };
+    } satisfies Pick<ReputationDisplayService, "resolveEntityTrustConfidence">;
 
-    const useCase = new RateSiteUseCase(entitiesPort, ratingsPort, trustPort);
+    const useCase = new RateSiteUseCase(
+      entitiesPort,
+      ratingsPort,
+      reputationDisplayService as unknown as ReputationDisplayService
+    );
     const result = await useCase.execute(
       {
         score: 5,

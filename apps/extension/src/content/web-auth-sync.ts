@@ -1,6 +1,8 @@
 import {
+  addStorageChangedListener,
   guardExtensionContext,
   onExtensionContextInvalidated,
+  removeStorageChangedListener,
   sendRuntimeMessage
 } from "./extension-context.js";
 import {
@@ -18,6 +20,7 @@ import {
 
 const WEB_AUTH_STORAGE_KEY = "reviewo.webAuth";
 const WEB_SIGNED_OUT_KEY = "reviewo.webSignedOut";
+const EXTENSION_AUTH_STORAGE_KEY = "reviewo.extensionAuth";
 const WEB_AUTH_BRIDGE_SOURCE = "reviewo-web";
 
 interface WebStoredAuthSession {
@@ -86,17 +89,60 @@ export function startWebAuthSync(): void {
   window.addEventListener("message", onWebAuthBridgeMessage);
   document.addEventListener("visibilitychange", onVisibilityChanged);
 
+  const onExtensionAuthChanged: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (
+    changes,
+    areaName
+  ) => {
+    if (!guardExtensionContext()) {
+      return;
+    }
+
+    if (areaName !== "local" || !(EXTENSION_AUTH_STORAGE_KEY in changes)) {
+      return;
+    }
+
+    const change = changes[EXTENSION_AUTH_STORAGE_KEY];
+
+    if (change?.oldValue !== undefined && change.newValue === undefined) {
+      void handleExtensionSignedOut();
+      return;
+    }
+
+    void onAuthMaybeChanged();
+  };
+
+  addStorageChangedListener(onExtensionAuthChanged);
+
   onExtensionContextInvalidated(() => {
     window.removeEventListener("storage", onStorageChanged);
     window.removeEventListener("focus", handleFocus);
     window.removeEventListener("message", onWebAuthBridgeMessage);
     document.removeEventListener("visibilitychange", onVisibilityChanged);
+    removeStorageChangedListener(onExtensionAuthChanged);
   });
 }
 
 async function handleWebSignOut(): Promise<void> {
   lastKnownWebAuthJson = null;
   await signOutExtension();
+}
+
+async function handleExtensionSignedOut(): Promise<void> {
+  if (isWebSignedOutLocally()) {
+    return;
+  }
+
+  if (!readWebAuthSession()) {
+    lastKnownWebAuthJson = null;
+    return;
+  }
+
+  window.localStorage.removeItem(WEB_AUTH_STORAGE_KEY);
+  lastKnownWebAuthJson = null;
+  window.postMessage(
+    { source: WEB_AUTH_BRIDGE_SOURCE, type: "reviewo:web-auth-changed" },
+    window.location.origin
+  );
 }
 
 async function onAuthMaybeChanged(): Promise<void> {

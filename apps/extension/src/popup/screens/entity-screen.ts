@@ -1,4 +1,7 @@
+import type { TranslateFn } from "@reviewo/i18n";
+
 import { createGetAuthSessionMessage, ExtensionMessageType } from "../../shared/messages.js";
+import { createExtensionTranslator } from "../../shared/extension-i18n.js";
 import { readExtensionPreferences } from "../../shared/extension-preferences-storage.js";
 import { buildRatingCardSummary } from "../../content/rating-card/format-display.js";
 import { resolveMyEntityRatingScore } from "../../content/rating-card/resolve-my-entity-rating.js";
@@ -9,6 +12,11 @@ import {
 } from "../entity-reviews-section.js";
 import { rateEntityViewModel } from "../services/rate-entity-view-model.js";
 import { renderPopupRatePanel } from "../popup-rate-panel.js";
+import { bindAuthPromptTriggers } from "../bind-auth-prompt-triggers.js";
+import {
+  bindChatDrawerToggle,
+  renderChatDrawerSectionMarkup
+} from "../components/chat-drawer.js";
 import { sendExtensionMessage } from "../services/popup-messaging.js";
 import { buildEntityPageUrl, escapeHtml } from "../view-helpers.js";
 import type { EntityViewModel } from "../types.js";
@@ -16,6 +24,7 @@ import type { EntityViewModel } from "../types.js";
 export interface EntityScreenActions {
   onEntityUpdate: (entity: EntityViewModel) => void;
   onOpenParent?: (entity: EntityViewModel) => void;
+  onRequestSignIn: () => void;
 }
 
 export async function renderEntityScreen(
@@ -23,6 +32,7 @@ export async function renderEntityScreen(
   entity: EntityViewModel,
   actions: EntityScreenActions
 ): Promise<void> {
+  const t = await createExtensionTranslator();
   const sessionResponse = await sendExtensionMessage<{
     payload?: { session?: { accessToken: string } | null };
     type?: string;
@@ -35,7 +45,7 @@ export async function renderEntityScreen(
   const currentUserId = session?.userId;
   const preferences = await readExtensionPreferences();
   const myRatingScore = await resolveEntityMyRatingScore(entity, isAuthenticated);
-  const ratePanelMarkup = renderPopupRatePanel({
+  const ratePanelMarkup = renderPopupRatePanel(t, {
     isAuthenticated,
     myRatingScore,
     rateScoreDataAttribute: "data-score",
@@ -44,34 +54,39 @@ export async function renderEntityScreen(
 
   const statsMarkup =
     entity.status === "found" && entity.avgScore !== undefined && entity.votesCount !== undefined
-      ? renderFoundStats(entity)
-      : `<p class="muted-copy">${entity.status === "not_found" ? "This site is not in Reviewo yet." : "Loading entity stats..."}</p>`;
+      ? renderFoundStats(entity, t)
+      : `<p class="muted-copy">${escapeHtml(entity.status === "not_found" ? t("entity.stats.notFound") : t("entity.stats.loading"))}</p>`;
 
   const entityPagePath =
     entity.entityPagePath ?? (entity.entityId ? `/entities/${entity.entityId}` : null);
   const openPageMarkup = entityPagePath
-    ? `<a class="primary-button link-button" href="${escapeHtml(buildEntityPageUrl(entityPagePath))}" target="_blank" rel="noopener noreferrer">Open page</a>`
+    ? `<a class="primary-button link-button" href="${escapeHtml(buildEntityPageUrl(entityPagePath))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("entity.openPage"))}</a>`
     : "";
-  const breadcrumbMarkup = renderEntityBreadcrumb(entity);
+  const breadcrumbMarkup = renderEntityBreadcrumb(entity, t);
   const rateSectionMarkup = `
     <section class="rate-panel">
-      <h2>${entity.status === "found" ? "Your rating" : "Be the first to rate"}</h2>
+      <h2>${escapeHtml(entity.status === "found" ? t("entity.rateSection.titleFound") : t("entity.rateSection.titleNotFound"))}</h2>
       ${ratePanelMarkup}
     </section>
   `;
 
   container.innerHTML = `
     <section class="screen entity-screen">
-      ${breadcrumbMarkup}
-      <div class="entity-hero">
-        <p class="section-eyebrow">${entity.status === "found" ? "Entity" : "Unknown site"}</p>
-        <h1>${escapeHtml(entity.title)}</h1>
-        <p class="muted-copy">${escapeHtml(entity.canonicalUrl || entity.pageUrl)}</p>
+      <div class="entity-screen-scroll">
+        ${breadcrumbMarkup}
+        <div class="entity-hero">
+          <p class="section-eyebrow">${escapeHtml(entity.status === "found" ? t("entity.eyebrow.found") : t("entity.eyebrow.notFound"))}</p>
+          <h1>${escapeHtml(entity.title)}</h1>
+          <p class="muted-copy">${escapeHtml(entity.canonicalUrl || entity.pageUrl)}</p>
+        </div>
+        <div class="entity-stats">${statsMarkup}</div>
+        ${openPageMarkup}
+        ${rateSectionMarkup}
+        <div class="entity-reviews-host" data-entity-reviews-host${
+          entity.status === "found" && entity.entityId ? "" : ' hidden="true"'
+        }></div>
       </div>
-      <div class="entity-stats">${statsMarkup}</div>
-      ${openPageMarkup}
-      ${rateSectionMarkup}
-      <div class="entity-reviews-host" data-entity-reviews-host${
+      <div class="entity-chat-actions" data-entity-chat-actions${
         entity.status === "found" && entity.entityId ? "" : ' hidden="true"'
       }></div>
     </section>
@@ -83,21 +98,39 @@ export async function renderEntityScreen(
       entity.entityId,
       isAuthenticated,
       currentUserId,
-      preferences
+      preferences,
+      t
+    );
+    mountEntityChatSection(
+      container,
+      entity.entityId,
+      entity.title,
+      isAuthenticated,
+      session?.accessToken ?? null,
+      currentUserId,
+      t,
+      actions
     );
   }
 
   container.querySelectorAll<HTMLButtonElement>("[data-score]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!isAuthenticated) {
+        actions.onRequestSignIn();
+        return;
+      }
+
       const score = Number(button.dataset.score);
 
       if (!Number.isInteger(score)) {
         return;
       }
 
-      void submitRating(entity, score, container, actions);
+      void submitRating(entity, score, container, actions, t);
     });
   });
+
+  bindAuthPromptTriggers(container, actions.onRequestSignIn);
 
   container.querySelector<HTMLButtonElement>("[data-open-parent]")?.addEventListener("click", () => {
     if (!entity.parentEntityId || !entity.parentTitle || !actions.onOpenParent) {
@@ -120,14 +153,15 @@ async function mountEntityReviewsSection(
   entityId: string,
   isAuthenticated: boolean,
   currentUserId: string | undefined,
-  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>
+  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>,
+  t: TranslateFn
 ): Promise<void> {
   if (!host) {
     return;
   }
 
   host.hidden = false;
-  host.innerHTML = `<p class="muted-copy">Loading reviews...</p>`;
+  host.innerHTML = `<p class="muted-copy">${escapeHtml(t("reviews.loading"))}</p>`;
 
   const loaded = await loadEntityReviewsSectionState(entityId, isAuthenticated, currentUserId, {
     displayMode: preferences.popupReviewDisplayMode,
@@ -137,26 +171,26 @@ async function mountEntityReviewsSection(
 
   if (!loaded.state) {
     host.innerHTML = `<p class="status-copy-error">${escapeHtml(
-      loaded.errorMessage ?? "Could not load reviews."
+      loaded.errorMessage ?? t("reviews.loadError")
     )}</p>`;
     return;
   }
 
-  host.innerHTML = renderEntityReviewsSectionMarkup(loaded.state, loaded.myReviewText ?? "", undefined, {
+  host.innerHTML = renderEntityReviewsSectionMarkup(t, loaded.state, loaded.myReviewText ?? "", undefined, {
     hideMyReviewWhenSaved: false
   });
-  bindEntityReviewsSection(host, entityId, loaded.state, loaded.myReviewText ?? "", {
+  bindEntityReviewsSection(t, host, entityId, loaded.state, loaded.myReviewText ?? "", {
     hideMyReviewWhenSaved: false
   });
 }
 
-function renderEntityBreadcrumb(entity: EntityViewModel): string {
+function renderEntityBreadcrumb(entity: EntityViewModel, t: TranslateFn): string {
   if (!entity.parentEntityId || !entity.parentTitle) {
     return "";
   }
 
   return `
-    <nav class="entity-breadcrumb" aria-label="Entity hierarchy">
+    <nav class="entity-breadcrumb" aria-label="${escapeHtml(t("entity.breadcrumb.ariaLabel"))}">
       <button type="button" class="entity-breadcrumb-parent" data-open-parent>
         ${escapeHtml(entity.parentTitle)}
       </button>
@@ -189,13 +223,14 @@ async function submitRating(
   entity: EntityViewModel,
   score: number,
   container: HTMLElement,
-  actions: EntityScreenActions
+  actions: EntityScreenActions,
+  t: TranslateFn
 ): Promise<void> {
   const statusElement = container.querySelector<HTMLParagraphElement>("[data-rate-status]");
 
   if (statusElement) {
     statusElement.hidden = false;
-    statusElement.textContent = "Saving rating...";
+    statusElement.textContent = t("rating.saving");
     statusElement.classList.remove("status-copy-error", "status-copy-success");
   }
 
@@ -206,32 +241,32 @@ async function submitRating(
     setRateStatus(
       container,
       entity.status === "not_found" && result.updated.entityId
-        ? "You created the first Reviewo page for this site."
-        : "Rating saved.",
+        ? t("rating.firstPageCreated")
+        : t("rating.saved"),
       "success"
     );
     await renderEntityScreen(container, result.updated, actions);
     return;
   }
 
-  setRateStatus(container, result.errorMessage ?? "Could not save rating.", "error");
+  setRateStatus(container, result.errorMessage ?? t("rating.saveError"), "error");
 }
 
-function renderFoundStats(entity: EntityViewModel): string {
+function renderFoundStats(entity: EntityViewModel, t: TranslateFn): string {
   if (entity.avgScore === undefined || entity.votesCount === undefined) {
-    return `<p class="muted-copy">No ratings yet · Be the first to rate</p>`;
+    return `<p class="muted-copy">${escapeHtml(t("rating.stats.empty"))}</p>`;
   }
 
   if (entity.votesCount === 0) {
     return `
       <div class="entity-stat-grid entity-stat-grid-empty">
-        <p class="entity-empty-rating">No ratings yet</p>
-        <p class="muted-copy">Be the first to rate</p>
+        <p class="entity-empty-rating">${escapeHtml(t("rating.stats.noRatings"))}</p>
+        <p class="muted-copy">${escapeHtml(t("rating.stats.beFirst"))}</p>
       </div>
     `;
   }
 
-  const summary = buildRatingCardSummary({
+  const summary = buildRatingCardSummary(t, {
     entity: {
       canonicalUrl: entity.canonicalUrl,
       description: null,
@@ -263,7 +298,7 @@ function renderFoundStats(entity: EntityViewModel): string {
     <div class="entity-stat-grid">
       <div>
         <span class="entity-stat-value">${escapeHtml(summary.averageScoreLabel)}</span>
-        <span class="entity-stat-scale">/ 5</span>
+        <span class="entity-stat-scale">${escapeHtml(t("rating.scaleSuffix"))}</span>
       </div>
       <p class="muted-copy">${escapeHtml(summary.metaLabel)}</p>
     </div>
@@ -285,4 +320,39 @@ function setRateStatus(
   statusElement.textContent = message;
   statusElement.classList.toggle("status-copy-error", tone === "error");
   statusElement.classList.toggle("status-copy-success", tone === "success");
+}
+
+function mountEntityChatSection(
+  container: HTMLElement,
+  entityId: string,
+  entityTitle: string,
+  isAuthenticated: boolean,
+  accessToken: string | null,
+  currentUserId: string | undefined,
+  t: TranslateFn,
+  actions: EntityScreenActions
+): void {
+  const host = container.querySelector<HTMLElement>("[data-entity-chat-actions]");
+
+  if (!host) {
+    return;
+  }
+
+  host.hidden = false;
+  host.innerHTML = renderChatDrawerSectionMarkup(t, entityId);
+  bindChatDrawerToggle(
+    host,
+    t,
+    entityId,
+    {
+      accessToken,
+      currentUserId,
+      entityId,
+      entityTitle,
+      isAuthenticated
+    },
+    {
+      onRequestSignIn: actions.onRequestSignIn
+    }
+  );
 }

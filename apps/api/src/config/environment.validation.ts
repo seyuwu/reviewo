@@ -7,6 +7,8 @@ export interface EnvironmentVariables {
   JWT_ACCESS_TOKEN_TTL_SECONDS: number;
   JWT_SECRET: string;
   NODE_ENV: NodeEnvironment;
+  REDIS_URL: string;
+  REPUTATION_ENGINE_ENABLED: boolean;
 }
 
 const DEFAULT_API_PORT = 3000;
@@ -17,6 +19,7 @@ const SECONDS_PER_DAY = 86_400;
 const DEFAULT_JWT_ACCESS_TOKEN_TTL_SECONDS = 120 * SECONDS_PER_DAY;
 const MAX_JWT_ACCESS_TOKEN_TTL_SECONDS = 365 * SECONDS_PER_DAY;
 const DEFAULT_JWT_SECRET = "reviewo_development_jwt_secret_change_me";
+const DEFAULT_REDIS_URL = "redis://localhost:6379";
 const VALID_NODE_ENVIRONMENTS = new Set<NodeEnvironment>(["development", "production", "test"]);
 
 export function validateEnvironment(config: Record<string, unknown>): EnvironmentVariables {
@@ -31,6 +34,11 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   const jwtAccessTokenTtlSeconds = parseJwtAccessTokenTtlSeconds(
     config["JWT_ACCESS_TOKEN_TTL_SECONDS"]
   );
+  const reputationEngineEnabled = parseBooleanFlag(
+    config["REPUTATION_ENGINE_ENABLED"],
+    false
+  );
+  const redisUrl = parseRedisUrl(config["REDIS_URL"], nodeEnvironment);
 
   return {
     API_PORT: apiPort,
@@ -38,7 +46,9 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     DATABASE_URL: databaseUrl,
     JWT_ACCESS_TOKEN_TTL_SECONDS: jwtAccessTokenTtlSeconds,
     JWT_SECRET: jwtSecret,
-    NODE_ENV: nodeEnvironment
+    NODE_ENV: nodeEnvironment,
+    REDIS_URL: redisUrl,
+    REPUTATION_ENGINE_ENABLED: reputationEngineEnabled
   };
 }
 
@@ -165,4 +175,46 @@ function parseJwtAccessTokenTtlSeconds(value: unknown): number {
   }
 
   return ttlSeconds;
+}
+
+function parseBooleanFlag(value: unknown, defaultValue: boolean): boolean {
+  if (value === undefined || value === null || value === "") {
+    return defaultValue;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("Boolean environment flags must be true or false");
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === "true" || normalized === "1") {
+    return true;
+  }
+
+  if (normalized === "false" || normalized === "0") {
+    return false;
+  }
+
+  throw new Error("Boolean environment flags must be true or false");
+}
+
+function parseRedisUrl(value: unknown, nodeEnvironment: NodeEnvironment): string {
+  if (value === undefined || value === null || value === "") {
+    if (nodeEnvironment === "production") {
+      throw new Error("REDIS_URL must be set in production");
+    }
+
+    return DEFAULT_REDIS_URL;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("REDIS_URL must be a Redis connection string");
+  }
+
+  return value;
 }

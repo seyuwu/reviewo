@@ -1,3 +1,5 @@
+import type { TranslateFn } from "@reviewo/i18n";
+
 import type { ExtensionResolveFoundResponse } from "../../shared/types/resolve.js";
 import { buildRatingCardSummary } from "./format-display.js";
 
@@ -11,9 +13,10 @@ export interface CardDisplayContext {
 
 export function buildCardDisplayContext(
   response: ExtensionResolveFoundResponse,
+  t: TranslateFn,
   escapeHtmlText: (value: string) => string
 ): CardDisplayContext {
-  const summary = buildRatingCardSummary({
+  const summary = buildRatingCardSummary(t, {
     entity: response.entity,
     rating: response.rating,
     status: "found",
@@ -30,21 +33,21 @@ export function buildCardDisplayContext(
     <div class="reviewo-stats">
       <div class="reviewo-rating-row">
         <span class="reviewo-rating-value">${escapeHtmlText(summary.averageScoreLabel)}</span>
-        <span class="reviewo-rating-scale">/ 5</span>
+        <span class="reviewo-rating-scale">${escapeHtmlText(t("rating.scaleSuffix"))}</span>
       </div>
       <p class="reviewo-meta">${escapeHtmlText(summary.metaLabel)}</p>
     </div>
   `
     : `
     <div class="reviewo-stats reviewo-stats-empty">
-      <p class="reviewo-no-ratings">${escapeHtmlText("No ratings yet")}</p>
-      <p class="reviewo-meta">${escapeHtmlText("Be the first to rate")}</p>
+      <p class="reviewo-no-ratings">${escapeHtmlText(t("rating.stats.noRatings"))}</p>
+      <p class="reviewo-meta">${escapeHtmlText(t("rating.stats.beFirst"))}</p>
     </div>
   `;
 
   return {
     detailsEntityPagePath: response.web.entityPagePath,
-    eyebrowLabel: "Current page",
+    eyebrowLabel: t("card.eyebrow.currentPage"),
     primaryStatsMarkup,
     secondaryStatsMarkup: "",
     title: response.entity.title

@@ -215,7 +215,9 @@ export interface ExtensionAuthenticatedApiResultMessage {
 
 export interface ExtensionAuthenticatedApiErrorMessage {
   payload: {
+    details?: unknown;
     message: string;
+    status?: number;
   };
   type: typeof ExtensionMessageType.AuthenticatedApiError;
 }
@@ -536,11 +538,15 @@ export function createAuthenticatedApiResultMessage(
 }
 
 export function createAuthenticatedApiErrorMessage(
-  message: string
+  message: string,
+  status?: number,
+  details?: unknown
 ): ExtensionAuthenticatedApiErrorMessage {
   return {
     payload: {
-      message
+      ...(details === undefined ? {} : { details }),
+      message,
+      ...(status === undefined ? {} : { status })
     },
     type: ExtensionMessageType.AuthenticatedApiError
   };

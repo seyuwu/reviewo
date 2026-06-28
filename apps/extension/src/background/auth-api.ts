@@ -9,6 +9,24 @@ import { apiRequest } from "./api-request.js";
 import { clearAuthSession, getStoredAuthSession, saveAuthSession } from "./auth-session.js";
 import { shouldClearExtensionSessionOn401 } from "../shared/web-auth-sync-policy.js";
 
+export class AuthenticatedApiRequestFailure extends Error {
+  readonly errorDetails?: unknown;
+  readonly status: number;
+
+  constructor(message: string, status: number, errorDetails?: unknown) {
+    super(message);
+    this.name = "AuthenticatedApiRequestFailure";
+    this.status = status;
+    this.errorDetails = errorDetails;
+  }
+}
+
+export function isAuthenticatedApiRequestFailure(
+  error: unknown
+): error is AuthenticatedApiRequestFailure {
+  return error instanceof AuthenticatedApiRequestFailure;
+}
+
 export async function loginWithApi(input: ExtensionLoginInput): Promise<ExtensionAuthResponse> {
   const response = await apiRequest<ExtensionAuthResponse>({
     body: input,
@@ -86,7 +104,11 @@ export async function authenticatedApiRequest<TData = unknown>(options: {
       await clearAuthSession();
     }
 
-    throw new Error(response.errorMessage);
+    throw new AuthenticatedApiRequestFailure(
+      response.errorMessage,
+      response.status,
+      response.errorDetails
+    );
   }
 
   return {

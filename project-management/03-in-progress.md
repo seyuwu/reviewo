@@ -4,11 +4,11 @@
 
 No active implementation stage.
 
-All MVP master-plan stages (1–33) are completed.
+Entity Live Chat MVP is completed.
 
 ## Goal
 
-None — MVP roadmap execution is complete pending post-MVP RFC planning.
+None — awaiting next approved post-MVP stage/RFC.
 
 ## Tasks
 
@@ -16,7 +16,7 @@ None.
 
 ## Current Progress
 
-Stage 33 stabilization audit is complete. See session report: Architectural Findings, Technical Debt, Critical Issues, Recommended Post-MVP RFCs, Final MVP Readiness Assessment.
+Entity Live Chat MVP delivered backend `ChatModule`, Redis presence, WebSocket gateway, REST chat endpoints, extension popup chat drawer, Active Now panel, unit tests, and documentation updates without changing ratings/reviews/reputation/extension resolve flows.
 
 ## Blockers
 
@@ -24,4 +24,4 @@ None.
 
 ## Remaining Work
 
-Post-MVP growth via approved RFCs (see Stage 33 report).
+Deferred v1 chat items: reactions, replies, attachments, edits/deletes, AI moderation/summary, personal messages, dedicated cron package (cleanup currently runs in-process interval).

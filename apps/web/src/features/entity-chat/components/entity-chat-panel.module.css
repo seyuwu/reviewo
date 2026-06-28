@@ -1,0 +1,243 @@
+.chatSection {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.5rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.chatSectionExpanded .chatToggleButton {
+  margin-top: 0.65rem;
+}
+
+.chatToggleButton {
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  margin-top: 0.65rem;
+  min-width: 0;
+  padding: 0.55rem 0.85rem;
+  text-align: left;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+  width: 100%;
+}
+
+.chatDrawerPanel {
+  display: grid;
+  grid-template-rows: 0fr;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  transition: grid-template-rows 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: 100%;
+}
+
+.chatDrawerPanelOpen:not(.chatDrawerPanelClosing) {
+  grid-template-rows: 1fr;
+  max-height: var(--reviewo-chat-panel-max-height, 17rem);
+}
+
+.chatDrawerPanelOpen.chatDrawerPanelClosing {
+  grid-template-rows: 1fr;
+  transition: none;
+}
+
+.chatDrawerPanelLoading.chatDrawerPanelOpen:not(.chatDrawerPanelClosing) {
+  max-height: max(var(--reviewo-chat-panel-max-height, 17rem), 7.5rem);
+}
+
+.chatDrawerPanelInner {
+  min-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: opacity 320ms cubic-bezier(0.22, 1, 0.36, 1) 40ms;
+}
+
+.chatDrawerPanelOpen:not(.chatDrawerPanelClosing) .chatDrawerPanelInner {
+  opacity: 1;
+}
+
+.chatDrawerPanelOpen.chatDrawerPanelClosing .chatDrawerPanelInner {
+  opacity: 0;
+  transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chatDrawerHost {
+  min-width: 0;
+  width: 100%;
+}
+
+.chatDrawer {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 10rem;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  width: 100%;
+}
+
+.chatDrawerHeader {
+  align-items: flex-start;
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.chatDrawerHeader h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.chatEntityTitle {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.chatDrawerBody {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chatDrawerFooter {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 0.45rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.chatMessageList {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  min-height: 0;
+  overflow-anchor: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.chatMessageItem {
+  line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chatMessageItem strong {
+  margin-right: 0.35rem;
+}
+
+.chatMessageItem span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chatComposer {
+  display: grid;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.chatComposer input {
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.65rem;
+  font: inherit;
+  min-width: 0;
+  padding: 0.55rem 0.7rem;
+  width: 100%;
+}
+
+.chatSendStatus,
+.chatSignInHint {
+  flex-shrink: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chatSendStatusError {
+  color: var(--color-danger, #b42318);
+}
+
+.chatDrawerResizeHandle {
+  border: 0;
+  border-radius: 999px;
+  cursor: ns-resize;
+  flex-shrink: 0;
+  height: 0.75rem;
+  margin: 0.15rem -0.15rem -0.35rem;
+  position: relative;
+  touch-action: none;
+}
+
+.chatDrawerResizeHandle::after {
+  background: var(--color-card-border);
+  border-radius: 999px;
+  content: "";
+  height: 0.2rem;
+  left: 28%;
+  position: absolute;
+  right: 28%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.chatDrawerResizeHandle:hover::after,
+.chatDrawerResizeHandle:focus-visible::after {
+  background: var(--color-text-muted);
+}
+
+.chatEmptyCopy {
+  margin: 0;
+}
+
+.chatSectionSidebar {
+  gap: 0.85rem;
+  margin-top: 0;
+}
+
+.chatSectionSidebar .chatDrawerPanel {
+  grid-template-rows: 1fr;
+  max-height: var(--reviewo-chat-panel-max-height, 20rem);
+  transition: none;
+}
+
+.chatSectionSidebar .chatDrawerPanelInner {
+  opacity: 1;
+  transition: none;
+}
+
+.chatSectionSidebar .chatDrawer {
+  min-height: 14rem;
+}
+
+.chatSectionSidebar .chatMessageList {
+  max-height: 12rem;
+}

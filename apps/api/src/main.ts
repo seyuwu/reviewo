@@ -3,6 +3,7 @@ import "reflect-metadata";
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
+import { IoAdapter } from "@nestjs/platform-socket.io";
 
 import { AppModule } from "./app.module.js";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter.js";
@@ -17,6 +18,7 @@ async function bootstrap(): Promise<void> {
 
   const logger = app.get(AppLogger);
   app.useLogger(logger);
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   app.useGlobalPipes(
     new ValidationPipe({

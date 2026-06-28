@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { createTranslator } from "@reviewo/i18n";
 
 import {
   buildRatingCardSummary,
@@ -11,11 +12,13 @@ import {
 import type { ExtensionResolveFoundResponse } from "../../shared/types/resolve.js";
 
 describe("rating card display formatting", () => {
+  const t = createTranslator("en");
+
   it("formats average score, votes, and trust labels", () => {
     assert.equal(formatAverageScore(4.26), "4.3");
-    assert.equal(formatVotesCount(1), "1 rating");
-    assert.equal(formatVotesCount(3), "3 ratings");
-    assert.equal(formatTrustConfidence(0.42), "Trust 42%");
+    assert.equal(formatVotesCount(t, 1), "1 rating");
+    assert.equal(formatVotesCount(t, 3), "3 ratings");
+    assert.equal(formatTrustConfidence(t, 0.42), "Confidence 42%");
   });
 
   it("builds card summary from found resolve response", () => {
@@ -47,11 +50,11 @@ describe("rating card display formatting", () => {
       }
     } satisfies ExtensionResolveFoundResponse;
 
-    const summary = buildRatingCardSummary(response);
+    const summary = buildRatingCardSummary(t, response);
 
     assert.equal(summary.entityTitle, "Example");
     assert.equal(summary.averageScoreLabel, "4.5");
-    assert.equal(summary.metaLabel, "2 ratings · Trust 2%");
+    assert.equal(summary.metaLabel, "2 ratings · Confidence 2%");
   });
 
   it("builds empty-state summary when entity has no ratings", () => {
@@ -83,11 +86,11 @@ describe("rating card display formatting", () => {
       }
     } satisfies ExtensionResolveFoundResponse;
 
-    const summary = buildRatingCardSummary(response);
+    const summary = buildRatingCardSummary(t, response);
 
     assert.equal(summary.hasRatings, false);
     assert.equal(summary.averageScoreLabel, "—");
     assert.equal(summary.metaLabel, "No ratings yet · Be the first to rate");
-    assert.equal(formatRatingStatsLine(0, 0), "No ratings yet · Be the first to rate");
+    assert.equal(formatRatingStatsLine(t, 0, 0), "No ratings yet · Be the first to rate");
   });
 });

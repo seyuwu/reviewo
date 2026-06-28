@@ -1,16 +1,21 @@
-export function renderPopupRatePanel(options: {
-  isAuthenticated: boolean;
-  myRatingScore: number | null;
-  rateScoreDataAttribute: string;
-  showLabel?: boolean;
-  statusSelector?: string;
-}): string {
+import type { TranslateFn } from "@reviewo/i18n";
+
+export function renderPopupRatePanel(
+  t: TranslateFn,
+  options: {
+    isAuthenticated: boolean;
+    myRatingScore: number | null;
+    rateScoreDataAttribute: string;
+    showLabel?: boolean;
+    statusSelector?: string;
+  }
+): string {
   const showLabel = options.showLabel !== false;
-  const labelMarkup = showLabel ? `<p class="home-rate-label">Your rating</p>` : "";
+  const labelMarkup = showLabel ? `<p class="home-rate-label">${escapeHtml(t("rating.yourRating"))}</p>` : "";
   const summaryMarkup =
     options.myRatingScore === null
-      ? `<p class="muted-copy">You have not rated this page yet.</p>`
-      : `<p class="status-line success-line">Your rating: ${options.myRatingScore} / 5</p>`;
+      ? `<p class="muted-copy">${escapeHtml(t("rating.notRatedYet"))}</p>`
+      : `<p class="status-line success-line">${escapeHtml(t("rating.yourRatingValue", { score: options.myRatingScore }))}</p>`;
 
   const statusMarkup = options.statusSelector
     ? `<p class="rate-status" ${options.statusSelector} hidden></p>`
@@ -20,18 +25,17 @@ export function renderPopupRatePanel(options: {
     <section class="home-rate-panel">
       ${labelMarkup}
       ${summaryMarkup}
-      <div class="reviewo-rate-controls popup-rate-controls" role="group" aria-label="Rate this page">
+      <div class="reviewo-rate-controls popup-rate-controls" role="group" aria-label="${escapeHtml(t("rating.groupAriaLabelPage"))}">
         ${[1, 2, 3, 4, 5]
           .map((score) => {
             const isSelected = options.myRatingScore === score;
 
             return `
-              <button
+      <button
                 type="button"
                 class="reviewo-rate-button${isSelected ? " is-selected" : ""}"
                 ${options.rateScoreDataAttribute}="${score}"
                 aria-pressed="${isSelected}"
-                ${options.isAuthenticated ? "" : "disabled"}
               >
                 ${score}
               </button>
@@ -39,8 +43,18 @@ export function renderPopupRatePanel(options: {
           })
           .join("")}
       </div>
-      <p class="muted-copy ${options.isAuthenticated ? "is-hidden" : ""}">Sign in to rate.</p>
+      <button type="button" class="text-link sign-in-cta${options.isAuthenticated ? " is-hidden" : ""}" data-open-auth-prompt>
+        ${escapeHtml(t("rating.signInToRate"))}
+      </button>
       ${statusMarkup}
     </section>
   `;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }

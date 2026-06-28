@@ -1,3 +1,5 @@
+import type { TranslateFn } from "@reviewo/i18n";
+
 import {
   fetchEntityReviews,
   fetchMyEntityReview,
@@ -13,12 +15,17 @@ import { sortEntityReviews } from "./review-sort.js";
 import { breakLongUnbrokenText } from "../shared/break-long-text.js";
 import { isReviewByCurrentUser } from "../shared/review-ownership.js";
 import {
-  formatReviewLengthCounter,
   isReviewTextWithinLimit,
   MAX_REVIEW_TEXT_LENGTH,
   reviewLengthCounterClass
 } from "../shared/review-limits.js";
 import { formatReviewSnippet } from "../shared/review-snippet.js";
+import {
+  bindReviewCarouselNav,
+  clampReviewCarouselIndex,
+  renderReviewCarouselNavMarkup,
+  updateReviewCarouselNav
+} from "../shared/review-carousel.js";
 import type { PopupReviewDisplayMode } from "../shared/preferences.js";
 import { escapeHtml } from "./view-helpers.js";
 import type { ExtensionReview, ExtensionReviewSort } from "./types/review.js";
@@ -77,6 +84,7 @@ export async function loadEntityReviewsSectionState(
 }
 
 export function renderEntityReviewsSectionMarkup(
+  t: TranslateFn,
   state: EntityReviewsSectionState,
   myReviewText: string,
   statusMessage?: string,
@@ -88,8 +96,12 @@ export function renderEntityReviewsSectionMarkup(
     !(hideMyReviewWhenSaved && hasSavedReviewText(myReviewText));
   const sortedReviews = sortEntityReviews(state.reviews, state.sort);
   const limitedReviews = sortedReviews.slice(0, state.reviewsLimit);
-  const reviewsMarkup = renderReviewListMarkup(limitedReviews, state);
-  const myReviewMarkup = renderMyReviewSection(myReviewText, state.isAuthenticated, {
+  const reviewsMarkup = renderReviewAtIndexMarkup(t, limitedReviews, 0, state);
+  const carouselNavMarkup = renderReviewCarouselNavMarkup(t, 0, limitedReviews.length, {
+    classPrefix: "review",
+    escapeHtml
+  });
+  const myReviewMarkup = renderMyReviewSection(t, myReviewText, state.isAuthenticated, {
     hideWhenSaved: hideMyReviewWhenSaved,
     showReviewForm
   });
@@ -99,27 +111,28 @@ export function renderEntityReviewsSectionMarkup(
       ${myReviewMarkup}
 
       <div class="reviews-panel-header">
-        <h2>Community reviews</h2>
+        <h2>${escapeHtml(t("reviews.community.title"))}</h2>
         <label class="review-sort-label">
-          Sort
+          ${escapeHtml(t("reviews.sort.label"))}
           <select data-review-sort>
-            <option value="likes"${state.sort === "likes" ? " selected" : ""}>Most helpful</option>
-            <option value="newest"${state.sort === "newest" ? " selected" : ""}>Newest</option>
+            <option value="likes"${state.sort === "likes" ? " selected" : ""}>${escapeHtml(t("reviews.sort.mostHelpful"))}</option>
+            <option value="newest"${state.sort === "newest" ? " selected" : ""}>${escapeHtml(t("reviews.sort.newest"))}</option>
           </select>
         </label>
       </div>
 
-      <div class="review-list-viewport" data-review-list-viewport>
-        <div class="review-list" data-review-list>
-          ${reviewsMarkup}
+      <div class="review-carousel" data-review-carousel>
+        <div class="review-list-viewport" data-review-list-viewport>
+          <div class="review-list" data-review-list>
+            ${reviewsMarkup}
+          </div>
         </div>
+        ${carouselNavMarkup}
       </div>
       ${
         sortedReviews.length > limitedReviews.length
-          ? `<p class="muted-copy review-list-hint">Showing ${limitedReviews.length} of ${sortedReviews.length}. Change the limit in Settings.</p>`
-          : limitedReviews.length > 1
-            ? `<p class="muted-copy review-list-hint">Scroll to read more reviews.</p>`
-            : ""
+          ? `<p class="muted-copy review-list-hint">${escapeHtml(t("reviews.list.showingLimited", { shown: limitedReviews.length, total: sortedReviews.length }))}</p>`
+          : ""
       }
       ${
         statusMessage
@@ -130,15 +143,23 @@ export function renderEntityReviewsSectionMarkup(
   `;
 }
 
-function renderReviewListMarkup(reviews: ExtensionReview[], state: EntityReviewsSectionState): string {
+function renderReviewAtIndexMarkup(
+  t: TranslateFn,
+  reviews: ExtensionReview[],
+  index: number,
+  state: EntityReviewsSectionState
+): string {
   if (reviews.length === 0) {
-    return `<p class="muted-copy">No community reviews yet.</p>`;
+    return `<p class="muted-copy">${escapeHtml(t("reviews.community.empty"))}</p>`;
   }
 
-  return reviews.map((review) => renderReviewCard(review, state)).join("");
+  const review = reviews[clampReviewCarouselIndex(index, reviews.length)]!;
+
+  return renderReviewCard(t, review, state);
 }
 
 function renderMyReviewSection(
+  t: TranslateFn,
   myReviewText: string,
   isAuthenticated: boolean,
   options: { hideWhenSaved: boolean; showReviewForm: boolean }
@@ -150,8 +171,10 @@ function renderMyReviewSection(
   if (!isAuthenticated) {
     return `
       <section class="my-review-form">
-        <h3>Your review</h3>
-        <p class="muted-copy">Sign in to leave a text review.</p>
+        <h3>${escapeHtml(t("reviews.myReview.title"))}</h3>
+        <button type="button" class="text-link sign-in-cta" data-open-auth-prompt>
+          ${escapeHtml(t("reviews.myReview.signInCta"))}
+        </button>
       </section>
     `;
   }
@@ -160,36 +183,38 @@ function renderMyReviewSection(
     return "";
   }
 
-  const saveReviewLabel = hasSavedReviewText(myReviewText) ? "Update review" : "Save review";
+  const saveReviewLabel = hasSavedReviewText(myReviewText)
+    ? t("reviews.myReview.update")
+    : t("reviews.myReview.save");
 
   return `
     <section class="my-review-form">
-      <h3>Your review</h3>
+      <h3>${escapeHtml(t("reviews.myReview.title"))}</h3>
       <textarea
         data-my-review-text
         maxlength="${MAX_REVIEW_TEXT_LENGTH}"
         rows="3"
-        placeholder="Share useful context about this page..."
+        placeholder="${escapeHtml(t("reviews.myReview.placeholder"))}"
       ></textarea>
       <div class="my-review-form-footer">
-        <p class="muted-copy review-length-hint">Up to ${MAX_REVIEW_TEXT_LENGTH} characters</p>
+        <p class="muted-copy review-length-hint">${escapeHtml(t("reviews.myReview.charLimitHint", { max: MAX_REVIEW_TEXT_LENGTH }))}</p>
         <p
           class="review-length-counter ${reviewLengthCounterClass(myReviewText.length)}"
           data-review-length-counter
           aria-live="polite"
         >
-          ${formatReviewLengthCounter(myReviewText.length)}
+          ${escapeHtml(t("reviews.myReview.charCounter", { length: myReviewText.length, max: MAX_REVIEW_TEXT_LENGTH }))}
         </p>
       </div>
       <button type="button" class="primary-button" data-save-review>
-        ${saveReviewLabel}
+        ${escapeHtml(saveReviewLabel)}
       </button>
       <p class="review-status" data-review-status hidden></p>
     </section>
   `;
 }
 
-function renderReviewCard(review: ExtensionReview, state: EntityReviewsSectionState): string {
+function renderReviewCard(t: TranslateFn, review: ExtensionReview, state: EntityReviewsSectionState): string {
   const isOwnReview = isReviewByCurrentUser(review.authorId, state.currentUserId);
   const likeClass = review.likedByCurrentUser ? " is-active" : "";
   const isCompact = state.displayMode === "compact";
@@ -203,14 +228,20 @@ function renderReviewCard(review: ExtensionReview, state: EntityReviewsSectionSt
     <article class="${cardClass}" data-review-id="${escapeHtml(review.id)}">
       <p class="review-text">${escapeHtml(breakLongUnbrokenText(displayText))}</p>
       <div class="review-card-footer">
-        <div class="review-vote-controls" role="group" aria-label="Review feedback">
+        <div class="review-vote-controls" role="group" aria-label="${escapeHtml(t("reviews.vote.groupAriaLabel"))}">
           <button
             type="button"
             class="review-vote-button review-like-button${likeClass}"
             data-like-review="${escapeHtml(review.id)}"
             aria-pressed="${review.likedByCurrentUser}"
             ${canVote ? "" : "disabled"}
-            title="${isOwnReview ? "You can't like your own review" : "Mark as helpful"}"
+            title="${escapeHtml(
+              isOwnReview
+                ? t("reviews.vote.ownReviewTooltip")
+                : review.likedByCurrentUser
+                  ? t("reviews.vote.unlikeTooltip")
+                  : t("reviews.vote.likeTooltip")
+            )}"
           >
             👍 ${review.likesCount}
           </button>
@@ -219,13 +250,13 @@ function renderReviewCard(review: ExtensionReview, state: EntityReviewsSectionSt
             class="review-vote-button review-unlike-button"
             data-unlike-review="${escapeHtml(review.id)}"
             ${canVote && review.likedByCurrentUser ? "" : "disabled"}
-            title="${isOwnReview ? "You can't like your own review" : "Remove your like"}"
+            title="${escapeHtml(isOwnReview ? t("reviews.vote.ownReviewTooltip") : t("reviews.vote.unlikeTooltip"))}"
           >
             👎
           </button>
         </div>
         <span class="review-date">${
-          isOwnReview ? `<span class="review-you-label">You</span> · ` : ""
+          isOwnReview ? `<span class="review-you-label">${escapeHtml(t("reviews.author.you"))}</span> · ` : ""
         }${escapeHtml(formatReviewDate(review.updatedAt))}</span>
       </div>
     </article>
@@ -233,6 +264,7 @@ function renderReviewCard(review: ExtensionReview, state: EntityReviewsSectionSt
 }
 
 export function bindEntityReviewsSection(
+  t: TranslateFn,
   container: HTMLElement,
   entityId: string,
   initialState: EntityReviewsSectionState,
@@ -241,90 +273,131 @@ export function bindEntityReviewsSection(
 ): void {
   let state = initialState;
   let myReviewText = initialMyReviewText;
+  let activeReviewIndex = 0;
   const hideMyReviewWhenSaved = renderOptions.hideMyReviewWhenSaved !== false;
   let showReviewForm =
     renderOptions.showReviewForm ??
     !(hideMyReviewWhenSaved && hasSavedReviewText(myReviewText));
 
+  const getLimitedReviews = (): ExtensionReview[] => {
+    const sortedReviews = sortEntityReviews(state.reviews, state.sort);
+    return sortedReviews.slice(0, state.reviewsLimit);
+  };
+
   const rerenderList = (): void => {
     const listElement = container.querySelector<HTMLElement>("[data-review-list]");
+    const carousel = container.querySelector<HTMLElement>("[data-review-carousel]");
 
     if (!listElement) {
       return;
     }
 
-    const sortedReviews = sortEntityReviews(state.reviews, state.sort);
-    const limitedReviews = sortedReviews.slice(0, state.reviewsLimit);
-    listElement.innerHTML = renderReviewListMarkup(limitedReviews, state);
+    const limitedReviews = getLimitedReviews();
+    activeReviewIndex = clampReviewCarouselIndex(activeReviewIndex, limitedReviews.length);
+    listElement.innerHTML = renderReviewAtIndexMarkup(t, limitedReviews, activeReviewIndex, state);
+    listElement.querySelector<HTMLElement>(".review-text")?.scrollTo({ top: 0 });
 
-    bindReviewVoteButtons(listElement);
-  };
+    if (carousel) {
+      const existingNav = carousel.querySelector("[data-review-carousel-nav]");
+      const navMarkup = renderReviewCarouselNavMarkup(t, activeReviewIndex, limitedReviews.length, {
+        classPrefix: "review",
+        escapeHtml
+      });
 
-  const bindReviewVoteButtons = (root: ParentNode): void => {
-    root.querySelectorAll<HTMLButtonElement>("[data-like-review]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const reviewId = button.dataset.likeReview;
-
-        if (!reviewId) {
-          return;
+      if (navMarkup) {
+        if (existingNav) {
+          existingNav.outerHTML = navMarkup;
+        } else {
+          carousel.insertAdjacentHTML("beforeend", navMarkup);
         }
 
-        void toggleReviewLike(reviewId, button);
-      });
-    });
-
-    root.querySelectorAll<HTMLButtonElement>("[data-unlike-review]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const reviewId = button.dataset.unlikeReview;
-
-        if (!reviewId) {
-          return;
-        }
-
-        void removeReviewLike(reviewId);
-      });
-    });
+        updateReviewCarouselNav(carousel, t, activeReviewIndex, limitedReviews.length);
+      } else {
+        existingNav?.remove();
+      }
+    }
   };
 
-  async function toggleReviewLike(reviewId: string, button: HTMLButtonElement): Promise<void> {
-    const review = state.reviews.find((item) => item.id === reviewId);
 
-    if (!review || isReviewByCurrentUser(review.authorId, state.currentUserId)) {
+  let pendingVoteReviewId: string | null = null;
+
+  const applyOptimisticReviewVote = (
+    review: ExtensionReview,
+    willLike: boolean
+  ): ExtensionReview => ({
+    ...review,
+    likedByCurrentUser: willLike,
+    likesCount: Math.max(0, review.likesCount + (willLike ? 1 : -1))
+  });
+
+  const updateReviewVoteInPlace = (review: ExtensionReview): void => {
+    const card = container.querySelector<HTMLElement>(`[data-review-id="${CSS.escape(review.id)}"]`);
+
+    if (!card) {
       return;
     }
 
-    button.disabled = true;
-    const result = review.likedByCurrentUser
-      ? await unlikeEntityReview(reviewId)
-      : await likeEntityReview(reviewId);
-    button.disabled = false;
+    const isOwnReview = isReviewByCurrentUser(review.authorId, state.currentUserId);
+    const canVote = state.isAuthenticated && !isOwnReview;
+    const likeButton = card.querySelector<HTMLButtonElement>("[data-like-review]");
+    const unlikeButton = card.querySelector<HTMLButtonElement>("[data-unlike-review]");
 
-    if (!result.review) {
-      setReviewStatus(result.errorMessage ?? "Could not update like.", "error");
+    if (likeButton) {
+      likeButton.classList.toggle("is-active", review.likedByCurrentUser);
+      likeButton.setAttribute("aria-pressed", String(review.likedByCurrentUser));
+      likeButton.disabled = !canVote;
+      likeButton.title = isOwnReview
+        ? t("reviews.vote.ownReviewTooltip")
+        : review.likedByCurrentUser
+          ? t("reviews.vote.unlikeTooltip")
+          : t("reviews.vote.likeTooltip");
+      likeButton.textContent = `👍 ${review.likesCount}`;
+    }
+
+    if (unlikeButton) {
+      unlikeButton.disabled = !canVote || !review.likedByCurrentUser;
+      unlikeButton.title = isOwnReview
+        ? t("reviews.vote.ownReviewTooltip")
+        : t("reviews.vote.unlikeTooltip");
+    }
+  };
+
+  async function handleReviewVote(reviewId: string): Promise<void> {
+    if (pendingVoteReviewId === reviewId) {
       return;
     }
 
-    state = {
-      ...state,
-      reviews: state.reviews.map((item) => (item.id === reviewId ? result.review! : item))
-    };
-    rerenderList();
-  }
-
-  async function removeReviewLike(reviewId: string): Promise<void> {
     const review = state.reviews.find((item) => item.id === reviewId);
 
     if (
-      !review?.likedByCurrentUser ||
+      !review ||
+      !state.isAuthenticated ||
       isReviewByCurrentUser(review.authorId, state.currentUserId)
     ) {
       return;
     }
 
-    const result = await unlikeEntityReview(reviewId);
+    const willLike = !review.likedByCurrentUser;
+    const snapshot = state;
+    const optimisticReview = applyOptimisticReviewVote(review, willLike);
+
+    pendingVoteReviewId = reviewId;
+    state = {
+      ...state,
+      reviews: state.reviews.map((item) => (item.id === reviewId ? optimisticReview : item))
+    };
+    updateReviewVoteInPlace(optimisticReview);
+
+    const result = willLike ? await likeEntityReview(reviewId) : await unlikeEntityReview(reviewId);
+    pendingVoteReviewId = null;
 
     if (!result.review) {
-      setReviewStatus(result.errorMessage ?? "Could not remove like.", "error");
+      state = snapshot;
+      updateReviewVoteInPlace(review);
+      setReviewStatus(
+        willLike ? t("reviews.vote.likeError") : t("reviews.vote.unlikeError"),
+        "error"
+      );
       return;
     }
 
@@ -332,8 +405,47 @@ export function bindEntityReviewsSection(
       ...state,
       reviews: state.reviews.map((item) => (item.id === reviewId ? result.review! : item))
     };
-    rerenderList();
+    updateReviewVoteInPlace(result.review);
+    setReviewStatus("", "default");
   }
+
+  const bindReviewVoteControls = (root: ParentNode): void => {
+    if (!(root instanceof HTMLElement) || root.dataset.reviewVoteControlsBound === "true") {
+      return;
+    }
+
+    root.dataset.reviewVoteControlsBound = "true";
+
+    root.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const likeButton = event.target.closest<HTMLButtonElement>("[data-like-review]:not(:disabled)");
+
+      if (likeButton) {
+        const reviewId = likeButton.dataset.likeReview;
+
+        if (reviewId) {
+          void handleReviewVote(reviewId);
+        }
+
+        return;
+      }
+
+      const unlikeButton = event.target.closest<HTMLButtonElement>(
+        "[data-unlike-review]:not(:disabled)"
+      );
+
+      if (unlikeButton) {
+        const reviewId = unlikeButton.dataset.unlikeReview;
+
+        if (reviewId) {
+          void handleReviewVote(reviewId);
+        }
+      }
+    });
+  };
 
   function setReviewStatus(message: string, tone: "default" | "error" | "success"): void {
     const statusElement = container.querySelector<HTMLParagraphElement>("[data-review-status]");
@@ -359,6 +471,7 @@ export function bindEntityReviewsSection(
       ...state,
       sort: value
     };
+    activeReviewIndex = 0;
     rerenderList();
   });
 
@@ -371,20 +484,20 @@ export function bindEntityReviewsSection(
     const text = textarea?.value.trim() ?? "";
 
     if (!text) {
-      setReviewStatus("Write something before saving.", "error");
+      setReviewStatus(t("reviews.save.emptyError"), "error");
       return;
     }
 
     if (!isReviewTextWithinLimit(text)) {
-      setReviewStatus(`Review must be ${MAX_REVIEW_TEXT_LENGTH} characters or fewer.`, "error");
+      setReviewStatus(t("reviews.save.tooLongError", { max: MAX_REVIEW_TEXT_LENGTH }), "error");
       return;
     }
 
-    setReviewStatus("Saving review...", "default");
+    setReviewStatus(t("reviews.save.saving"), "default");
     const result = await upsertMyEntityReview(entityId, text);
 
     if (!result.review) {
-      setReviewStatus(result.errorMessage ?? "Could not save review.", "error");
+      setReviewStatus(result.errorMessage ?? t("reviews.save.error"), "error");
       return;
     }
 
@@ -407,11 +520,19 @@ export function bindEntityReviewsSection(
       syncReviewLengthCounter();
     }
 
-    setReviewStatus("Review saved.", "success");
+    setReviewStatus(t("reviews.save.success"), "success");
     rerenderList();
   }
 
-  bindReviewVoteButtons(container);
+  bindReviewVoteControls(container);
+  bindReviewCarouselNav(container, {
+    getIndex: () => activeReviewIndex,
+    getTotal: () => getLimitedReviews().length,
+    onNavigate: (nextIndex) => {
+      activeReviewIndex = nextIndex;
+      rerenderList();
+    }
+  });
 
   const textarea = container.querySelector<HTMLTextAreaElement>("[data-my-review-text]");
   const lengthCounter = container.querySelector<HTMLParagraphElement>("[data-review-length-counter]");
@@ -422,7 +543,10 @@ export function bindEntityReviewsSection(
     }
 
     const length = textarea.value.length;
-    lengthCounter.textContent = formatReviewLengthCounter(length);
+    lengthCounter.textContent = t("reviews.myReview.charCounter", {
+      length,
+      max: MAX_REVIEW_TEXT_LENGTH
+    });
     lengthCounter.className = `review-length-counter ${reviewLengthCounterClass(length)}`.trim();
   };
 

@@ -9,6 +9,8 @@ export interface ApplicationConfig {
   jwtAccessTokenTtlSeconds: number;
   jwtSecret: string;
   port: number;
+  redisUrl: string;
+  reputationEngineEnabled: boolean;
 }
 
 export const environmentConfig = registerAs(
@@ -23,9 +25,21 @@ export const environmentConfig = registerAs(
     environment: (process.env["NODE_ENV"] ?? "development") as NodeEnvironment,
     jwtAccessTokenTtlSeconds: Number(process.env["JWT_ACCESS_TOKEN_TTL_SECONDS"] ?? 120 * 86_400),
     jwtSecret: process.env["JWT_SECRET"] ?? "reviewo_development_jwt_secret_change_me",
-    port: Number(process.env["API_PORT"] ?? 3000)
+    port: Number(process.env["API_PORT"] ?? 3000),
+    redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
+    reputationEngineEnabled: parseBooleanFlag(process.env["REPUTATION_ENGINE_ENABLED"], false)
   })
 );
+
+function parseBooleanFlag(value: string | undefined, defaultValue: boolean): boolean {
+  if (!value) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  return normalized === "true" || normalized === "1";
+}
 
 function parseCorsAllowedOrigins(
   value: string | undefined,

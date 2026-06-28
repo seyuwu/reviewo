@@ -4,6 +4,7 @@ import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedRequest } from "../../../common/interfaces/authenticated-request.js";
 import { UsersService } from "../../users/services/users.service.js";
+import { parseBearerToken } from "../lib/parse-bearer-token.js";
 import { JwtTokenService } from "../services/jwt-token.service.js";
 
 interface BearerRequest extends AuthenticatedRequest {
@@ -21,7 +22,7 @@ export class JwtAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<BearerRequest>();
-    const token = getBearerToken(request.headers.authorization);
+    const token = parseBearerToken(request.headers.authorization);
 
     if (!token) {
       throw createUnauthorizedException();
@@ -43,22 +44,6 @@ export class JwtAuthGuard implements CanActivate {
 
     return true;
   }
-}
-
-function getBearerToken(value: string | string[] | undefined): string | null {
-  const authorization = Array.isArray(value) ? value[0] : value;
-
-  if (!authorization) {
-    return null;
-  }
-
-  const [scheme, token] = authorization.split(" ");
-
-  if (scheme !== "Bearer" || !token) {
-    return null;
-  }
-
-  return token;
 }
 
 function createUnauthorizedException(): Error {

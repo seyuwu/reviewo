@@ -1,8 +1,10 @@
 "use client";
 
+import type { TranslateFn } from "@reviewo/i18n";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
+import { useTranslation } from "../../i18n/locale-provider";
 import { MinimalAuthPanel } from "../../auth/components/minimal-auth-panel";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { getCurrentUserProfile } from "../api/profile";
@@ -11,6 +13,7 @@ import type { CurrentUserProfile } from "../types/profile";
 type ProfileFlowState = "loading" | "guest" | "authenticated";
 
 export function ProfilePageView() {
+  const t = useTranslation();
   const { authSession, isAuthSessionLoaded, signOut, storeAuthSession } = useAuthSession();
   const accessToken = authSession?.accessToken;
 
@@ -37,17 +40,14 @@ export function ProfilePageView() {
         <div key="guest" className="auth-center-page ui-fade-in">
           <div className="auth-center-card">
             <header className="auth-center-header">
-              <p className="eyebrow">Account</p>
-              <h1 id="auth-heading">Sign in to Reviewo</h1>
-              <p className="muted-copy">
-                Register or log in to rate pages, leave reviews, and keep your session in sync with
-                the browser extension.
-              </p>
+              <p className="eyebrow">{t("common.account")}</p>
+              <h1 id="auth-heading">{t("auth.context.signInToReviewo")}</h1>
+              <p className="muted-copy">{t("auth.context.signInHint")}</p>
             </header>
 
             <MinimalAuthPanel
               authSession={authSession}
-              contextLabel="Register or sign in"
+              contextLabel={t("auth.context.registerOrSignIn")}
               onAuthSuccess={(authResponse) => {
                 storeAuthSession(authResponse);
               }}
@@ -58,22 +58,19 @@ export function ProfilePageView() {
       ) : (
         <div key="authenticated" className="profile-page profile-page-authenticated ui-fade-in">
           <div className="profile-hero">
-            <p className="eyebrow">Profile</p>
-            <h1 id="profile-heading">Your Reviewo account.</h1>
-            <p className="hero-copy">
-              A minimal read-only profile for the current authenticated user. Profile editing and
-              activity feeds are intentionally deferred.
-            </p>
+            <p className="eyebrow">{t("web.nav.profile")}</p>
+            <h1 id="profile-heading">{t("web.profile.title")}</h1>
+            <p className="hero-copy">{t("web.profile.subtitle")}</p>
           </div>
 
           <div className="profile-panel-centered">
             <div className="panel-card profile-panel">
               {profileQuery.isLoading ? <ProfilePanelSkeleton /> : null}
               {profileQuery.isError ? (
-                <ProfileStateMessage message="Profile could not be loaded. Sign in again and retry." />
+                <ProfileStateMessage message={t("web.profile.loadError")} />
               ) : null}
               {profileQuery.data ? (
-                <ProfileDetails profile={profileQuery.data} onSignOut={signOut} />
+                <ProfileDetails profile={profileQuery.data} onSignOut={signOut} t={t} />
               ) : null}
             </div>
           </div>
@@ -117,12 +114,15 @@ function ProfilePanelSkeleton() {
   );
 }
 
+
 function ProfileDetails({
   profile,
-  onSignOut
+  onSignOut,
+  t
 }: {
   profile: CurrentUserProfile;
   onSignOut: () => void;
+  t: TranslateFn;
 }) {
   return (
     <div className="profile-details ui-fade-in">
@@ -130,29 +130,25 @@ function ProfileDetails({
         {getInitials(profile.displayName)}
       </div>
       <div>
-        <p className="result-type">Current user</p>
+        <p className="result-type">{t("web.profile.currentUser")}</p>
         <h2>{profile.displayName}</h2>
-        <p className="muted-copy">{profile.email ?? "No email on profile"}</p>
+        <p className="muted-copy">{profile.email ?? t("web.profile.noEmail")}</p>
       </div>
 
-      <div className="profile-fields" aria-label="Basic profile information">
-        <ProfileField label="User ID" value={profile.id} />
-        <ProfileField label="Username" value={profile.username ?? "Not set"} />
-        <ProfileField label="Status" value={profile.status} />
-        <ProfileField label="Email" value={profile.email ?? "Not set"} />
+      <div className="profile-fields" aria-label={t("web.profile.fieldsAriaLabel")}>
+        <ProfileField label={t("web.profile.userId")} value={profile.id} />
+        <ProfileField label={t("web.profile.username")} value={profile.username ?? t("web.profile.notSet")} />
+        <ProfileField label={t("web.profile.status")} value={profile.status} />
+        <ProfileField label={t("web.profile.email")} value={profile.email ?? t("web.profile.notSet")} />
       </div>
 
       <div className="profile-note">
-        <p>
-          Recent ratings and reviews are not shown yet because user activity endpoints are outside
-          this stage.
-        </p>
         <div className="profile-actions">
           <Link className="primary-link" href="/">
-            Back to search
+            {t("web.backToSearch")}
           </Link>
           <button type="button" className="secondary-button" onClick={onSignOut}>
-            Sign out
+            {t("web.profile.signOut")}
           </button>
         </div>
       </div>

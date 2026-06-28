@@ -31,6 +31,16 @@ x-dev-workspace-volumes: &dev-workspace-volumes
   - type: volume
     source: dev_ui_node_modules
     target: /workspace/packages/ui/node_modules
+  - type: volume
+    source: dev_i18n_node_modules
+    target: /workspace/packages/i18n/node_modules
+
+x-dev-service-command: &dev-service-command
+  [
+    "sh",
+    "-c",
+    "LOCKFILE=/workspace/pnpm-lock.yaml; STAMP=/workspace/node_modules/.pnpm-install-stamp; if [ ! -f \"$$STAMP\" ] || [ \"$$LOCKFILE\" -nt \"$$STAMP\" ]; then echo dev-start: pnpm install; corepack pnpm install --frozen-lockfile --store-dir /pnpm/store && touch \"$$STAMP\"; else echo dev-start: skip install; fi; exec corepack pnpm --filter \"$$DEV_PNPM_FILTER\" dev"
+  ]
 
 services:
   api:
@@ -38,44 +48,33 @@ services:
       target: development
     environment:
       NODE_ENV: development
+      DEV_PNPM_FILTER: "@reviewo/api"
       # Dev sessions should stay logged in; do not inherit a short host JWT TTL (e.g. 900s).
       JWT_ACCESS_TOKEN_TTL_SECONDS: "10368000"
       # Keep API DB credentials aligned with postgres when the dev stack is recreated partially.
       DATABASE_URL: postgresql://${POSTGRES_USER:-reviewo}:${POSTGRES_PASSWORD:-reviewo_password}@postgres:5432/${POSTGRES_DB:-reviewo}
+      REPUTATION_ENGINE_ENABLED: ${REPUTATION_ENGINE_ENABLED:-true}
     volumes: *dev-workspace-volumes
-    command:
-      [
-        "sh",
-        "-c",
-        "corepack pnpm install --frozen-lockfile --store-dir /pnpm/store && corepack pnpm --filter @reviewo/api dev"
-      ]
+    command: *dev-service-command
 
   web:
     build:
       target: development
     environment:
       NODE_ENV: development
+      DEV_PNPM_FILTER: "@reviewo/web"
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3000}
     volumes: *dev-workspace-volumes
-    command:
-      [
-        "sh",
-        "-c",
-        "corepack pnpm install --frozen-lockfile --store-dir /pnpm/store && corepack pnpm --filter @reviewo/web dev"
-      ]
+    command: *dev-service-command
 
   extension:
     build:
       target: development
     environment:
       NODE_ENV: development
+      DEV_PNPM_FILTER: "@reviewo/extension"
     volumes: *dev-workspace-volumes
-    command:
-      [
-        "sh",
-        "-c",
-        "corepack pnpm install --frozen-lockfile --store-dir /pnpm/store && corepack pnpm --filter @reviewo/extension dev"
-      ]
+    command: *dev-service-command
 
 volumes:
   dev_pnpm_store:
@@ -87,3 +86,4 @@ volumes:
   dev_shared_node_modules:
   dev_types_node_modules:
   dev_ui_node_modules:
+  dev_i18n_node_modules:

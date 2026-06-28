@@ -1,6 +1,5 @@
 // Use px (not rem) so card size stays consistent on sites like YouTube/Twitch
-// that change the document root font-size. Scale is applied via --reviewo-ui-scale
-// relative to a 1920x1080 reference viewport.
+// that change the document root font-size.
 import { CARD_BASE_WIDTH_PX } from "./card-responsive-scale.js";
 
 export const RATING_CARD_STYLES = `
@@ -10,9 +9,7 @@ export const RATING_CARD_STYLES = `
   display: block;
   position: fixed;
   z-index: 2147483647;
-  width: ${CARD_BASE_WIDTH_PX}px;
-  --reviewo-ui-scale: 1;
-  transform: scale(var(--reviewo-ui-scale));
+  width: min(${CARD_BASE_WIDTH_PX}px, calc(100vw - 32px));
   pointer-events: auto;
 }
 
@@ -91,6 +88,12 @@ export const RATING_CARD_STYLES = `
   .reviewo-card-shell.is-closing {
     animation: none;
   }
+
+  .reviewo-card,
+  .reviewo-chat-panel,
+  .reviewo-chat-panel-inner {
+    transition: none !important;
+  }
 }
 
 .reviewo-card {
@@ -107,12 +110,25 @@ export const RATING_CARD_STYLES = `
   flex-direction: column;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   font-size: 16px;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   padding: 16px 18px 18px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+@supports (interpolate-size: allow-keywords) {
+  .reviewo-card {
+    height: auto;
+    interpolate-size: allow-keywords;
+    transition: height 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+.reviewo-card-scroll {
+  display: contents;
 }
 
 .reviewo-card-header {
@@ -454,9 +470,77 @@ export const RATING_CARD_STYLES = `
   scroll-behavior: smooth;
 }
 
-.reviewo-review-list {
+.reviewo-review-carousel {
   display: grid;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.reviewo-review-carousel-nav {
+  align-items: center;
+  display: flex;
   gap: 10px;
+  justify-content: center;
+}
+
+.reviewo-review-carousel-button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  color: #171717;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 14px;
+  height: 32px;
+  justify-content: center;
+  line-height: 1;
+  min-width: 32px;
+  padding: 0;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.reviewo-review-carousel-button:hover:not(:disabled),
+.reviewo-review-carousel-button:focus-visible:not(:disabled) {
+  background: #fafafa;
+  border-color: #d4d4d8;
+}
+
+.reviewo-review-carousel-button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.reviewo-review-carousel-counter {
+  color: #737373;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 56px;
+  text-align: center;
+}
+
+.reviewo-review-carousel .reviewo-review-list-viewport {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.reviewo-review-carousel .reviewo-review-text,
+.reviewo-review-carousel .reviewo-review-card.is-compact .reviewo-review-text {
+  height: 96px;
+  max-height: 96px;
+  min-height: 96px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.reviewo-review-list {
+  display: block;
   max-width: 100%;
   min-width: 0;
 }
@@ -530,6 +614,7 @@ export const RATING_CARD_STYLES = `
 .reviewo-review-like-button.is-active {
   background: rgba(212, 175, 55, 0.15);
   border-color: #d4af37;
+  opacity: 1;
 }
 
 .reviewo-review-vote-button:disabled {
@@ -554,6 +639,7 @@ export const RATING_CARD_STYLES = `
   font-size: 14px;
   font-weight: 700;
   justify-content: center;
+  margin-top: 12px;
   max-width: 100%;
   min-width: 0;
   padding: 11px 16px;
@@ -566,5 +652,421 @@ export const RATING_CARD_STYLES = `
 .reviewo-details:hover,
 .reviewo-details:focus-visible {
   background: #404040;
+}
+
+.reviewo-settings-tip {
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+.reviewo-settings-tip-copy {
+  color: #525252;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.reviewo-settings-tip-kbd {
+  color: #171717;
+  font-weight: 700;
+}
+
+.reviewo-settings-tip-dismiss {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  color: #171717;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  justify-self: start;
+  padding: 6px 12px;
+}
+
+.reviewo-settings-tip-dismiss:hover,
+.reviewo-settings-tip-dismiss:focus-visible {
+  background: #fafafa;
+  border-color: #d4d4d4;
+}
+
+.reviewo-auth-back {
+  background: transparent;
+  border: 0;
+  color: #171717;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  margin: 0 0 6px;
+  padding: 0;
+}
+
+.reviewo-auth-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.reviewo-auth-lead {
+  color: #525252;
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.reviewo-auth-mode-toggle {
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+}
+
+.reviewo-auth-mode-button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: #525252;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 10px;
+}
+
+.reviewo-auth-mode-button.is-active {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  color: #171717;
+}
+
+.reviewo-auth-form {
+  display: grid;
+  gap: 10px;
+}
+
+.reviewo-auth-field {
+  display: grid;
+  gap: 4px;
+}
+
+.reviewo-auth-field-label {
+  color: #525252;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.reviewo-auth-field input {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-sizing: border-box;
+  color: #171717;
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.reviewo-auth-field input:focus-visible {
+  border-color: #171717;
+  outline: 2px solid rgb(23 23 23 / 0.12);
+  outline-offset: 1px;
+}
+
+.reviewo-auth-display-name-slot {
+  display: none;
+}
+
+.reviewo-auth-display-name-slot.is-visible {
+  display: block;
+}
+
+.reviewo-auth-submit {
+  background: #171717;
+  border: 0;
+  border-radius: 12px;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  margin-top: 2px;
+  padding: 11px 16px;
+}
+
+.reviewo-auth-submit:hover:not(:disabled),
+.reviewo-auth-submit:focus-visible:not(:disabled) {
+  background: #404040;
+}
+
+.reviewo-auth-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.reviewo-auth-status {
+  color: #525252;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.reviewo-auth-status.is-error {
+  color: #b91c1c;
+}
+
+.reviewo-auth-status.is-success {
+  color: #166534;
+}
+
+.reviewo-chat-section {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  margin-top: 10px;
+}
+
+.reviewo-chat-section.is-expanded {
+  background: #fafafa;
+  border-radius: 0 0 14px 14px;
+  border-top: 1px solid #e5e7eb;
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.reviewo-chat-panel {
+  flex: 0 0 auto;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reviewo-chat-panel.is-open {
+  height: min(36vh, 280px);
+  max-height: min(36vh, 280px);
+}
+
+.reviewo-chat-panel.is-loading.is-open {
+  height: min(36vh, 280px);
+  max-height: min(36vh, 280px);
+}
+
+.reviewo-chat-panel-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.reviewo-chat-host {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.reviewo-chat-footer {
+  display: grid;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.reviewo-chat-footer[hidden] {
+  display: none !important;
+}
+
+.reviewo-chat-toggle {
+  flex-shrink: 0;
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fafafa;
+  color: #171717;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 12px;
+  text-align: left;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.reviewo-chat-section.is-expanded .reviewo-chat-toggle {
+  background: #fff;
+  border-radius: 10px;
+  margin-bottom: 0;
+  margin-top: 8px;
+}
+
+.reviewo-chat-toggle:hover,
+.reviewo-chat-toggle:focus-visible {
+  background: #f5f5f5;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-card {
+  display: flex;
+  flex-direction: column;
+  max-height: min(98vh, 900px);
+  overflow: hidden;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-card-scroll {
+  display: block;
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-rate-section,
+.reviewo-card-shell.is-chat-expanded .reviewo-settings-tip {
+  display: none !important;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-details {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  margin-top: 8px;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-chat-section {
+  flex: 0 0 auto;
+}
+
+:host([data-placement^="bottom"]).is-chat-expanded .reviewo-card-shell.is-chat-expanded .reviewo-card {
+  overflow: hidden;
+}
+
+:host([data-placement^="top"]).is-chat-expanded .reviewo-card-shell.is-chat-expanded .reviewo-card {
+  overflow: hidden;
+}
+
+.reviewo-chat-drawer {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  margin-top: 0;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.reviewo-chat-drawer-header {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.reviewo-chat-drawer-body {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.reviewo-chat-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.reviewo-chat-message-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.reviewo-chat-message {
+  font-size: 13px;
+  line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.reviewo-chat-message span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.reviewo-chat-message strong {
+  margin-right: 4px;
+}
+
+.reviewo-chat-composer {
+  display: grid;
+  flex-shrink: 0;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.reviewo-chat-send-status,
+.reviewo-chat-sign-in-hint {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.reviewo-chat-composer input {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.reviewo-chat-send {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #171717;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+
+.reviewo-chat-send:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.reviewo-chat-error {
+  color: #b91c1c;
+  font-size: 13px;
+  margin: 0;
 }
 `;

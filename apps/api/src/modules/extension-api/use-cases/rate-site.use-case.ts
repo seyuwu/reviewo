@@ -6,8 +6,7 @@ import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
 import type { EnsureEntityForUrlResult } from "../../entities/interfaces/ensure-entity-for-url.js";
 import { RATINGS_PORT } from "../../ratings/interfaces/ratings.port.js";
 import type { RatingsPort } from "../../ratings/interfaces/ratings.port.js";
-import { TRUST_PORT } from "../../trust/interfaces/trust.port.js";
-import type { TrustPort } from "../../trust/interfaces/trust.port.js";
+import { ReputationDisplayService } from "../../reputation/services/reputation-display.service.js";
 import type { ExtensionByUrlRatingResponseDto } from "../dto/extension-by-url-rating-response.dto.js";
 import type { ExtensionEntitySummaryDto } from "../dto/extension-resolve-response.dto.js";
 import type { ExtensionWebLinkDto } from "../dto/extension-resolve-response.dto.js";
@@ -25,8 +24,7 @@ export class RateSiteUseCase {
     private readonly entitiesPort: EntitiesPort,
     @Inject(RATINGS_PORT)
     private readonly ratingsPort: RatingsPort,
-    @Inject(TRUST_PORT)
-    private readonly trustPort: TrustPort
+    private readonly reputationDisplayService: ReputationDisplayService
   ) {}
 
   async execute(
@@ -46,7 +44,7 @@ export class RateSiteUseCase {
       },
       currentUser
     );
-    const trust = await this.trustPort.getEntityTrust(provision.entity.id);
+    const trust = await this.reputationDisplayService.resolveEntityTrustConfidence(provision.entity.id);
 
     return {
       entity: toExtensionEntitySummaryDto(provision.entity),

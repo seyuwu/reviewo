@@ -1193,3 +1193,37 @@
 - Stage: 33
 - Summary: Final architecture and quality audit — no product code changes. Confirmed modular boundaries, no cyclic Nest module dependencies, RFC/master-plan alignment, and documented post-MVP RFC backlog.
 - Verification: Codebase review only (boundaries, ports, duplicates, RFC 0007/0008, master plan stages 1–33).
+
+## 2026-06-28 - Entity Live Chat MVP
+
+- Stage: Post-MVP / Entity Live Chat MVP
+- Summary: Added per-entity live chat with PostgreSQL message storage, Redis online presence, Socket.IO gateway, REST history/active-now endpoints, trust-based send cooldowns, extension popup chat drawer, and deterministic Active Now ranking from recent message activity.
+- Created modules:
+  - `ChatModule` (`EntityChatGateway`, `EntityChatService`, `EntityChatRepository`, `PresenceService`, `ChatRateLimiterService`)
+  - `RedisModule` / `RedisService`
+- Created files (high level):
+  - `apps/api/prisma/migrations/20260628140000_add_entity_chat_foundation/`
+  - `apps/api/src/modules/chat/**`
+  - `apps/api/src/redis/**`
+  - `apps/extension/src/popup/components/chat-drawer.ts`
+  - `apps/extension/src/popup/components/active-now-panel.ts`
+  - `apps/extension/src/popup/services/entity-chat-api.ts`
+  - `apps/extension/src/popup/services/entity-chat-socket.ts`
+- Changed files (high level):
+  - `apps/api/src/app.module.ts`
+  - `apps/api/package.json`
+  - `apps/extension/src/popup/screens/home-screen.ts`
+  - `apps/extension/src/popup/screens/entity-screen.ts`
+  - `apps/extension/public/popup.css`
+  - `packages/i18n/src/messages/en.ts`
+  - `packages/i18n/src/messages/ru.ts`
+  - `.env.example`, `.env.development`
+- Architectural changes:
+  - Room id is `entityId`; no chat room/participant tables in v1.
+  - Presence stored in Redis key pattern `chat:entity:{entityId}:online`.
+  - Active Now uses SQL aggregation over last 30 minutes (message count + unique participants).
+  - Message retention: 90 days and max 5000 messages per entity via in-process cleanup job.
+- Verification:
+  - Chat unit tests: message pagination, presence, room naming, active-now ranking, trust cooldown.
+  - Extension tests: existing navigation/review/rating flows still pass (`44/44`).
+  - Apply migration `20260628140000_add_entity_chat_foundation` before using chat in Docker dev stack.

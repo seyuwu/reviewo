@@ -20,3 +20,13 @@ export async function getExtensionSessionUserId(): Promise<string | undefined> {
 
   return response.payload?.session?.userId;
 }
+
+export async function getExtensionSessionAccessToken(): Promise<string | null> {
+  const response = await sendExtensionMessage(createGetAuthSessionMessage());
+
+  if (response?.type !== ExtensionMessageType.AuthSessionResult) {
+    return null;
+  }
+
+  return response.payload?.session?.accessToken ?? null;
+}

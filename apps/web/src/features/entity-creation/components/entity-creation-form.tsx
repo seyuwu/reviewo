@@ -6,6 +6,8 @@ import { FormEvent, useMemo, useState } from "react";
 import { FormFeedback } from "../../../components/form-feedback";
 import { MinimalAuthPanel } from "../../auth/components/minimal-auth-panel";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
+import { useTranslation } from "../../i18n/locale-provider";
+import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
 import { createEntity } from "../api/create-entity";
 import { entityTypes } from "../types/entity";
 import type { EntityType } from "../types/entity";
@@ -14,6 +16,7 @@ export function EntityCreationForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("query") ?? "";
+  const t = useTranslation();
   const { authSession, signOut, storeAuthSession } = useAuthSession();
   const [title, setTitle] = useState(initialQuery);
   const [type, setType] = useState<EntityType>("website");
@@ -34,7 +37,7 @@ export function EntityCreationForm() {
     setStatusMessage(null);
 
     if (!authSession?.accessToken) {
-      setErrorMessage("Sign in before creating an entity.");
+      setErrorMessage(t("web.entityCreate.signInRequired"));
       return;
     }
 
@@ -57,7 +60,7 @@ export function EntityCreationForm() {
           : `/entities/${entity.id}`
       );
     } catch {
-      setErrorMessage("Entity creation failed. Check the form and try again.");
+      setErrorMessage(t("web.entityCreate.failed"));
     } finally {
       setIsCreatingEntity(false);
     }
@@ -65,37 +68,34 @@ export function EntityCreationForm() {
 
   function handleSignOut() {
     signOut();
-    setStatusMessage("Signed out from the creation flow.");
+    setStatusMessage(t("web.entityCreate.signedOut"));
   }
 
   return (
     <section className="creation-card" aria-labelledby="entity-creation-heading">
-      <p className="eyebrow">Create entity</p>
-      <h1 id="entity-creation-heading">Add a page to Reviewo.</h1>
-      <p className="hero-copy">
-        Create the minimum entity record. The backend remains responsible for validation, canonical
-        URL normalization, and duplicate prevention.
-      </p>
+      <p className="eyebrow">{t("web.entityCreate.eyebrow")}</p>
+      <h1 id="entity-creation-heading">{t("web.entityCreate.pageTitle")}</h1>
+      <p className="hero-copy">{t("web.entityCreate.subtitle")}</p>
 
       <div className="creation-grid">
         <MinimalAuthPanel
           authSession={authSession}
-          contextLabel="Sign in for creation"
+          contextLabel={t("web.entityCreate.signInContext")}
           onAuthSuccess={(authResponse) => {
             const storedSession = storeAuthSession(authResponse);
-            setStatusMessage(`Signed in as ${storedSession.displayName}.`);
+            setStatusMessage(t("auth.signedInAs", { displayName: storedSession.displayName }));
           }}
           onSignOut={handleSignOut}
         />
 
         <form className="panel-card form-stack" onSubmit={handleCreateEntitySubmit}>
           <div className="section-heading">
-            <p className="result-type">Step 2</p>
-            <h2>Entity details</h2>
+            <p className="result-type">{t("web.entityCreate.step")}</p>
+            <h2>{t("web.entityCreate.detailsTitle")}</h2>
           </div>
 
           <label className="field-label">
-            Title
+            {t("web.entityCreate.titleLabel")}
             <input
               maxLength={200}
               minLength={1}
@@ -108,7 +108,7 @@ export function EntityCreationForm() {
           </label>
 
           <label className="field-label">
-            Type
+            {t("web.entityCreate.typeLabel")}
             <select
               required
               value={type}
@@ -118,14 +118,14 @@ export function EntityCreationForm() {
             >
               {entityTypes.map((entityType) => (
                 <option key={entityType} value={entityType}>
-                  {entityType}
+                  {formatEntityTypeLabel(t, entityType)}
                 </option>
               ))}
             </select>
           </label>
 
           <label className="field-label">
-            Canonical URL
+            {t("web.entityCreate.canonicalUrl")}
             <input
               maxLength={2048}
               placeholder="https://example.com"
@@ -138,7 +138,7 @@ export function EntityCreationForm() {
           </label>
 
           <label className="field-label">
-            Description
+            {t("web.entityCreate.descriptionLabel")}
             <textarea
               maxLength={2000}
               rows={5}
@@ -154,7 +154,7 @@ export function EntityCreationForm() {
             className="primary-button"
             disabled={!canSubmitEntity || isCreatingEntity}
           >
-            {isCreatingEntity ? "Creating..." : "Create entity"}
+            {isCreatingEntity ? t("web.entityCreate.creating") : t("web.entityCreate.createEntity")}
           </button>
         </form>
       </div>

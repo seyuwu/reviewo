@@ -1,3 +1,6 @@
+import type { TranslateFn } from "@reviewo/i18n";
+
+import { createExtensionTranslator } from "../../shared/extension-i18n.js";
 import { searchEntities, type SearchEntityResult } from "../services/search-entities.js";
 import { entityViewFromSearchResult, escapeHtml } from "../view-helpers.js";
 import type { EntityViewModel } from "../types.js";
@@ -14,25 +17,27 @@ export async function renderSearchScreen(
   query: string,
   actions: SearchScreenActions
 ): Promise<void> {
+  const t = await createExtensionTranslator();
+
   container.innerHTML = `
     <section class="screen search-screen">
       <form class="search-entry" data-search-form>
         <label class="field-label search-field-label">
-          Search Reviewo
+          ${escapeHtml(t("home.search.label"))}
           <input
             name="query"
             type="search"
             value="${escapeHtml(query)}"
-            placeholder="youtube, github, amazon..."
+            placeholder="${escapeHtml(t("home.search.placeholder"))}"
             autocomplete="off"
           />
         </label>
-        <button type="submit" class="primary-button">Search</button>
+        <button type="submit" class="primary-button">${escapeHtml(t("common.search"))}</button>
       </form>
       <div class="search-results-panel" data-search-results>
         <div class="search-state search-state-loading">
           <span class="state-dot state-dot-loading" aria-hidden="true"></span>
-          Searching...
+          ${escapeHtml(t("web.home.searching"))}
         </div>
       </div>
     </section>
@@ -72,7 +77,7 @@ export async function renderSearchScreen(
       resultsHost.innerHTML = `
         <div class="search-state">
           <span class="state-dot" aria-hidden="true"></span>
-          Type to search Reviewo.
+          ${escapeHtml(t("popup.search.idle"))}
         </div>
       `;
       return;
@@ -85,7 +90,7 @@ export async function renderSearchScreen(
       resultsHost.innerHTML = `
         <div class="search-state search-state-loading">
           <span class="state-dot state-dot-loading" aria-hidden="true"></span>
-          Searching...
+          ${escapeHtml(t("web.home.searching"))}
         </div>
       `;
     }
@@ -98,7 +103,7 @@ export async function renderSearchScreen(
       }
 
       resultsHost.classList.remove("is-loading");
-      resultsHost.innerHTML = renderSearchResults(response.results, response.canCreateEntity);
+      resultsHost.innerHTML = renderSearchResults(t, response.results, response.canCreateEntity);
       bindSearchResults(resultsHost, response.results, actions);
     } catch {
       if (requestId !== activeRequestId) {
@@ -106,19 +111,23 @@ export async function renderSearchScreen(
       }
 
       resultsHost.classList.remove("is-loading");
-      resultsHost.innerHTML = `<p class="status-copy-error">Search failed. Check that the API is running.</p>`;
+      resultsHost.innerHTML = `<p class="status-copy-error">${escapeHtml(t("popup.search.failed"))}</p>`;
     }
   }
 
   await runSearch(query.trim(), true);
 }
 
-function renderSearchResults(results: SearchEntityResult[], canCreateEntity: boolean): string {
+function renderSearchResults(
+  t: TranslateFn,
+  results: SearchEntityResult[],
+  canCreateEntity: boolean
+): string {
   if (results.length === 0) {
     return `
       <section class="search-results-empty">
-        <p class="muted-copy">No entities found.</p>
-        ${canCreateEntity ? `<p class="muted-copy">Try a different query or rate the current page from Home.</p>` : ""}
+        <p class="muted-copy">${escapeHtml(t("popup.search.noResults"))}</p>
+        ${canCreateEntity ? `<p class="muted-copy">${escapeHtml(t("popup.search.noResultsHint"))}</p>` : ""}
       </section>
     `;
   }

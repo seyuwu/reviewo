@@ -11,8 +11,7 @@ import type { UrlNormalizer } from "../../entities/interfaces/url-normalizer.js"
 import { RateEntityDto } from "../../ratings/dto/rate-entity.dto.js";
 import { RATINGS_PORT } from "../../ratings/interfaces/ratings.port.js";
 import type { RatingsPort } from "../../ratings/interfaces/ratings.port.js";
-import { TRUST_PORT } from "../../trust/interfaces/trust.port.js";
-import type { TrustPort } from "../../trust/interfaces/trust.port.js";
+import { ReputationDisplayService } from "../../reputation/services/reputation-display.service.js";
 import { ExtensionQuickRatingResponseDto } from "../dto/extension-quick-rating-response.dto.js";
 import type { ExtensionByUrlRatingResponseDto } from "../dto/extension-by-url-rating-response.dto.js";
 import type { ExtensionRateByUrlDto } from "../dto/extension-rate-by-url.dto.js";
@@ -31,10 +30,9 @@ export class ExtensionApiService {
     private readonly entitiesPort: EntitiesPort,
     @Inject(RATINGS_PORT)
     private readonly ratingsPort: RatingsPort,
-    @Inject(TRUST_PORT)
-    private readonly trustPort: TrustPort,
     @Inject(URL_NORMALIZER)
     private readonly urlNormalizer: UrlNormalizer,
+    private readonly reputationDisplayService: ReputationDisplayService,
     private readonly rateSiteUseCase: RateSiteUseCase
   ) {}
 
@@ -54,7 +52,7 @@ export class ExtensionApiService {
 
     const [rating, trust, parent] = await Promise.all([
       this.ratingsPort.getAggregate(resolvedEntity.entity.id),
-      this.trustPort.getEntityTrust(resolvedEntity.entity.id),
+      this.reputationDisplayService.resolveEntityTrustConfidence(resolvedEntity.entity.id),
       this.resolveParentSiteBundle(resolvedEntity.canonicalUrl, resolvedEntity.entity.id)
     ]);
 
@@ -94,7 +92,7 @@ export class ExtensionApiService {
 
     const [rating, trust] = await Promise.all([
       this.ratingsPort.getAggregate(siteResolved.entity.id),
-      this.trustPort.getEntityTrust(siteResolved.entity.id)
+      this.reputationDisplayService.resolveEntityTrustConfidence(siteResolved.entity.id)
     ]);
 
     return {
@@ -117,7 +115,7 @@ export class ExtensionApiService {
     }
 
     const ratingResult = await this.ratingsPort.rateEntity(entityId, input, currentUser);
-    const trust = await this.trustPort.getEntityTrust(entityId);
+    const trust = await this.reputationDisplayService.resolveEntityTrustConfidence(entityId);
 
     return {
       entity: toExtensionEntitySummaryDto(entity),

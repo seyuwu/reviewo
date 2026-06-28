@@ -1,4 +1,7 @@
+import type { TranslateFn } from "@reviewo/i18n";
+
 import type { ExtensionStoredAuthSession } from "../../shared/types/auth.js";
+import { extensionConfig } from "../../shared/config.js";
 import {
   createAuthLoginMessage,
   createAuthRegisterMessage,
@@ -13,6 +16,7 @@ type AuthMode = "login" | "register";
 export interface AuthFormOptions {
   onSessionChange: (session: ExtensionStoredAuthSession | null) => void;
   root: HTMLElement;
+  t: TranslateFn;
 }
 
 export function mountAuthForm(options: AuthFormOptions): { refresh: () => Promise<void> } {
@@ -20,6 +24,7 @@ export function mountAuthForm(options: AuthFormOptions): { refresh: () => Promis
   let authSession: ExtensionStoredAuthSession | null = null;
   let isSubmitting = false;
   let hasRendered = false;
+  const { t } = options;
 
   async function loadAuthSession(): Promise<void> {
     const response = await sendExtensionMessage<{
@@ -78,7 +83,8 @@ export function mountAuthForm(options: AuthFormOptions): { refresh: () => Promis
     const submitButton = options.root.querySelector<HTMLButtonElement>("[data-auth-submit]");
 
     if (submitButton) {
-      submitButton.textContent = authMode === "register" ? "Register" : "Login";
+      submitButton.textContent =
+        authMode === "register" ? t("auth.mode.register") : t("auth.mode.login");
     }
   }
 
@@ -86,7 +92,7 @@ export function mountAuthForm(options: AuthFormOptions): { refresh: () => Promis
     if (authSession) {
       options.root.innerHTML = `
         <div class="auth-inline signed-in-inline ui-fade-soft">
-          <p>Signed in as <strong>${escapeHtml(authSession.displayName)}</strong></p>
+          <p>${escapeHtml(t("auth.signedInAs", { displayName: authSession.displayName }))}</p>
         </div>
       `;
       hasRendered = false;
@@ -96,25 +102,25 @@ export function mountAuthForm(options: AuthFormOptions): { refresh: () => Promis
     if (!hasRendered) {
       options.root.innerHTML = `
         <div class="auth-inline">
-          <div class="segmented-control" role="group" aria-label="Authentication mode">
-            <button type="button" data-auth-mode="register" aria-pressed="${authMode === "register"}">Register</button>
-            <button type="button" data-auth-mode="login" aria-pressed="${authMode === "login"}">Login</button>
+          <div class="segmented-control" role="group" aria-label="${escapeHtml(t("auth.mode.ariaLabel"))}">
+            <button type="button" data-auth-mode="register" aria-pressed="${authMode === "register"}">${escapeHtml(t("auth.mode.register"))}</button>
+            <button type="button" data-auth-mode="login" aria-pressed="${authMode === "login"}">${escapeHtml(t("auth.mode.login"))}</button>
           </div>
           <form data-auth-form class="form-stack">
             <div class="auth-display-name-slot${authMode === "register" ? " is-visible" : ""}" data-auth-display-name-slot aria-hidden="${authMode !== "register"}">
               <div class="auth-display-name-slot__inner">
                 <label class="field-label">
-                  Display name
+                  ${escapeHtml(t("auth.field.displayName"))}
                   <input name="displayName" autocomplete="name" maxlength="100" minlength="1" ${authMode === "register" ? "required" : 'tabindex="-1"'} />
                 </label>
               </div>
             </div>
             <label class="field-label">
-              Email
+              ${escapeHtml(t("auth.field.email"))}
               <input name="email" type="email" autocomplete="email" maxlength="320" required />
             </label>
             <label class="field-label">
-              Password
+              ${escapeHtml(t("auth.field.password"))}
               <input
                 name="password"
                 type="password"
@@ -124,10 +130,10 @@ export function mountAuthForm(options: AuthFormOptions): { refresh: () => Promis
                 required
               />
             </label>
-            <button type="submit" class="primary-button" data-auth-submit>${authMode === "register" ? "Register" : "Login"}</button>
+            <button type="submit" class="primary-button" data-auth-submit>${escapeHtml(authMode === "register" ? t("auth.mode.register") : t("auth.mode.login"))}</button>
           </form>
           <p class="muted-copy auth-hint">
-            Extension sign-in is stored separately from the web app. Use the same email and password, or register here once.
+            ${escapeHtml(t("auth.hint.separateSession"))}
           </p>
           <div class="form-feedback-slot" data-auth-feedback-slot>
             <div class="form-feedback-slot__inner">
@@ -188,17 +194,14 @@ export function mountAuthForm(options: AuthFormOptions): { refresh: () => Promis
     }
 
     if (!response) {
-      setStatus(
-        "Could not reach the extension background worker. Reload the extension on chrome://extensions and make sure the API is running on http://localhost:3000.",
-        "error"
-      );
+      setStatus(t("auth.error.backgroundUnavailable", { apiUrl: extensionConfig.apiBaseUrl }), "error");
       return;
     }
 
     if (response?.type === ExtensionMessageType.AuthOperationSuccess) {
       authSession = response.payload?.session ?? null;
       options.onSessionChange(authSession);
-      setStatus("Signed in successfully.", "success");
+      setStatus(t("auth.success.signedIn"), "success");
       render();
       return;
     }
@@ -207,15 +210,15 @@ export function mountAuthForm(options: AuthFormOptions): { refresh: () => Promis
       const apiMessage = response.payload?.message?.trim();
 
       if (apiMessage?.toLowerCase().includes("already exists")) {
-        setStatus("This email is already registered. Switch to Login and use the same password.", "error");
+        setStatus(t("auth.error.emailExists"), "error");
         return;
       }
 
-      setStatus(apiMessage || "Authentication failed. Check your details and try again.", "error");
+      setStatus(apiMessage || t("auth.error.generic"), "error");
       return;
     }
 
-    setStatus("Authentication failed. Check your details and try again.", "error");
+    setStatus(t("auth.error.generic"), "error");
   }
 
   void loadAuthSession();

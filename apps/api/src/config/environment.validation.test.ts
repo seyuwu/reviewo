@@ -7,7 +7,8 @@ const productionBase = {
   CORS_ALLOWED_ORIGINS: "https://app.example.com",
   DATABASE_URL: "postgresql://reviewo:secret@postgres:5432/reviewo",
   JWT_SECRET: "production_jwt_secret_with_enough_length",
-  NODE_ENV: "production"
+  NODE_ENV: "production",
+  REDIS_URL: "redis://redis:6379"
 } as const;
 
 describe("validateEnvironment", () => {

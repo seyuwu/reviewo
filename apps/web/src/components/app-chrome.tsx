@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ReactNode } from "react";
 
 import { useAuthSession } from "../features/auth/hooks/use-auth-session";
+import { LocaleSwitcher } from "../features/i18n/locale-switcher";
+import { useTranslation } from "../features/i18n/locale-provider";
 
 interface AppChromeProps {
   children: ReactNode;
@@ -11,6 +13,7 @@ interface AppChromeProps {
 
 export function AppChrome({ children }: AppChromeProps) {
   const { authSession, isAuthSessionLoaded, signOut } = useAuthSession();
+  const t = useTranslation();
 
   const authNavState = !isAuthSessionLoaded ? "loading" : authSession ? "signed-in" : "guest";
 
@@ -19,25 +22,26 @@ export function AppChrome({ children }: AppChromeProps) {
       <header className="app-chrome">
         <div className="app-chrome-inner">
           <Link className="app-brand" href="/">
-            Reviewo
+            {t("brand.name")}
           </Link>
-          <nav className="app-chrome-nav" aria-label="Site navigation">
+          <nav className="app-chrome-nav" aria-label={t("web.nav.ariaLabel")}>
             <Link className="app-nav-link app-nav-link-emphasis" href="/">
-              Поиск
+              {t("web.nav.search")}
             </Link>
+            <LocaleSwitcher />
             <div className="app-chrome-auth" data-state={authNavState}>
               <div className="app-chrome-auth-cluster guest-cluster">
                 <Link className="app-nav-link app-nav-link-emphasis" href="/profile">
-                  Sign in
+                  {t("web.nav.signIn")}
                 </Link>
               </div>
               <div className="app-chrome-auth-cluster signed-in-cluster">
-                <span className="app-nav-user">{authSession?.displayName ?? "Account"}</span>
+                <span className="app-nav-user">{authSession?.displayName ?? t("web.nav.account")}</span>
                 <Link className="app-nav-link" href="/profile">
-                  Profile
+                  {t("web.nav.profile")}
                 </Link>
                 <button type="button" className="app-nav-button" onClick={signOut}>
-                  Sign out
+                  {t("web.nav.signOut")}
                 </button>
               </div>
             </div>

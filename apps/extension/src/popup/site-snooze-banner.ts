@@ -1,3 +1,5 @@
+import type { TranslateFn } from "@reviewo/i18n";
+
 import {
   clearSiteSnooze,
   formatSiteSnoozeUntil,
@@ -11,6 +13,7 @@ import { escapeHtml } from "./view-helpers.js";
 export async function syncSiteSnoozeBanner(
   container: HTMLElement,
   activeTab: ActiveTabResolveState,
+  t: TranslateFn,
   onChanged: () => void
 ): Promise<void> {
   const slot = ensureSiteSnoozeBannerSlot(container);
@@ -34,11 +37,11 @@ export async function syncSiteSnoozeBanner(
   slot.innerHTML = `
     <section class="site-snooze-banner">
       <div class="site-snooze-banner-copy">
-        <p class="site-snooze-banner-title">Reviewo отключён на этом сайте</p>
-        <p class="site-snooze-banner-meta">До ${escapeHtml(formatSiteSnoozeUntil(expiresAt))}</p>
+        <p class="site-snooze-banner-title">${escapeHtml(t("snooze.banner.title"))}</p>
+        <p class="site-snooze-banner-meta">${escapeHtml(t("snooze.banner.until", { date: formatSiteSnoozeUntil(expiresAt) }))}</p>
       </div>
       <button type="button" class="primary-button site-snooze-enable-button" data-enable-site-snooze>
-        Включить снова
+        ${escapeHtml(t("snooze.banner.enableAgain"))}
       </button>
     </section>
   `;

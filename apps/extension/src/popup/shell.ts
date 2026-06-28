@@ -1,3 +1,5 @@
+import type { TranslateFn } from "@reviewo/i18n";
+
 import type { ExtensionStoredAuthSession } from "../shared/types/auth.js";
 import { escapeHtml, formatAccountLabel } from "./view-helpers.js";
 
@@ -7,6 +9,7 @@ export interface PopupShellElements {
   body: HTMLElement;
   footer: HTMLElement;
   header: HTMLElement;
+  localeMount: HTMLElement;
   logoutButton: HTMLButtonElement;
   openEntityLink: HTMLAnchorElement;
   settingsButton: HTMLButtonElement;
@@ -27,14 +30,17 @@ export function createPopupShell(root: HTMLElement): PopupShellElements {
       <main class="popup-body" data-popup-body></main>
       <footer class="popup-footer">
         <button type="button" class="footer-button" data-settings-button>Settings</button>
-        <a
-          class="footer-button footer-entity-link"
-          data-open-entity-link
-          href="#"
-          target="_blank"
-          rel="noopener noreferrer"
-          hidden
-        >Open page</a>
+        <div class="popup-footer-center">
+          <div data-popup-locale-mount></div>
+          <a
+            class="footer-button footer-entity-link"
+            data-open-entity-link
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            hidden
+          >Open page</a>
+        </div>
         <button type="button" class="footer-button" data-logout-button hidden>Logout</button>
       </footer>
     </div>
@@ -48,6 +54,7 @@ export function createPopupShell(root: HTMLElement): PopupShellElements {
   const logoutButton = root.querySelector<HTMLButtonElement>("[data-logout-button]");
   const openEntityLink = root.querySelector<HTMLAnchorElement>("[data-open-entity-link]");
   const settingsButton = root.querySelector<HTMLButtonElement>("[data-settings-button]");
+  const localeMount = root.querySelector<HTMLElement>("[data-popup-locale-mount]");
 
   if (
     !accountButton ||
@@ -55,6 +62,7 @@ export function createPopupShell(root: HTMLElement): PopupShellElements {
     !body ||
     !footer ||
     !header ||
+    !localeMount ||
     !logoutButton ||
     !openEntityLink ||
     !settingsButton
@@ -68,14 +76,23 @@ export function createPopupShell(root: HTMLElement): PopupShellElements {
     body,
     footer,
     header,
+    localeMount,
     logoutButton,
     openEntityLink,
     settingsButton
   };
 }
 
+export function applyPopupShellLabels(elements: PopupShellElements, t: TranslateFn): void {
+  elements.backButton.setAttribute("aria-label", t("popup.shell.backAriaLabel"));
+  elements.settingsButton.textContent = t("popup.shell.settings");
+  elements.openEntityLink.textContent = t("popup.shell.openPage");
+  elements.logoutButton.textContent = t("popup.shell.logout");
+}
+
 export function updateShellChrome(
   elements: PopupShellElements,
+  t: TranslateFn,
   options: {
     canGoBack: boolean;
     isSessionLoaded?: boolean;
@@ -91,12 +108,14 @@ export function updateShellChrome(
   if (options.session) {
     elements.accountButton.textContent = options.isSessionLoaded
       ? formatAccountLabel(options.session)
-      : "…";
+      : t("common.loadingEllipsis");
     elements.accountButton.setAttribute("aria-expanded", "false");
     return;
   }
 
-  elements.accountButton.textContent = options.showAuthPrompt ? "Close" : "Sign in";
+  elements.accountButton.textContent = options.showAuthPrompt
+    ? t("popup.shell.close")
+    : t("popup.shell.signIn");
   elements.accountButton.setAttribute("aria-expanded", String(options.showAuthPrompt));
 }
 

@@ -9,12 +9,12 @@ import type { ExtensionUserPreferences } from "../../shared/preferences.js";
 import { extensionConfig } from "../../shared/config.js";
 import type { ExtensionResolveFoundResponse } from "../../shared/types/resolve.js";
 import type { ExtensionResolveResponse } from "../../shared/types/resolve.js";
-import { hasAuthenticatedExtensionSession, getExtensionSessionUserId } from "./auth-session-state.js";
+import { hasAuthenticatedExtensionSession, getExtensionSessionAccessToken, getExtensionSessionUserId } from "./auth-session-state.js";
 import { ENTITY_RATINGS_STORAGE_KEY, readPersistedEntityRatingByCanonical, readPersistedEntityRatingEntry } from "../../shared/entity-rating-sync.js";
 import { mergeQuickRatingIntoFoundResponse } from "../../shared/merge-rating-response.js";
 import { publishEntityRatingUpdate } from "../../shared/publish-entity-rating-update.js";
 import { applyCardPlacement } from "./card-placement.js";
-import { bindAutoDismiss, clearAutoDismiss } from "./auto-dismiss.js";
+import { bindAutoDismiss, bindOutsideDismiss, clearAutoDismiss, unbindAutoDismiss, unbindOutsideDismiss } from "./auto-dismiss.js";
 import { buildCardDisplayContext, getRateTargetEntityId } from "./card-display.js";
 import { installCardResponsiveScale } from "./card-responsive-scale.js";
 import { installCardTitleRefresh, resolveCardDisplayTitle } from "./card-page-title.js";
@@ -35,7 +35,25 @@ import { RATING_CARD_STYLES } from "./rating-card-styles.js";
 import { submitEntityRating } from "./submit-entity-rating.js";
 import { submitEntityRatingByUrl } from "./submit-entity-rating-by-url.js";
 import { bindSiteSnoozePanel, renderSiteSnoozePanelMarkup } from "./site-snooze-panel.js";
+import {
+  bindCardAuthPanel,
+  renderCardAuthPanelMarkup,
+  type CardAuthMode
+} from "./card-auth-panel.js";
+import {
+  bindCardSettingsTip,
+  renderCardSettingsTipMarkup
+} from "./card-settings-tip.js";
+import {
+  bindCardChatDrawer,
+  clearCardChatDrawerState,
+  renderCardChatSectionMarkup
+} from "./card-chat-drawer.js";
 import { requestDismissRatingCard, requestMarkEntityRatedOnTab, readRatingCardSessionKey, isResolveResultForCurrentPage } from "./rating-card-session.js";
+import { isOnSiteCardTipDismissed } from "../../shared/extension-onboarding-storage.js";
+import { createExtensionTranslatorFromPreference } from "../../shared/extension-i18n.js";
+import { formatRatingCardHotkeyLabel } from "../../shared/rating-card-hotkey.js";
+import type { TranslateFn } from "@reviewo/i18n";
 
 const RATING_CARD_HOST_ID = "reviewo-rating-card-host";
 const RATING_CARD_ROOT_CLASS = "reviewo-rating-card-root";
@@ -51,6 +69,12 @@ type RatingCardHost = HTMLElement & {
   reviewoResponsiveScaleCleanup?: () => void;
   reviewoAutoDismissPendingCleanup?: () => void;
 };
+
+let activeRatingCardLocaleRefresh: (() => void) | null = null;
+
+export function refreshVisibleRatingCardLocale(): void {
+  activeRatingCardLocaleRefresh?.();
+}
 
 export interface HideRatingCardOptions {
   animated?: boolean;
@@ -70,10 +94,16 @@ export function hideRatingCard(options: HideRatingCardOptions = {}): void {
   }
 }
 
+export function isRatingCardVisible(): boolean {
+  return findAllRatingCardHosts().some((host) => !host.reviewoIsClosing);
+}
+
 export function removeAllRatingCardHosts(): void {
   for (const host of findAllRatingCardHosts()) {
     removeRatingCardHost(host);
   }
+
+  activeRatingCardLocaleRefresh = null;
 }
 
 function findAllRatingCardHosts(): RatingCardHost[] {
@@ -99,7 +129,8 @@ function hideSingleRatingCardHost(
 
   if (shouldAnimate && shellElement) {
     host.reviewoIsClosing = true;
-    clearAutoDismissPending(host);
+    unbindAutoDismiss(host);
+    unbindOutsideDismiss(host);
     clearAutoDismiss(host);
     shellElement.classList.remove("is-entering");
     shellElement.classList.add("is-closing");
@@ -142,6 +173,8 @@ function cancelCloseAnimation(host: RatingCardHost): void {
 }
 
 function removeRatingCardHost(host: RatingCardHost): void {
+  clearCardChatDrawerState();
+
   if (host.reviewoStorageListener) {
     removeStorageChangedListener(host.reviewoStorageListener);
   }
@@ -154,16 +187,10 @@ function removeRatingCardHost(host: RatingCardHost): void {
     host.reviewoResponsiveScaleCleanup();
   }
 
-  clearAutoDismissPending(host);
+  unbindAutoDismiss(host);
+  unbindOutsideDismiss(host);
   clearAutoDismiss(host);
   host.remove();
-}
-
-function clearAutoDismissPending(host: RatingCardHost): void {
-  if (host.reviewoAutoDismissPendingCleanup) {
-    host.reviewoAutoDismissPendingCleanup();
-    host.reviewoAutoDismissPendingCleanup = undefined;
-  }
 }
 
 export async function showRatingCard(
@@ -181,6 +208,8 @@ export async function showRatingCard(
   host.className = RATING_CARD_ROOT_CLASS;
   applyCardPlacement(host, preferences.cardPlacement);
 
+  let t = createExtensionTranslatorFromPreference(preferences.locale);
+
   const shadowRoot = host.attachShadow({ mode: "open" });
   const styleElement = document.createElement("style");
   styleElement.textContent = RATING_CARD_STYLES;
@@ -191,38 +220,54 @@ export async function showRatingCard(
   const cardElement = document.createElement("article");
   cardElement.className = "reviewo-card";
   cardElement.setAttribute("role", "complementary");
-  cardElement.setAttribute("aria-label", "Reviewo rating summary");
+  cardElement.setAttribute("aria-label", t("card.ariaLabel"));
 
   shellElement.append(cardElement);
   shadowRoot.append(styleElement, shellElement);
   document.documentElement.append(host);
 
   const cardState: {
+    accessToken: string | null;
+    authMode: CardAuthMode;
     cachedPageTitle?: string;
+    cardView: "auth" | "main";
     currentUserId?: string;
     isAuthenticated: boolean;
     isSubmitting: boolean;
     myRatingScore: number | null;
     myReviewText: string | null;
     myReviewUpdatedAt: string | null;
+    pendingRatingScore: number | null;
     resolveResponse: ExtensionResolveResponse;
     reviewDisplayMode: ExtensionUserPreferences["popupReviewDisplayMode"];
     reviews: CardEntityReview[];
     reviewsError: string | null;
     reviewsLimit: number;
     reviewsSort: CardReviewSort;
+    activeReviewIndex: number;
+    settingsTipHotkeyEnabled: boolean;
+    settingsTipHotkeyLabel: string;
+    showSettingsTip: boolean;
   } = {
+    accessToken: null,
+    authMode: "register",
+    cardView: "main",
     isAuthenticated: false,
     isSubmitting: false,
     myRatingScore: null,
     myReviewText: null,
     myReviewUpdatedAt: null,
+    pendingRatingScore: null,
     resolveResponse,
     reviewDisplayMode: preferences.popupReviewDisplayMode,
     reviews: [],
     reviewsError: null,
     reviewsLimit: preferences.popupReviewsLimit,
-    reviewsSort: "likes"
+    reviewsSort: "likes",
+    activeReviewIndex: 0,
+    settingsTipHotkeyEnabled: preferences.ratingCardHotkeyEnabled,
+    settingsTipHotkeyLabel: formatRatingCardHotkeyLabel(preferences.ratingCardHotkey, t),
+    showSettingsTip: false
   };
 
   let isCardContentReady = false;
@@ -236,6 +281,7 @@ export async function showRatingCard(
 
   async function refreshAuthState(): Promise<void> {
     cardState.isAuthenticated = await hasAuthenticatedExtensionSession();
+    cardState.accessToken = cardState.isAuthenticated ? await getExtensionSessionAccessToken() : null;
     cardState.currentUserId = cardState.isAuthenticated
       ? await getExtensionSessionUserId()
       : undefined;
@@ -337,6 +383,12 @@ export async function showRatingCard(
 
       return;
     }
+
+    if (cardState.cardView === "auth") {
+      renderAuthCard();
+      return;
+    }
+
     if (cardState.resolveResponse.status !== "found") {
       renderNotFoundCard();
       return;
@@ -344,20 +396,111 @@ export async function showRatingCard(
 
     const display = buildCardDisplayContext(
       cardState.resolveResponse,
+      t,
       escapeHtmlText
     );
     const cardTitle = resolveCardDisplayTitle(cardState.resolveResponse, readCardPageTitle());
 
     cardElement.innerHTML = `
-      ${renderCardHeaderMarkup(display.eyebrowLabel, cardTitle)}
-      ${display.primaryStatsMarkup}
-      ${display.secondaryStatsMarkup}
-      ${renderRateSection()}
-      ${renderCommunityReviewsSection()}
-      <a class="reviewo-details" href="${escapeHtmlAttribute(buildEntityPageUrl(display.detailsEntityPagePath))}" target="_blank" rel="noopener noreferrer">More details</a>
+      <div class="reviewo-card-scroll">
+        ${renderCardHeaderMarkup(display.eyebrowLabel, cardTitle)}
+        ${display.primaryStatsMarkup}
+        ${display.secondaryStatsMarkup}
+        ${renderRateSection()}
+        ${renderCommunityReviewsSection()}
+        ${renderSettingsTipSection()}
+      </div>
+      <a class="reviewo-details" href="${escapeHtmlAttribute(buildEntityPageUrl(display.detailsEntityPagePath))}" target="_blank" rel="noopener noreferrer">${escapeHtmlText(t("card.moreDetails"))}</a>
+      ${renderCardChatSectionMarkup(t, cardState.resolveResponse.entity.id)}
     `;
 
     bindCardActions();
+  }
+
+  function renderAuthCard(): void {
+    const cardTitle = resolveCardDisplayTitle(cardState.resolveResponse, readCardPageTitle());
+
+    cardElement.innerHTML = `
+      ${renderAuthCardHeaderMarkup(cardTitle)}
+      ${renderCardAuthPanelMarkup(t, {
+        authMode: cardState.authMode,
+        pendingScore: cardState.pendingRatingScore
+      })}
+    `;
+
+    bindAuthCardActions();
+  }
+
+  function renderAuthCardHeaderMarkup(cardTitle: string): string {
+    return `
+      <header class="reviewo-card-header">
+        <div class="reviewo-card-heading">
+          <button type="button" class="reviewo-auth-back" data-auth-back aria-label="${escapeHtmlAttribute(t("card.auth.backAriaLabel"))}">&larr;</button>
+          <span class="reviewo-eyebrow">${escapeHtmlText(t("card.auth.headerEyebrow"))}</span>
+          <h2 class="reviewo-title" title="${escapeHtmlAttribute(cardTitle)}">${escapeHtmlText(cardTitle)}</h2>
+        </div>
+        <div class="reviewo-header-aside">
+          <button type="button" class="reviewo-dismiss" aria-label="${escapeHtmlAttribute(t("card.dismissAriaLabel"))}">&times;</button>
+        </div>
+      </header>
+    `;
+  }
+
+  function bindAuthCardActions(): void {
+    const pageSessionKey = readRatingCardSessionKey(cardState.resolveResponse.url.input);
+
+    cardElement.querySelector(".reviewo-dismiss")?.addEventListener("click", () => {
+      cardState.pendingRatingScore = null;
+      cardState.cardView = "main";
+      requestDismissRatingCard(pageSessionKey);
+      hideRatingCard();
+    });
+
+    bindCardAuthPanel(cardElement, t, {
+      authMode: cardState.authMode,
+      onAuthModeChange: (nextMode) => {
+        cardState.authMode = nextMode;
+        renderAuthCard();
+      },
+      onCancel: () => {
+        cancelPendingAuth();
+      },
+      onSuccess: () => handleAuthSuccess()
+    });
+  }
+
+  function cancelPendingAuth(): void {
+    cardState.pendingRatingScore = null;
+    cardState.cardView = "main";
+    renderCard();
+  }
+
+  async function handleAuthSuccess(): Promise<void> {
+    const pendingScore = cardState.pendingRatingScore;
+    cardState.cardView = "main";
+    cardState.pendingRatingScore = null;
+    await refreshAuthState();
+
+    if (pendingScore !== null && cardState.isAuthenticated && cardState.myRatingScore === null) {
+      await handleRatingSubmit(pendingScore);
+      return;
+    }
+
+    renderCard();
+  }
+
+  function openAuthForRating(score: number): void {
+    cardState.authMode = "register";
+    cardState.pendingRatingScore = score;
+    cardState.cardView = "auth";
+    renderAuthCard();
+  }
+
+  function openAuthForChat(): void {
+    cardState.authMode = "register";
+    cardState.pendingRatingScore = null;
+    cardState.cardView = "auth";
+    renderAuthCard();
   }
 
   function renderRateSection(): string {
@@ -367,11 +510,11 @@ export async function showRatingCard(
 
     return `
       <div class="reviewo-rate-section">
-        <p class="reviewo-rate-label">Your rating</p>
-        <div class="reviewo-rate-controls" role="group" aria-label="Rate this site">
+        <p class="reviewo-rate-label">${escapeHtmlText(t("card.rate.label"))}</p>
+        <div class="reviewo-rate-controls" role="group" aria-label="${escapeHtmlAttribute(t("card.rate.groupAriaLabel"))}">
           ${RATING_SCORES.map((score) => {
-            const isSelected = cardState.myRatingScore === score;
-            const isDisabled = !cardState.isAuthenticated || cardState.isSubmitting;
+            const isSelected = cardState.pendingRatingScore === score;
+            const isDisabled = cardState.isSubmitting;
 
             return `
               <button
@@ -386,9 +529,6 @@ export async function showRatingCard(
             `;
           }).join("")}
         </div>
-        <p class="reviewo-rate-hint${cardState.isAuthenticated ? " is-hidden" : ""}">
-          Sign in through Reviewo to rate.
-        </p>
         <p class="reviewo-rate-status" hidden></p>
       </div>
     `;
@@ -402,24 +542,42 @@ export async function showRatingCard(
           <h2 class="reviewo-title" title="${escapeHtmlAttribute(cardTitle)}">${escapeHtmlText(cardTitle)}</h2>
         </div>
         <div class="reviewo-header-aside">
-          ${renderSiteSnoozePanelMarkup()}
-          <button type="button" class="reviewo-dismiss" aria-label="Dismiss Reviewo card">&times;</button>
+          ${renderSiteSnoozePanelMarkup(t)}
+          <button type="button" class="reviewo-dismiss" aria-label="${escapeHtmlAttribute(t("card.dismissAriaLabel"))}">&times;</button>
         </div>
       </header>
     `;
   }
 
   function renderCommunityReviewsSection(): string {
-    return renderCardCommunityReviewsMarkup(getCommunityReviewsState(), cardState.reviewsError);
+    return renderCardCommunityReviewsMarkup(
+      t,
+      getCommunityReviewsState(),
+      cardState.reviewsError,
+      cardState.activeReviewIndex
+    );
+  }
+
+  function renderSettingsTipSection(): string {
+    if (!cardState.showSettingsTip) {
+      return "";
+    }
+
+    return renderCardSettingsTipMarkup(
+      cardState.settingsTipHotkeyLabel,
+      cardState.settingsTipHotkeyEnabled,
+      t
+    );
   }
 
   function renderNotFoundCard(): void {
     const cardTitle = resolveCardDisplayTitle(cardState.resolveResponse, readCardPageTitle());
 
     cardElement.innerHTML = `
-      ${renderCardHeaderMarkup("Current page", cardTitle)}
-      ${renderNotFoundStats()}
+      ${renderCardHeaderMarkup(t("card.eyebrow.currentPage"), cardTitle)}
+      ${renderNotFoundStats(t)}
       ${renderNotFoundRateSection()}
+      ${renderSettingsTipSection()}
     `;
 
     bindCardActions();
@@ -433,11 +591,11 @@ export async function showRatingCard(
     return `
       <div class="reviewo-rate-section">
         <p class="reviewo-rate-label">Your rating</p>
-        <p class="reviewo-first-rating-copy">Rate this page to add it to Reviewo.</p>
+        <p class="reviewo-first-rating-copy">${escapeHtmlText(t("card.notFound.rateHint"))}</p>
         <div class="reviewo-rate-controls" role="group" aria-label="Rate this site">
           ${RATING_SCORES.map((score) => {
-            const isSelected = cardState.myRatingScore === score;
-            const isDisabled = !cardState.isAuthenticated || cardState.isSubmitting;
+            const isSelected = cardState.pendingRatingScore === score;
+            const isDisabled = cardState.isSubmitting;
 
             return `
               <button
@@ -452,9 +610,6 @@ export async function showRatingCard(
             `;
           }).join("")}
         </div>
-        <p class="reviewo-rate-hint${cardState.isAuthenticated ? " is-hidden" : ""}">
-          Sign in through Reviewo to rate.
-        </p>
         <p class="reviewo-rate-status" hidden></p>
       </div>
     `;
@@ -473,11 +628,18 @@ export async function showRatingCard(
       hideRatingCard();
     });
 
+    bindCardSettingsTip(cardElement);
+
     cardElement.querySelectorAll<HTMLButtonElement>(".reviewo-rate-button").forEach((button) => {
       button.addEventListener("click", () => {
         const score = Number(button.dataset.score);
 
         if (!Number.isInteger(score)) {
+          return;
+        }
+
+        if (!cardState.isAuthenticated) {
+          openAuthForRating(score);
           return;
         }
 
@@ -489,10 +651,32 @@ export async function showRatingCard(
     if (cardState.resolveResponse.status === "found") {
       bindCardCommunityReviews(
         cardElement,
+        t,
         getCommunityReviewsState,
         (nextState) => {
           cardState.reviews = nextState.reviews;
           cardState.reviewsSort = nextState.sort;
+        },
+        {
+          getActiveIndex: () => cardState.activeReviewIndex,
+          setActiveIndex: (index) => {
+            cardState.activeReviewIndex = index;
+          }
+        }
+      );
+
+      bindCardChatDrawer(
+        cardElement,
+        t,
+        cardState.resolveResponse.entity.id,
+        {
+          accessToken: cardState.accessToken,
+          entityId: cardState.resolveResponse.entity.id,
+          entityTitle: cardState.resolveResponse.entity.title,
+          isAuthenticated: cardState.isAuthenticated
+        },
+        {
+          onRequestSignIn: openAuthForChat
         }
       );
     }
@@ -504,7 +688,7 @@ export async function showRatingCard(
       const isSelected = selectedScore === score;
       button.classList.toggle("is-selected", isSelected);
       button.setAttribute("aria-pressed", String(isSelected));
-      button.disabled = !cardState.isAuthenticated || cardState.isSubmitting;
+      button.disabled = cardState.isSubmitting;
     });
   }
 
@@ -539,7 +723,7 @@ export async function showRatingCard(
 
     cardState.isSubmitting = true;
     cardState.myRatingScore = score;
-    setRateStatus("Saving rating...");
+    setRateStatus(t("rating.saving"));
     updateRatingControlsState();
 
     if (cardState.resolveResponse.status === "found") {
@@ -562,19 +746,19 @@ export async function showRatingCard(
           score: submitResult.result.myRating.score
         });
         requestMarkEntityRatedOnTab(readRatingCardSessionKey(cardState.resolveResponse.url.input));
-        setRateStatus("Rating saved.", "success");
+        setRateStatus(t("rating.saved"), "success");
         renderCard();
         return;
       }
 
       if (submitResult.errorMessage?.toLowerCase().includes("authentication")) {
         cardState.isAuthenticated = false;
-        setRateStatus("Sign in through Reviewo to rate.", "error");
+        setRateStatus(t("card.rate.signInRequired"), "error");
         renderCard();
         return;
       }
 
-      setRateStatus(submitResult.errorMessage ?? "Could not save rating.", "error");
+      setRateStatus(submitResult.errorMessage ?? t("rating.saveError"), "error");
       renderCard();
       return;
     }
@@ -611,8 +795,8 @@ export async function showRatingCard(
       requestMarkEntityRatedOnTab(readRatingCardSessionKey(cardState.resolveResponse.url.input));
       const successMessage =
         submitResult.result.entityProvision.mode === "created"
-          ? "You created the first Reviewo page for this site."
-          : "Rating saved.";
+          ? t("rating.firstPageCreated")
+          : t("rating.saved");
       setRateStatus(successMessage, "success");
       renderCard();
       return;
@@ -652,6 +836,27 @@ export async function showRatingCard(
 
   (host as RatingCardHost).reviewoResponsiveScaleCleanup = installCardResponsiveScale(host);
 
+  activeRatingCardLocaleRefresh = () => {
+    void readExtensionPreferences().then((latestPreferences) => {
+      t = createExtensionTranslatorFromPreference(latestPreferences.locale);
+      cardState.settingsTipHotkeyEnabled = latestPreferences.ratingCardHotkeyEnabled;
+      cardState.settingsTipHotkeyLabel = formatRatingCardHotkeyLabel(
+        latestPreferences.ratingCardHotkey,
+        t
+      );
+
+      if (!document.contains(host)) {
+        return;
+      }
+
+      cardElement.setAttribute("aria-label", t("card.ariaLabel"));
+
+      if (isCardContentReady) {
+        renderCard();
+      }
+    });
+  };
+
   void revealCardWhenReady();
 
   async function revealCardWhenReady(): Promise<void> {
@@ -668,6 +873,14 @@ export async function showRatingCard(
       return;
     }
 
+    const [latestPreferences, tipDismissed] = await Promise.all([
+      readExtensionPreferences(),
+      isOnSiteCardTipDismissed()
+    ]);
+    cardState.settingsTipHotkeyEnabled = latestPreferences.ratingCardHotkeyEnabled;
+    cardState.settingsTipHotkeyLabel = formatRatingCardHotkeyLabel(latestPreferences.ratingCardHotkey, t);
+    cardState.showSettingsTip = !tipDismissed;
+
     isCardContentReady = true;
     renderCard();
 
@@ -682,13 +895,15 @@ export async function showRatingCard(
       renderCard();
     }, cardState.resolveResponse.url.input);
 
-    if (preferences.autoDismissSeconds > 0) {
-      bindAutoDismiss(host, preferences.autoDismissSeconds);
+    if (latestPreferences.autoDismissSeconds > 0) {
+      bindAutoDismiss(host, shellElement, latestPreferences.autoDismissSeconds);
     }
+
+    bindOutsideDismiss(host);
   }
 }
 
-export async function showRatingCardForResolveResult(
+export async function showRatingCardOnDemand(
   response: ExtensionResolveResponse
 ): Promise<void> {
   if (!isResolveResultForCurrentPage(response)) {
@@ -699,6 +914,22 @@ export async function showRatingCardForResolveResult(
   await showRatingCard(response, preferences);
 }
 
+export async function showRatingCardForResolveResult(
+  response: ExtensionResolveResponse
+): Promise<void> {
+  if (!isResolveResultForCurrentPage(response)) {
+    return;
+  }
+
+  const preferences = await readExtensionPreferences();
+
+  if (!preferences.onSiteRatingCardEnabled) {
+    return;
+  }
+
+  await showRatingCard(response, preferences);
+}
+
 /** @deprecated Use showRatingCardForResolveResult */
 export async function showRatingCardForFoundEntity(
   response: ExtensionResolveFoundResponse
@@ -706,11 +937,11 @@ export async function showRatingCardForFoundEntity(
   await showRatingCardForResolveResult(response);
 }
 
-function renderNotFoundStats(): string {
+function renderNotFoundStats(t: TranslateFn): string {
   return `
     <div class="reviewo-stats reviewo-stats-empty">
-      <p class="reviewo-no-ratings">No ratings yet</p>
-      <p class="reviewo-meta">Be the first to rate</p>
+      <p class="reviewo-no-ratings">${escapeHtmlText(t("rating.stats.noRatings"))}</p>
+      <p class="reviewo-meta">${escapeHtmlText(t("rating.stats.beFirst"))}</p>
     </div>
   `;
 }

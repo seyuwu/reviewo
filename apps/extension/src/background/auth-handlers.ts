@@ -1,5 +1,6 @@
 import {
   authenticatedApiRequest,
+  isAuthenticatedApiRequestFailure,
   loginWithApi,
   persistAuthResponse,
   registerWithApi
@@ -110,6 +111,13 @@ export function handleAuthMessage(
         sendResponse(createAuthenticatedApiResultMessage(result.data, result.status));
       })
       .catch((error: unknown) => {
+        if (isAuthenticatedApiRequestFailure(error)) {
+          sendResponse(
+            createAuthenticatedApiErrorMessage(error.errorMessage, error.status, error.errorDetails)
+          );
+          return;
+        }
+
         const messageText =
           error instanceof Error ? error.message : "Authenticated API request failed.";
 

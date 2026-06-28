@@ -1,24 +1,49 @@
 import {
+  addStorageChangedListener,
   guardExtensionContext,
   installExtensionContextGuards,
   sendRuntimeMessage
 } from "./extension-context.js";
-import { hideRatingCard, showRatingCardForResolveResult } from "./rating-card/rating-card.js";
+import { LOCALE_PREFERENCE_STORAGE_KEY } from "@reviewo/i18n";
+
+import { hideRatingCard, isRatingCardVisible, refreshVisibleRatingCardLocale, showRatingCardForResolveResult, showRatingCardOnDemand } from "./rating-card/rating-card.js";
 import {
   isResolveResultForCurrentPage,
   requestShowRatingCardIfAllowed,
   readRatingCardSessionKey
 } from "./rating-card/rating-card-session.js";
+import { installRatingCardHotkeyTrigger } from "./rating-card/rating-card-hotkey-trigger.js";
 import { watchPageUrlChanges } from "./page-resolve-watcher.js";
 import { waitForPageContentReady } from "./rating-card/page-content-ready.js";
 import { createResolvePageUrlMessage, createPageSourceTitleResultMessage, ExtensionMessageType, isExtensionGetPageSourceTitleMessage, isExtensionRequestShowRatingCardMessage } from "../shared/messages.js";
 import { readCurrentPageSourceTitle } from "./page-source-title.js";
 import { readCurrentPageUrl } from "../shared/page-url.js";
 import { readPageIdentity } from "../shared/page-identity.js";
+import { EXTENSION_PREFERENCES_STORAGE_KEY } from "../shared/preferences.js";
 import { isReviewoWebPage } from "../shared/reviewo-web-page.js";
 import type { ExtensionResolveResponse } from "../shared/types/resolve.js";
 
 installExtensionContextGuards();
+
+addStorageChangedListener((changes, areaName) => {
+  if (areaName !== "local") {
+    return;
+  }
+
+  if (!(EXTENSION_PREFERENCES_STORAGE_KEY in changes || LOCALE_PREFERENCE_STORAGE_KEY in changes)) {
+    return;
+  }
+
+  const nextPreferences = changes[EXTENSION_PREFERENCES_STORAGE_KEY]?.newValue as
+    | { onSiteRatingCardEnabled?: boolean }
+    | undefined;
+
+  if (nextPreferences?.onSiteRatingCardEnabled === false) {
+    hideRatingCard({ animated: false });
+  }
+
+  refreshVisibleRatingCardLocale();
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (isExtensionGetPageSourceTitleMessage(message)) {
@@ -27,8 +52,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (isExtensionRequestShowRatingCardMessage(message)) {
-    const generation = ++latestResolveGeneration;
-    resolvePageUrl(readCurrentPageUrl(), generation);
+    triggerManualRatingCardShow();
     sendResponse({ ok: true });
     return false;
   }
@@ -40,6 +64,24 @@ const REVIEWO_RESOLVE_RESULT_EVENT = "reviewo:resolve-result";
 
 let latestResolveGeneration = 0;
 
+type ResolveShowMode = "auto" | "manual";
+
+function triggerManualRatingCardShow(): void {
+  const generation = ++latestResolveGeneration;
+  resolvePageUrl(readCurrentPageUrl(), generation, "manual");
+}
+
+function toggleManualRatingCardWithHotkey(): void {
+  if (isRatingCardVisible()) {
+    hideRatingCard({ animated: true });
+    return;
+  }
+
+  triggerManualRatingCardShow();
+}
+
+installRatingCardHotkeyTrigger(toggleManualRatingCardWithHotkey);
+
 function publishResolveResult(result: ExtensionResolveResponse): void {
   window.dispatchEvent(
     new CustomEvent<ExtensionResolveResponse>(REVIEWO_RESOLVE_RESULT_EVENT, {
@@ -48,7 +90,11 @@ function publishResolveResult(result: ExtensionResolveResponse): void {
   );
 }
 
-function resolvePageUrl(pageUrl: string, generation: number): void {
+function resolvePageUrl(
+  pageUrl: string,
+  generation: number,
+  mode: ResolveShowMode = "auto"
+): void {
   if (!guardExtensionContext() || isReviewoWebPage(pageUrl)) {
     return;
   }
@@ -79,6 +125,11 @@ function resolvePageUrl(pageUrl: string, generation: number): void {
 
       console.info("Reviewo content script received resolve result.", callbackResponse.payload);
       publishResolveResult(result);
+
+      if (mode === "manual") {
+        void showRatingCardOnDemand(result);
+        return;
+      }
 
       requestShowRatingCardIfAllowed(readRatingCardSessionKey(result.url.input), () => {
         if (generation !== latestResolveGeneration) {
