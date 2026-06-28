@@ -11,6 +11,7 @@ import { EntityChatPanel } from "../../entity-chat/components/entity-chat-panel"
 import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
 import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { ApiError } from "../../../lib/api/api-error";
+import { publicEnv } from "../../../lib/config/public-env";
 import {
   getEntityPage,
   getMyRating,
@@ -210,7 +211,6 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
           <ReviewsList
             accessToken={accessToken}
             canInteract={canInteract}
-            currentUserId={authSession?.userId}
             entityId={entityId}
             reviews={pageData.reviews}
             reviewsCount={pageData.meta.reviewsCount}
@@ -231,6 +231,8 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
               window.location.assign("/profile");
             }}
           />
+
+          <ExtensionInstallCta />
 
           <form className={`panel-card form-stack ${styles.constrainedPanel}`} onSubmit={handleRatingSubmit}>
             <div className="section-heading">
@@ -269,7 +271,11 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
             <FormFeedback errorMessage={ratingErrorMessage} statusMessage={ratingStatusMessage} />
           </form>
 
-          <form className={`panel-card form-stack ${styles.constrainedPanel}`} onSubmit={handleReviewSubmit}>
+          <form
+            id="entity-my-review"
+            className={`panel-card form-stack ${styles.constrainedPanel}`}
+            onSubmit={handleReviewSubmit}
+          >
             <div className="section-heading">
               <p className="result-type">{t("web.entity.myReviewTitle")}</p>
               <h2>{t("web.entity.shareContext")}</h2>
@@ -375,7 +381,7 @@ function EntityHero({
         <EntityStat label={t("web.entity.votes")} value={String(pageData.rating.votesCount)} />
         <EntityStat
           label={t("web.entity.confidence")}
-          value={formatPercent(pageData.trust.confidence)}
+          value={formatReliabilityPercent(pageData.trust.confidence)}
         />
         <EntityStat
           label={t("web.entity.reviewsCount")}
@@ -436,13 +442,17 @@ function RatingSummary({ rating }: { rating: RatingAggregate }) {
 
 function TrustSummary({ confidence }: { confidence: number }) {
   const t = useTranslation();
+  const reliabilityLabel = formatRatingReliability(t, confidence);
 
   return (
     <section className={`panel-card entity-section ${styles.constrainedPanel}`} aria-labelledby="trust-summary-heading">
       <div className="section-heading">
         <p className="result-type">{t("web.entity.confidenceEyebrow")}</p>
-        <h2 id="trust-summary-heading">{formatPercent(confidence)}</h2>
+        <h2 id="trust-summary-heading">{reliabilityLabel}</h2>
       </div>
+      <p className="muted-copy">
+        {t("rating.confidence", { percent: Math.round(confidence * 100) })} · {t("web.entity.confidenceHint")}
+      </p>
       <div className="trust-meter" aria-hidden="true">
         <span style={{ width: `${Math.round(confidence * 100)}%` }} />
       </div>
@@ -450,17 +460,74 @@ function TrustSummary({ confidence }: { confidence: number }) {
   );
 }
 
+function ExtensionInstallCta() {
+  const t = useTranslation();
+  const isExtensionInstalled = useReviewoExtensionPresence();
+
+  if (isExtensionInstalled) {
+    return null;
+  }
+
+  return (
+    <aside className={`panel-card extension-cta ${styles.constrainedPanel}`} aria-label={t("web.extensionCta.ariaLabel")}>
+      <div className="section-heading">
+        <p className="result-type">{t("web.extensionCta.eyebrow")}</p>
+        <h2>{t("web.extensionCta.title")}</h2>
+      </div>
+      <p className="muted-copy">{t("web.extensionCta.body")}</p>
+      {publicEnv.extensionInstallUrl ? (
+        <a
+          className="primary-link"
+          href={publicEnv.extensionInstallUrl}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          {t("web.extensionCta.action")}
+        </a>
+      ) : (
+        <p className="muted-copy extension-cta-note">{t("web.extensionCta.noInstallUrl")}</p>
+      )}
+    </aside>
+  );
+}
+
+function useReviewoExtensionPresence(): boolean {
+  const [isPresent, setIsPresent] = useState(false);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent): void => {
+      if (event.source !== window || event.origin !== window.location.origin) {
+        return;
+      }
+
+      if (
+        event.data?.source === "reviewo-extension" &&
+        event.data?.type === "reviewo:extension-present"
+      ) {
+        setIsPresent(true);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    window.postMessage({ source: "reviewo-web", type: "reviewo:extension-ping" }, window.location.origin);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, []);
+
+  return isPresent;
+}
+
 function ReviewsList({
   accessToken,
   canInteract,
-  currentUserId,
   entityId,
   reviews: initialReviews,
   reviewsCount
 }: {
   accessToken: string | undefined;
   canInteract: boolean;
-  currentUserId: string | undefined;
   entityId: string;
   reviews: Review[];
   reviewsCount: number;
@@ -538,7 +605,7 @@ function ReviewsList({
       return;
     }
 
-    if (review.authorId === currentUserId) {
+    if (review.isOwnReview) {
       return;
     }
 
@@ -569,7 +636,7 @@ function ReviewsList({
       {reviews.length > 0 ? (
         <div className={`review-list ${styles.reviewList}`}>
           {reviews.map((review) => {
-            const isOwnReview = review.authorId === currentUserId;
+            const isOwnReview = review.isOwnReview;
             const canVote = canInteract && !isOwnReview;
 
             return (
@@ -732,8 +799,14 @@ function formatScore(score: number): string {
   return score.toFixed(2);
 }
 
-function formatPercent(value: number): string {
-  return `${Math.round(value * 100)}%`;
+function formatReliabilityPercent(confidence: number): string {
+  return `${Math.round(confidence * 100)}%`;
+}
+
+function formatRatingReliability(t: ReturnType<typeof useTranslation>, confidence: number): string {
+  return t("rating.confidence", {
+    percent: Math.round(confidence * 100)
+  });
 }
 
 function formatDate(value: string, locale: string): string {

@@ -1,5 +1,5 @@
 import * as esbuild from "esbuild";
-import { copyFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,9 @@ const distDirectory = join(extensionRoot, "dist");
 const watchMode = process.argv.includes("--watch");
 const apiBaseUrl = process.env.EXTENSION_API_BASE_URL ?? "http://localhost:3000";
 const webBaseUrl = process.env.EXTENSION_WEB_BASE_URL ?? "http://localhost:3001";
+
+validateProductionUrl("EXTENSION_API_BASE_URL", apiBaseUrl);
+validateProductionUrl("EXTENSION_WEB_BASE_URL", webBaseUrl);
 
 const sharedBuildOptions = {
   bundle: true,
@@ -63,11 +66,40 @@ function removeStaleContentSourceMap() {
 function copyStaticAssets() {
   mkdirSync(distDirectory, { recursive: true });
 
-  const staticFiles = ["manifest.json", "popup.html", "popup.css"];
+  const staticFiles = ["popup.html", "popup.css"];
 
   for (const fileName of staticFiles) {
     copyFileSync(join(publicDirectory, fileName), join(distDirectory, fileName));
   }
+
+  writeManifest();
+}
+
+function writeManifest() {
+  const manifestPath = join(publicDirectory, "manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+
+  if (process.env.NODE_ENV === "production") {
+    const webMatch = `${new URL(webBaseUrl).origin}/*`;
+    const apiMatch = `${new URL(apiBaseUrl).origin}/*`;
+
+    manifest.host_permissions = [apiMatch];
+    manifest.content_scripts = manifest.content_scripts.map((script) => {
+      if (script.js?.includes("web-auth-content.js")) {
+        return {
+          ...script,
+          matches: [webMatch]
+        };
+      }
+
+      return {
+        ...script,
+        exclude_matches: [webMatch]
+      };
+    });
+  }
+
+  writeFileSync(join(distDirectory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 async function runBuild() {
@@ -148,4 +180,29 @@ if (watchMode) {
   await runWatch();
 } else {
   await runBuild();
+}
+
+function validateProductionUrl(name, value) {
+  if (process.env.NODE_ENV !== "production") {
+    return;
+  }
+
+  if (!isHttpsOrLocalhost(value)) {
+    throw new Error(`${name} must use HTTPS in production`);
+  }
+}
+
+function isHttpsOrLocalhost(value) {
+  try {
+    const url = new URL(value);
+
+    return (
+      url.protocol === "https:" ||
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "::1"
+    );
+  } catch {
+    return false;
+  }
 }

@@ -355,10 +355,15 @@ export async function showRatingCard(
   }
 
   function getCommunityReviewsState(): CardCommunityReviewsState {
+    const hasCurrentUserReview = Boolean(cardState.myReviewText?.trim());
+
     return {
       currentUserId: cardState.currentUserId,
       displayMode: cardState.reviewDisplayMode,
+      entityId: cardState.resolveResponse.status === "found" ? cardState.resolveResponse.entity.id : "",
+      hasCurrentUserReview,
       isAuthenticated: cardState.isAuthenticated,
+      myReviewText: cardState.myReviewText ?? "",
       reviews: cardState.reviews,
       reviewsLimit: cardState.reviewsLimit,
       sort: cardState.reviewsSort
@@ -590,9 +595,9 @@ export async function showRatingCard(
 
     return `
       <div class="reviewo-rate-section">
-        <p class="reviewo-rate-label">Your rating</p>
+        <p class="reviewo-rate-label">${escapeHtmlText(t("card.rate.label"))}</p>
         <p class="reviewo-first-rating-copy">${escapeHtmlText(t("card.notFound.rateHint"))}</p>
-        <div class="reviewo-rate-controls" role="group" aria-label="Rate this site">
+        <div class="reviewo-rate-controls" role="group" aria-label="${escapeHtmlAttribute(t("card.rate.groupAriaLabel"))}">
           ${RATING_SCORES.map((score) => {
             const isSelected = cardState.pendingRatingScore === score;
             const isDisabled = cardState.isSubmitting;
@@ -654,6 +659,12 @@ export async function showRatingCard(
         t,
         getCommunityReviewsState,
         (nextState) => {
+          const didUpdateMyReview = nextState.myReviewText !== (cardState.myReviewText ?? "");
+
+          cardState.myReviewText = nextState.myReviewText;
+          cardState.myReviewUpdatedAt = didUpdateMyReview && nextState.hasCurrentUserReview
+            ? new Date().toISOString()
+            : cardState.myReviewUpdatedAt;
           cardState.reviews = nextState.reviews;
           cardState.reviewsSort = nextState.sort;
         },
@@ -804,7 +815,7 @@ export async function showRatingCard(
 
     if (submitResult.errorMessage?.toLowerCase().includes("authentication")) {
       cardState.isAuthenticated = false;
-      setRateStatus("Sign in through Reviewo to rate.", "error");
+      setRateStatus(t("card.rate.signInRequired"), "error");
       renderCard();
       return;
     }

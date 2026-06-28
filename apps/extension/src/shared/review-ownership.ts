@@ -1,3 +1,3 @@
-export function isReviewByCurrentUser(authorId: string, currentUserId?: string): boolean {
-  return Boolean(currentUserId && authorId === currentUserId);
+export function isReviewByCurrentUser(review: { isOwnReview: boolean }): boolean {
+  return review.isOwnReview;
 }

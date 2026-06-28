@@ -24,5 +24,8 @@ ENV NODE_ENV=production
 ENV APP_NAME=extension
 
 RUN corepack pnpm --filter @reviewo/extension build
+RUN chown -R node:node /workspace
+
+USER node
 
 CMD ["corepack", "pnpm", "--filter", "@reviewo/extension", "test"]

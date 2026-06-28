@@ -7,6 +7,7 @@ This directory is the long-term home for project documentation. Content is being
 | Path | Description |
 | ---- | ----------- |
 | [deployment/mvp-deploy.md](./deployment/mvp-deploy.md) | MVP production deployment notes (Stage 32) |
+| [deployment/selectel-vds-guide.md](./deployment/selectel-vds-guide.md) | Пошаговый деплой на VDS Selectel (рядом с другим Docker-проектом) |
 | [testing/mvp-e2e-flow.md](./testing/mvp-e2e-flow.md) | MVP end-to-end user journey (Stage 31) |
 | [testing/mvp-smoke-checklist.md](./testing/mvp-smoke-checklist.md) | MVP manual smoke checklist and integration test notes |
 | [11-rfc/0009-hierarchical-entities.md](./11-rfc/0009-hierarchical-entities.md) | RFC 0009: Hierarchical entities & extension display modes (Phase 1) |

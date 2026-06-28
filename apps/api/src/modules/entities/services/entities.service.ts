@@ -8,6 +8,7 @@ import { createAppException } from "../../../common/exceptions/app.exception.js"
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import { CreateEntityDto } from "../dto/create-entity.dto.js";
 import { EntityDto } from "../dto/entity.dto.js";
+import { TrustCheckResponseDto } from "../dto/trust-check-response.dto.js";
 import { createEntityCreatedEvent } from "../events/entity-created.event.js";
 import type { EnsureEntityForUrlInput } from "../interfaces/ensure-entity-for-url.js";
 import type { EnsureEntityForUrlResult } from "../interfaces/ensure-entity-for-url.js";
@@ -84,7 +85,7 @@ export class EntitiesService implements EntitiesPort {
 
       await this.domainEventBus.publish(
         createEntityCreatedEvent({
-          createdBy: entityDto.createdBy,
+          createdBy: entity.createdBy,
           entityId: entityDto.id,
           type: entityDto.type
         })
@@ -191,6 +192,87 @@ export class EntitiesService implements EntitiesPort {
     };
   }
 
+  async trustCheckUrl(url: string): Promise<TrustCheckResponseDto> {
+    const resolved = await this.resolveEntityByUrl(url);
+
+    if (resolved.resolution === "hidden") {
+      throw createEntityUnavailableException();
+    }
+
+    if (resolved.entity) {
+      return {
+        entity: resolved.entity,
+        mode: "existing",
+        url: {
+          canonical: resolved.canonicalUrl,
+          input: resolved.inputUrl
+        }
+      };
+    }
+
+    const entity = await this.createPublicUrlEntity(resolved.canonicalUrl);
+
+    return {
+      entity,
+      mode: "created",
+      url: {
+        canonical: resolved.canonicalUrl,
+        input: resolved.inputUrl
+      }
+    };
+  }
+
+  private async createPublicUrlEntity(canonicalUrl: string): Promise<EntityDto> {
+    const title = sanitizeLazyEntityTitle(undefined, canonicalUrl);
+    const slug = await this.createAvailableUrlSlug(canonicalUrl);
+
+    try {
+      const entity = await this.entitiesRepository.create({
+        canonicalUrl,
+        createdBy: null,
+        slug,
+        title,
+        type: EntityType.website
+      });
+      const entityDto = toEntityDto(entity);
+
+      await this.domainEventBus.publish(
+        createEntityCreatedEvent({
+          createdBy: entity.createdBy,
+          entityId: entityDto.id,
+          type: entityDto.type
+        })
+      );
+
+      return entityDto;
+    } catch (error) {
+      if (this.entitiesRepository.isUniqueConstraintError(error)) {
+        const existingEntity = await this.entitiesRepository.findByCanonicalUrl(canonicalUrl);
+
+        if (existingEntity && existingEntity.visibility === EntityVisibility.ACTIVE) {
+          return toEntityDto(existingEntity);
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  private async createAvailableUrlSlug(canonicalUrl: string): Promise<string> {
+    const baseSlug = createSlugFromCanonicalUrl(canonicalUrl);
+
+    for (let index = 0; index < 10; index += 1) {
+      const candidate = index === 0 ? baseSlug : `${baseSlug}-${index + 1}`.slice(0, 120);
+      const existingEntity = await this.entitiesRepository.findBySlug(candidate);
+
+      if (!existingEntity) {
+        return candidate;
+      }
+    }
+
+    return `${baseSlug.slice(0, 111)}-${Date.now().toString(36)}`;
+  }
+
   async ensureEntityForUrl(
     url: string,
     input: EnsureEntityForUrlInput,
@@ -237,7 +319,7 @@ export class EntitiesService implements EntitiesPort {
 
       await this.domainEventBus.publish(
         createEntityCreatedEvent({
-          createdBy: entityDto.createdBy,
+          createdBy: entity.createdBy,
           entityId: entityDto.id,
           type: entityDto.type
         })
@@ -363,7 +445,6 @@ function toEntityDto(entity: Entity): EntityDto {
   return {
     canonicalUrl: entity.canonicalUrl,
     createdAt: entity.createdAt.toISOString(),
-    createdBy: entity.createdBy,
     description: entity.description,
     id: entity.id,
     parentId: entity.parentId,
@@ -386,7 +467,7 @@ function createEntityNotFoundException(): Error {
 function createEntityUnavailableException(): Error {
   return createAppException({
     code: AppErrorCode.NotFound,
-    message: "This site is not available on Reviewo",
+    message: "This site is not available on Opinia",
     statusCode: HttpStatus.NOT_FOUND
   });
 }

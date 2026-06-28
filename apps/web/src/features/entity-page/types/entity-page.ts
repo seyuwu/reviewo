@@ -1,7 +1,6 @@
 export interface Entity {
   canonicalUrl: string | null;
   createdAt: string;
-  createdBy: string | null;
   description: string | null;
   id: string;
   parentId: string | null;
@@ -42,10 +41,10 @@ export interface RateEntityResponse {
 }
 
 export interface Review {
-  authorId: string;
   createdAt: string;
   entityId: string;
   id: string;
+  isOwnReview: boolean;
   likedByCurrentUser: boolean;
   likesCount: number;
   text: string;

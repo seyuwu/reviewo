@@ -6,30 +6,30 @@ import type { ExtensionReview } from "./types/review.js";
 
 const reviews: ExtensionReview[] = [
   {
-    authorId: "a",
     createdAt: "2026-06-27T00:00:00.000Z",
     entityId: "e",
     id: "1",
+    isOwnReview: false,
     likedByCurrentUser: false,
     likesCount: 2,
     text: "Older popular",
     updatedAt: "2026-06-20T00:00:00.000Z"
   },
   {
-    authorId: "b",
     createdAt: "2026-06-27T00:00:00.000Z",
     entityId: "e",
     id: "2",
+    isOwnReview: false,
     likedByCurrentUser: false,
     likesCount: 5,
     text: "Top liked",
     updatedAt: "2026-06-25T00:00:00.000Z"
   },
   {
-    authorId: "c",
     createdAt: "2026-06-27T00:00:00.000Z",
     entityId: "e",
     id: "3",
+    isOwnReview: false,
     likedByCurrentUser: false,
     likesCount: 1,
     text: "Newest",

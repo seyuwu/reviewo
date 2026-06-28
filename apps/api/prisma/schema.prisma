@@ -200,6 +200,18 @@ model UserActivityDaily {
   @@schema("reputation")
 }
 
+model UserActivityHourly {
+  userId             String   @map("user_id") @db.Uuid
+  activityHour       DateTime @map("activity_hour") @db.Timestamptz(6)
+  ratingCreatedCount Int      @default(0) @map("rating_created_count")
+  ratingUpdatedCount Int      @default(0) @map("rating_updated_count")
+
+  @@id([userId, activityHour])
+  @@index([userId, activityHour(sort: Desc)])
+  @@map("user_activity_hourly")
+  @@schema("reputation")
+}
+
 model UserEntityStats {
   userId      String   @map("user_id") @db.Uuid
   entityId    String   @map("entity_id") @db.Uuid

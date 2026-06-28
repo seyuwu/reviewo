@@ -87,7 +87,7 @@ export function EntityChatPanel({
   const onlinePollRef = useRef<number | undefined>(undefined);
   const shouldStickToBottomRef = useRef(true);
 
-  const entityTitleLabel = entityTitle.trim() || "Reviewo";
+  const entityTitleLabel = entityTitle.trim() || t("brand.name");
 
   const disconnectSocket = useCallback((): void => {
     connectionRef.current?.disconnect();
@@ -381,10 +381,14 @@ export function EntityChatPanel({
   }, [expanded, isClosing, isSidebar, messages, scrollMessagesToBottom]);
 
   useEffect(() => {
+    if (isSidebar || (!expanded && !isSidebar) || isClosing || isBootstrapping) {
+      return;
+    }
+
     const drawer = drawerRef.current;
     const handle = resizeHandleRef.current;
 
-    if ((!expanded && !isSidebar) || isClosing || isBootstrapping || !drawer || !handle) {
+    if (!drawer || !handle) {
       return;
     }
 
@@ -501,13 +505,15 @@ export function EntityChatPanel({
             <p className={`muted-copy ${styles.chatSignInHint}`}>{t("chat.signInRequired")}</p>
           )}
 
-          <div
-            ref={resizeHandleRef}
-            className={styles.chatDrawerResizeHandle}
-            role="separator"
-            aria-orientation="horizontal"
-            aria-label={t("chat.resizeHeight")}
-          />
+          {!isSidebar ? (
+            <div
+              ref={resizeHandleRef}
+              className={styles.chatDrawerResizeHandle}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={t("chat.resizeHeight")}
+            />
+          ) : null}
         </div>
       </section>
     );

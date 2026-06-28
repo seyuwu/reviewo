@@ -10,7 +10,6 @@ export interface EntityChatMessage {
   entityId: string;
   id: string;
   message: string;
-  userId: string;
 }
 
 export interface EntityChatMessagesPage {

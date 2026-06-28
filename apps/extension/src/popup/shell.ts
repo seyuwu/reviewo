@@ -22,7 +22,7 @@ export function createPopupShell(root: HTMLElement): PopupShellElements {
         <div class="popup-header-main">
           <button type="button" class="icon-button" data-back-button hidden aria-label="Back">←</button>
           <div class="popup-brand">
-            <span class="popup-logo">Reviewo</span>
+            <span class="popup-logo" data-popup-logo>Opinia</span>
           </div>
           <button type="button" class="account-button" data-account-button>Sign in</button>
         </div>
@@ -84,6 +84,11 @@ export function createPopupShell(root: HTMLElement): PopupShellElements {
 }
 
 export function applyPopupShellLabels(elements: PopupShellElements, t: TranslateFn): void {
+  const logo = elements.header.querySelector<HTMLElement>("[data-popup-logo]");
+  if (logo) {
+    logo.textContent = t("brand.name");
+  }
+
   elements.backButton.setAttribute("aria-label", t("popup.shell.backAriaLabel"));
   elements.settingsButton.textContent = t("popup.shell.settings");
   elements.openEntityLink.textContent = t("popup.shell.openPage");

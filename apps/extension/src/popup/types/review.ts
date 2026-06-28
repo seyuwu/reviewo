@@ -1,8 +1,8 @@
 export interface ExtensionReview {
-  authorId: string;
   createdAt: string;
   entityId: string;
   id: string;
+  isOwnReview: boolean;
   likedByCurrentUser: boolean;
   likesCount: number;
   text: string;

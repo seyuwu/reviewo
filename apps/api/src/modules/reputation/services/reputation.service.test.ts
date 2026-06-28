@@ -27,6 +27,11 @@ interface StoredSnapshot {
 function createReputationServiceHarness() {
   const snapshots = new Map<string, StoredSnapshot>();
   const appendEventCalls: string[] = [];
+  const userHourlyActivity = {
+    ratingCreatedCount: 0,
+    ratingUpdatedCount: 0
+  };
+  let entityActivityHourlyIncrements = 0;
 
   const reputationRepository = {
     appendReputationEvent: async ({ type }: { type: string }) => {
@@ -48,13 +53,26 @@ function createReputationServiceHarness() {
       uniqueEntityTypeCount: 1,
       uniqueRootDomainCount: 1
     }),
-    incrementEntityActivityHourly: async () => 1,
+    getEntityActivityHourlyCount: async () => entityActivityHourlyIncrements,
+    incrementEntityActivityHourly: async () => {
+      entityActivityHourlyIncrements += 1;
+
+      return entityActivityHourlyIncrements;
+    },
     incrementUserActivityDaily: async () => undefined,
+    incrementUserActivityHourly: async (input: {
+      createdIncrement?: number;
+      updatedIncrement?: number;
+    }) => {
+      userHourlyActivity.ratingCreatedCount += input.createdIncrement ?? 0;
+      userHourlyActivity.ratingUpdatedCount += input.updatedIncrement ?? 0;
+    },
     incrementUserEntityStats: async () => ({ isNewEntity: true }),
     incrementUserEntityTypeStats: async () => ({ isNewPair: true }),
     incrementUserRootDomainStats: async () => ({ isNewDomain: true }),
     listTopUserEntityRatingCounts: async () => [1],
     listUserActivityDaily: async () => [1],
+    listUserActivityHourly: async () => [userHourlyActivity],
     resolveParentContextType: async () => "__root__",
     sumVoteWeightsForEntity: async () => {
       const values = [...snapshots.values()].filter((snapshot) => snapshot.entityId === entityId);
@@ -87,6 +105,15 @@ function createReputationServiceHarness() {
     findUserById: async () => ({
       createdAt: new Date("2024-01-01T00:00:00.000Z")
     }),
+    getAuthorReviewModerationStats: async () => ({
+      hiddenReviewsCount: 0,
+      reviewsCount: 0
+    }),
+    getNewAccountRatingCohortStats: async () => ({
+      averageAccountAgeDays: null,
+      dominantScoreShare: 0,
+      ratingsCount: 0
+    }),
     getEntityRatingStats: async () => ({
       firstRatingAt: new Date("2026-06-01T00:00:00.000Z"),
       lastRatingAt: new Date("2026-06-02T00:00:00.000Z"),
@@ -109,6 +136,8 @@ function createReputationServiceHarness() {
   return {
     appendEventCalls,
     calculationContext,
+    getEntityActivityHourlyIncrements: () => entityActivityHourlyIncrements,
+    getUserHourlyActivity: () => userHourlyActivity,
     service,
     snapshots
   };
@@ -147,8 +176,6 @@ describe("ReputationService vote weight snapshots", () => {
       userId
     });
 
-    const firstWeight = harness.snapshots.get(ratingId)?.voteWeight;
-
     await harness.service.onRatingUpdated(
       {
         entityId,
@@ -159,11 +186,66 @@ describe("ReputationService vote weight snapshots", () => {
       3
     );
 
-    const secondWeight = harness.snapshots.get(ratingId)?.voteWeight;
+    const snapshot = harness.snapshots.get(ratingId);
 
     assert.equal(harness.snapshots.size, 1);
-    assert.notEqual(firstWeight, undefined);
-    assert.notEqual(secondWeight, undefined);
-    assert.notEqual(firstWeight, secondWeight);
+    assert.ok(snapshot);
+    assert.equal(snapshot.score, 5);
+  });
+
+  it("does not count rating score updates as new entity activity", async () => {
+    const harness = createReputationServiceHarness();
+
+    await harness.service.onRatingCreated({
+      entityId,
+      ratingId,
+      score: 3,
+      userId
+    });
+    await harness.service.onRatingUpdated(
+      {
+        entityId,
+        ratingId,
+        score: 5,
+        userId
+      },
+      3
+    );
+    await harness.service.onRatingUpdated(
+      {
+        entityId,
+        ratingId,
+        score: 2,
+        userId
+      },
+      5
+    );
+
+    assert.equal(harness.getEntityActivityHourlyIncrements(), 1);
+  });
+
+  it("counts rating score updates as user edit churn", async () => {
+    const harness = createReputationServiceHarness();
+
+    await harness.service.onRatingCreated({
+      entityId,
+      ratingId,
+      score: 3,
+      userId
+    });
+    await harness.service.onRatingUpdated(
+      {
+        entityId,
+        ratingId,
+        score: 5,
+        userId
+      },
+      3
+    );
+
+    assert.deepEqual(harness.getUserHourlyActivity(), {
+      ratingCreatedCount: 1,
+      ratingUpdatedCount: 1
+    });
   });
 });

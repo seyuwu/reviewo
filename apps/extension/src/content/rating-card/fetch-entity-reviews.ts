@@ -6,10 +6,10 @@ import {
 import { sendExtensionMessage } from "../extension-messaging.js";
 
 export interface CardEntityReview {
-  authorId: string;
   createdAt: string;
   entityId: string;
   id: string;
+  isOwnReview: boolean;
   likedByCurrentUser: boolean;
   likesCount: number;
   text: string;
@@ -84,6 +84,33 @@ export async function fetchEntityReviews(
 
   return {
     reviews: result.data ?? []
+  };
+}
+
+export async function upsertMyEntityReview(
+  entityId: string,
+  text: string
+): Promise<{ errorMessage?: string; review?: CardEntityReview }> {
+  const result = await readAuthenticatedData<CardEntityReview>({
+    body: { text },
+    method: "PUT",
+    path: `/reviews/entities/${entityId}/my-review`
+  });
+
+  if (result.errorMessage) {
+    return {
+      errorMessage: result.errorMessage
+    };
+  }
+
+  if (!result.data) {
+    return {
+      errorMessage: "Could not save review."
+    };
+  }
+
+  return {
+    review: result.data
   };
 }
 

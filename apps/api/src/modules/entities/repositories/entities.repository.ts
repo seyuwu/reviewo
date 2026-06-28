@@ -5,7 +5,7 @@ import { PrismaService } from "../../../database/prisma.service.js";
 
 export interface CreateEntityRecordInput {
   canonicalUrl?: string;
-  createdBy: string;
+  createdBy: string | null;
   description?: string;
   parentId?: string;
   slug: string;

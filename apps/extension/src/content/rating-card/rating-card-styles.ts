@@ -477,11 +477,94 @@ export const RATING_CARD_STYLES = `
   min-width: 0;
 }
 
+.reviewo-review-carousel-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
 .reviewo-review-carousel-nav {
   align-items: center;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: center;
+}
+
+.reviewo-review-write-cta {
+  align-items: center;
+  background: rgba(212, 175, 55, 0.12);
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 999px;
+  color: #171717;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 32px;
+  padding: 0 12px;
+  text-decoration: none;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.reviewo-review-write-cta:hover,
+.reviewo-review-write-cta:focus-visible {
+  background: rgba(212, 175, 55, 0.2);
+  border-color: #d4af37;
+}
+
+.reviewo-review-write-actions {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.reviewo-review-publish-button,
+.reviewo-review-cancel-button {
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.reviewo-review-publish-button {
+  background: #171717;
+  border: 1px solid #171717;
+  color: #ffffff;
+}
+
+.reviewo-review-cancel-button {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #171717;
+}
+
+.reviewo-review-publish-button:hover:not(:disabled),
+.reviewo-review-publish-button:focus-visible:not(:disabled) {
+  background: #404040;
+  border-color: #404040;
+}
+
+.reviewo-review-cancel-button:hover:not(:disabled),
+.reviewo-review-cancel-button:focus-visible:not(:disabled) {
+  background: #fafafa;
+  border-color: #d4d4d4;
+}
+
+.reviewo-review-publish-button:disabled,
+.reviewo-review-cancel-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .reviewo-review-carousel-button {
@@ -581,6 +664,48 @@ export const RATING_CARD_STYLES = `
 
 .reviewo-review-card.is-own-review {
   border-color: #d4af37;
+}
+
+.reviewo-review-editor-card {
+  gap: 6px;
+}
+
+.reviewo-review-editor {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-sizing: border-box;
+  color: #171717;
+  font: inherit;
+  font-size: 13px;
+  height: 96px;
+  line-height: 1.45;
+  min-height: 96px;
+  padding: 9px 10px;
+  resize: none;
+  width: 100%;
+}
+
+.reviewo-review-editor:focus-visible {
+  border-color: #171717;
+  outline: 2px solid rgb(23 23 23 / 0.12);
+  outline-offset: 1px;
+}
+
+.reviewo-review-editor-status {
+  color: #737373;
+  display: none;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.reviewo-review-editor-status.is-visible {
+  display: block;
+}
+
+.reviewo-review-editor-status.is-error {
+  color: #b91c1c;
 }
 
 .reviewo-review-you-label {

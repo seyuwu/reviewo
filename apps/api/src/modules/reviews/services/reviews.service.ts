@@ -196,11 +196,13 @@ export class ReviewsService implements ReviewsPort {
 }
 
 function toReviewDto(review: ReviewWithVotes, currentUserId?: string): ReviewDto {
+  const isOwnReview = currentUserId === review.authorId;
+
   return {
-    authorId: review.authorId,
     createdAt: review.createdAt.toISOString(),
     entityId: review.entityId,
     id: review.id,
+    isOwnReview,
     likedByCurrentUser: currentUserId
       ? review.votes.some((vote) => vote.userId === currentUserId)
       : false,

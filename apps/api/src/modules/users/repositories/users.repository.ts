@@ -10,6 +10,12 @@ export interface CreateUserInput {
   email: string;
 }
 
+export interface UpdateUserProfileInput {
+  displayName: string;
+  email: string;
+  username: string | null;
+}
+
 @Injectable()
 export class UsersRepository {
   constructor(private readonly prismaService: PrismaService) {}
@@ -37,6 +43,31 @@ export class UsersRepository {
 
   async findById(id: string): Promise<User | null> {
     return this.prismaService.user.findUnique({
+      where: {
+        id
+      }
+    });
+  }
+
+  async findByUsername(username: string): Promise<User | null> {
+    return this.prismaService.user.findUnique({
+      where: {
+        username
+      }
+    });
+  }
+
+  async updateProfile(
+    id: string,
+    input: UpdateUserProfileInput,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<User> {
+    return client.user.update({
+      data: {
+        displayName: input.displayName,
+        email: input.email,
+        username: input.username
+      },
       where: {
         id
       }

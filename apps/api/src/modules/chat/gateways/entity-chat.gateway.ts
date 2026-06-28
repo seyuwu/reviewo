@@ -33,9 +33,6 @@ interface AuthenticatedSocketData {
 
 @Injectable()
 @WebSocketGateway({
-  cors: {
-    origin: true
-  },
   namespace: "/chat"
 })
 export class EntityChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -72,15 +69,15 @@ export class EntityChatGateway implements OnGatewayConnection, OnGatewayDisconne
     const entityId = client.data.entityId as string | undefined;
     const userId = getSocketData(client).user?.id;
 
-    if (!entityId || !userId) {
+    if (!entityId) {
       return;
     }
 
-    const onlineCount = await this.entityChatService.leaveRoom(entityId, userId);
-    this.server.to(roomName(entityId)).emit("online_count", {
-      entityId,
-      onlineCount
-    });
+    if (userId) {
+      await this.entityChatService.leaveRoom(entityId, userId);
+    }
+
+    this.emitRoomOnlineCount(entityId);
   }
 
   @SubscribeMessage("join")
@@ -101,29 +98,25 @@ export class EntityChatGateway implements OnGatewayConnection, OnGatewayDisconne
     const previousEntityId = client.data.entityId as string | undefined;
     const userId = getSocketData(client).user?.id;
 
-    if (previousEntityId && previousEntityId !== entityId && userId) {
-      const previousOnlineCount = await this.entityChatService.leaveRoom(previousEntityId, userId);
-      this.server.to(roomName(previousEntityId)).emit("online_count", {
-        entityId: previousEntityId,
-        onlineCount: previousOnlineCount
-      });
+    if (previousEntityId && previousEntityId !== entityId) {
+      if (userId) {
+        await this.entityChatService.leaveRoom(previousEntityId, userId);
+      }
+
       await client.leave(roomName(previousEntityId));
+      this.emitRoomOnlineCount(previousEntityId);
     }
 
     await client.join(roomName(entityId));
     client.data.entityId = entityId;
 
     const page = await this.entityChatService.listMessages(entityId);
-    let onlineCount = await this.entityChatService.getOnlineCount(entityId).then((result) => result.onlineCount);
 
     if (userId) {
-      onlineCount = await this.entityChatService.joinRoom(entityId, userId);
+      await this.entityChatService.joinRoom(entityId, userId);
     }
 
-    this.server.to(roomName(entityId)).emit("online_count", {
-      entityId,
-      onlineCount
-    });
+    const onlineCount = this.emitRoomOnlineCount(entityId);
 
     return {
       entityId,
@@ -144,16 +137,11 @@ export class EntityChatGateway implements OnGatewayConnection, OnGatewayDisconne
     await client.leave(roomName(entityId));
     delete client.data.entityId;
 
-    let onlineCount = await this.entityChatService.getOnlineCount(entityId).then((result) => result.onlineCount);
-
     if (userId) {
-      onlineCount = await this.entityChatService.leaveRoom(entityId, userId);
+      await this.entityChatService.leaveRoom(entityId, userId);
     }
 
-    this.server.to(roomName(entityId)).emit("online_count", {
-      entityId,
-      onlineCount
-    });
+    const onlineCount = this.emitRoomOnlineCount(entityId);
 
     return {
       entityId,
@@ -196,9 +184,25 @@ export class EntityChatGateway implements OnGatewayConnection, OnGatewayDisconne
       return null;
     }
 
-    const onlineCount = await this.entityChatService.joinRoom(entityId, userId);
+    await this.entityChatService.joinRoom(entityId, userId);
+    const onlineCount = this.emitRoomOnlineCount(entityId);
 
     return { onlineCount };
+  }
+
+  private emitRoomOnlineCount(entityId: string): number {
+    const onlineCount = this.readRoomOnlineCount(entityId);
+
+    this.server.to(roomName(entityId)).emit("online_count", {
+      entityId,
+      onlineCount
+    });
+
+    return onlineCount;
+  }
+
+  private readRoomOnlineCount(entityId: string): number {
+    return readSocketRooms(this.server).get(roomName(entityId))?.size ?? 0;
   }
 }
 
@@ -234,4 +238,13 @@ function getSocketData(client: Socket): AuthenticatedSocketData {
   }
 
   return client.data as AuthenticatedSocketData;
+}
+
+function readSocketRooms(server: Server): Map<string, Set<unknown>> {
+  const gatewayServer = server as unknown as {
+    adapter?: { rooms: Map<string, Set<unknown>> };
+    sockets?: { adapter?: { rooms: Map<string, Set<unknown>> } };
+  };
+
+  return gatewayServer.adapter?.rooms ?? gatewayServer.sockets?.adapter?.rooms ?? new Map();
 }

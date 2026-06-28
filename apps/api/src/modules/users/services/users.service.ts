@@ -11,6 +11,12 @@ export interface CreateUserWithEmailInput {
   email: string;
 }
 
+export interface UpdateUserProfileInput {
+  displayName: string;
+  email: string;
+  username: string | null;
+}
+
 @Injectable()
 export class UsersService {
   constructor(private readonly usersRepository: UsersRepository) {}
@@ -95,6 +101,27 @@ export class UsersService {
     }
   }
 
+  async ensureEmailAvailableForUser(email: string, userId: string): Promise<void> {
+    const normalizedEmail = normalizeEmail(email);
+    const existingUser = await this.usersRepository.findByEmail(normalizedEmail);
+
+    if (existingUser && existingUser.id !== userId) {
+      throw createEmailAlreadyExistsException();
+    }
+  }
+
+  async ensureUsernameAvailableForUser(username: string | null, userId: string): Promise<void> {
+    if (!username) {
+      return;
+    }
+
+    const existingUser = await this.usersRepository.findByUsername(username);
+
+    if (existingUser && existingUser.id !== userId) {
+      throw createUsernameAlreadyExistsException();
+    }
+  }
+
   async findAuthenticatedUserById(id: string): Promise<AuthenticatedUser | null> {
     const user = await this.usersRepository.findById(id);
 
@@ -105,6 +132,36 @@ export class UsersService {
     return toAuthenticatedUser(user);
   }
 
+  async updateUserProfile(
+    id: string,
+    input: UpdateUserProfileInput,
+    transaction: Prisma.TransactionClient
+  ): Promise<AuthenticatedUser> {
+    try {
+      const user = await this.usersRepository.updateProfile(
+        id,
+        {
+          displayName: input.displayName.trim(),
+          email: normalizeEmail(input.email),
+          username: input.username
+        },
+        transaction
+      );
+
+      return toAuthenticatedUser(user);
+    } catch (error) {
+      if (this.usersRepository.isUniqueConstraintError(error)) {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "Email or username is already taken",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
+
+      throw error;
+    }
+  }
+
   normalizeEmail(email: string): string {
     return normalizeEmail(email);
   }
@@ -112,6 +169,22 @@ export class UsersService {
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+function createEmailAlreadyExistsException(): Error {
+  return createAppException({
+    code: AppErrorCode.Conflict,
+    message: "User with this email already exists",
+    statusCode: HttpStatus.CONFLICT
+  });
+}
+
+function createUsernameAlreadyExistsException(): Error {
+  return createAppException({
+    code: AppErrorCode.Conflict,
+    message: "User with this username already exists",
+    statusCode: HttpStatus.CONFLICT
+  });
 }
 
 function toAuthenticatedUser(user: User): AuthenticatedUser {

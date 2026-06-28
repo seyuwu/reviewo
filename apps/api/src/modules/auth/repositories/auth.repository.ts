@@ -47,6 +47,34 @@ export class AuthRepository {
     });
   }
 
+  async findEmailIdentityByUserId(userId: string): Promise<UserAuthIdentity | null> {
+    return this.prismaService.userAuthIdentity.findFirst({
+      where: {
+        provider: "email",
+        userId
+      }
+    });
+  }
+
+  async updateEmailIdentity(
+    id: string,
+    input: {
+      email: string;
+      passwordHash?: string;
+    },
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<UserAuthIdentity> {
+    return client.userAuthIdentity.update({
+      data: {
+        providerUserId: input.email,
+        ...(input.passwordHash ? { passwordHash: input.passwordHash } : {})
+      },
+      where: {
+        id
+      }
+    });
+  }
+
   isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
     return (
       typeof error === "object" &&

@@ -169,4 +169,43 @@ describe("ReputationReplayService", () => {
 
     assert.equal(appendCalls, 0);
   });
+
+  it("replays rating updates after their original rating create events", async () => {
+    const events = [createRatingEvent(1, "rating.created"), createRatingEvent(1, "rating.updated")];
+    const snapshots = new Map<string, { score: number }>();
+    const replayed: string[] = [];
+    const repository = {
+      clearDerivedState: async () => {
+        snapshots.clear();
+      },
+      getVoteWeightSnapshotByRatingId: async (ratingId: string) => snapshots.get(ratingId) ?? null,
+      listReputationEventsOrdered: async () => events
+    } as unknown as ReputationRepository;
+    const calculationContext = new ReputationCalculationContext();
+    const service = {
+      onRatingCreated: async (payload: { ratingId: string; score: number }) => {
+        replayed.push("created");
+        snapshots.set(payload.ratingId, {
+          score: payload.score
+        });
+      },
+      onRatingUpdated: async (
+        payload: { ratingId: string; score: number },
+        previousScore: number
+      ) => {
+        replayed.push(`updated:${previousScore}->${payload.score}`);
+        snapshots.set(payload.ratingId, {
+          score: payload.score
+        });
+      },
+      onReviewCreated: async () => undefined,
+      onReviewHidden: async () => undefined,
+      onReviewUnhidden: async () => undefined
+    } as unknown as ReputationService;
+    const replayService = new ReputationReplayService(calculationContext, repository, service);
+
+    await replayService.replay({ calculationVersion: 2 });
+
+    assert.deepEqual(replayed, ["created", "updated:4->5"]);
+  });
 });

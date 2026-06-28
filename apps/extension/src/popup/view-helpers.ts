@@ -26,11 +26,11 @@ export function entityViewFromResolve(
       entityId: result.entity.id,
       entityPagePath: result.web.entityPagePath,
       pageUrl,
-      pageTitle,
       status: "found",
       title: displayTitle,
       trustConfidence: result.trust.confidence,
       votesCount: result.rating.votesCount,
+      ...(pageTitle ? { pageTitle } : {}),
       ...(result.parent
         ? {
             parentEntityId: result.parent.entity.id,
@@ -44,9 +44,9 @@ export function entityViewFromResolve(
   return {
     canonicalUrl: result.url.canonical,
     pageUrl,
-    pageTitle,
     status: "not_found",
-    title: pageTitle ?? deriveTitleFromCanonicalUrl(result.url.canonical)
+    title: pageTitle ?? deriveTitleFromCanonicalUrl(result.url.canonical),
+    ...(pageTitle ? { pageTitle } : {})
   };
 }
 

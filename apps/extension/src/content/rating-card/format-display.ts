@@ -30,6 +30,10 @@ export function formatTrustConfidence(t: TranslateFn, confidence: number): strin
   return t("rating.confidence", { percent: Math.round(confidence * 100) });
 }
 
+export function formatRatingReliability(t: TranslateFn, confidence: number): string {
+  return formatTrustConfidence(t, confidence);
+}
+
 export function formatRatingStatsLineWithConfidence(
   t: TranslateFn,
   avgScore: number,
@@ -42,7 +46,7 @@ export function formatRatingStatsLineWithConfidence(
     return baseLine;
   }
 
-  return `${baseLine} · ${formatTrustConfidence(t, confidence)}`;
+  return `${baseLine} · ${formatRatingReliability(t, confidence)}`;
 }
 
 export function buildRatingCardSummary(
@@ -61,7 +65,8 @@ export function buildRatingCardSummary(
     entityTitle: response.entity.title,
     hasRatings,
     metaLabel: hasRatings
-      ? `${formatVotesCount(t, response.rating.votesCount)} · ${formatTrustConfidence(t, response.trust.confidence)}`
+      ? `${formatVotesCount(t, response.rating.votesCount)} · ${formatRatingReliability(t, response.trust.confidence)}`
       : t("rating.stats.empty")
   };
 }
+

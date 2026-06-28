@@ -1,7 +1,12 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Query, Req, UseGuards } from "@nestjs/common";
 
 import { CurrentUser } from "../../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
+import {
+  ApiRateLimiterService,
+  type RequestLike
+} from "../../../common/rate-limiting/api-rate-limiter.service.js";
+import { createRatingRateLimitRules } from "../../../common/rate-limiting/rating-rate-limit-rules.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import { RateEntityDto } from "../../ratings/dto/rate-entity.dto.js";
 import { ExtensionByUrlRatingResponseDto } from "../dto/extension-by-url-rating-response.dto.js";
@@ -15,7 +20,10 @@ import { ExtensionApiService } from "../services/extension-api.service.js";
 
 @Controller("extension")
 export class ExtensionApiController {
-  constructor(private readonly extensionApiService: ExtensionApiService) {}
+  constructor(
+    private readonly apiRateLimiterService: ApiRateLimiterService,
+    private readonly extensionApiService: ExtensionApiService
+  ) {}
 
   @Get("resolve")
   async resolveUrl(@Query() query: ExtensionResolveQueryDto): Promise<ExtensionResolveResponseDto> {
@@ -34,8 +42,13 @@ export class ExtensionApiController {
   @UseGuards(JwtAuthGuard)
   async rateSiteByUrl(
     @Body() input: ExtensionRateByUrlDto,
-    @CurrentUser() currentUser: AuthenticatedUser
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
   ): Promise<ExtensionByUrlRatingResponseDto> {
+    await this.apiRateLimiterService.assertWithinLimits(
+      createRatingRateLimitRules(currentUser.id, request)
+    );
+
     return this.extensionApiService.rateSiteByUrl(input, currentUser);
   }
 
@@ -44,8 +57,13 @@ export class ExtensionApiController {
   async rateEntity(
     @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string,
     @Body() input: RateEntityDto,
-    @CurrentUser() currentUser: AuthenticatedUser
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
   ): Promise<ExtensionQuickRatingResponseDto> {
+    await this.apiRateLimiterService.assertWithinLimits(
+      createRatingRateLimitRules(currentUser.id, request)
+    );
+
     return this.extensionApiService.rateEntity(entityId, input, currentUser);
   }
 }

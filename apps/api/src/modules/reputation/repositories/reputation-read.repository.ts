@@ -10,6 +10,17 @@ export interface EntityRatingStats {
   uniqueRatersCount: number;
 }
 
+export interface NewAccountRatingCohortStats {
+  averageAccountAgeDays: number | null;
+  dominantScoreShare: number;
+  ratingsCount: number;
+}
+
+export interface AuthorReviewModerationStats {
+  hiddenReviewsCount: number;
+  reviewsCount: number;
+}
+
 @Injectable()
 export class ReputationReadRepository {
   constructor(private readonly prismaService: PrismaService) {}
@@ -48,6 +59,27 @@ export class ReputationReadRepository {
         id: ratingId
       }
     });
+  }
+
+  async getAuthorReviewModerationStats(authorId: string): Promise<AuthorReviewModerationStats> {
+    const [reviewsCount, hiddenReviewsCount] = await Promise.all([
+      this.prismaService.review.count({
+        where: {
+          authorId
+        }
+      }),
+      this.prismaService.review.count({
+        where: {
+          authorId,
+          visibility: "HIDDEN"
+        }
+      })
+    ]);
+
+    return {
+      hiddenReviewsCount,
+      reviewsCount
+    };
   }
 
   async getEntityRatingStats(entityId: string): Promise<EntityRatingStats> {
@@ -110,6 +142,84 @@ export class ReputationReadRepository {
     return ratings.length;
   }
 
+  async getNewAccountRatingCohortStats(input: {
+    entityId: string;
+    maxAccountAgeDays: number;
+    now: Date;
+    windowStart: Date;
+  }): Promise<NewAccountRatingCohortStats> {
+    const ratings = await this.prismaService.rating.findMany({
+      select: {
+        score: true,
+        userId: true
+      },
+      where: {
+        createdAt: {
+          gte: input.windowStart
+        },
+        entityId: input.entityId
+      }
+    });
+
+    if (ratings.length === 0) {
+      return createEmptyNewAccountRatingCohortStats();
+    }
+
+    const users = await this.prismaService.user.findMany({
+      select: {
+        createdAt: true,
+        id: true
+      },
+      where: {
+        id: {
+          in: [...new Set(ratings.map((rating) => rating.userId))]
+        }
+      }
+    });
+    const createdAtByUserId = new Map(users.map((user) => [user.id, user.createdAt]));
+    const newAccountRatings = ratings
+      .map((rating) => {
+        const accountCreatedAt = createdAtByUserId.get(rating.userId);
+
+        if (!accountCreatedAt) {
+          return null;
+        }
+
+        const accountAgeDays = Math.max(
+          0,
+          (input.now.getTime() - accountCreatedAt.getTime()) / 86_400_000
+        );
+
+        return accountAgeDays <= input.maxAccountAgeDays
+          ? {
+              accountAgeDays,
+              score: rating.score
+            }
+          : null;
+      })
+      .filter((rating): rating is { accountAgeDays: number; score: number } => rating !== null);
+
+    if (newAccountRatings.length === 0) {
+      return createEmptyNewAccountRatingCohortStats();
+    }
+
+    const scoreCounts = new Map<number, number>();
+
+    for (const rating of newAccountRatings) {
+      scoreCounts.set(rating.score, (scoreCounts.get(rating.score) ?? 0) + 1);
+    }
+
+    const dominantScoreCount = Math.max(...scoreCounts.values());
+
+    return {
+      averageAccountAgeDays:
+        newAccountRatings.reduce((sum, rating) => sum + rating.accountAgeDays, 0) /
+        newAccountRatings.length,
+      dominantScoreShare: dominantScoreCount / newAccountRatings.length,
+      ratingsCount: newAccountRatings.length
+    };
+  }
+
   async getRatingAggregate(entityId: string): Promise<{
     avgScore: number;
     votesCount: number;
@@ -151,4 +261,12 @@ export class ReputationReadRepository {
       }
     });
   }
+}
+
+function createEmptyNewAccountRatingCohortStats(): NewAccountRatingCohortStats {
+  return {
+    averageAccountAgeDays: null,
+    dominantScoreShare: 0,
+    ratingsCount: 0
+  };
 }

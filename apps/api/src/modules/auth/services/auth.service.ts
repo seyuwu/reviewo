@@ -10,8 +10,10 @@ import { PrismaService } from "../../../database/prisma.service.js";
 import { UsersService } from "../../users/services/users.service.js";
 import { AuthRepository } from "../repositories/auth.repository.js";
 import { AuthResponseDto } from "../dto/auth-response.dto.js";
+import { ChangePasswordDto } from "../dto/change-password.dto.js";
 import { LoginDto } from "../dto/login.dto.js";
 import { RegisterDto } from "../dto/register.dto.js";
+import { UpdateCurrentUserDto } from "../dto/update-current-user.dto.js";
 import { JwtTokenService } from "./jwt-token.service.js";
 import { PasswordHasherService } from "./password-hasher.service.js";
 
@@ -94,6 +96,97 @@ export class AuthService {
     return user;
   }
 
+  async updateCurrentUserProfile(
+    currentUser: AuthenticatedUser,
+    input: UpdateCurrentUserDto
+  ): Promise<AuthenticatedUser> {
+    const email = this.usersService.normalizeEmail(input.email);
+    const username = input.username ?? null;
+    const identity = await this.authRepository.findEmailIdentityByUserId(currentUser.id);
+    const isEmailChanging = email !== currentUser.email;
+
+    if (isEmailChanging && !identity?.passwordHash) {
+      throw createInvalidCurrentPasswordException();
+    }
+
+    if (isEmailChanging) {
+      const isPasswordValid =
+        input.currentPassword &&
+        identity?.passwordHash &&
+        (await this.passwordHasherService.verify(input.currentPassword, identity.passwordHash));
+
+      if (!isPasswordValid) {
+        throw createInvalidCurrentPasswordException();
+      }
+    }
+
+    await this.usersService.ensureEmailAvailableForUser(email, currentUser.id);
+    await this.usersService.ensureUsernameAvailableForUser(username, currentUser.id);
+
+    try {
+      return await this.prismaService.$transaction(async (transaction) => {
+        const updatedUser = await this.usersService.updateUserProfile(
+          currentUser.id,
+          {
+            displayName: input.displayName,
+            email,
+            username
+          },
+          transaction
+        );
+
+        if (identity && isEmailChanging) {
+          await this.authRepository.updateEmailIdentity(
+            identity.id,
+            {
+              email
+            },
+            transaction
+          );
+        }
+
+        return updatedUser;
+      });
+    } catch (error) {
+      if (this.authRepository.isUniqueConstraintError(error)) {
+        throw createEmailAlreadyExistsException();
+      }
+
+      throw error;
+    }
+  }
+
+  async changeCurrentUserPassword(
+    currentUser: AuthenticatedUser,
+    input: ChangePasswordDto
+  ): Promise<void> {
+    const identity = await this.authRepository.findEmailIdentityByUserId(currentUser.id);
+
+    if (!identity?.passwordHash) {
+      throw createInvalidCurrentPasswordException();
+    }
+
+    const isPasswordValid = await this.passwordHasherService.verify(
+      input.currentPassword,
+      identity.passwordHash
+    );
+
+    if (!isPasswordValid) {
+      throw createInvalidCurrentPasswordException();
+    }
+
+    if (input.newPassword === input.currentPassword) {
+      throw createPasswordReuseException();
+    }
+
+    const nextPasswordHash = await this.passwordHasherService.hash(input.newPassword);
+
+    await this.authRepository.updateEmailIdentity(identity.id, {
+      email: identity.providerUserId,
+      passwordHash: nextPasswordHash
+    });
+  }
+
   private createAuthResponse(user: AuthenticatedUser): AuthResponseDto {
     return {
       accessToken: this.jwtTokenService.signAccessToken(user.id),
@@ -128,5 +221,21 @@ function createInvalidCredentialsException(): Error {
     code: AppErrorCode.Unauthorized,
     message: "Invalid email or password",
     statusCode: HttpStatus.UNAUTHORIZED
+  });
+}
+
+function createInvalidCurrentPasswordException(): Error {
+  return createAppException({
+    code: AppErrorCode.BadRequest,
+    message: "Current password is incorrect",
+    statusCode: HttpStatus.BAD_REQUEST
+  });
+}
+
+function createPasswordReuseException(): Error {
+  return createAppException({
+    code: AppErrorCode.BadRequest,
+    message: "New password must be different from the current password",
+    statusCode: HttpStatus.BAD_REQUEST
   });
 }

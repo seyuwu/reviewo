@@ -10,16 +10,21 @@ import {
   renderReviewCarouselNavMarkup,
   updateReviewCarouselNav
 } from "../../shared/review-carousel.js";
+import { resumeAutoDismiss, suspendAutoDismiss, type AutoDismissHost } from "./auto-dismiss.js";
 import { animateRatingCardShellHeight } from "./card-shell-animation.js";
 import type { CardEntityReview } from "./fetch-entity-reviews.js";
-import { likeEntityReview, unlikeEntityReview } from "./fetch-entity-reviews.js";
+import { likeEntityReview, unlikeEntityReview, upsertMyEntityReview } from "./fetch-entity-reviews.js";
+import { MAX_REVIEW_TEXT_LENGTH } from "../../shared/review-limits.js";
 
 export type CardReviewSort = "likes" | "newest";
 
 export interface CardCommunityReviewsState {
   currentUserId?: string;
   displayMode: PopupReviewDisplayMode;
+  entityId: string;
+  hasCurrentUserReview: boolean;
   isAuthenticated: boolean;
+  myReviewText: string;
   reviews: CardEntityReview[];
   reviewsLimit: number;
   sort: CardReviewSort;
@@ -60,7 +65,7 @@ function renderReviewCard(
   review: CardEntityReview,
   state: CardCommunityReviewsState
 ): string {
-  const isOwnReview = isReviewByCurrentUser(review.authorId, state.currentUserId);
+  const isOwnReview = isReviewByCurrentUser(review);
   const likeClass = review.likedByCurrentUser ? " is-active" : "";
   const isCompact = state.displayMode === "compact";
   const displayText = isCompact ? formatReviewSnippet(review.text) : review.text;
@@ -130,6 +135,78 @@ export interface CardCommunityReviewsCarouselIndex {
   setActiveIndex: (index: number) => void;
 }
 
+function renderReviewEditorMarkup(t: TranslateFn, text: string, statusMessage = ""): string {
+  return `
+    <article class="reviewo-review-card reviewo-review-editor-card">
+      <textarea
+        class="reviewo-review-editor"
+        data-review-editor-text
+        maxlength="${MAX_REVIEW_TEXT_LENGTH}"
+        placeholder="${escapeHtmlAttribute(t("reviews.myReview.placeholder"))}"
+      >${escapeHtmlText(text)}</textarea>
+      <p class="reviewo-review-editor-status${statusMessage ? " is-visible" : ""}" data-review-editor-status>
+        ${escapeHtmlText(statusMessage)}
+      </p>
+    </article>
+  `;
+}
+
+function renderReviewCtaMarkup(t: TranslateFn, state: CardCommunityReviewsState, isWritingReview: boolean): string {
+  if (state.hasCurrentUserReview) {
+    return "";
+  }
+
+  if (isWritingReview) {
+    return `
+      <div class="reviewo-review-write-actions" data-review-write-actions>
+        <button type="button" class="reviewo-review-publish-button" data-review-publish>
+          ${escapeHtmlText(t("reviews.myReview.publish"))}
+        </button>
+        <button type="button" class="reviewo-review-cancel-button" data-review-cancel>
+          ${escapeHtmlText(t("reviews.myReview.cancel"))}
+        </button>
+      </div>
+    `;
+  }
+
+  return `
+    <button
+      type="button"
+      class="reviewo-review-write-cta"
+      data-review-write
+    >
+      ${escapeHtmlText(t("reviews.myReview.leave"))}
+    </button>
+  `;
+}
+
+function renderReviewCarouselActionsMarkup(
+  t: TranslateFn,
+  state: CardCommunityReviewsState,
+  activeIndex: number,
+  total: number,
+  isWritingReview = false
+): string {
+  const carouselNavMarkup = isWritingReview
+    ? ""
+    : renderReviewCarouselNavMarkup(t, activeIndex, total, {
+        classPrefix: "reviewo-review",
+        escapeHtml: escapeHtmlAttribute
+      });
+  const reviewCtaMarkup = renderReviewCtaMarkup(t, state, isWritingReview);
+
+  if (!carouselNavMarkup && !reviewCtaMarkup) {
+    return "";
+  }
+
+  return `
+    <div class="reviewo-review-carousel-actions" data-review-carousel-actions>
+      ${carouselNavMarkup}
+      ${reviewCtaMarkup}
+    </div>
+  `;
+}
+
 export function renderCardCommunityReviewsMarkup(
   t: TranslateFn,
   state: CardCommunityReviewsState,
@@ -140,10 +217,7 @@ export function renderCardCommunityReviewsMarkup(
   const limitedReviews = sortedReviews.slice(0, state.reviewsLimit);
   const activeIndex = clampReviewCarouselIndex(initialIndex, limitedReviews.length);
   const reviewsMarkup = renderReviewAtIndexMarkup(t, limitedReviews, activeIndex, state);
-  const carouselNavMarkup = renderReviewCarouselNavMarkup(t, activeIndex, limitedReviews.length, {
-    classPrefix: "reviewo-review",
-    escapeHtml: escapeHtmlAttribute
-  });
+  const carouselActionsMarkup = renderReviewCarouselActionsMarkup(t, state, activeIndex, limitedReviews.length);
 
   return `
     <section class="reviewo-reviews-panel">
@@ -168,7 +242,7 @@ export function renderCardCommunityReviewsMarkup(
             ${reviewsMarkup}
           </div>
         </div>
-        ${carouselNavMarkup}
+        ${carouselActionsMarkup}
       </div>
       ${
         sortedReviews.length > limitedReviews.length
@@ -186,6 +260,10 @@ export function bindCardCommunityReviews(
   onStateChange: (nextState: CardCommunityReviewsState) => void,
   carouselIndex?: CardCommunityReviewsCarouselIndex
 ): void {
+  let isWritingReview = false;
+  let draftReviewText = getState().myReviewText;
+  let pendingReviewSave = false;
+
   const syncActiveReviewIndex = (index: number): number => {
     const limitedReviews = getLimitedReviews();
     const nextIndex = clampReviewCarouselIndex(index, limitedReviews.length);
@@ -205,8 +283,15 @@ export function bindCardCommunityReviews(
   const setActiveReviewIndex = (index: number): void => {
     activeReviewIndex = syncActiveReviewIndex(index);
   };
+  const cardHost = getCardHost(container);
 
-  const rerenderList = (options?: { animateShell?: boolean }): void => {
+  const renderMainPanelMarkup = (state: CardCommunityReviewsState, limitedReviews: CardEntityReview[]): string => {
+    return isWritingReview
+      ? renderReviewEditorMarkup(t, draftReviewText)
+      : renderReviewAtIndexMarkup(t, limitedReviews, activeReviewIndex, state);
+  };
+
+  const rerenderList = (options?: { animateShell?: boolean; focusEditor?: boolean }): void => {
     const listElement = container.querySelector<HTMLElement>("[data-review-list]");
     const carousel = container.querySelector<HTMLElement>("[data-review-carousel]");
 
@@ -218,26 +303,29 @@ export function bindCardCommunityReviews(
     const limitedReviews = getLimitedReviews();
     activeReviewIndex = clampReviewCarouselIndex(activeReviewIndex, limitedReviews.length);
     carouselIndex?.setActiveIndex(activeReviewIndex);
-    listElement.innerHTML = renderReviewAtIndexMarkup(t, limitedReviews, activeReviewIndex, state);
+    listElement.innerHTML = renderMainPanelMarkup(state, limitedReviews);
     listElement.querySelector<HTMLElement>(".reviewo-review-text")?.scrollTo({ top: 0 });
 
     if (carousel) {
-      const existingNav = carousel.querySelector("[data-review-carousel-nav]");
-      const navMarkup = renderReviewCarouselNavMarkup(t, activeReviewIndex, limitedReviews.length, {
-        classPrefix: "reviewo-review",
-        escapeHtml: escapeHtmlAttribute
-      });
+      const existingActions = carousel.querySelector("[data-review-carousel-actions]");
+      const actionsMarkup = renderReviewCarouselActionsMarkup(
+        t,
+        state,
+        activeReviewIndex,
+        limitedReviews.length,
+        isWritingReview
+      );
 
-      if (navMarkup) {
-        if (existingNav) {
-          existingNav.outerHTML = navMarkup;
+      if (actionsMarkup) {
+        if (existingActions) {
+          existingActions.outerHTML = actionsMarkup;
         } else {
-          carousel.insertAdjacentHTML("beforeend", navMarkup);
+          carousel.insertAdjacentHTML("beforeend", actionsMarkup);
         }
 
         updateReviewCarouselNav(carousel, t, activeReviewIndex, limitedReviews.length);
       } else {
-        existingNav?.remove();
+        existingActions?.remove();
       }
     }
 
@@ -249,6 +337,12 @@ export function bindCardCommunityReviews(
       options?.animateShell !== false
     ) {
       animateRatingCardShellHeight(cardShell);
+    }
+
+    bindReviewEditorKeyboardGuard(listElement.querySelector<HTMLElement>("[data-review-editor-text]"));
+
+    if (options?.focusEditor) {
+      listElement.querySelector<HTMLTextAreaElement>("[data-review-editor-text]")?.focus();
     }
   };
 
@@ -274,7 +368,7 @@ export function bindCardCommunityReviews(
       return;
     }
 
-    const isOwnReview = isReviewByCurrentUser(review.authorId, state.currentUserId);
+    const isOwnReview = isReviewByCurrentUser(review);
     const canVote = state.isAuthenticated && !isOwnReview;
     const likeButton = card.querySelector<HTMLButtonElement>("[data-like-review]");
     const unlikeButton = card.querySelector<HTMLButtonElement>("[data-unlike-review]");
@@ -310,7 +404,7 @@ export function bindCardCommunityReviews(
     if (
       !review ||
       !state.isAuthenticated ||
-      isReviewByCurrentUser(review.authorId, state.currentUserId)
+      isReviewByCurrentUser(review)
     ) {
       return;
     }
@@ -341,6 +435,133 @@ export function bindCardCommunityReviews(
     });
     updateReviewVoteInPlace(result.review);
   }
+
+  function updateReviewEditorStatus(message: string, isError = false): void {
+    const status = container.querySelector<HTMLElement>("[data-review-editor-status]");
+
+    if (!status) {
+      return;
+    }
+
+    status.textContent = message;
+    status.classList.toggle("is-visible", Boolean(message));
+    status.classList.toggle("is-error", isError);
+  }
+
+  function startWritingReview(): void {
+    const state = getState();
+
+    isWritingReview = true;
+    draftReviewText = state.myReviewText;
+    if (cardHost) {
+      suspendAutoDismiss(cardHost as AutoDismissHost);
+    }
+    rerenderList({ focusEditor: state.isAuthenticated });
+
+    if (!state.isAuthenticated) {
+      updateReviewEditorStatus(t("reviews.myReview.signInCta"), true);
+    }
+  }
+
+  function cancelWritingReview(): void {
+    isWritingReview = false;
+    draftReviewText = getState().myReviewText;
+    if (cardHost) {
+      resumeAutoDismiss(cardHost as AutoDismissHost);
+    }
+    rerenderList();
+  }
+
+  async function publishReview(): Promise<void> {
+    if (pendingReviewSave) {
+      return;
+    }
+
+    const state = getState();
+    const textarea = container.querySelector<HTMLTextAreaElement>("[data-review-editor-text]");
+    const text = textarea?.value.trim() ?? "";
+
+    if (!state.isAuthenticated) {
+      updateReviewEditorStatus(t("reviews.myReview.signInCta"), true);
+      return;
+    }
+
+    if (!text) {
+      updateReviewEditorStatus(t("reviews.save.emptyError"), true);
+      return;
+    }
+
+    if (text.length > MAX_REVIEW_TEXT_LENGTH) {
+      updateReviewEditorStatus(t("reviews.save.tooLongError", { max: MAX_REVIEW_TEXT_LENGTH }), true);
+      return;
+    }
+
+    pendingReviewSave = true;
+    container.querySelectorAll<HTMLButtonElement>("[data-review-publish], [data-review-cancel]").forEach((button) => {
+      button.disabled = true;
+    });
+    updateReviewEditorStatus(t("reviews.save.saving"));
+
+    const result = await upsertMyEntityReview(state.entityId, text);
+    pendingReviewSave = false;
+
+    if (!result.review) {
+      updateReviewEditorStatus(result.errorMessage ?? t("reviews.save.error"), true);
+      container.querySelectorAll<HTMLButtonElement>("[data-review-publish], [data-review-cancel]").forEach((button) => {
+        button.disabled = false;
+      });
+      return;
+    }
+
+    const existingReviewIds = new Set(state.reviews.map((review) => review.id));
+    const nextReviews = existingReviewIds.has(result.review.id)
+      ? state.reviews.map((review) => (review.id === result.review!.id ? result.review! : review))
+      : [result.review, ...state.reviews];
+
+    onStateChange({
+      ...state,
+      hasCurrentUserReview: true,
+      myReviewText: result.review.text,
+      reviews: nextReviews,
+      sort: "newest"
+    });
+
+    isWritingReview = false;
+    draftReviewText = result.review.text;
+    setActiveReviewIndex(0);
+    if (cardHost) {
+      resumeAutoDismiss(cardHost as AutoDismissHost);
+    }
+    rerenderList();
+  }
+
+  const bindReviewWriteControls = (root: ParentNode): void => {
+    if (!(root instanceof HTMLElement) || root.dataset.reviewWriteControlsBound === "true") {
+      return;
+    }
+
+    root.dataset.reviewWriteControlsBound = "true";
+
+    root.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      if (event.target.closest("[data-review-write]")) {
+        startWritingReview();
+        return;
+      }
+
+      if (event.target.closest("[data-review-cancel]")) {
+        cancelWritingReview();
+        return;
+      }
+
+      if (event.target.closest("[data-review-publish]")) {
+        void publishReview();
+      }
+    });
+  };
 
   const bindReviewVoteControls = (root: ParentNode): void => {
     if (!(root instanceof HTMLElement) || root.dataset.reviewVoteControlsBound === "true") {
@@ -396,6 +617,7 @@ export function bindCardCommunityReviews(
   });
 
   bindReviewVoteControls(container);
+  bindReviewWriteControls(container);
   bindReviewCarouselNav(container, {
     getIndex: () => activeReviewIndex,
     getTotal: () => getLimitedReviews().length,
@@ -404,6 +626,32 @@ export function bindCardCommunityReviews(
       rerenderList({ animateShell: false });
     }
   });
+}
+
+function getCardHost(container: ParentNode): HTMLElement | null {
+  const root = container.getRootNode();
+
+  if (root instanceof ShadowRoot && root.host instanceof HTMLElement) {
+    return root.host;
+  }
+
+  return null;
+}
+
+function bindReviewEditorKeyboardGuard(target: HTMLElement | null): void {
+  if (!target || target.dataset.reviewEditorKeyboardGuardBound === "true") {
+    return;
+  }
+
+  target.dataset.reviewEditorKeyboardGuardBound = "true";
+
+  const stopPageHotkeyPropagation = (event: Event): void => {
+    event.stopPropagation();
+  };
+
+  target.addEventListener("keydown", stopPageHotkeyPropagation);
+  target.addEventListener("keypress", stopPageHotkeyPropagation);
+  target.addEventListener("keyup", stopPageHotkeyPropagation);
 }
 
 function escapeHtmlAttribute(value: string): string {

@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import {
   clearAuthSession,
   getStoredAuthSession,
-  saveAuthSession
+  saveAuthSession,
+  updateStoredAuthSession
 } from "../lib/auth-session-storage";
 import { WEB_AUTH_BRIDGE_SOURCE } from "../lib/web-auth-bridge";
 import type { AuthResponse, StoredAuthSession } from "../types/auth";
@@ -56,10 +57,21 @@ export function useAuthSession() {
     setAuthSession(null);
   }
 
+  function updateAuthSession(
+    input: Partial<Pick<StoredAuthSession, "displayName" | "email">>
+  ): StoredAuthSession | null {
+    const updatedSession = updateStoredAuthSession(input);
+
+    setAuthSession(updatedSession);
+
+    return updatedSession;
+  }
+
   return {
     authSession,
     isAuthSessionLoaded,
     signOut,
-    storeAuthSession
+    storeAuthSession,
+    updateAuthSession
   };
 }

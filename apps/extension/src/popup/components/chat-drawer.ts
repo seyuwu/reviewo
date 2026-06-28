@@ -259,7 +259,7 @@ export function bindChatDrawerToggle(
       return;
     }
 
-    host.innerHTML = renderChatDrawerMarkup(t, entityTitleLabel(options.entityTitle), onlineCount, messages, {
+    host.innerHTML = renderChatDrawerMarkup(t, entityTitleLabel(options.entityTitle, t), onlineCount, messages, {
       isAuthenticated: options.isAuthenticated
     });
     bindChatDrawerControls(host, t, options, actions, {
@@ -680,8 +680,8 @@ function bindChatDrawerControls(
   }
 }
 
-function entityTitleLabel(title: string): string {
-  return title.trim() || "Reviewo";
+function entityTitleLabel(title: string, t: TranslateFn): string {
+  return title.trim() || t("brand.name");
 }
 
 function scrollMessagesToBottom(list: HTMLElement | null): void {

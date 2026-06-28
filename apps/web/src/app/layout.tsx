@@ -7,7 +7,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   description: "A universal public opinion layer for entities across the internet.",
-  title: "Reviewo"
+  title: "Opinia"
 };
 
 interface RootLayoutProps {

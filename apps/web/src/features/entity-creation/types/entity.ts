@@ -27,7 +27,6 @@ export interface CreateEntityInput {
 export interface Entity {
   canonicalUrl: string | null;
   createdAt: string;
-  createdBy: string | null;
   description: string | null;
   id: string;
   parentId: string | null;

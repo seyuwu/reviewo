@@ -225,7 +225,7 @@
 
 .chatSectionSidebar .chatDrawerPanel {
   grid-template-rows: 1fr;
-  max-height: var(--reviewo-chat-panel-max-height, 20rem);
+  max-height: 20rem;
   transition: none;
 }
 
@@ -235,7 +235,9 @@
 }
 
 .chatSectionSidebar .chatDrawer {
-  min-height: 14rem;
+  height: 20rem;
+  max-height: 20rem;
+  min-height: 20rem;
 }
 
 .chatSectionSidebar .chatMessageList {

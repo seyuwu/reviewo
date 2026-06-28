@@ -1,6 +1,103 @@
+validatePublicEnvironment();
+
 /** @type {import("next").NextConfig} */
 const nextConfig = {
+  async headers() {
+    return [
+      {
+        headers: createSecurityHeaders(),
+        source: "/:path*"
+      }
+    ];
+  },
   reactStrictMode: true
 };
 
 export default nextConfig;
+
+function createSecurityHeaders() {
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+  const apiOrigin = resolveOrigin(apiBaseUrl);
+  const websocketOrigin = resolveWebSocketOrigin(apiBaseUrl);
+  const connectSources = ["'self'", apiOrigin, websocketOrigin].filter(Boolean);
+  const contentSecurityPolicy = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "img-src 'self' data:",
+    "object-src 'none'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    `connect-src ${connectSources.join(" ")}`
+  ].join("; ");
+
+  return [
+    {
+      key: "Content-Security-Policy",
+      value: contentSecurityPolicy
+    },
+    {
+      key: "Permissions-Policy",
+      value: "camera=(), microphone=(), geolocation=()"
+    },
+    {
+      key: "Referrer-Policy",
+      value: "strict-origin-when-cross-origin"
+    },
+    {
+      key: "Strict-Transport-Security",
+      value: "max-age=15552000; includeSubDomains"
+    },
+    {
+      key: "X-Content-Type-Options",
+      value: "nosniff"
+    },
+    {
+      key: "X-Frame-Options",
+      value: "DENY"
+    }
+  ];
+}
+
+function resolveOrigin(value) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return "";
+  }
+}
+
+function resolveWebSocketOrigin(value) {
+  try {
+    const url = new URL(value);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+
+    return url.origin;
+  } catch {
+    return "";
+  }
+}
+
+function validatePublicEnvironment() {
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+
+  if (process.env.NODE_ENV === "production" && !isHttpsOrLocalhost(apiBaseUrl)) {
+    throw new Error("NEXT_PUBLIC_API_BASE_URL must use HTTPS in production");
+  }
+}
+
+function isHttpsOrLocalhost(value) {
+  try {
+    const url = new URL(value);
+
+    return (
+      url.protocol === "https:" ||
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "::1"
+    );
+  } catch {
+    return false;
+  }
+}

@@ -7,6 +7,13 @@ export interface UserTrustInput {
   anomalyPenalty: number;
   dailyRatingCounts: number[];
   entityRatingCounts: number[];
+  hourlyRatingCounts?: number[];
+  hourlyRatingUpdateCounts?: number[];
+  ratingEditRatio?: number;
+  reviewModeration?: {
+    hiddenReviewsCount: number;
+    reviewsCount: number;
+  };
   scoreCounts: [number, number, number, number, number];
   totalRatings: number;
   uniqueEntityTypeCount: number;
@@ -16,6 +23,7 @@ export interface UserTrustInput {
 
 export interface UserTrustResult {
   accountAgeBonus: number;
+  anomalyPenalty: number;
   consensusScore: number;
   coverageScore: number;
   diversityScore: number;
@@ -31,21 +39,22 @@ export class UserTrustCalculator {
     const stabilityScore = this.calculateStabilityScore(input.totalRatings, input.dailyRatingCounts);
     const consensusScore = this.calculateConsensusScore(input.totalRatings, input.scoreCounts);
     const accountAgeBonus = this.calculateAccountAgeBonus(input.accountCreatedAt, now);
+    const accountAgeCap = this.calculateAccountAgeCap(input.accountCreatedAt, now);
+    const anomalyPenalty = this.calculateAnomalyPenalty(input);
+    const rawTrustScore =
+      0.3 * diversityScore +
+      0.25 * coverageScore +
+      0.3 * stabilityScore +
+      0.1 * consensusScore +
+      accountAgeBonus -
+      anomalyPenalty;
     const trustScore = roundToThreeDecimals(
-      clamp(
-        0.3 * diversityScore +
-          0.25 * coverageScore +
-          0.3 * stabilityScore +
-          0.1 * consensusScore +
-          accountAgeBonus -
-          input.anomalyPenalty,
-        0.05,
-        1
-      )
+      clamp(Math.min(rawTrustScore, accountAgeCap), 0.05, 1)
     );
 
     return {
       accountAgeBonus: roundToThreeDecimals(accountAgeBonus),
+      anomalyPenalty: roundToThreeDecimals(anomalyPenalty),
       consensusScore: roundToThreeDecimals(consensusScore),
       coverageScore: roundToThreeDecimals(coverageScore),
       diversityScore: roundToThreeDecimals(diversityScore),
@@ -119,4 +128,101 @@ export class UserTrustCalculator {
 
     return Math.min(0.05, (daysSinceRegistration / 365) * 0.05);
   }
+
+  private calculateAccountAgeCap(accountCreatedAt: Date, now: Date): number {
+    const daysSinceRegistration = Math.max(
+      0,
+      (now.getTime() - accountCreatedAt.getTime()) / 86_400_000
+    );
+
+    if (daysSinceRegistration < 1) {
+      return 0.55;
+    }
+
+    if (daysSinceRegistration < 3) {
+      return interpolate(0.55, 0.75, (daysSinceRegistration - 1) / 2);
+    }
+
+    if (daysSinceRegistration < 7) {
+      return interpolate(0.75, 1, (daysSinceRegistration - 3) / 4);
+    }
+
+    return 1;
+  }
+
+  private calculateAnomalyPenalty(input: UserTrustInput): number {
+    const hourlyRatingCounts = input.hourlyRatingCounts ?? [];
+    const hourlyRatingUpdateCounts = input.hourlyRatingUpdateCounts ?? [];
+    const maxHourlyCreates =
+      hourlyRatingCounts.length > 0 ? Math.max(...hourlyRatingCounts) : 0;
+    const maxHourlyUpdates =
+      hourlyRatingUpdateCounts.length > 0 ? Math.max(...hourlyRatingUpdateCounts) : 0;
+    const velocityPenalty = calculateLinearPenalty(maxHourlyCreates, {
+      cap: 0.2,
+      maxAt: 35,
+      startsAt: 10
+    });
+    const hourlyEditPenalty = calculateLinearPenalty(maxHourlyUpdates, {
+      cap: 0.1,
+      maxAt: 15,
+      startsAt: 3
+    });
+    const editRatioPenalty = calculateLinearPenalty(input.ratingEditRatio ?? 0, {
+      cap: 0.05,
+      maxAt: 1.5,
+      startsAt: 0.5
+    });
+    const reviewModerationPenalty = this.calculateReviewModerationPenalty(input.reviewModeration);
+
+    return clamp(
+      input.anomalyPenalty +
+        velocityPenalty +
+        hourlyEditPenalty +
+        editRatioPenalty +
+        reviewModerationPenalty,
+      0,
+      0.3
+    );
+  }
+
+  private calculateReviewModerationPenalty(
+    reviewModeration: UserTrustInput["reviewModeration"]
+  ): number {
+    if (
+      !reviewModeration ||
+      reviewModeration.reviewsCount < 5 ||
+      reviewModeration.hiddenReviewsCount < 2
+    ) {
+      return 0;
+    }
+
+    const hiddenRatio = reviewModeration.hiddenReviewsCount / reviewModeration.reviewsCount;
+
+    return calculateLinearPenalty(hiddenRatio, {
+      cap: 0.15,
+      maxAt: 0.6,
+      startsAt: 0.2
+    });
+  }
+}
+
+function calculateLinearPenalty(
+  value: number,
+  thresholds: { cap: number; maxAt: number; startsAt: number }
+): number {
+  if (value <= thresholds.startsAt) {
+    return 0;
+  }
+
+  const denominator = thresholds.maxAt - thresholds.startsAt;
+
+  if (denominator <= 0) {
+    return thresholds.cap;
+  }
+
+  return thresholds.cap * clamp((value - thresholds.startsAt) / denominator, 0, 1);
+}
+
+function interpolate(start: number, end: number, progress: number): number {
+  return start + (end - start) * clamp(progress, 0, 1);
 }

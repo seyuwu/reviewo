@@ -115,8 +115,7 @@ export class EntityChatService implements OnModuleInit {
       displayName: currentUser.displayName,
       entityId: created.entityId,
       id: created.id,
-      message: created.message,
-      userId: created.userId
+      message: created.message
     };
   }
 
@@ -168,14 +167,12 @@ function mapMessageDto(row: {
   user: {
     displayName: string;
   };
-  userId: string;
 }): EntityChatMessageDto {
   return {
     createdAt: row.createdAt.toISOString(),
     displayName: row.user.displayName,
     entityId: row.entityId,
     id: row.id,
-    message: row.message,
-    userId: row.userId
+    message: row.message
   };
 }

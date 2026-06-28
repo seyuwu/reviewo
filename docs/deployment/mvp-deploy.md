@@ -2,6 +2,8 @@
 
 Stage 32 production-readiness notes for the first Reviewo deployment.
 
+For a step-by-step guide on a shared Selectel VDS (alongside another Docker project), see [selectel-vds-guide.md](./selectel-vds-guide.md).
+
 ## Prerequisites
 
 - Docker and Docker Compose
@@ -22,6 +24,7 @@ Stage 32 production-readiness notes for the first Reviewo deployment.
 | `DATABASE_URL` | Built automatically in Compose from Postgres vars; for external DB set explicitly on API |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated public web origins, e.g. `https://app.example.com` |
 | `NEXT_PUBLIC_API_BASE_URL` | Public API URL embedded into the web build, e.g. `https://api.example.com` |
+| `TRUST_PROXY_HOPS` | Set to the number of trusted reverse proxy hops; keep `0` when the API is directly exposed |
 
 Optional:
 
@@ -30,10 +33,14 @@ Optional:
 | `ADMIN_EMAIL` | After a user registers, `pnpm db:seed` promotes this email to `ADMIN` |
 
 API startup validates required production settings and fails fast on placeholders.
+Production Compose also requires real `JWT_SECRET`, `POSTGRES_PASSWORD`, `MINIO_ROOT_USER`,
+`MINIO_ROOT_PASSWORD`, `CORS_ALLOWED_ORIGINS`, and `NEXT_PUBLIC_API_BASE_URL` values.
 
 ## Docker Compose production stack
 
 The production override starts API and web services. Postgres, Redis, and MinIO use the base Compose services.
+The production override does not publish Postgres, Redis, or MinIO ports to the host; keep them on the
+internal Compose network and put only API/web behind your reverse proxy.
 
 ```bash
 # Linux / macOS
@@ -46,7 +53,7 @@ docker compose --env-file .env.production \
   up -d --build
 ```
 
-Default ports (override in `.env.production`):
+Public ports (override in `.env.production`):
 
 - API: `API_PORT` (default `3000`)
 - Web: `WEB_PORT` mapped to container port `3000` (default host `3001`)

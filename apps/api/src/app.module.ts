@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter.js";
 import { AppLogger } from "./common/logger/app-logger.service.js";
+import { RateLimitingModule } from "./common/rate-limiting/rate-limiting.module.js";
 import { AppConfigModule } from "./config/app-config.module.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { HealthModule } from "./health/health.module.js";
@@ -27,6 +28,7 @@ import { RedisModule } from "./redis/redis.module.js";
     AppConfigModule,
     DatabaseModule,
     RedisModule,
+    RateLimitingModule,
     HealthModule,
     AuthModule,
     UsersModule,

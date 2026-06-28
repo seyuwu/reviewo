@@ -4,6 +4,7 @@ import { DomainEventsModule } from "../../common/domain-events/domain-events.mod
 import { AuthModule } from "../auth/auth.module.js";
 import { UsersModule } from "../users/users.module.js";
 import { EntitiesController } from "./controllers/entities.controller.js";
+import { TrustCheckController } from "./controllers/trust-check.controller.js";
 import { ENTITIES_PORT } from "./interfaces/entities.port.js";
 import { URL_NORMALIZER } from "./interfaces/url-normalizer.js";
 import { EntitiesRepository } from "./repositories/entities.repository.js";
@@ -11,7 +12,7 @@ import { EntitiesService } from "./services/entities.service.js";
 import { UrlNormalizationService } from "./services/url-normalization.service.js";
 
 @Module({
-  controllers: [EntitiesController],
+  controllers: [EntitiesController, TrustCheckController],
   exports: [ENTITIES_PORT, EntitiesService, URL_NORMALIZER],
   imports: [AuthModule, DomainEventsModule, UsersModule],
   providers: [

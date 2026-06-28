@@ -24,5 +24,8 @@ ENV NODE_ENV=production
 ENV APP_NAME=api
 
 RUN corepack pnpm build
+RUN chown -R node:node /workspace
+
+USER node
 
 CMD ["corepack", "pnpm", "--filter", "@reviewo/api", "start:prod"]

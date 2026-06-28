@@ -26,4 +26,15 @@ describe("AnomalyDetectionService", () => {
     assert.ok(result.syncScore > 0.5);
     assert.ok(result.anomalyScore >= result.syncScore * 0.8);
   });
+
+  it("uses new-account cluster signals as entity anomaly input", () => {
+    const result = service.detect({
+      newAccountClusterScore: 0.9,
+      ratingsLastHour: 2,
+      syncClusterCount: 0
+    });
+
+    assert.equal(result.clusterScore, 0.9);
+    assert.ok(result.anomalyScore >= 0.54);
+  });
 });

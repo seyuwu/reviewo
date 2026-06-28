@@ -6,11 +6,17 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  Req,
   UseGuards
 } from "@nestjs/common";
 
 import { CurrentUser } from "../../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
+import {
+  ApiRateLimiterService,
+  type RequestLike
+} from "../../../common/rate-limiting/api-rate-limiter.service.js";
+import { createPresenceHeartbeatRateLimitRules } from "../../../common/rate-limiting/write-rate-limit-rules.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import type {
   ActiveNowListDto,
@@ -18,13 +24,18 @@ import type {
   EntityChatMessagesPageDto,
   EntityChatOnlineCountDto
 } from "../dto/entity-chat.dto.js";
-import { SendEntityChatMessageDto } from "../dto/entity-chat-query.dto.js";
+import {
+  ActiveNowQueryDto,
+  ListEntityChatMessagesQueryDto,
+  SendEntityChatMessageDto
+} from "../dto/entity-chat-query.dto.js";
 import { EntityChatGateway } from "../gateways/entity-chat.gateway.js";
 import { EntityChatService } from "../services/entity-chat.service.js";
 
 @Controller("chat")
 export class EntityChatController {
   constructor(
+    private readonly apiRateLimiterService: ApiRateLimiterService,
     private readonly entityChatService: EntityChatService,
     private readonly entityChatGateway: EntityChatGateway
   ) {}
@@ -32,10 +43,9 @@ export class EntityChatController {
   @Get("entities/:entityId/messages")
   async listMessages(
     @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string,
-    @Query("before") before?: string,
-    @Query("limit") limit?: string
+    @Query() query: ListEntityChatMessagesQueryDto
   ): Promise<EntityChatMessagesPageDto> {
-    return this.entityChatService.listMessages(entityId, before, parseLimit(limit));
+    return this.entityChatService.listMessages(entityId, query.before, query.limit);
   }
 
   @Get("entities/:entityId/online")
@@ -46,8 +56,8 @@ export class EntityChatController {
   }
 
   @Get("active-now")
-  async getActiveNow(@Query("limit") limit?: string): Promise<ActiveNowListDto> {
-    return this.entityChatService.getActiveNow(parseLimit(limit) ?? 5);
+  async getActiveNow(@Query() query: ActiveNowQueryDto): Promise<ActiveNowListDto> {
+    return this.entityChatService.getActiveNow(query.limit ?? 5);
   }
 
   @Post("entities/:entityId/messages")
@@ -68,8 +78,13 @@ export class EntityChatController {
   @UseGuards(JwtAuthGuard)
   async heartbeatPresence(
     @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string,
-    @CurrentUser() currentUser: AuthenticatedUser
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
   ): Promise<EntityChatOnlineCountDto> {
+    await this.apiRateLimiterService.assertWithinLimits(
+      createPresenceHeartbeatRateLimitRules(currentUser.id, request)
+    );
+
     const onlineCount = await this.entityChatService.joinRoom(entityId, currentUser.id);
 
     return {
@@ -77,18 +92,4 @@ export class EntityChatController {
       onlineCount
     };
   }
-}
-
-function parseLimit(value: string | undefined): number | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    return undefined;
-  }
-
-  return parsed;
 }

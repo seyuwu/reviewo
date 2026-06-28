@@ -3,7 +3,6 @@ import type { EntityType, EntityVisibility } from "@prisma/client";
 export class EntityDto {
   canonicalUrl!: string | null;
   createdAt!: string;
-  createdBy!: string | null;
   description!: string | null;
   id!: string;
   parentId!: string | null;

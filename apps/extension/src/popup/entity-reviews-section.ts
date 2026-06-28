@@ -31,7 +31,7 @@ import { escapeHtml } from "./view-helpers.js";
 import type { ExtensionReview, ExtensionReviewSort } from "./types/review.js";
 
 export interface EntityReviewsSectionState {
-  currentUserId?: string;
+  currentUserId?: string | undefined;
   displayMode: PopupReviewDisplayMode;
   isAuthenticated: boolean;
   reviews: ExtensionReview[];
@@ -68,7 +68,7 @@ export async function loadEntityReviewsSectionState(
   }
 
   const reviews = reviewsResult.reviews ?? [];
-  const myReviewText = resolveMyReviewText(reviews, currentUserId, myReviewResult.review);
+  const myReviewText = resolveMyReviewText(reviews, myReviewResult.review);
 
   return {
     myReviewText,
@@ -215,7 +215,7 @@ function renderMyReviewSection(
 }
 
 function renderReviewCard(t: TranslateFn, review: ExtensionReview, state: EntityReviewsSectionState): string {
-  const isOwnReview = isReviewByCurrentUser(review.authorId, state.currentUserId);
+  const isOwnReview = isReviewByCurrentUser(review);
   const likeClass = review.likedByCurrentUser ? " is-active" : "";
   const isCompact = state.displayMode === "compact";
   const displayText = isCompact ? formatReviewSnippet(review.text) : review.text;
@@ -337,7 +337,7 @@ export function bindEntityReviewsSection(
       return;
     }
 
-    const isOwnReview = isReviewByCurrentUser(review.authorId, state.currentUserId);
+    const isOwnReview = isReviewByCurrentUser(review);
     const canVote = state.isAuthenticated && !isOwnReview;
     const likeButton = card.querySelector<HTMLButtonElement>("[data-like-review]");
     const unlikeButton = card.querySelector<HTMLButtonElement>("[data-unlike-review]");
@@ -372,7 +372,7 @@ export function bindEntityReviewsSection(
     if (
       !review ||
       !state.isAuthenticated ||
-      isReviewByCurrentUser(review.authorId, state.currentUserId)
+      isReviewByCurrentUser(review)
     ) {
       return;
     }

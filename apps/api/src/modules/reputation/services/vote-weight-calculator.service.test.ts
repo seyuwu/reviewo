@@ -6,7 +6,7 @@ import { VoteWeightCalculator } from "./vote-weight-calculator.service.js";
 describe("VoteWeightCalculator", () => {
   const calculator = new VoteWeightCalculator();
 
-  it("returns user trust as vote weight in v1", () => {
+  it("returns user trust as vote weight", () => {
     const result = calculator.calculate({
       entityId: "entity-id",
       userId: "user-id",

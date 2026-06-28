@@ -45,6 +45,26 @@ export function saveAuthSession(authResponse: AuthResponse): StoredAuthSession {
   return authSession;
 }
 
+export function updateStoredAuthSession(
+  input: Partial<Pick<StoredAuthSession, "displayName" | "email">>
+): StoredAuthSession | null {
+  const currentSession = getStoredAuthSession();
+
+  if (!currentSession) {
+    return null;
+  }
+
+  const nextSession = {
+    ...currentSession,
+    ...input
+  };
+
+  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
+  notifyWebAuthChanged();
+
+  return nextSession;
+}
+
 export function clearAuthSession(): void {
   window.localStorage.setItem(WEB_SIGNED_OUT_KEY, "1");
   window.localStorage.removeItem(AUTH_STORAGE_KEY);

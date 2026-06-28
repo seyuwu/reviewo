@@ -7,7 +7,7 @@ import { ReputationReadRepository } from "../repositories/reputation-read.reposi
 import { ReputationRepository } from "../repositories/reputation.repository.js";
 import type { ConfidenceReason } from "../types/confidence-reason.types.js";
 import { differenceInDays } from "../utils/date-buckets.js";
-import { calculateVariance } from "../utils/reputation-math.js";
+import { calculateVariance, clamp } from "../utils/reputation-math.js";
 import { extractRootDomain } from "../utils/root-domain.js";
 import { ReputationCalculationContext } from "./reputation-calculation-context.service.js";
 import { AnomalyDetectionService } from "./anomaly-detection.service.js";
@@ -20,6 +20,8 @@ import type { EntityConfidenceExplanationDto } from "../dto/entity-confidence-ex
 import type { UserTrustProfileDto } from "../dto/user-trust-profile.dto.js";
 
 const ACTIVITY_LOOKBACK_DAYS = 90;
+const NEW_ACCOUNT_COHORT_LOOKBACK_MINUTES = 60;
+const NEW_ACCOUNT_MAX_AGE_DAYS = 7;
 const SYNC_WINDOW_MINUTES = 5;
 
 export interface RatingChangedEventPayload {
@@ -111,6 +113,7 @@ export class ReputationService {
     if (!options.skipEventAppend) {
       await this.appendEvent("review.hidden", payload, occurredAt);
     }
+    await this.recalculateUserTrust(payload.authorId);
   }
 
   async onReviewUnhidden(
@@ -121,6 +124,7 @@ export class ReputationService {
     if (!options.skipEventAppend) {
       await this.appendEvent("review.unhidden", payload, occurredAt);
     }
+    await this.recalculateUserTrust(payload.authorId);
   }
 
   async getUserTrustProfile(userId: string): Promise<UserTrustProfileDto> {
@@ -272,6 +276,17 @@ export class ReputationService {
         score: input.score,
         userId: input.userId
       });
+      await this.reputationRepository.incrementUserActivityHourly({
+        activityAt: input.occurredAt,
+        createdIncrement: 1,
+        userId: input.userId
+      });
+    } else {
+      await this.reputationRepository.incrementUserActivityHourly({
+        activityAt: input.occurredAt,
+        updatedIncrement: 1,
+        userId: input.userId
+      });
     }
 
     const userTrust = await this.recalculateUserTrust(input.userId);
@@ -291,10 +306,15 @@ export class ReputationService {
       weightFactors: voteWeight.factors as Prisma.InputJsonValue
     });
 
-    const ratingsLastHour = await this.reputationRepository.incrementEntityActivityHourly(
-      input.entityId,
-      input.occurredAt
-    );
+    const ratingsLastHour = input.isScoreUpdate
+      ? await this.reputationRepository.getEntityActivityHourlyCount(
+          input.entityId,
+          input.occurredAt
+        )
+      : await this.reputationRepository.incrementEntityActivityHourly(
+          input.entityId,
+          input.occurredAt
+        );
     await this.recalculateEntityMetrics(input.entityId, ratingsLastHour);
   }
 
@@ -303,17 +323,38 @@ export class ReputationService {
     const behaviorMetrics = await this.reputationRepository.getUserBehaviorMetrics(userId);
     const since = new Date(Date.now() - ACTIVITY_LOOKBACK_DAYS * 86_400_000);
 
-    const [dailyRatingCounts, entityRatingCounts, uniqueTypeParentPairCount] = await Promise.all([
+    const [
+      dailyRatingCounts,
+      entityRatingCounts,
+      hourlyActivityCounts,
+      reviewModeration,
+      uniqueTypeParentPairCount
+    ] = await Promise.all([
       this.reputationRepository.listUserActivityDaily(userId, since),
       this.reputationRepository.listTopUserEntityRatingCounts(userId),
+      this.reputationRepository.listUserActivityHourly(userId, since),
+      this.readRepository.getAuthorReviewModerationStats(userId),
       this.reputationRepository.countUserEntityTypePairs(userId)
     ]);
+    const hourlyRatingCounts = hourlyActivityCounts.map((row) => row.ratingCreatedCount);
+    const hourlyRatingUpdateCounts = hourlyActivityCounts.map((row) => row.ratingUpdatedCount);
+    const totalHourlyCreates = sumCounts(hourlyRatingCounts);
+    const totalHourlyUpdates = sumCounts(hourlyRatingUpdateCounts);
 
     const trustResult = this.userTrustCalculator.calculate({
       accountCreatedAt: user?.createdAt ?? new Date(),
       anomalyPenalty: 0,
       dailyRatingCounts,
       entityRatingCounts,
+      hourlyRatingCounts,
+      hourlyRatingUpdateCounts,
+      ratingEditRatio:
+        totalHourlyCreates > 0
+          ? totalHourlyUpdates / totalHourlyCreates
+          : totalHourlyUpdates > 0
+            ? 1
+            : 0,
+      reviewModeration,
       scoreCounts: behaviorMetrics
         ? [
             behaviorMetrics.score1Count,
@@ -331,7 +372,7 @@ export class ReputationService {
 
     await this.reputationRepository.upsertUserTrustProfile({
       accountAgeBonus: trustResult.accountAgeBonus,
-      anomalyPenalty: 0,
+      anomalyPenalty: trustResult.anomalyPenalty,
       calculationVersion: this.calculationContext.getVersion(),
       consensusScore: trustResult.consensusScore,
       coverageScore: trustResult.coverageScore,
@@ -346,14 +387,24 @@ export class ReputationService {
 
   private async recalculateEntityMetrics(entityId: string, ratingsLastHour: number): Promise<void> {
     const ratingStats = await this.readRepository.getEntityRatingStats(entityId);
-    const syncWindowStart = new Date(Date.now() - SYNC_WINDOW_MINUTES * 60_000);
-    const syncClusterCount = await this.readRepository.countDistinctRatersInWindow(
-      entityId,
-      syncWindowStart
+    const now = new Date();
+    const syncWindowStart = new Date(now.getTime() - SYNC_WINDOW_MINUTES * 60_000);
+    const newAccountCohortWindowStart = new Date(
+      now.getTime() - NEW_ACCOUNT_COHORT_LOOKBACK_MINUTES * 60_000
     );
+    const [syncClusterCount, newAccountCohortStats] = await Promise.all([
+      this.readRepository.countDistinctRatersInWindow(entityId, syncWindowStart),
+      this.readRepository.getNewAccountRatingCohortStats({
+        entityId,
+        maxAccountAgeDays: NEW_ACCOUNT_MAX_AGE_DAYS,
+        now,
+        windowStart: newAccountCohortWindowStart
+      })
+    ]);
     const existingAnomaly = await this.reputationRepository.getEntityAnomalyMetrics(entityId);
     const anomalyResult = this.anomalyDetectionService.detect({
       clusterScore: Number(existingAnomaly?.clusterScore ?? 0),
+      newAccountClusterScore: calculateNewAccountClusterScore(newAccountCohortStats),
       ratingsLastHour,
       syncClusterCount: syncClusterCount >= 3 ? 1 : 0
     });
@@ -442,4 +493,24 @@ function createProfileNotFoundException(message: string): Error {
     message,
     statusCode: HttpStatus.NOT_FOUND
   });
+}
+
+function sumCounts(counts: number[]): number {
+  return counts.reduce((sum, count) => sum + count, 0);
+}
+
+function calculateNewAccountClusterScore(input: {
+  averageAccountAgeDays: number | null;
+  dominantScoreShare: number;
+  ratingsCount: number;
+}): number {
+  if (input.ratingsCount < 3 || input.averageAccountAgeDays === null) {
+    return 0;
+  }
+
+  const volumeFactor = Math.min(1, input.ratingsCount / 8);
+  const samenessFactor = clamp((input.dominantScoreShare - 0.6) / 0.4, 0, 1);
+  const freshnessFactor = 1 - Math.min(1, input.averageAccountAgeDays / NEW_ACCOUNT_MAX_AGE_DAYS);
+
+  return volumeFactor * samenessFactor * freshnessFactor;
 }

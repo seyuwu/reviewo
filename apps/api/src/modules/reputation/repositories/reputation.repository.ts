@@ -64,6 +64,11 @@ export interface UpsertEntityAnomalyMetricsInput {
   syncScore: number;
 }
 
+export interface UserHourlyActivityCounts {
+  ratingCreatedCount: number;
+  ratingUpdatedCount: number;
+}
+
 @Injectable()
 export class ReputationRepository {
   constructor(private readonly prismaService: PrismaService) {}
@@ -102,6 +107,40 @@ export class ReputationRepository {
         userId_activityDate: {
           activityDate: normalizedDate,
           userId
+        }
+      }
+    });
+  }
+
+  async incrementUserActivityHourly(input: {
+    activityAt: Date;
+    createdIncrement?: number;
+    updatedIncrement?: number;
+    userId: string;
+  }): Promise<void> {
+    const activityHour = truncateToUtcHour(input.activityAt);
+    const createdIncrement = input.createdIncrement ?? 0;
+    const updatedIncrement = input.updatedIncrement ?? 0;
+
+    await this.prismaService.userActivityHourly.upsert({
+      create: {
+        activityHour,
+        ratingCreatedCount: createdIncrement,
+        ratingUpdatedCount: updatedIncrement,
+        userId: input.userId
+      },
+      update: {
+        ratingCreatedCount: {
+          increment: createdIncrement
+        },
+        ratingUpdatedCount: {
+          increment: updatedIncrement
+        }
+      },
+      where: {
+        userId_activityHour: {
+          activityHour,
+          userId: input.userId
         }
       }
     });
@@ -336,6 +375,29 @@ export class ReputationRepository {
     return rows.map((row) => row.ratingCount);
   }
 
+  async listUserActivityHourly(
+    userId: string,
+    since: Date
+  ): Promise<UserHourlyActivityCounts[]> {
+    const rows = await this.prismaService.userActivityHourly.findMany({
+      orderBy: {
+        activityHour: "asc"
+      },
+      select: {
+        ratingCreatedCount: true,
+        ratingUpdatedCount: true
+      },
+      where: {
+        activityHour: {
+          gte: truncateToUtcHour(since)
+        },
+        userId
+      }
+    });
+
+    return rows;
+  }
+
   async listTopUserEntityRatingCounts(userId: string, limit = 50): Promise<number[]> {
     const rows = await this.prismaService.userEntityStats.findMany({
       orderBy: {
@@ -387,6 +449,23 @@ export class ReputationRepository {
     });
 
     return row.ratingCount;
+  }
+
+  async getEntityActivityHourlyCount(entityId: string, activityAt: Date): Promise<number> {
+    const activityHour = truncateToUtcHour(activityAt);
+    const row = await this.prismaService.entityActivityHourly.findUnique({
+      select: {
+        ratingCount: true
+      },
+      where: {
+        entityId_activityHour: {
+          activityHour,
+          entityId
+        }
+      }
+    });
+
+    return row?.ratingCount ?? 0;
   }
 
   async upsertUserTrustProfile(input: UpsertUserTrustProfileInput): Promise<UserTrustProfile> {
@@ -516,6 +595,7 @@ export class ReputationRepository {
       this.prismaService.userTrustProfile.deleteMany(),
       this.prismaService.userBehaviorMetrics.deleteMany(),
       this.prismaService.userActivityDaily.deleteMany(),
+      this.prismaService.userActivityHourly.deleteMany(),
       this.prismaService.userEntityStats.deleteMany(),
       this.prismaService.userEntityTypeStats.deleteMany(),
       this.prismaService.userRootDomainStats.deleteMany()

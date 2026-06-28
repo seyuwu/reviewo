@@ -23,8 +23,23 @@ function scheduleAutoDismiss(host: AutoDismissHost, delayMs: number): void {
       return;
     }
 
+    if (isAutoDismissRootActive(host)) {
+      clearAutoDismiss(host);
+      return;
+    }
+
     hideRatingCard({ animated: true });
   }, delayMs);
+}
+
+function isAutoDismissRootActive(host: AutoDismissHost): boolean {
+  const interactionRoot = host.reviewoAutoDismissRoot;
+
+  if (!interactionRoot) {
+    return false;
+  }
+
+  return interactionRoot.matches(":hover") || interactionRoot.contains(document.activeElement);
 }
 
 export function bindAutoDismiss(
@@ -66,12 +81,18 @@ export function bindAutoDismiss(
   };
 
   interactionRoot.addEventListener("pointerenter", pauseDismiss);
+  interactionRoot.addEventListener("pointermove", pauseDismiss);
+  interactionRoot.addEventListener("pointerdown", pauseDismiss);
+  interactionRoot.addEventListener("click", pauseDismiss);
   interactionRoot.addEventListener("pointerleave", scheduleAfterPointerLeave);
   interactionRoot.addEventListener("focusin", pauseDismiss);
   interactionRoot.addEventListener("focusout", handleFocusOut);
 
   host.reviewoAutoDismissPendingCleanup = () => {
     interactionRoot.removeEventListener("pointerenter", pauseDismiss);
+    interactionRoot.removeEventListener("pointermove", pauseDismiss);
+    interactionRoot.removeEventListener("pointerdown", pauseDismiss);
+    interactionRoot.removeEventListener("click", pauseDismiss);
     interactionRoot.removeEventListener("pointerleave", scheduleAfterPointerLeave);
     interactionRoot.removeEventListener("focusin", pauseDismiss);
     interactionRoot.removeEventListener("focusout", handleFocusOut);
@@ -96,7 +117,7 @@ export function resumeAutoDismiss(host: AutoDismissHost): void {
   host.reviewoAutoDismissSuspended = false;
   clearAutoDismiss(host);
 
-  if (interactionRoot.matches(":hover") || interactionRoot.contains(document.activeElement)) {
+  if (isAutoDismissRootActive(host)) {
     return;
   }
 

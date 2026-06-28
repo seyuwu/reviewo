@@ -102,7 +102,7 @@ describe("EntitiesService visibility", () => {
         typeof error === "object" &&
         error !== null &&
         "message" in error &&
-        (error as { message?: string }).message === "This site is not available on Reviewo"
+        (error as { message?: string }).message === "This site is not available on Opinia"
     );
   });
 });

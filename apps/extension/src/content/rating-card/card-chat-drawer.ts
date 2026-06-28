@@ -591,9 +591,14 @@ function bindCardChatComposer(
   actions: CardChatDrawerActions,
   sendMessage: (text: string) => Promise<void>
 ): void {
-  footer.querySelector<HTMLFormElement>("[data-reviewo-chat-composer]")?.addEventListener("submit", (event) => {
+  const composer = footer.querySelector<HTMLFormElement>("[data-reviewo-chat-composer]");
+  const input = footer.querySelector<HTMLInputElement>("[data-reviewo-chat-input]");
+
+  bindChatComposerKeyboardGuard(composer);
+  bindChatComposerKeyboardGuard(input);
+
+  composer?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const input = footer.querySelector<HTMLInputElement>("[data-reviewo-chat-input]");
     const value = input?.value.trim() ?? "";
 
     if (!value) {
@@ -603,13 +608,27 @@ function bindCardChatComposer(
     void sendMessage(value);
   });
 
-  footer.querySelector<HTMLInputElement>("[data-reviewo-chat-input]")?.addEventListener("focus", () => {
+  input?.addEventListener("focus", () => {
     const hint = footer.querySelector(".reviewo-chat-sign-in-hint");
 
     if (hint) {
       actions.onRequestSignIn();
     }
   });
+}
+
+function bindChatComposerKeyboardGuard(target: HTMLElement | null): void {
+  if (!target) {
+    return;
+  }
+
+  const stopPageHotkeyPropagation = (event: Event): void => {
+    event.stopPropagation();
+  };
+
+  target.addEventListener("keydown", stopPageHotkeyPropagation);
+  target.addEventListener("keypress", stopPageHotkeyPropagation);
+  target.addEventListener("keyup", stopPageHotkeyPropagation);
 }
 
 function bindCardChatMessageList(
