@@ -205,6 +205,44 @@ export const enMessages = {
   "web.nav.signOut": "Sign out",
   "web.nav.account": "Account",
   "web.nav.ariaLabel": "Site navigation",
+  "web.nav.privacy": "Privacy",
+  "web.privacy.title": "Privacy Policy",
+  "web.privacy.updated": "Last updated: July 1, 2026",
+  "web.privacy.intro":
+    "This policy explains how Opinia (“we”, “us”) collects, uses, and protects information when you use the Opinia website (opinia.ru), the Opinia browser extension, and related services. By using Opinia, you agree to this policy.",
+  "web.privacy.sections.operator.title": "Who operates Opinia",
+  "web.privacy.sections.operator.body":
+    "Opinia is operated at opinia.ru. For privacy questions or requests, contact us at nefony@gmail.com or via Telegram: t.me/opinia_support.",
+  "web.privacy.sections.collect.title": "Information we collect",
+  "web.privacy.sections.collect.body":
+    "Depending on how you use Opinia, we may process:\n\n• Account information: email address, display name, and username when you register or sign in.\n• Authentication data: access tokens used to keep you signed in between the website and extension.\n• Page data: the URL of the page you are viewing and, when you rate or create an entry, the page title.\n• User content: ratings, reviews, and optional chat messages you choose to publish.\n• Technical data: standard server logs (such as request time and IP address) needed to operate and secure our API.\n\nWe do not collect payment card data, medical data, or precise GPS location through the extension.",
+  "web.privacy.sections.use.title": "How we use information",
+  "web.privacy.sections.use.body":
+    "We use collected information only to provide and improve Opinia: to show community ratings, let you submit ratings and reviews, authenticate your account, sync your session between the website and extension, operate entity chat, prevent abuse, and maintain the service.",
+  "web.privacy.sections.extension.title": "Browser extension storage",
+  "web.privacy.sections.extension.body":
+    "The Opinia extension stores some data locally in your browser (chrome.storage.local), including your session token, language preference, extension settings, and cached rating data for the current session. This data stays on your device unless you sign in or submit content that is sent to our servers at api.opinia.ru over HTTPS.",
+  "web.privacy.sections.sharing.title": "Sharing and sale of data",
+  "web.privacy.sections.sharing.body":
+    "We do not sell your personal data. We do not share it with third parties for advertising or creditworthiness purposes. We may use infrastructure providers (hosting, database) strictly to run Opinia. We may disclose information if required by law.",
+  "web.privacy.sections.retention.title": "Data retention",
+  "web.privacy.sections.retention.body":
+    "We keep account and user-generated content while your account is active or as needed to provide the service. You may request account deletion by contacting us. Server logs are kept for a limited period for security and troubleshooting.",
+  "web.privacy.sections.security.title": "Security",
+  "web.privacy.sections.security.body":
+    "We use HTTPS for all communication between the website, extension, and api.opinia.ru. Passwords are handled through our authentication system and are not stored in plain text.",
+  "web.privacy.sections.rights.title": "Your choices and rights",
+  "web.privacy.sections.rights.body":
+    "You can sign out of the extension and website at any time. You may request access, correction, or deletion of your account data by emailing nefony@gmail.com. You can disable the on-site rating card in extension settings.",
+  "web.privacy.sections.children.title": "Children",
+  "web.privacy.sections.children.body":
+    "Opinia is not directed at children under 13. We do not knowingly collect personal information from children under 13.",
+  "web.privacy.sections.changes.title": "Changes to this policy",
+  "web.privacy.sections.changes.body":
+    "We may update this policy from time to time. We will post the updated version at https://opinia.ru/privacy with a revised date.",
+  "web.privacy.contact.title": "Contact",
+  "web.privacy.contact.body":
+    "Email: nefony@gmail.com\nTelegram: t.me/opinia_support\nWebsite: https://opinia.ru",
   "web.home.title": "What would you like to rate?",
   "web.home.subtitle":
     "Find a site, product, company, or anything else. Opinia shows what people think about it.",

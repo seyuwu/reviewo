@@ -28,6 +28,9 @@ export function AppChrome({ children }: AppChromeProps) {
             <Link className="app-nav-link app-nav-link-emphasis" href="/">
               {t("web.nav.search")}
             </Link>
+            <Link className="app-nav-link" href="/privacy">
+              {t("web.nav.privacy")}
+            </Link>
             <LocaleSwitcher />
             <div className="app-chrome-auth" data-state={authNavState}>
               <div className="app-chrome-auth-cluster guest-cluster">
