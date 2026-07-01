@@ -70,6 +70,25 @@ services:
       args:
         NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
 
+  waitlist-bot:
+    image: reviewo-waitlist-bot:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: apps/waitlist-bot/Dockerfile
+    restart: unless-stopped
+    profiles:
+      - waitlist
+    networks:
+      - reviewo
+    environment:
+      WAITLIST_BOT_TOKEN: ${WAITLIST_BOT_TOKEN:-}
+      WAITLIST_CHANNEL_URL: ${WAITLIST_CHANNEL_URL:-https://t.me/opinia_official}
+      WAITLIST_SUPPORT_URL: ${WAITLIST_SUPPORT_URL:-https://t.me/opinia_support}
+      WAITLIST_ADMIN_IDS: ${WAITLIST_ADMIN_IDS:-}
+      WAITLIST_DATABASE_PATH: ${WAITLIST_DATABASE_PATH:-/data/waitlist.db}
+    volumes:
+      - waitlist_bot_data:/data
+
   postgres:
     image: ${POSTGRES_IMAGE:-postgres:17-alpine}
     restart: unless-stopped
@@ -126,6 +145,7 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  waitlist_bot_data:
 
 networks:
   reviewo:

@@ -1,0 +1,1 @@
+"""Opinia Telegram waitlist bot."""

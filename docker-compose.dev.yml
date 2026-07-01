@@ -76,6 +76,16 @@ services:
     volumes: *dev-workspace-volumes
     command: *dev-service-command
 
+  waitlist-bot:
+    volumes:
+      - type: bind
+        source: ./apps/waitlist-bot
+        target: /app
+      - type: volume
+        source: waitlist_bot_data
+        target: /data
+    command: ["python", "-m", "bot"]
+
 volumes:
   dev_pnpm_store:
   dev_root_node_modules:
