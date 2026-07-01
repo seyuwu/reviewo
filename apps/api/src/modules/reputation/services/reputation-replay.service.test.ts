@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ReputationEvent } from "@prisma/client";
+import type { ReputationEvent } from "#prisma/client";
 
 import type { ReputationRepository } from "../repositories/reputation.repository.js";
 import { ReputationCalculationContext } from "./reputation-calculation-context.service.js";

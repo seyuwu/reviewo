@@ -1,4 +1,4 @@
-import { EntityType } from "@prisma/client";
+import { EntityType } from "#prisma/client";
 import { Transform } from "class-transformer";
 import {
   IsEnum,

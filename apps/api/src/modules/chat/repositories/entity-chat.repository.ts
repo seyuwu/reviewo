@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { EntityChatMessage, Prisma } from "@prisma/client";
+import type { EntityChatMessage, Prisma } from "#prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 

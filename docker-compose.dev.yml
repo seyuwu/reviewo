@@ -46,6 +46,8 @@ services:
   api:
     build:
       target: development
+    ports:
+      - "${API_PORT:-3000}:${API_PORT:-3000}"
     environment:
       NODE_ENV: development
       DEV_PNPM_FILTER: "@reviewo/api"
@@ -60,6 +62,8 @@ services:
   web:
     build:
       target: development
+    ports:
+      - "${WEB_PORT:-3001}:3000"
     environment:
       NODE_ENV: development
       DEV_PNPM_FILTER: "@reviewo/web"
@@ -75,6 +79,19 @@ services:
       DEV_PNPM_FILTER: "@reviewo/extension"
     volumes: *dev-workspace-volumes
     command: *dev-service-command
+
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  minio:
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
 
   waitlist-bot:
     volumes:

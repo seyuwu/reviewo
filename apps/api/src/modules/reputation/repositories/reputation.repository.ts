@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "#prisma/client";
 import type {
   EntityAnomalyMetrics,
   EntityConfidenceProfile,
@@ -7,7 +7,7 @@ import type {
   UserBehaviorMetrics,
   UserTrustProfile,
   VoteWeightSnapshot
-} from "@prisma/client";
+} from "#prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 import { REPUTATION_ROOT_CONTEXT_TYPE } from "../constants/calculation-versions.js";

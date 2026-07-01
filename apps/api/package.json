@@ -5,6 +5,9 @@
   "description": "Reviewo backend API application.",
   "type": "module",
   "main": "./dist/main.js",
+  "imports": {
+    "#prisma/client": "./src/generated/prisma/client.js"
+  },
   "scripts": {
     "build": "corepack pnpm db:generate && tsc -p tsconfig.json",
     "db:generate": "prisma generate",

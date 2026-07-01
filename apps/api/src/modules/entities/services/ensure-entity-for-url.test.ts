@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { EntityType } from "@prisma/client";
+import { EntityType } from "#prisma/client";
 
 import type { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";

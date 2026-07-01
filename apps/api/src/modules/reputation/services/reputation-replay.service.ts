@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { ReputationEvent } from "@prisma/client";
+import type { ReputationEvent } from "#prisma/client";
 
 import { ReputationRepository } from "../repositories/reputation.repository.js";
 import { ReputationCalculationContext } from "./reputation-calculation-context.service.js";

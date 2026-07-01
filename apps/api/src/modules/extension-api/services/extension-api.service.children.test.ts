@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { EntityType } from "@prisma/client";
+import { EntityType } from "#prisma/client";
 
 import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
 import type { RatingsPort } from "../../ratings/interfaces/ratings.port.js";

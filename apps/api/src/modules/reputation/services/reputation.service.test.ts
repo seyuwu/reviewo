@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { EntityType } from "@prisma/client";
+import { EntityType } from "#prisma/client";
 
 import type { ReputationReadRepository } from "../repositories/reputation-read.repository.js";
 import type { ReputationRepository } from "../repositories/reputation.repository.js";

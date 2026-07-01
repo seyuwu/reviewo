@@ -1,4 +1,4 @@
-import type { ReviewVisibility } from "@prisma/client";
+import type { ReviewVisibility } from "#prisma/client";
 
 export class ReviewDto {
   createdAt!: string;

@@ -1,4 +1,4 @@
-import type { EntityVisibility, ReviewVisibility } from "@prisma/client";
+import type { EntityVisibility, ReviewVisibility } from "#prisma/client";
 
 export class HideEntityResponseDto {
   entityId!: string;

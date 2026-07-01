@@ -1,4 +1,4 @@
-import type { EntityType } from "@prisma/client";
+import type { EntityType } from "#prisma/client";
 
 import type { RatingAggregateDto } from "../../ratings/dto/rating-aggregate.dto.js";
 import type { TrustConfidenceDto } from "../../trust/dto/trust-confidence.dto.js";

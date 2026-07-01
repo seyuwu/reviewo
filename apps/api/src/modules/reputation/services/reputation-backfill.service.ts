@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Rating } from "@prisma/client";
+import type { Rating } from "#prisma/client";
 
 import { ReputationRepository } from "../repositories/reputation.repository.js";
 import { ReputationService } from "./reputation.service.js";

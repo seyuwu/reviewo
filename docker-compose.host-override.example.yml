@@ -1,0 +1,9 @@
+# Copy to docker-compose.host-override.yml on the VPS (do not commit secrets).
+# Requires docker-compose.prod.yml with `ports: - !reset []` for api/web.
+services:
+  api:
+    ports:
+      - "127.0.0.1:8890:8890"
+  web:
+    ports:
+      - "127.0.0.1:8889:3000"

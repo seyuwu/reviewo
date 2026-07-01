@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { Rating } from "@prisma/client";
+import type { Rating } from "#prisma/client";
 
 import type { ReputationRepository } from "../repositories/reputation.repository.js";
 import { ReputationBackfillService } from "./reputation-backfill.service.js";

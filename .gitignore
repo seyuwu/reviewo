@@ -30,6 +30,7 @@ pnpm-debug.log*
 
 # Local waitlist bot data
 apps/waitlist-bot/data/
+apps/api/src/generated/
 
 # IDE and OS files
 .DS_Store

@@ -25,7 +25,7 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NODE_ENV=production
 ENV APP_NAME=web
 
-RUN corepack pnpm --filter @reviewo/web build
+RUN corepack pnpm --filter @reviewo/web... build
 RUN chown -R node:node /workspace
 
 USER node

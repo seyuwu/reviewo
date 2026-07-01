@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
-import type { Entity } from "@prisma/client";
-import { EntityType, EntityVisibility } from "@prisma/client";
+import type { Entity } from "#prisma/client";
+import { EntityType, EntityVisibility } from "#prisma/client";
 
 import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
