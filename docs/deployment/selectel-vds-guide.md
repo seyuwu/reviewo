@@ -1,3 +1,13 @@
+Обновление в будущем:
+
+cd /opt/opinia && git pull
+docker compose --env-file .env.production \
+  -f docker-compose.yml -f docker-compose.prod.yml \
+  -f docker-compose.host-override.yml \
+  up -d --build
+Поздравляю — Opinia в проде рядом с logITika.
+
+
 # Деплой Reviewo на VDS Selectel (рядом с logITika)
 
 Пошаговый гайд для выката **Reviewo** на уже работающем сервере с **logITika** (проект 1 — не трогать).

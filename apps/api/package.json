@@ -6,7 +6,7 @@
   "type": "module",
   "main": "./dist/main.js",
   "imports": {
-    "#prisma/client": "./src/generated/prisma/client.js"
+    "#prisma/client": "./dist/generated/prisma/client.js"
   },
   "scripts": {
     "build": "corepack pnpm db:generate && tsc -p tsconfig.json",
