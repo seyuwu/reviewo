@@ -1,5 +1,6 @@
-import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from "@nestjs/common";
 
+import { AdminGuard } from "../../auth/guards/admin.guard.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import type { EntityAnalyticsDto } from "../dto/entity-analytics.dto.js";
 import type { EntityConfidenceExplanationDto } from "../dto/entity-confidence-explanation.dto.js";
@@ -10,12 +11,16 @@ import {
   ReputationUserAccessGuard,
   ReputationUserIdParam
 } from "../guards/reputation-user-access.guard.js";
+import { CoordinationGraphJobService } from "../services/coordination-graph-job.service.js";
 import { ReputationService } from "../services/reputation.service.js";
 
 @Controller("reputation")
 @UseGuards(ReputationEngineEnabledGuard)
 export class ReputationController {
-  constructor(private readonly reputationService: ReputationService) {}
+  constructor(
+    private readonly coordinationGraphJobService: CoordinationGraphJobService,
+    private readonly reputationService: ReputationService
+  ) {}
 
   @Get("users/:id")
   @UseGuards(JwtAuthGuard, ReputationUserAccessGuard)
@@ -45,5 +50,11 @@ export class ReputationController {
     @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string
   ): Promise<EntityConfidenceExplanationDto> {
     return this.reputationService.getEntityConfidenceExplanation(entityId);
+  }
+
+  @Post("admin/recalculate-coordination")
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  async recalculateCoordinationGraph() {
+    return this.coordinationGraphJobService.recalculate();
   }
 }

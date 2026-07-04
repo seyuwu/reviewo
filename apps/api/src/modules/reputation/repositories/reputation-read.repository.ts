@@ -13,6 +13,7 @@ export interface EntityRatingStats {
 export interface NewAccountRatingCohortStats {
   averageAccountAgeDays: number | null;
   dominantScoreShare: number;
+  newAccountShare: number;
   ratingsCount: number;
 }
 
@@ -216,8 +217,93 @@ export class ReputationReadRepository {
         newAccountRatings.reduce((sum, rating) => sum + rating.accountAgeDays, 0) /
         newAccountRatings.length,
       dominantScoreShare: dominantScoreCount / newAccountRatings.length,
+      newAccountShare: newAccountRatings.length / ratings.length,
       ratingsCount: newAccountRatings.length
     };
+  }
+
+  async getEntityNewAccountShare(input: {
+    entityId: string;
+    maxAccountAgeDays: number;
+    now: Date;
+  }): Promise<number> {
+    const ratings = await this.prismaService.rating.findMany({
+      select: {
+        userId: true
+      },
+      where: {
+        entityId: input.entityId
+      }
+    });
+
+    if (ratings.length === 0) {
+      return 0;
+    }
+
+    const users = await this.prismaService.user.findMany({
+      select: {
+        createdAt: true,
+        id: true
+      },
+      where: {
+        id: {
+          in: [...new Set(ratings.map((rating) => rating.userId))]
+        }
+      }
+    });
+    const createdAtByUserId = new Map(users.map((user) => [user.id, user.createdAt]));
+    let newAccountRatingsCount = 0;
+
+    for (const rating of ratings) {
+      const accountCreatedAt = createdAtByUserId.get(rating.userId);
+
+      if (!accountCreatedAt) {
+        continue;
+      }
+
+      const accountAgeDays = Math.max(
+        0,
+        (input.now.getTime() - accountCreatedAt.getTime()) / 86_400_000
+      );
+
+      if (accountAgeDays <= input.maxAccountAgeDays) {
+        newAccountRatingsCount += 1;
+      }
+    }
+
+    return newAccountRatingsCount / ratings.length;
+  }
+
+  async countPlatformUsers(): Promise<number> {
+    return this.prismaService.user.count();
+  }
+
+  async listUserEntitySetsForCoordinationGraph(): Promise<
+    Array<{ entityIds: Set<string>; userId: string }>
+  > {
+    const stats = await this.prismaService.userEntityStats.findMany({
+      select: {
+        entityId: true,
+        userId: true
+      },
+      where: {
+        ratingCount: {
+          gt: 0
+        }
+      }
+    });
+    const entityIdsByUserId = new Map<string, Set<string>>();
+
+    for (const row of stats) {
+      const existing = entityIdsByUserId.get(row.userId) ?? new Set<string>();
+      existing.add(row.entityId);
+      entityIdsByUserId.set(row.userId, existing);
+    }
+
+    return [...entityIdsByUserId.entries()].map(([userId, entityIds]) => ({
+      entityIds,
+      userId
+    }));
   }
 
   async getRatingAggregate(entityId: string): Promise<{
@@ -267,6 +353,7 @@ function createEmptyNewAccountRatingCohortStats(): NewAccountRatingCohortStats {
   return {
     averageAccountAgeDays: null,
     dominantScoreShare: 0,
+    newAccountShare: 0,
     ratingsCount: 0
   };
 }

@@ -37,4 +37,15 @@ describe("AnomalyDetectionService", () => {
     assert.equal(result.clusterScore, 0.9);
     assert.ok(result.anomalyScore >= 0.54);
   });
+
+  it("uses coordination cluster signals as entity anomaly input", () => {
+    const result = service.detect({
+      coordinationClusterScore: 0.8,
+      ratingsLastHour: 1,
+      syncClusterCount: 0
+    });
+
+    assert.equal(result.clusterScore, 0.8);
+    assert.ok(result.anomalyScore >= 0.48);
+  });
 });

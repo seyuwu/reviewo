@@ -21,6 +21,9 @@ export interface ExtensionRatingAggregate {
 
 export interface ExtensionTrustConfidence {
   confidence: number;
+  dataReliability?: number;
+  manipulationRisk?: number;
+  reliabilityLevel?: "very_high" | "high" | "medium" | "low";
 }
 
 export interface ExtensionWebLink {

@@ -48,9 +48,11 @@ export interface UpsertEntityConfidenceProfileInput {
   anomalyScore: number;
   calculationVersion: number;
   confidenceScore: number;
+  dataReliability: number;
   effectiveVoteMass: number;
   entityId: string;
   explanation: Prisma.InputJsonValue;
+  manipulationRisk: number;
   scoreVariance: number | null;
   uniqueRatersCount: number;
 }
@@ -598,7 +600,10 @@ export class ReputationRepository {
       this.prismaService.userActivityHourly.deleteMany(),
       this.prismaService.userEntityStats.deleteMany(),
       this.prismaService.userEntityTypeStats.deleteMany(),
-      this.prismaService.userRootDomainStats.deleteMany()
+      this.prismaService.userRootDomainStats.deleteMany(),
+      this.prismaService.userClusterMembership.deleteMany(),
+      this.prismaService.userCoordinationCluster.deleteMany(),
+      this.prismaService.userCoordinationScore.deleteMany()
     ]);
   }
 
@@ -626,6 +631,102 @@ export class ReputationRepository {
 
     return parent?.type ?? REPUTATION_ROOT_CONTEXT_TYPE;
   }
+
+  async getUserCoordinationScore(userId: string): Promise<number | null> {
+    const score = await this.prismaService.userCoordinationScore.findUnique({
+      where: {
+        userId
+      }
+    });
+
+    return score ? Number(score.clusterScore) : null;
+  }
+
+  async getEntityCoordinationExposureShare(entityId: string): Promise<number> {
+    const ratings = await this.prismaService.rating.findMany({
+      distinct: ["userId"],
+      select: {
+        userId: true
+      },
+      where: {
+        entityId
+      }
+    });
+
+    if (ratings.length === 0) {
+      return 0;
+    }
+
+    const coordinationScores = await this.prismaService.userCoordinationScore.findMany({
+      select: {
+        clusterScore: true,
+        userId: true
+      },
+      where: {
+        userId: {
+          in: ratings.map((rating) => rating.userId)
+        }
+      }
+    });
+    const scoreByUserId = new Map(
+      coordinationScores.map((entry) => [entry.userId, Number(entry.clusterScore)])
+    );
+    let flaggedRaters = 0;
+
+    for (const rating of ratings) {
+      if ((scoreByUserId.get(rating.userId) ?? 0) > 0.5) {
+        flaggedRaters += 1;
+      }
+    }
+
+    return flaggedRaters / ratings.length;
+  }
+
+  async replaceCoordinationClusters(input: {
+    clusters: Array<{
+      memberUserIds: string[];
+      overlapScore: number;
+    }>;
+  }): Promise<void> {
+    await this.prismaService.$transaction([
+      this.prismaService.userClusterMembership.deleteMany(),
+      this.prismaService.userCoordinationCluster.deleteMany(),
+      this.prismaService.userCoordinationScore.deleteMany()
+    ]);
+
+    for (const cluster of input.clusters) {
+      const createdCluster = await this.prismaService.userCoordinationCluster.create({
+        data: {
+          memberCount: cluster.memberUserIds.length,
+          overlapScore: cluster.overlapScore
+        }
+      });
+
+      await this.prismaService.userClusterMembership.createMany({
+        data: cluster.memberUserIds.map((userId) => ({
+          clusterId: createdCluster.id,
+          userId
+        }))
+      });
+
+      const clusterScore = calculateClusterScore(
+        cluster.memberUserIds.length,
+        cluster.overlapScore
+      );
+
+      await this.prismaService.userCoordinationScore.createMany({
+        data: cluster.memberUserIds.map((userId) => ({
+          clusterScore,
+          userId
+        }))
+      });
+    }
+  }
+}
+
+function calculateClusterScore(memberCount: number, overlapScore: number): number {
+  const sizeFactor = Math.min(1, memberCount / 10);
+  return Math.min(1, sizeFactor * overlapScore);
 }
 
 function getScoreCountField(

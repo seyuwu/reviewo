@@ -53,6 +53,9 @@ export interface Review {
 
 export interface TrustConfidence {
   confidence: number;
+  dataReliability?: number;
+  manipulationRisk?: number;
+  reliabilityLevel?: "very_high" | "high" | "medium" | "low";
 }
 
 export interface EntityPageMeta {

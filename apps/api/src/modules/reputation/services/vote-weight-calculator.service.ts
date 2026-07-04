@@ -3,6 +3,7 @@ import { Injectable } from "@nestjs/common";
 import { clamp, roundToThreeDecimals } from "../utils/reputation-math.js";
 
 export interface VoteWeightContext {
+  anomalyModifier: number;
   entityId: string;
   userId: string;
   userTrust: number;
@@ -29,12 +30,12 @@ export class VoteWeightCalculator {
   private readonly factorDefinitions: VoteWeightFactorDefinition[] = [
     { enabled: true, name: "userTrust" },
     { enabled: false, name: "expertise" },
-    { enabled: false, name: "anomalyModifier" }
+    { enabled: true, name: "anomalyModifier" }
   ];
 
   calculate(context: VoteWeightContext): VoteWeightResult {
     const resolved: VoteWeightFactorValues = {
-      anomalyModifier: 1,
+      anomalyModifier: context.anomalyModifier,
       expertise: 1,
       userTrust: context.userTrust
     };

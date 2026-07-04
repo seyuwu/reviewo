@@ -16,9 +16,12 @@ import { ReputationDisplayService } from "./services/reputation-display.service.
 import { ReputationReplayService } from "./services/reputation-replay.service.js";
 import { REPUTATION_PORT } from "./interfaces/reputation.port.js";
 import { AnomalyDetectionService } from "./services/anomaly-detection.service.js";
+import { CoordinationGraphJobService } from "./services/coordination-graph-job.service.js";
+import { CoordinationGraphService } from "./services/coordination-graph.service.js";
 import { EntityConfidenceCalculator } from "./services/entity-confidence-calculator.service.js";
 import { ReputationService } from "./services/reputation.service.js";
 import { UserTrustCalculator } from "./services/user-trust-calculator.service.js";
+import { UserVoteAnomalyModifierService } from "./services/user-vote-anomaly-modifier.service.js";
 import { VoteWeightCalculator } from "./services/vote-weight-calculator.service.js";
 
 @Module({
@@ -30,7 +33,10 @@ import { VoteWeightCalculator } from "./services/vote-weight-calculator.service.
     ReputationReadRepository,
     ReputationRepository,
     UserTrustCalculator,
+    UserVoteAnomalyModifierService,
     VoteWeightCalculator,
+    CoordinationGraphService,
+    CoordinationGraphJobService,
     EntityConfidenceCalculator,
     AnomalyDetectionService,
     ReputationService,

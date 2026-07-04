@@ -308,6 +308,8 @@ model EntityActivityHourly {
 model EntityConfidenceProfile {
   entityId             String   @id @map("entity_id") @db.Uuid
   confidenceScore      Decimal  @map("confidence_score") @db.Decimal(4, 3)
+  dataReliability      Decimal? @map("data_reliability") @db.Decimal(4, 3)
+  manipulationRisk     Decimal? @map("manipulation_risk") @db.Decimal(4, 3)
   effectiveVoteMass    Decimal  @default(0) @map("effective_vote_mass") @db.Decimal(10, 2)
   uniqueRatersCount    Int      @default(0) @map("unique_raters_count")
   activityDurationDays Int      @default(0) @map("activity_duration_days")
@@ -318,6 +320,38 @@ model EntityConfidenceProfile {
   calculatedAt         DateTime @map("calculated_at") @db.Timestamptz(6)
 
   @@map("entity_confidence_profiles")
+  @@schema("reputation")
+}
+
+model UserCoordinationCluster {
+  id           String                  @id @default(uuid()) @db.Uuid
+  memberCount  Int                     @map("member_count")
+  overlapScore Decimal                 @map("overlap_score") @db.Decimal(4, 3)
+  detectedAt   DateTime                @default(now()) @map("detected_at") @db.Timestamptz(6)
+  members      UserClusterMembership[]
+
+  @@map("user_coordination_clusters")
+  @@schema("reputation")
+}
+
+model UserClusterMembership {
+  clusterId String                  @map("cluster_id") @db.Uuid
+  userId    String                  @map("user_id") @db.Uuid
+  joinedAt  DateTime                @default(now()) @map("joined_at") @db.Timestamptz(6)
+  cluster   UserCoordinationCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@id([clusterId, userId])
+  @@index([userId])
+  @@map("user_cluster_memberships")
+  @@schema("reputation")
+}
+
+model UserCoordinationScore {
+  userId       String   @id @map("user_id") @db.Uuid
+  clusterScore Decimal  @map("cluster_score") @db.Decimal(4, 3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("user_coordination_scores")
   @@schema("reputation")
 }
 

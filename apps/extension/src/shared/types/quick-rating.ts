@@ -25,6 +25,9 @@ export interface ExtensionQuickRatingResponse {
   };
   trust: {
     confidence: number;
+    dataReliability?: number;
+    manipulationRisk?: number;
+    reliabilityLevel?: "very_high" | "high" | "medium" | "low";
   };
   web: {
     entityPagePath: string;

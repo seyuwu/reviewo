@@ -229,7 +229,7 @@ async function buildDomainTreeSection(
       t,
       treeRoot.rating.avgScore,
       treeRoot.rating.votesCount,
-      treeRoot.trust.confidence
+      treeRoot.trust
     );
     const currentEntityId = activeTab.result.entity.id;
 
@@ -339,7 +339,7 @@ async function buildCurrentPageSectionMarkup(
       t,
       activeTab.result.rating.avgScore,
       activeTab.result.rating.votesCount,
-      activeTab.result.trust.confidence
+      activeTab.result.trust
     );
 
     return `
@@ -505,7 +505,7 @@ function renderParentSiteSection(result: ExtensionResolveFoundResponse, t: Trans
     t,
     result.parent.rating.avgScore,
     result.parent.rating.votesCount,
-    result.parent.trust.confidence
+    result.parent.trust
   );
 
   return `

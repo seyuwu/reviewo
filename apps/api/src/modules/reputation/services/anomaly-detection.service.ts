@@ -4,6 +4,7 @@ import { clamp, roundToThreeDecimals } from "../utils/reputation-math.js";
 
 export interface AnomalyDetectionInput {
   clusterScore?: number;
+  coordinationClusterScore?: number;
   newAccountClusterScore?: number;
   ratingsLastHour: number;
   syncClusterCount: number;
@@ -25,7 +26,8 @@ export class AnomalyDetectionService {
     const clusterScore = roundToThreeDecimals(
       Math.max(
         clamp(input.clusterScore ?? 0, 0, 1),
-        clamp(input.newAccountClusterScore ?? 0, 0, 1)
+        clamp(input.newAccountClusterScore ?? 0, 0, 1),
+        clamp(input.coordinationClusterScore ?? 0, 0, 1)
       )
     );
     const anomalyScore = roundToThreeDecimals(

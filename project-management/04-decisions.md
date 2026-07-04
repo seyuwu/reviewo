@@ -1900,3 +1900,53 @@ Minimal additive module, no pre-created chat rooms/participants, deterministic a
 - Bull/cron worker for retention (deferred).
 
 **Status:** Confirmed — implemented in Entity Live Chat MVP.
+
+## 2026-07-04 - Anti-Fraud Trust System (3 Stages)
+
+### Problem
+
+Entity confidence could stay high (~84%) even when manipulation signals were detected. Volume alone did not distinguish 100 ratings from 5 users vs 100 users. Vote weight ignored anomaly context.
+
+### Decision
+
+Implement anti-fraud trust in three stages:
+
+**Stage 1 — Unique ratio, hard caps, anomaly vote modifier**
+
+- Add `uniqueRatioFactor = min(1, uniqueRaters / max(votesCount, 1) / 0.6)` with 15% weight in entity confidence.
+- Rebalance confidence weights: mass 30%, unique users 15%, unique ratio 15%, duration 20%, variance 10%, anomaly 10%.
+- Apply hard caps after weighted sum: `confidence = min(rawScore, hardCap)` where:
+  - `anomalyScore >= 0.7` → cap 0.40
+  - `uniqueRatio < 0.25` → cap 0.50
+  - `newAccountShare >= 0.6` → cap 0.45 (only when `votesCount >= 10` and `uniqueRaters >= 5`)
+- Enable `anomalyModifier` in vote weight with modifiers: new-account cluster 0.35, sync window 0.30, entity burst 0.50.
+- Bump `REPUTATION_CALCULATION_VERSION` to 3; replay derived reputation state after deploy.
+
+**Stage 2 — Dual score + UI categories**
+
+- Extend public trust DTO with optional `dataReliability`, `manipulationRisk`, `reliabilityLevel`.
+- Persist dual scores on `entity_confidence_profiles`.
+- Display reliability categories (very high / high / medium / low) instead of literal 100% in UI.
+
+**Stage 3 — Coordination graph**
+
+- Batch-detect user clusters via Jaccard overlap on rated entities (min 5 users, min 5 entities, overlap ≥ 0.4).
+- Feed coordination score into anomaly detection, vote modifier, and hard caps.
+- Do not apply coordination caps when platform has fewer than 500 users.
+
+**Bootstrap protection**
+
+- New-account hard caps require minimum sample size so early Opinia communities are not penalized as botnets.
+- Domain verification (3–5% bonus + badge) remains a separate future RFC.
+
+### Reason
+
+Hard caps prevent "we detected fraud but still show 84% trust." Unique ratio separates coordinated small groups from organic breadth. Coordination graph targets farm patterns that evade burst/IP signals.
+
+### Alternatives
+
+- Single percentage only in UI.
+- Strong account-age penalties without sample gates.
+- Domain verification bonus up to 15% in the same release.
+
+**Status:** Confirmed — implementation in progress.

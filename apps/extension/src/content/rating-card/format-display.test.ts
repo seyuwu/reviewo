@@ -18,9 +18,9 @@ describe("rating card display formatting", () => {
     assert.equal(formatAverageScore(4.26), "4.3");
     assert.equal(formatVotesCount(t, 1), "1 rating");
     assert.equal(formatVotesCount(t, 3), "3 ratings");
-    assert.equal(formatRatingReliability(t, 0.2), "Reliability 20%");
-    assert.equal(formatRatingReliability(t, 0.42), "Reliability 42%");
-    assert.equal(formatRatingReliability(t, 0.8), "Reliability 80%");
+    assert.equal(formatRatingReliability(t, { confidence: 0.2 }), "Reliability 20%");
+    assert.equal(formatRatingReliability(t, { confidence: 0.85 }), "Reliability 85%");
+    assert.equal(formatRatingReliability(t, { confidence: 0.97 }), "Reliability 97%");
   });
 
   it("builds card summary from found resolve response", () => {

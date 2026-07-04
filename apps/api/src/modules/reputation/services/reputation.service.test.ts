@@ -9,6 +9,7 @@ import { EntityConfidenceCalculator } from "./entity-confidence-calculator.servi
 import { ReputationCalculationContext } from "./reputation-calculation-context.service.js";
 import { ReputationService } from "./reputation.service.js";
 import { UserTrustCalculator } from "./user-trust-calculator.service.js";
+import { UserVoteAnomalyModifierService } from "./user-vote-anomaly-modifier.service.js";
 import { VoteWeightCalculator } from "./vote-weight-calculator.service.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
@@ -91,7 +92,9 @@ function createReputationServiceHarness() {
     upsertVoteWeightSnapshot: async (input: StoredSnapshot) => {
       snapshots.set(input.ratingId, input);
       return input;
-    }
+    },
+    getUserCoordinationScore: async () => null,
+    getEntityCoordinationExposureShare: async () => 0
   } as unknown as ReputationRepository;
 
   const readRepository = {
@@ -112,8 +115,11 @@ function createReputationServiceHarness() {
     getNewAccountRatingCohortStats: async () => ({
       averageAccountAgeDays: null,
       dominantScoreShare: 0,
+      newAccountShare: 0,
       ratingsCount: 0
     }),
+    getEntityNewAccountShare: async () => 0,
+    countPlatformUsers: async () => 1000,
     getEntityRatingStats: async () => ({
       firstRatingAt: new Date("2026-06-01T00:00:00.000Z"),
       lastRatingAt: new Date("2026-06-02T00:00:00.000Z"),
@@ -130,6 +136,7 @@ function createReputationServiceHarness() {
     readRepository,
     reputationRepository,
     new UserTrustCalculator(),
+    new UserVoteAnomalyModifierService(),
     new VoteWeightCalculator()
   );
 

@@ -13,6 +13,7 @@ import { ReputationCalculationContext } from "./reputation-calculation-context.s
 import { AnomalyDetectionService } from "./anomaly-detection.service.js";
 import { EntityConfidenceCalculator } from "./entity-confidence-calculator.service.js";
 import { UserTrustCalculator } from "./user-trust-calculator.service.js";
+import { UserVoteAnomalyModifierService } from "./user-vote-anomaly-modifier.service.js";
 import { VoteWeightCalculator } from "./vote-weight-calculator.service.js";
 import type { EntityAnalyticsDto } from "../dto/entity-analytics.dto.js";
 import type { EntityConfidenceDto } from "../dto/entity-analytics.dto.js";
@@ -50,6 +51,7 @@ export class ReputationService {
     private readonly readRepository: ReputationReadRepository,
     private readonly reputationRepository: ReputationRepository,
     private readonly userTrustCalculator: UserTrustCalculator,
+    private readonly userVoteAnomalyModifierService: UserVoteAnomalyModifierService,
     private readonly voteWeightCalculator: VoteWeightCalculator
   ) {}
 
@@ -290,7 +292,44 @@ export class ReputationService {
     }
 
     const userTrust = await this.recalculateUserTrust(input.userId);
+    const user = await this.readRepository.findUserById(input.userId);
+    const now = input.occurredAt;
+    const syncWindowStart = new Date(now.getTime() - SYNC_WINDOW_MINUTES * 60_000);
+    const newAccountCohortWindowStart = new Date(
+      now.getTime() - NEW_ACCOUNT_COHORT_LOOKBACK_MINUTES * 60_000
+    );
+    const [
+      syncClusterCount,
+      newAccountCohortStats,
+      entityBurstRatingsLastHour,
+      userCoordinationScore
+    ] = await Promise.all([
+      this.readRepository.countDistinctRatersInWindow(input.entityId, syncWindowStart),
+      this.readRepository.getNewAccountRatingCohortStats({
+        entityId: input.entityId,
+        maxAccountAgeDays: NEW_ACCOUNT_MAX_AGE_DAYS,
+        now,
+        windowStart: newAccountCohortWindowStart
+      }),
+      input.isScoreUpdate
+        ? this.reputationRepository.getEntityActivityHourlyCount(input.entityId, input.occurredAt)
+        : this.reputationRepository
+            .getEntityActivityHourlyCount(input.entityId, input.occurredAt)
+            .then((count) => count + 1),
+      this.reputationRepository.getUserCoordinationScore(input.userId)
+    ]);
+    const accountAgeDays = user
+      ? Math.max(0, (now.getTime() - user.createdAt.getTime()) / 86_400_000)
+      : NEW_ACCOUNT_MAX_AGE_DAYS;
+    const anomalyModifierResult = this.userVoteAnomalyModifierService.calculate({
+      accountAgeDays,
+      entityBurstRatingsLastHour,
+      entityNewAccountClusterScore: calculateNewAccountClusterScore(newAccountCohortStats),
+      isInSyncWindow: syncClusterCount >= 3,
+      ...(userCoordinationScore !== null ? { userCoordinationScore } : {})
+    });
     const voteWeight = this.voteWeightCalculator.calculate({
+      anomalyModifier: anomalyModifierResult.modifier,
       entityId: input.entityId,
       userId: input.userId,
       userTrust: userTrust.trustScore
@@ -392,18 +431,27 @@ export class ReputationService {
     const newAccountCohortWindowStart = new Date(
       now.getTime() - NEW_ACCOUNT_COHORT_LOOKBACK_MINUTES * 60_000
     );
-    const [syncClusterCount, newAccountCohortStats] = await Promise.all([
+    const [syncClusterCount, newAccountCohortStats, newAccountShare, platformUserCount, coordinationExposureShare] =
+      await Promise.all([
       this.readRepository.countDistinctRatersInWindow(entityId, syncWindowStart),
       this.readRepository.getNewAccountRatingCohortStats({
         entityId,
         maxAccountAgeDays: NEW_ACCOUNT_MAX_AGE_DAYS,
         now,
         windowStart: newAccountCohortWindowStart
-      })
+      }),
+      this.readRepository.getEntityNewAccountShare({
+        entityId,
+        maxAccountAgeDays: NEW_ACCOUNT_MAX_AGE_DAYS,
+        now
+      }),
+      this.readRepository.countPlatformUsers(),
+      this.reputationRepository.getEntityCoordinationExposureShare(entityId)
     ]);
     const existingAnomaly = await this.reputationRepository.getEntityAnomalyMetrics(entityId);
     const anomalyResult = this.anomalyDetectionService.detect({
       clusterScore: Number(existingAnomaly?.clusterScore ?? 0),
+      coordinationClusterScore: coordinationExposureShare,
       newAccountClusterScore: calculateNewAccountClusterScore(newAccountCohortStats),
       ratingsLastHour,
       syncClusterCount: syncClusterCount >= 3 ? 1 : 0
@@ -419,15 +467,20 @@ export class ReputationService {
     });
 
     const effectiveVoteMass = await this.reputationRepository.sumVoteWeightsForEntity(entityId);
+    const votesCount = ratingStats.scores.length;
     const confidenceResult = this.entityConfidenceCalculator.calculate({
       activityDurationDays:
         ratingStats.firstRatingAt && ratingStats.lastRatingAt
           ? differenceInDays(ratingStats.firstRatingAt, ratingStats.lastRatingAt)
           : 0,
       anomalyScore: anomalyResult.anomalyScore,
+      coordinationExposureShare,
       effectiveVoteMass,
+      newAccountShare,
+      platformUserCount,
       scoreVariance: calculateVariance(ratingStats.scores),
-      uniqueRatersCount: ratingStats.uniqueRatersCount
+      uniqueRatersCount: ratingStats.uniqueRatersCount,
+      votesCount
     });
 
     await this.reputationRepository.upsertEntityConfidenceProfile({
@@ -438,9 +491,11 @@ export class ReputationService {
       anomalyScore: anomalyResult.anomalyScore,
       calculationVersion: this.calculationContext.getVersion(),
       confidenceScore: confidenceResult.confidenceScore,
+      dataReliability: confidenceResult.dataReliability,
       effectiveVoteMass,
       entityId,
       explanation: confidenceResult.explanation as unknown as Prisma.InputJsonValue,
+      manipulationRisk: confidenceResult.manipulationRisk,
       scoreVariance:
         ratingStats.scores.length > 0 ? calculateVariance(ratingStats.scores) : null,
       uniqueRatersCount: ratingStats.uniqueRatersCount

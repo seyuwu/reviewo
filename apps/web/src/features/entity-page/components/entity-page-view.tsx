@@ -21,7 +21,7 @@ import {
   unlikeReview,
   upsertMyReview
 } from "../api/entity-page";
-import type { EntityPageResponse, RatingAggregate, Review } from "../types/entity-page";
+import type { EntityPageResponse, RatingAggregate, Review, TrustConfidence } from "../types/entity-page";
 import styles from "./entity-page.module.css";
 import { ReviewTextContent } from "./review-text-content";
 
@@ -207,7 +207,7 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
       >
         <div className={`entity-page-main ${styles.mainColumn}`}>
           <RatingSummary rating={pageData.rating} />
-          <TrustSummary confidence={pageData.trust.confidence} />
+          <TrustSummary trust={pageData.trust} />
           <ReviewsList
             accessToken={accessToken}
             canInteract={canInteract}
@@ -440,9 +440,10 @@ function RatingSummary({ rating }: { rating: RatingAggregate }) {
   );
 }
 
-function TrustSummary({ confidence }: { confidence: number }) {
+function TrustSummary({ trust }: { trust: TrustConfidence }) {
   const t = useTranslation();
-  const reliabilityLabel = formatRatingReliability(t, confidence);
+  const reliabilityLabel = formatRatingReliability(t, trust);
+  const manipulationRiskLabel = formatManipulationRiskLabel(t, trust.manipulationRisk);
 
   return (
     <section className={`panel-card entity-section ${styles.constrainedPanel}`} aria-labelledby="trust-summary-heading">
@@ -451,10 +452,12 @@ function TrustSummary({ confidence }: { confidence: number }) {
         <h2 id="trust-summary-heading">{reliabilityLabel}</h2>
       </div>
       <p className="muted-copy">
-        {t("rating.confidence", { percent: Math.round(confidence * 100) })} · {t("web.entity.confidenceHint")}
+        {t("rating.dataReliability.label")}: {formatReliabilityPercent(trust.dataReliability ?? trust.confidence)}
+        {manipulationRiskLabel ? ` · ${manipulationRiskLabel}` : ""}
       </p>
+      <p className="muted-copy">{t("web.entity.confidenceHint")}</p>
       <div className="trust-meter" aria-hidden="true">
-        <span style={{ width: `${Math.round(confidence * 100)}%` }} />
+        <span style={{ width: `${Math.round(trust.confidence * 100)}%` }} />
       </div>
     </section>
   );
@@ -803,10 +806,24 @@ function formatReliabilityPercent(confidence: number): string {
   return `${Math.round(confidence * 100)}%`;
 }
 
-function formatRatingReliability(t: ReturnType<typeof useTranslation>, confidence: number): string {
+function formatRatingReliability(
+  t: ReturnType<typeof useTranslation>,
+  trust: TrustConfidence
+): string {
   return t("rating.confidence", {
-    percent: Math.round(confidence * 100)
+    percent: Math.round(trust.confidence * 100)
   });
+}
+
+function formatManipulationRiskLabel(
+  t: ReturnType<typeof useTranslation>,
+  manipulationRisk?: number
+): string | null {
+  if (manipulationRisk === undefined) {
+    return null;
+  }
+
+  return `${t("rating.manipulationRisk.label")}: ${Math.round(manipulationRisk * 100)}%`;
 }
 
 function formatDate(value: string, locale: string): string {

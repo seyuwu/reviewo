@@ -10,7 +10,8 @@ const nextConfig = {
       }
     ];
   },
-  reactStrictMode: true
+  reactStrictMode: true,
+  transpilePackages: ["@reviewo/i18n"]
 };
 
 export default nextConfig;

@@ -1,6 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
+import { resolveReliabilityLevel } from "@reviewo/shared";
+
 import type { ApplicationConfig } from "../../../config/environment.config.js";
 import { TRUST_PORT } from "../../trust/interfaces/trust.port.js";
 import type { TrustPort } from "../../trust/interfaces/trust.port.js";
@@ -18,22 +20,29 @@ export class ReputationDisplayService implements ReputationPort {
   ) {}
 
   async getDisplayConfidence(entityId: string): Promise<number | null> {
-    if (!this.isReputationEngineEnabled()) {
-      return null;
-    }
+    const trust = await this.resolveEntityTrustConfidence(entityId);
 
-    const profile = await this.reputationRepository.getEntityConfidenceProfile(entityId);
-
-    return profile ? Number(profile.confidenceScore) : null;
+    return trust.confidence;
   }
 
   async resolveEntityTrustConfidence(entityId: string): Promise<TrustConfidenceDto> {
-    const reputationConfidence = await this.getDisplayConfidence(entityId);
+    if (this.isReputationEngineEnabled()) {
+      const profile = await this.reputationRepository.getEntityConfidenceProfile(entityId);
 
-    if (reputationConfidence !== null) {
-      return {
-        confidence: reputationConfidence
-      };
+      if (profile) {
+        const confidence = Number(profile.confidenceScore);
+
+        return {
+          confidence,
+          ...(profile.dataReliability !== null && profile.dataReliability !== undefined
+            ? { dataReliability: Number(profile.dataReliability) }
+            : {}),
+          ...(profile.manipulationRisk !== null && profile.manipulationRisk !== undefined
+            ? { manipulationRisk: Number(profile.manipulationRisk) }
+            : {}),
+          reliabilityLevel: resolveReliabilityLevel(confidence)
+        };
+      }
     }
 
     return this.trustPort.getEntityTrust(entityId);
