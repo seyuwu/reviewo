@@ -2,6 +2,18 @@
 
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import type { EntityChatLocale } from "@reviewo/shared";
+import {
+  appendEntityChatMessageNewest,
+  DEFAULT_ENTITY_CHAT_LOCALE,
+  ENTITY_CHAT_CLIENT_INITIAL_LIMIT,
+  ENTITY_CHAT_CLIENT_OLDER_LIMIT,
+  mergeEntityChatMessagesNewest,
+  prependEntityChatMessagesOldest,
+  resolveEntityChatOlderCursor,
+  trimEntityChatMessagesNewest
+} from "@reviewo/shared";
+
 import { useTranslation } from "../../i18n/locale-provider";
 import {
   fetchEntityChatMessages,
@@ -21,11 +33,15 @@ import {
 } from "../lib/entity-chat-socket";
 import {
   CHAT_ONLINE_POLL_MS,
+  captureChatListScrollAnchor,
   formatChatOnlineCountLabel,
-  formatChatSendErrorMessage
+  formatChatSendErrorMessage,
+  isChatListNearBottom,
+  preserveChatListScrollPosition
 } from "../lib/chat-ui-helpers";
 import type { EntityChatMessage } from "../types/entity-chat";
 import styles from "./entity-chat-panel.module.css";
+import { EntityChatLocaleSwitch } from "./entity-chat-locale-switch";
 
 const PANEL_ANIMATION_MS = 360;
 
@@ -36,24 +52,6 @@ interface EntityChatPanelProps {
   isAuthenticated: boolean;
   onRequestSignIn?: () => void;
   placement?: "main" | "sidebar";
-}
-
-function mergeChatMessages(
-  current: EntityChatMessage[],
-  incoming: EntityChatMessage[]
-): EntityChatMessage[] {
-  if (current.length === 0) {
-    return incoming;
-  }
-
-  const knownIds = new Set(current.map((item) => item.id));
-  const appended = incoming.filter((item) => !knownIds.has(item.id));
-
-  if (appended.length === 0) {
-    return current;
-  }
-
-  return [...current, ...appended];
 }
 
 export function EntityChatPanel({
@@ -77,6 +75,7 @@ export function EntityChatPanel({
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [draft, setDraft] = useState("");
+  const [chatLocale, setChatLocale] = useState<EntityChatLocale>(DEFAULT_ENTITY_CHAT_LOCALE);
 
   const connectionRef = useRef<EntityChatSocketConnection | null>(null);
   const handlersRef = useRef<EntityChatSocketHandlers>({});
@@ -86,6 +85,7 @@ export function EntityChatPanel({
   const closeTimerRef = useRef<number | undefined>(undefined);
   const onlinePollRef = useRef<number | undefined>(undefined);
   const shouldStickToBottomRef = useRef(true);
+  const olderScrollAnchorRef = useRef<ReturnType<typeof captureChatListScrollAnchor> | null>(null);
 
   const entityTitleLabel = entityTitle.trim() || t("brand.name");
 
@@ -104,14 +104,14 @@ export function EntityChatPanel({
   const refreshOnlineCount = useCallback(async (): Promise<void> => {
     try {
       const result = accessToken
-        ? await pingEntityChatPresence(entityId, accessToken)
-        : await fetchEntityChatOnlineCount(entityId);
+        ? await pingEntityChatPresence(entityId, accessToken, chatLocale)
+        : await fetchEntityChatOnlineCount(entityId, chatLocale);
 
       setOnlineCount(result.onlineCount);
     } catch {
       // Keep the last known count visible.
     }
-  }, [accessToken, entityId]);
+  }, [accessToken, chatLocale, entityId]);
 
   const startOnlinePolling = useCallback((): void => {
     stopOnlinePolling();
@@ -135,43 +135,36 @@ export function EntityChatPanel({
       return false;
     }
 
-    const scroll = (): void => {
-      const lastMessage = list.lastElementChild;
-
-      list.scrollTop = list.scrollHeight - list.clientHeight;
-
-      if (lastMessage instanceof HTMLElement) {
-        lastMessage.scrollIntoView({ block: "end", inline: "nearest" });
-      }
-
-      list.scrollTop = list.scrollHeight - list.clientHeight;
-    };
-
-    scroll();
-    requestAnimationFrame(() => {
-      scroll();
-      requestAnimationFrame(scroll);
-    });
-    window.setTimeout(scroll, 80);
-    window.setTimeout(scroll, 240);
-
+    list.scrollTop = list.scrollHeight - list.clientHeight;
     return true;
   }, []);
 
   handlersRef.current = {
-    onMessages: (initialMessages) => {
-      setMessages((current) => mergeChatMessages(current, initialMessages));
-      shouldStickToBottomRef.current = true;
-    },
-    onNewMessage: (message) => {
+    onMessages: (initialMessages, incomingNextCursor) => {
+      const list = messageListRef.current;
+
+      if (list) {
+        shouldStickToBottomRef.current = isChatListNearBottom(list);
+      }
+
       setMessages((current) => {
-        if (current.some((item) => item.id === message.id)) {
-          return current;
+        const merged = mergeEntityChatMessagesNewest(current, initialMessages);
+
+        if (incomingNextCursor !== undefined) {
+          setNextCursor((cursor) => resolveEntityChatOlderCursor(merged.length, incomingNextCursor, cursor));
         }
 
-        return [...current, message];
+        return merged;
       });
-      shouldStickToBottomRef.current = true;
+    },
+    onNewMessage: (message) => {
+      const list = messageListRef.current;
+
+      if (list) {
+        shouldStickToBottomRef.current = isChatListNearBottom(list);
+      }
+
+      setMessages((current) => appendEntityChatMessageNewest(current, message));
     },
     onOnlineCount: (count) => {
       setOnlineCount(count);
@@ -190,15 +183,18 @@ export function EntityChatPanel({
     setIsBootstrapping(true);
 
     try {
-      const page = await fetchEntityChatMessages(entityId, { limit: 100 });
+      const page = await fetchEntityChatMessages(entityId, {
+        limit: ENTITY_CHAT_CLIENT_INITIAL_LIMIT,
+        locale: chatLocale
+      });
 
-      setMessages(page.messages);
+      setMessages(trimEntityChatMessagesNewest(page.messages));
       setNextCursor(page.nextCursor);
       setHasLoadedMessages(true);
       shouldStickToBottomRef.current = true;
 
       try {
-        const online = await fetchEntityChatOnlineCount(entityId);
+        const online = await fetchEntityChatOnlineCount(entityId, chatLocale);
         setOnlineCount(online.onlineCount);
       } catch {
         setOnlineCount(0);
@@ -210,7 +206,7 @@ export function EntityChatPanel({
     } finally {
       setIsBootstrapping(false);
     }
-  }, [entityId, hasLoadedMessages, isBootstrapping, refreshOnlineCount, t]);
+  }, [chatLocale, entityId, hasLoadedMessages, isBootstrapping, refreshOnlineCount, t]);
 
   const loadOlderMessages = useCallback(async (): Promise<void> => {
     if (!nextCursor || isLoadingOlder) {
@@ -218,29 +214,26 @@ export function EntityChatPanel({
     }
 
     setIsLoadingOlder(true);
+    shouldStickToBottomRef.current = false;
     const list = messageListRef.current;
-    const previousHeight = list?.scrollHeight ?? 0;
+
+    if (list) {
+      olderScrollAnchorRef.current = captureChatListScrollAnchor(list);
+    }
 
     try {
       const page = await fetchEntityChatMessages(entityId, {
         before: nextCursor,
-        limit: 50
+        limit: ENTITY_CHAT_CLIENT_OLDER_LIMIT,
+        locale: chatLocale
       });
 
-      setMessages((current) => [...page.messages, ...current]);
+      setMessages((current) => prependEntityChatMessagesOldest(current, page.messages));
       setNextCursor(page.nextCursor);
-
-      requestAnimationFrame(() => {
-        const updatedList = messageListRef.current;
-
-        if (updatedList) {
-          updatedList.scrollTop = updatedList.scrollHeight - previousHeight;
-        }
-      });
     } finally {
       setIsLoadingOlder(false);
     }
-  }, [entityId, isLoadingOlder, nextCursor]);
+  }, [chatLocale, entityId, isLoadingOlder, nextCursor]);
 
   const finishClose = useCallback((): void => {
     if (closeTimerRef.current !== undefined) {
@@ -316,16 +309,10 @@ export function EntityChatPanel({
       }
 
       if (!created) {
-        created = await sendEntityChatMessage(entityId, text, accessToken);
+        created = await sendEntityChatMessage(entityId, text, accessToken, chatLocale);
       }
 
-      setMessages((current) => {
-        if (current.some((item) => item.id === created!.id)) {
-          return current;
-        }
-
-        return [...current, created!];
-      });
+      setMessages((current) => appendEntityChatMessageNewest(current, created!));
       setDraft("");
       shouldStickToBottomRef.current = true;
     } catch (error) {
@@ -336,18 +323,38 @@ export function EntityChatPanel({
   };
 
   useEffect(() => {
-    if (!isSidebar || hasLoadedMessages || isBootstrapping) {
+    if ((!expanded && !isSidebar) || hasLoadedMessages || isBootstrapping) {
       return;
     }
 
     void bootstrapChat();
-  }, [bootstrapChat, hasLoadedMessages, isBootstrapping, isSidebar]);
+  }, [bootstrapChat, chatLocale, expanded, hasLoadedMessages, isBootstrapping, isSidebar]);
+
+  const handleLocaleChange = useCallback(
+    (nextLocale: EntityChatLocale): void => {
+      if (nextLocale === chatLocale) {
+        return;
+      }
+
+      disconnectSocket();
+      stopOnlinePolling();
+      setChatLocale(nextLocale);
+      setMessages([]);
+      setNextCursor(null);
+      setHasLoadedMessages(false);
+      setSendError(null);
+      setDraft("");
+      shouldStickToBottomRef.current = true;
+    },
+    [chatLocale, disconnectSocket, stopOnlinePolling]
+  );
 
   useEffect(() => {
     setMessages([]);
     setNextCursor(null);
     setHasLoadedMessages(false);
     setSendError(null);
+    setChatLocale(DEFAULT_ENTITY_CHAT_LOCALE);
     disconnectSocket();
     stopOnlinePolling();
   }, [disconnectSocket, entityId, stopOnlinePolling]);
@@ -359,7 +366,7 @@ export function EntityChatPanel({
       return;
     }
 
-    const connection = connectEntityChatSocket(entityId, accessToken, handlersRef);
+    const connection = connectEntityChatSocket(entityId, chatLocale, accessToken, handlersRef);
     connectionRef.current = connection;
     startOnlinePolling();
 
@@ -368,17 +375,29 @@ export function EntityChatPanel({
       connectionRef.current = null;
       stopOnlinePolling();
     };
-  }, [accessToken, entityId, hasLoadedMessages, isChatLive, startOnlinePolling, stopOnlinePolling]);
+  }, [accessToken, chatLocale, entityId, hasLoadedMessages, isChatLive, startOnlinePolling, stopOnlinePolling]);
 
   useLayoutEffect(() => {
-    if ((!expanded && !isSidebar) || isClosing) {
+    if ((!expanded && !isSidebar) || isClosing || isLoadingOlder) {
       return;
     }
 
     if (shouldStickToBottomRef.current) {
       scrollMessagesToBottom();
     }
-  }, [expanded, isClosing, isSidebar, messages, scrollMessagesToBottom]);
+  }, [expanded, isClosing, isLoadingOlder, isSidebar, messages, scrollMessagesToBottom]);
+
+  useLayoutEffect(() => {
+    const anchor = olderScrollAnchorRef.current;
+    const list = messageListRef.current;
+
+    if (!anchor || !list) {
+      return;
+    }
+
+    preserveChatListScrollPosition(list, anchor);
+    olderScrollAnchorRef.current = null;
+  }, [messages]);
 
   useEffect(() => {
     if (isSidebar || (!expanded && !isSidebar) || isClosing || isBootstrapping) {
@@ -395,16 +414,6 @@ export function EntityChatPanel({
     applyChatDrawerHeight(drawer, webChatDrawerResizeConfig);
     bindChatDrawerResizeHandle(drawer, handle, webChatDrawerResizeConfig);
   }, [expanded, isClosing, isBootstrapping, isSidebar]);
-
-  useEffect(() => {
-    if ((!expanded && !isSidebar) || isClosing || isBootstrapping) {
-      return;
-    }
-
-    if (shouldStickToBottomRef.current) {
-      shouldStickToBottomRef.current = !scrollMessagesToBottom();
-    }
-  }, [expanded, isClosing, isBootstrapping, isSidebar, messages.length, scrollMessagesToBottom]);
 
   useEffect(
     () => () => {
@@ -434,15 +443,34 @@ export function EntityChatPanel({
       <p className={`status-copy-error ${styles.chatSendStatusError}`}>{sendError}</p>
     ) : (
       <section ref={drawerRef} className={styles.chatDrawer} aria-label={t("chat.title")}>
-        {!isSidebar ? (
-          <div className={styles.chatDrawerHeader}>
-            <div>
+        <div className={styles.chatDrawerHeader}>
+          <div className={styles.chatDrawerHeaderMain}>
+            <div className={styles.chatDrawerHeaderTop}>
               <h3>{t("chat.title")}</h3>
-              <p className="muted-copy">{formatChatOnlineCountLabel(t, onlineCount)}</p>
+              <div className={styles.chatDrawerHeaderTopCenter}>
+                {messages.length > 0 ? (
+                  <button
+                    type="button"
+                    className={styles.chatLoadOlderButton}
+                    disabled={!nextCursor || isLoadingOlder}
+                    onClick={() => {
+                      void loadOlderMessages();
+                    }}
+                  >
+                    {isLoadingOlder ? t("chat.loadingOlder") : t("chat.loadOlder")}
+                  </button>
+                ) : null}
+              </div>
+              <div className={styles.chatDrawerHeaderLocale}>
+                <EntityChatLocaleSwitch locale={chatLocale} onChange={handleLocaleChange} />
+              </div>
             </div>
-            <p className={`muted-copy ${styles.chatEntityTitle}`}>{entityTitleLabel}</p>
+            <p className="muted-copy">{formatChatOnlineCountLabel(t, onlineCount)}</p>
           </div>
-        ) : null}
+          {!isSidebar ? (
+            <p className={`muted-copy ${styles.chatEntityTitle}`}>{entityTitleLabel}</p>
+          ) : null}
+        </div>
 
         <div className={styles.chatDrawerBody}>
           {messages.length === 0 ? (
@@ -452,11 +480,7 @@ export function EntityChatPanel({
               ref={messageListRef}
               className={styles.chatMessageList}
               onScroll={(event) => {
-                const list = event.currentTarget;
-
-                if (list.scrollTop <= 24) {
-                  void loadOlderMessages();
-                }
+                shouldStickToBottomRef.current = isChatListNearBottom(event.currentTarget);
               }}
             >
               {messages.map((message) => (
@@ -527,9 +551,7 @@ export function EntityChatPanel({
     >
       {isSidebar ? (
         <div className="section-heading">
-          <p className="result-type">{t("chat.title")}</p>
           <h2>{entityTitleLabel}</h2>
-          <p className="muted-copy">{formatChatOnlineCountLabel(t, onlineCount)}</p>
         </div>
       ) : null}
 

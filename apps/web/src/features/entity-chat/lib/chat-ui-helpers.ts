@@ -15,3 +15,32 @@ export function formatChatSendErrorMessage(t: TranslateFn, error: unknown): stri
 
   return t("chat.sendError");
 }
+
+export function isChatListNearBottom(list: HTMLElement, thresholdPx = 48): boolean {
+  return list.scrollHeight - list.scrollTop - list.clientHeight <= thresholdPx;
+}
+
+export type ChatListScrollAnchor = {
+  scrollHeight: number;
+  scrollTop: number;
+};
+
+export function captureChatListScrollAnchor(list: HTMLElement): ChatListScrollAnchor {
+  return {
+    scrollHeight: list.scrollHeight,
+    scrollTop: list.scrollTop
+  };
+}
+
+export function preserveChatListScrollPosition(
+  list: HTMLElement,
+  anchor: ChatListScrollAnchor
+): void {
+  const nextScrollTop = Math.max(0, anchor.scrollTop + (list.scrollHeight - anchor.scrollHeight));
+
+  list.scrollTop = nextScrollTop;
+
+  requestAnimationFrame(() => {
+    list.scrollTop = nextScrollTop;
+  });
+}

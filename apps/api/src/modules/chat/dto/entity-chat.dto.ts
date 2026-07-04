@@ -3,16 +3,19 @@ export interface EntityChatMessageDto {
   displayName: string;
   entityId: string;
   id: string;
+  locale: string;
   message: string;
 }
 
 export interface EntityChatMessagesPageDto {
+  locale: string;
   messages: EntityChatMessageDto[];
   nextCursor: string | null;
 }
 
 export interface EntityChatOnlineCountDto {
   entityId: string;
+  locale: string;
   onlineCount: number;
 }
 

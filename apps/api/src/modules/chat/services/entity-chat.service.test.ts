@@ -26,6 +26,7 @@ describe("EntityChatService", () => {
       id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
       isHidden: false,
       hiddenReason: null,
+      locale: "ru",
       message: `message-${index}`,
       user: { displayName: `User ${index}` },
       userId: currentUser.id
@@ -52,6 +53,7 @@ describe("EntityChatService", () => {
         id: "66666666-6666-4666-8666-666666666666",
         isHidden: false,
         hiddenReason: null,
+        locale: "ru",
         message: "hello chat",
         userId: currentUser.id
       })

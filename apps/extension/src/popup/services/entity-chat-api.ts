@@ -1,5 +1,9 @@
 import { extensionConfig } from "../../shared/config.js";
 import {
+  appendEntityChatLocaleParam,
+  type EntityChatLocale
+} from "../../shared/entity-chat/locale.js";
+import {
   ChatSendError,
   readRetryAfterSecondsFromApiBody
 } from "../../shared/entity-chat/chat-send-error.js";
@@ -9,16 +13,19 @@ export interface EntityChatMessage {
   displayName: string;
   entityId: string;
   id: string;
+  locale?: string;
   message: string;
 }
 
 export interface EntityChatMessagesPage {
+  locale?: string;
   messages: EntityChatMessage[];
   nextCursor: string | null;
 }
 
 export interface EntityChatOnlineCount {
   entityId: string;
+  locale?: string;
   onlineCount: number;
 }
 
@@ -39,7 +46,7 @@ export interface ActiveNowList {
 
 export async function fetchEntityChatMessages(
   entityId: string,
-  options?: { before?: string; limit?: number }
+  options?: { before?: string; limit?: number; locale?: EntityChatLocale }
 ): Promise<EntityChatMessagesPage> {
   const params = new URLSearchParams();
 
@@ -50,6 +57,8 @@ export async function fetchEntityChatMessages(
   if (options?.limit) {
     params.set("limit", String(options.limit));
   }
+
+  appendEntityChatLocaleParam(params, options?.locale ?? "ru");
 
   const query = params.toString();
   const response = await fetch(
@@ -65,9 +74,18 @@ export async function fetchEntityChatMessages(
   return (await response.json()) as EntityChatMessagesPage;
 }
 
-export async function fetchEntityChatOnlineCount(entityId: string): Promise<EntityChatOnlineCount> {
+export async function fetchEntityChatOnlineCount(
+  entityId: string,
+  locale: EntityChatLocale = "ru"
+): Promise<EntityChatOnlineCount> {
+  const params = new URLSearchParams();
+  appendEntityChatLocaleParam(params, locale);
+  const query = params.toString();
+
   const response = await fetch(
-    `${extensionConfig.apiBaseUrl}/chat/entities/${encodeURIComponent(entityId)}/online`
+    `${extensionConfig.apiBaseUrl}/chat/entities/${encodeURIComponent(entityId)}/online${
+      query ? `?${query}` : ""
+    }`
   );
 
   if (!response.ok) {
@@ -89,10 +107,17 @@ export async function fetchActiveNow(limit = 5): Promise<ActiveNowList> {
 
 export async function pingEntityChatPresence(
   entityId: string,
-  accessToken: string
+  accessToken: string,
+  locale: EntityChatLocale = "ru"
 ): Promise<EntityChatOnlineCount> {
+  const params = new URLSearchParams();
+  appendEntityChatLocaleParam(params, locale);
+  const query = params.toString();
+
   const response = await fetch(
-    `${extensionConfig.apiBaseUrl}/chat/entities/${encodeURIComponent(entityId)}/presence`,
+    `${extensionConfig.apiBaseUrl}/chat/entities/${encodeURIComponent(entityId)}/presence${
+      query ? `?${query}` : ""
+    }`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`
@@ -111,12 +136,13 @@ export async function pingEntityChatPresence(
 export async function sendEntityChatMessage(
   entityId: string,
   message: string,
-  accessToken: string
+  accessToken: string,
+  locale: EntityChatLocale = "ru"
 ): Promise<EntityChatMessage> {
   const response = await fetch(
     `${extensionConfig.apiBaseUrl}/chat/entities/${encodeURIComponent(entityId)}/messages`,
     {
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ locale, message }),
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json"

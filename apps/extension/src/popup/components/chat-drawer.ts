@@ -1,4 +1,13 @@
 import type { TranslateFn } from "@reviewo/i18n";
+import {
+  appendEntityChatMessageNewest,
+  ENTITY_CHAT_CLIENT_INITIAL_LIMIT,
+  ENTITY_CHAT_CLIENT_OLDER_LIMIT,
+  mergeEntityChatMessagesNewest,
+  prependEntityChatMessagesOldest,
+  resolveEntityChatOlderCursor,
+  trimEntityChatMessagesNewest
+} from "@reviewo/shared";
 
 import { escapeHtml } from "../view-helpers.js";
 import type { EntityChatMessage } from "../services/entity-chat-api.js";
@@ -15,6 +24,23 @@ import {
   formatChatSendErrorMessage,
   updateChatOnlineCountElement
 } from "../../shared/entity-chat/chat-ui-helpers.js";
+import {
+  appendChatMessagesToList,
+  captureChatListScrollAnchor,
+  POPUP_CHAT_MESSAGE_LIST_DOM,
+  prependChatMessagesToList,
+  replaceChatMessageList,
+  scrollChatListToBottom
+} from "../../shared/entity-chat/chat-message-list-dom.js";
+import {
+  bindEntityChatLocaleSwitch,
+  buildEntityChatConnectionKey,
+  DEFAULT_ENTITY_CHAT_LOCALE,
+  ENTITY_CHAT_LOCALES,
+  renderEntityChatLocaleSelectorMarkup,
+  updateEntityChatLocaleSelectorUi,
+  type EntityChatLocale
+} from "../../shared/entity-chat/locale.js";
 import {
   applyChatDrawerHeight,
   bindChatDrawerResizeHandle,
@@ -36,41 +62,16 @@ export interface ChatDrawerMountOptions {
 }
 
 const expandedStateByEntity = new Map<string, boolean>();
+const localeByEntity = new Map<string, EntityChatLocale>();
 const liveConnectionByEntity = new Map<string, ReturnType<typeof connectEntityChatSocket>>();
 const POPUP_CHAT_PANEL_ANIMATION_MS = 360;
 const CHAT_MESSAGE_SYNC_MS = 2000;
-
-function mergeChatMessages(
-  current: EntityChatMessage[],
-  incoming: EntityChatMessage[]
-): EntityChatMessage[] {
-  if (current.length === 0) {
-    return incoming;
-  }
-
-  const knownIds = new Set(current.map((item) => item.id));
-  const appended = incoming.filter((item) => !knownIds.has(item.id));
-
-  if (appended.length === 0) {
-    return current;
-  }
-
-  return [...current, ...appended];
-}
 
 export function setPopupChatExpanded(expanded: boolean): void {
   document.documentElement.classList.toggle("popup-chat-expanded", expanded);
   document.body.classList.toggle("popup-chat-expanded", expanded);
   document.querySelector<HTMLElement>(".popup-body")?.classList.toggle("popup-chat-expanded", expanded);
   document.querySelector<HTMLElement>(".screen-host")?.classList.toggle("popup-chat-expanded", expanded);
-
-  if (expanded) {
-    requestAnimationFrame(() => {
-      const chatDock = document.querySelector<HTMLElement>(".entity-chat-actions, .home-chat-actions");
-
-      chatDock?.scrollIntoView({ block: "nearest" });
-    });
-  }
 }
 
 export function renderChatDrawerToggleMarkup(t: TranslateFn, entityId: string): string {
@@ -120,20 +121,32 @@ export function bindChatDrawerToggle(
     return;
   }
 
-  liveConnectionByEntity.get(entityId)?.disconnect();
-  liveConnectionByEntity.delete(entityId);
+  for (const locale of ENTITY_CHAT_LOCALES) {
+    const connectionKey = buildEntityChatConnectionKey(entityId, locale);
+    liveConnectionByEntity.get(connectionKey)?.disconnect();
+    liveConnectionByEntity.delete(connectionKey);
+  }
 
   let connection: ReturnType<typeof connectEntityChatSocket> | null = null;
+  let chatLocale = localeByEntity.get(entityId) ?? DEFAULT_ENTITY_CHAT_LOCALE;
+  const readConnectionKey = (): string => buildEntityChatConnectionKey(entityId, chatLocale);
   let messages: EntityChatMessage[] = [];
   let nextCursor: string | null = null;
   let onlineCount = 0;
   let isLoadingOlder = false;
   let hasLoadedMessages = false;
-  let isBootstrapping = false;
+  let chatLoadGeneration = 0;
   let onlinePollTimer: number | undefined;
   let messageSyncTimer: number | undefined;
   let isSyncingMessages = false;
   let closeLayoutTimer: number | undefined;
+
+  const bumpChatLoadGeneration = (): number => {
+    chatLoadGeneration += 1;
+    return chatLoadGeneration;
+  };
+
+  const isStaleChatLoad = (generation: number): boolean => generation !== chatLoadGeneration;
 
   const cancelCloseLayoutTimer = (): void => {
     if (closeLayoutTimer !== undefined) {
@@ -157,8 +170,8 @@ export function bindChatDrawerToggle(
 
     try {
       const result = options.accessToken
-        ? await pingEntityChatPresence(entityId, options.accessToken)
-        : await fetchEntityChatOnlineCount(entityId);
+        ? await pingEntityChatPresence(entityId, options.accessToken, chatLocale)
+        : await fetchEntityChatOnlineCount(entityId, chatLocale);
 
       onlineCount = result.onlineCount;
       updateOnlineCountUi();
@@ -194,13 +207,16 @@ export function bindChatDrawerToggle(
     isSyncingMessages = true;
 
     try {
-      const page = await fetchEntityChatMessages(entityId, { limit: 100 });
-      const mergedMessages = mergeChatMessages(messages, page.messages);
+      const page = await fetchEntityChatMessages(entityId, {
+        limit: ENTITY_CHAT_CLIENT_INITIAL_LIMIT,
+        locale: chatLocale
+      });
+      const mergedMessages = mergeEntityChatMessagesNewest(messages, page.messages);
 
       if (mergedMessages !== messages) {
         messages = mergedMessages;
-        nextCursor ??= page.nextCursor;
-        renderDrawerContent();
+        nextCursor = resolveEntityChatOlderCursor(messages.length, page.nextCursor, nextCursor);
+        syncMessagesToDom();
       }
     } catch {
       // Socket is the primary path; this is only a live sync fallback.
@@ -229,18 +245,19 @@ export function bindChatDrawerToggle(
       return;
     }
 
-    connection = connectEntityChatSocket(entityId, options.accessToken, {
-      onMessages: (initialMessages) => {
-        messages = initialMessages;
-        renderDrawerContent();
-      },
-      onNewMessage: (message) => {
-        if (messages.some((item) => item.id === message.id)) {
-          return;
+    connection = connectEntityChatSocket(entityId, chatLocale, options.accessToken, {
+      onMessages: (initialMessages, incomingNextCursor) => {
+        messages = mergeEntityChatMessagesNewest(messages, initialMessages);
+
+        if (incomingNextCursor !== undefined) {
+          nextCursor = resolveEntityChatOlderCursor(messages.length, incomingNextCursor, nextCursor);
         }
 
-        messages = [...messages, message];
-        renderDrawerContent();
+        syncMessagesToDom();
+      },
+      onNewMessage: (message) => {
+        messages = appendEntityChatMessageNewest(messages, message);
+        syncMessagesToDom();
       },
       onOnlineCount: (count) => {
         onlineCount = count;
@@ -251,24 +268,144 @@ export function bindChatDrawerToggle(
         startOnlinePolling();
       }
     });
-    liveConnectionByEntity.set(entityId, connection);
+    liveConnectionByEntity.set(readConnectionKey(), connection);
   };
 
-  const renderDrawerContent = (): void => {
+  const switchChatLocale = (nextLocale: EntityChatLocale): void => {
+    if (nextLocale === chatLocale && hasLoadedMessages) {
+      return;
+    }
+
+    connection?.disconnect();
+    connection = null;
+    liveConnectionByEntity.delete(readConnectionKey());
+    stopOnlinePolling();
+    stopMessageSync();
+
+    chatLocale = nextLocale;
+    localeByEntity.set(entityId, chatLocale);
+    messages = [];
+    nextCursor = null;
+    hasLoadedMessages = false;
+
+    if (host.querySelector(".chat-drawer")) {
+      updateEntityChatLocaleSelectorUi(host, chatLocale, { surface: "popup" });
+    }
+
+    if (!(expandedStateByEntity.get(entityId) ?? false)) {
+      return;
+    }
+
+    const generation = bumpChatLoadGeneration();
+    startOnlinePolling();
+    void bootstrapChat(generation);
+  };
+
+  const getMessageListBody = (): HTMLElement | null =>
+    host.querySelector<HTMLElement>("[data-chat-drawer-body]");
+
+  const updateLoadOlderButton = (): void => {
+    const button = host.querySelector<HTMLButtonElement>("[data-chat-load-older]");
+
+    if (!button) {
+      return;
+    }
+
+    button.disabled = !nextCursor || isLoadingOlder;
+    button.textContent = t(isLoadingOlder ? "chat.loadingOlder" : "chat.loadOlder");
+  };
+
+  const getMessageList = (): HTMLElement | null =>
+    host.querySelector<HTMLElement>(POPUP_CHAT_MESSAGE_LIST_DOM.listSelector);
+
+  const scrollMessageListToBottom = (): void => {
+    scrollChatListToBottom(getMessageList());
+  };
+
+  const syncMessagesToDom = (): void => {
+    const body = getMessageListBody();
+
+    if (!body) {
+      return;
+    }
+
+    if (messages.length > 0 && !host.querySelector("[data-chat-load-older]")) {
+      mountDrawer(false);
+      return;
+    }
+
+    const list = body.querySelector<HTMLElement>(POPUP_CHAT_MESSAGE_LIST_DOM.listSelector);
+
+    if (messages.length === 0) {
+      replaceChatMessageList(body, [], t("chat.empty"), POPUP_CHAT_MESSAGE_LIST_DOM, escapeHtml);
+      updateLoadOlderButton();
+      return;
+    }
+
+    if (!list) {
+      replaceChatMessageList(body, messages, t("chat.empty"), POPUP_CHAT_MESSAGE_LIST_DOM, escapeHtml);
+      updateLoadOlderButton();
+      return;
+    }
+
+    appendChatMessagesToList(list, messages, POPUP_CHAT_MESSAGE_LIST_DOM, escapeHtml);
+    updateLoadOlderButton();
+  };
+
+  const mountDrawer = (scrollToBottom = true): void => {
     if (!host) {
       return;
     }
 
-    host.innerHTML = renderChatDrawerMarkup(t, entityTitleLabel(options.entityTitle, t), onlineCount, messages, {
-      isAuthenticated: options.isAuthenticated
-    });
+    host.innerHTML = renderChatDrawerMarkup(
+      t,
+      entityTitleLabel(options.entityTitle, t),
+      onlineCount,
+      chatLocale,
+      {
+        isAuthenticated: options.isAuthenticated,
+        isLoadingOlder,
+        nextCursor,
+        showLoadOlder: messages.length > 0
+      }
+    );
     bindChatDrawerControls(host, t, options, actions, {
-      getMessages: () => messages,
       loadOlderMessages,
-      sendMessage
+      sendMessage,
+      switchChatLocale
     });
+
+    const body = getMessageListBody();
+
+    if (body) {
+      replaceChatMessageList(body, messages, t("chat.empty"), POPUP_CHAT_MESSAGE_LIST_DOM, escapeHtml);
+    }
+
     syncDrawerHeight();
-    scrollMessagesToBottom(host.querySelector<HTMLElement>("[data-chat-message-list]"));
+    updateOnlineCountUi();
+
+    if (scrollToBottom) {
+      requestAnimationFrame(() => {
+        scrollMessageListToBottom();
+      });
+    }
+  };
+
+  const ensureDrawerMounted = (scrollToBottom = false): void => {
+    if (host.querySelector(".chat-drawer")) {
+      syncMessagesToDom();
+      updateOnlineCountUi();
+
+      if (scrollToBottom) {
+        requestAnimationFrame(() => {
+          scrollMessageListToBottom();
+        });
+      }
+
+      return;
+    }
+
+    mountDrawer(scrollToBottom);
   };
 
   const syncDrawerHeight = (): void => {
@@ -310,7 +447,7 @@ export function bindChatDrawerToggle(
     container.classList.remove("is-chat-expanded");
     connection?.disconnect();
     connection = null;
-    liveConnectionByEntity.delete(entityId);
+    liveConnectionByEntity.delete(readConnectionKey());
     stopMessageSync();
 
     requestAnimationFrame(() => {
@@ -356,7 +493,7 @@ export function bindChatDrawerToggle(
     chatPanel.classList.remove("is-loading");
     connection?.disconnect();
     connection = null;
-    liveConnectionByEntity.delete(entityId);
+    liveConnectionByEntity.delete(readConnectionKey());
     stopOnlinePolling();
     stopMessageSync();
 
@@ -385,11 +522,11 @@ export function bindChatDrawerToggle(
       return;
     }
 
-    if (isBootstrapping) {
+    if (chatPanel.classList.contains("is-loading")) {
       return;
     }
 
-    renderDrawerContent();
+    ensureDrawerMounted(true);
   };
 
   toggleButton.addEventListener("click", () => {
@@ -405,13 +542,13 @@ export function bindChatDrawerToggle(
     startOnlinePolling();
 
     if (!hasLoadedMessages) {
-      void bootstrapChat();
+      void bootstrapChat(bumpChatLoadGeneration());
       return;
     }
 
     connectLiveUpdates();
     startMessageSync();
-    renderDrawerContent();
+    ensureDrawerMounted(true);
   });
 
   if (expandedStateByEntity.get(entityId)) {
@@ -419,49 +556,64 @@ export function bindChatDrawerToggle(
     startOnlinePolling();
 
     if (!hasLoadedMessages) {
-      void bootstrapChat();
+      void bootstrapChat(bumpChatLoadGeneration());
     } else {
       connectLiveUpdates();
       startMessageSync();
-      renderDrawerContent();
+      ensureDrawerMounted(true);
     }
   }
 
-  async function bootstrapChat(): Promise<void> {
-    if (!host || isBootstrapping || hasLoadedMessages) {
+  async function bootstrapChat(generation: number): Promise<void> {
+    if (!host || isStaleChatLoad(generation)) {
       return;
     }
 
-    isBootstrapping = true;
+    if (hasLoadedMessages) {
+      return;
+    }
+
     chatPanel.classList.add("is-loading");
     host.innerHTML = `<p class="muted-copy">${escapeHtml(t("chat.loading"))}</p>`;
+    const locale = chatLocale;
 
     try {
-      const page = await fetchEntityChatMessages(entityId, { limit: 100 });
+      const page = await fetchEntityChatMessages(entityId, {
+        limit: ENTITY_CHAT_CLIENT_INITIAL_LIMIT,
+        locale
+      });
 
-      messages = page.messages;
+      if (isStaleChatLoad(generation) || chatLocale !== locale) {
+        return;
+      }
+
+      messages = trimEntityChatMessagesNewest(page.messages);
       nextCursor = page.nextCursor;
 
       try {
-        const online = await fetchEntityChatOnlineCount(entityId);
+        const online = await fetchEntityChatOnlineCount(entityId, locale);
         onlineCount = online.onlineCount;
       } catch {
         onlineCount = 0;
       }
 
+      if (isStaleChatLoad(generation) || chatLocale !== locale) {
+        return;
+      }
+
       hasLoadedMessages = true;
-      renderDrawerContent();
-      updateOnlineCountUi();
+      mountDrawer();
       connectLiveUpdates();
       startMessageSync();
       void refreshOnlineCount();
     } catch {
-      if (host) {
+      if (!isStaleChatLoad(generation) && chatLocale === locale && host) {
         host.innerHTML = `<p class="status-copy-error">${escapeHtml(t("chat.loadError"))}</p>`;
       }
     } finally {
-      chatPanel.classList.remove("is-loading");
-      isBootstrapping = false;
+      if (!isStaleChatLoad(generation)) {
+        chatPanel.classList.remove("is-loading");
+      }
     }
   }
 
@@ -470,27 +622,41 @@ export function bindChatDrawerToggle(
       return;
     }
 
+    const list = host.querySelector<HTMLElement>(POPUP_CHAT_MESSAGE_LIST_DOM.listSelector);
+    const anchor = list ? captureChatListScrollAnchor(list) : null;
+
     isLoadingOlder = true;
-    const list = host.querySelector<HTMLElement>("[data-chat-message-list]");
-    const previousHeight = list?.scrollHeight ?? 0;
+    updateLoadOlderButton();
 
     try {
       const page = await fetchEntityChatMessages(entityId, {
         before: nextCursor,
-        limit: 50
+        limit: ENTITY_CHAT_CLIENT_OLDER_LIMIT,
+        locale: chatLocale
       });
 
-      messages = [...page.messages, ...messages];
+      messages = prependEntityChatMessagesOldest(messages, page.messages);
       nextCursor = page.nextCursor;
-      renderDrawerContent();
 
-      const updatedList = host.querySelector<HTMLElement>("[data-chat-message-list]");
+      if (list && anchor) {
+        prependChatMessagesToList(list, page.messages, POPUP_CHAT_MESSAGE_LIST_DOM, escapeHtml, anchor);
+      } else {
+        const body = getMessageListBody();
 
-      if (updatedList) {
-        updatedList.scrollTop = updatedList.scrollHeight - previousHeight;
+        if (body) {
+          replaceChatMessageList(
+            body,
+            messages,
+            t("chat.empty"),
+            POPUP_CHAT_MESSAGE_LIST_DOM,
+            escapeHtml,
+            anchor
+          );
+        }
       }
     } finally {
       isLoadingOlder = false;
+      updateLoadOlderButton();
     }
   }
 
@@ -534,13 +700,15 @@ export function bindChatDrawerToggle(
       }
 
       if (!created) {
-        created = await sendEntityChatMessage(entityId, text, options.accessToken);
+        created = await sendEntityChatMessage(entityId, text, options.accessToken, chatLocale);
       }
 
       if (!messages.some((item) => item.id === created.id)) {
-        messages = [...messages, created];
-        renderDrawerContent();
+        messages = appendEntityChatMessageNewest(messages, created);
+        syncMessagesToDom();
       }
+
+      scrollMessageListToBottom();
 
       if (input) {
         input.value = "";
@@ -568,39 +736,41 @@ function renderChatDrawerMarkup(
   t: TranslateFn,
   entityTitle: string,
   onlineCount: number,
-  messages: EntityChatMessage[],
-  options: { isAuthenticated: boolean }
+  chatLocale: EntityChatLocale,
+  options: {
+    isAuthenticated: boolean;
+    isLoadingOlder: boolean;
+    nextCursor: string | null;
+    showLoadOlder: boolean;
+  }
 ): string {
-  const messageMarkup =
-    messages.length === 0
-      ? `<p class="muted-copy chat-empty-copy">${escapeHtml(t("chat.empty"))}</p>`
-      : `<ul class="chat-message-list" data-chat-message-list>
-          ${messages
-            .map(
-              (message) => `
-            <li class="chat-message-item">
-              <strong>${escapeHtml(message.displayName)}:</strong>
-              <span>${escapeHtml(message.message)}</span>
-            </li>
-          `
-            )
-            .join("")}
-        </ul>`;
+  const loadOlderButtonMarkup = options.showLoadOlder
+    ? `<button
+          type="button"
+          class="chat-load-older-button"
+          data-chat-load-older
+          ${!options.nextCursor || options.isLoadingOlder ? "disabled" : ""}
+        >
+          ${escapeHtml(options.isLoadingOlder ? t("chat.loadingOlder") : t("chat.loadOlder"))}
+        </button>`
+    : "";
 
   return `
     <section class="chat-drawer" aria-label="${escapeHtml(t("chat.title"))}">
       <div class="chat-drawer-header">
-        <div>
-          <h3>${escapeHtml(t("chat.title"))}</h3>
+        <div class="chat-drawer-header-main">
+          <div class="chat-drawer-header-top">
+            <h3>${escapeHtml(t("chat.title"))}</h3>
+            <div class="chat-drawer-header-top-center">${loadOlderButtonMarkup}</div>
+            ${renderEntityChatLocaleSelectorMarkup(chatLocale, { surface: "popup" })}
+          </div>
           <p class="muted-copy" data-chat-online-count>${escapeHtml(
             formatChatOnlineCountLabel(t, onlineCount)
           )}</p>
         </div>
         <p class="muted-copy chat-entity-title">${escapeHtml(entityTitle)}</p>
       </div>
-      <div class="chat-drawer-body">
-        ${messageMarkup}
-      </div>
+      <div class="chat-drawer-body" data-chat-drawer-body></div>
       <div class="chat-drawer-footer">
         <form class="chat-composer" data-chat-composer>
           <input
@@ -637,11 +807,17 @@ function bindChatDrawerControls(
   options: ChatDrawerMountOptions,
   actions: ChatDrawerActions,
   helpers: {
-    getMessages: () => EntityChatMessage[];
     loadOlderMessages: () => Promise<void>;
     sendMessage: (text: string) => Promise<void>;
+    switchChatLocale: (locale: EntityChatLocale) => void;
   }
 ): void {
+  bindEntityChatLocaleSwitch(host, helpers.switchChatLocale);
+
+  host.querySelector<HTMLButtonElement>("[data-chat-load-older]")?.addEventListener("click", () => {
+    void helpers.loadOlderMessages();
+  });
+
   host.querySelector<HTMLFormElement>("[data-chat-composer]")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const input = host.querySelector<HTMLInputElement>("[data-chat-input]");
@@ -656,14 +832,6 @@ function bindChatDrawerControls(
         input.value = "";
       }
     });
-  });
-
-  host.querySelector<HTMLElement>("[data-chat-message-list]")?.addEventListener("scroll", (event) => {
-    const list = event.currentTarget as HTMLElement;
-
-    if (list.scrollTop <= 24) {
-      void helpers.loadOlderMessages();
-    }
   });
 
   if (!options.isAuthenticated) {
@@ -682,14 +850,4 @@ function bindChatDrawerControls(
 
 function entityTitleLabel(title: string, t: TranslateFn): string {
   return title.trim() || t("brand.name");
-}
-
-function scrollMessagesToBottom(list: HTMLElement | null): void {
-  if (!list) {
-    return;
-  }
-
-  requestAnimationFrame(() => {
-    list.scrollTop = list.scrollHeight;
-  });
 }

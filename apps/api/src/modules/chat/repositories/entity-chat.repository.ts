@@ -1,10 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import type { EntityChatMessage, Prisma } from "#prisma/client";
+import type { EntityChatLocale } from "@reviewo/shared";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 
 export interface CreateEntityChatMessageInput {
   entityId: string;
+  locale: EntityChatLocale;
   message: string;
   userId: string;
 }
@@ -33,6 +35,7 @@ export class EntityChatRepository {
     return this.prismaService.entityChatMessage.create({
       data: {
         entityId: input.entityId,
+        locale: input.locale,
         message: input.message.trim(),
         userId: input.userId
       }
@@ -47,13 +50,18 @@ export class EntityChatRepository {
     });
   }
 
-  async listLatestMessages(entityId: string, limit = DEFAULT_MESSAGE_PAGE_SIZE): Promise<EntityChatMessage[]> {
+  async listLatestMessages(
+    entityId: string,
+    locale: EntityChatLocale,
+    limit = DEFAULT_MESSAGE_PAGE_SIZE
+  ): Promise<EntityChatMessage[]> {
     const pageSize = clampPageSize(limit);
 
     return this.prismaService.entityChatMessage.findMany({
       where: {
         entityId,
-        isHidden: false
+        isHidden: false,
+        locale
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: pageSize
@@ -62,13 +70,14 @@ export class EntityChatRepository {
 
   async listMessagesBeforeCursor(
     entityId: string,
+    locale: EntityChatLocale,
     beforeMessageId: string,
     limit = DEFAULT_MESSAGE_PAGE_SIZE
   ): Promise<EntityChatMessage[]> {
     const pageSize = clampPageSize(limit);
     const cursorMessage = await this.findMessageById(beforeMessageId);
 
-    if (!cursorMessage || cursorMessage.entityId !== entityId) {
+    if (!cursorMessage || cursorMessage.entityId !== entityId || cursorMessage.locale !== locale) {
       return [];
     }
 
@@ -76,6 +85,7 @@ export class EntityChatRepository {
       where: {
         entityId,
         isHidden: false,
+        locale,
         OR: [
           {
             createdAt: {
@@ -97,6 +107,7 @@ export class EntityChatRepository {
 
   async listMessagesWithAuthors(
     entityId: string,
+    locale: EntityChatLocale,
     beforeMessageId?: string,
     limit = DEFAULT_MESSAGE_PAGE_SIZE
   ): Promise<
@@ -111,13 +122,14 @@ export class EntityChatRepository {
     const pageSize = clampPageSize(limit);
     const where: Prisma.EntityChatMessageWhereInput = {
       entityId,
-      isHidden: false
+      isHidden: false,
+      locale
     };
 
     if (beforeMessageId) {
       const cursorMessage = await this.findMessageById(beforeMessageId);
 
-      if (!cursorMessage || cursorMessage.entityId !== entityId) {
+      if (!cursorMessage || cursorMessage.entityId !== entityId || cursorMessage.locale !== locale) {
         return [];
       }
 
@@ -195,16 +207,17 @@ export class EntityChatRepository {
       }
     });
 
-    const entityIds = await this.prismaService.entityChatMessage.findMany({
-      distinct: ["entityId"],
+    const entityLocales = await this.prismaService.entityChatMessage.findMany({
+      distinct: ["entityId", "locale"],
       select: {
-        entityId: true
+        entityId: true,
+        locale: true
       }
     });
 
     let trimmedByEntity = 0;
 
-    for (const { entityId } of entityIds) {
+    for (const { entityId, locale } of entityLocales) {
       const overflow = await this.prismaService.entityChatMessage.findMany({
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
@@ -213,7 +226,8 @@ export class EntityChatRepository {
         skip: MAX_MESSAGES_PER_ENTITY,
         take: 500,
         where: {
-          entityId
+          entityId,
+          locale
         }
       });
 

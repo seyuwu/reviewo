@@ -375,13 +375,14 @@ model EntityChatMessage {
   id           String   @id @default(uuid()) @db.Uuid
   entityId     String   @map("entity_id") @db.Uuid
   userId       String   @map("user_id") @db.Uuid
+  locale       String   @default("ru")
   message      String
   isHidden     Boolean  @default(false) @map("is_hidden")
   hiddenReason String?  @map("hidden_reason")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([entityId, createdAt])
+  @@index([entityId, locale, createdAt])
   @@index([createdAt])
   @@map("entity_chat_messages")
   @@schema("chat")

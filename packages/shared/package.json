@@ -19,6 +19,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
+    "test": "tsc -p tsconfig.json && tsc -p tsconfig.test.json && node --test dist-test/entity-chat-messages.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0"
   }
 }

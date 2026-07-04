@@ -1,10 +1,12 @@
 import { io, type Socket } from "socket.io-client";
+import { ENTITY_CHAT_CLIENT_INITIAL_LIMIT } from "@reviewo/shared";
 
 import { extensionConfig } from "../../shared/config.js";
+import type { EntityChatLocale } from "../../shared/entity-chat/locale.js";
 import type { EntityChatMessage } from "./entity-chat-api.js";
 
 export interface EntityChatSocketHandlers {
-  onMessages?: (messages: EntityChatMessage[]) => void;
+  onMessages?: (messages: EntityChatMessage[], nextCursor?: string | null) => void;
   onNewMessage?: (message: EntityChatMessage) => void;
   onOnlineCount?: (onlineCount: number) => void;
   onDisconnect?: () => void;
@@ -21,7 +23,7 @@ const JOIN_ROOM_TIMEOUT_MS = 10_000;
 
 function isJoinAck(
   response: unknown
-): response is { messages: EntityChatMessage[]; onlineCount: number } {
+): response is { messages: EntityChatMessage[]; nextCursor?: string | null; onlineCount: number } {
   return (
     typeof response === "object" &&
     response !== null &&
@@ -34,6 +36,7 @@ function isJoinAck(
 
 export function connectEntityChatSocket(
   entityId: string,
+  locale: EntityChatLocale,
   accessToken: string | null,
   handlers: EntityChatSocketHandlers
 ): EntityChatSocketConnection {
@@ -59,7 +62,10 @@ export function connectEntityChatSocket(
 
     joinTimeout = window.setTimeout(markDisconnected, JOIN_ROOM_TIMEOUT_MS);
 
-    socket.emit("join", { entityId }, (response: unknown) => {
+    socket.emit(
+      "join",
+      { entityId, locale, limit: ENTITY_CHAT_CLIENT_INITIAL_LIMIT },
+      (response: unknown) => {
       clearJoinTimeout();
 
       if (!isJoinAck(response)) {
@@ -68,7 +74,7 @@ export function connectEntityChatSocket(
       }
 
       hasJoinedRoom = true;
-      handlers.onMessages?.(response.messages);
+      handlers.onMessages?.(response.messages, response.nextCursor ?? null);
       handlers.onOnlineCount?.(response.onlineCount);
     });
   };
@@ -135,7 +141,7 @@ export function connectEntityChatSocket(
 
         socket.emit(
           "send_message",
-          { entityId, message },
+          { entityId, locale, message },
           (response: EntityChatMessage | { message?: string } | undefined) => {
             window.clearTimeout(timeout);
 

@@ -429,6 +429,8 @@ export const ruMessages: MessageDictionary = {
   "chat.loading": "Загрузка чата...",
   "chat.loadError": "Не удалось загрузить чат.",
   "chat.empty": "Сообщений пока нет. Начните обсуждение.",
+  "chat.loadOlder": "Загрузить ранние сообщения",
+  "chat.loadingOlder": "Загрузка ранних сообщений...",
   "chat.input.placeholder": "Напишите сообщение...",
   "chat.send": "Отправить",
   "chat.signInRequired": "Войдите, чтобы отправлять сообщения.",

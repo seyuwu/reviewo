@@ -88,6 +88,75 @@
   width: 100%;
 }
 
+.chatDrawerHeaderMain {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.chatDrawerHeaderTop {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.chatDrawerHeaderTop h3 {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  margin: 0;
+  min-width: 0;
+}
+
+.chatDrawerHeaderTopCenter {
+  align-items: stretch;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chatLoadOlderButton {
+  align-items: center;
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: #525252;
+  cursor: pointer;
+  display: flex;
+  flex: 1 1 auto;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.35rem 0.5rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.chatLoadOlderButton:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.chatDrawerHeaderLocale {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+}
+
 .chatDrawerHeader {
   align-items: flex-start;
   display: flex;
@@ -166,6 +235,26 @@
   width: 100%;
 }
 
+.chatComposer :global(.secondary-button) {
+  background: var(--color-primary);
+  border: 0;
+  color: #ffffff;
+  min-width: 5.5rem;
+  padding: 0.55rem 0.85rem;
+  white-space: nowrap;
+  width: auto;
+}
+
+.chatComposer :global(.secondary-button:hover),
+.chatComposer :global(.secondary-button:focus-visible) {
+  background: #404040;
+  color: #ffffff;
+}
+
+.chatComposer :global(.secondary-button:disabled) {
+  opacity: 0.55;
+}
+
 .chatComposer input {
   border: 1px solid var(--color-card-border);
   border-radius: 0.65rem;
@@ -225,7 +314,7 @@
 
 .chatSectionSidebar .chatDrawerPanel {
   grid-template-rows: 1fr;
-  max-height: 20rem;
+  max-height: none;
   transition: none;
 }
 
@@ -235,11 +324,11 @@
 }
 
 .chatSectionSidebar .chatDrawer {
-  height: 20rem;
+  height: auto;
   max-height: 20rem;
-  min-height: 20rem;
+  min-height: 14rem;
 }
 
 .chatSectionSidebar .chatMessageList {
-  max-height: 12rem;
+  max-height: none;
 }

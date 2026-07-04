@@ -1,5 +1,5 @@
 import * as esbuild from "esbuild";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, watch, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -71,13 +71,27 @@ function removeStaleContentSourceMap() {
 function copyStaticAssets() {
   mkdirSync(distDirectory, { recursive: true });
 
-  const staticFiles = ["popup.html", "popup.css"];
-
-  for (const fileName of staticFiles) {
-    copyFileSync(join(publicDirectory, fileName), join(distDirectory, fileName));
-  }
+  copyPopupHtml();
+  copyFileSync(join(publicDirectory, "popup.css"), join(distDirectory, "popup.css"));
 
   writeManifest();
+}
+
+function copyPopupHtml() {
+  const html = readFileSync(join(publicDirectory, "popup.html"), "utf8");
+  const cssVersion = Date.now().toString(36);
+  const patchedHtml = html.replace(/href="popup\.css(?:\?[^"]*)?"/, `href="popup.css?v=${cssVersion}"`);
+
+  writeFileSync(join(distDirectory, "popup.html"), patchedHtml);
+}
+
+function watchStaticAssets() {
+  for (const fileName of ["popup.html", "popup.css"]) {
+    watch(join(publicDirectory, fileName), () => {
+      copyStaticAssets();
+      console.info(`Reviewo extension copied ${fileName}`);
+    });
+  }
 }
 
 function writeManifest() {
@@ -196,6 +210,7 @@ async function runWatch() {
 
   copyStaticAssets();
   logBuildSummary();
+  watchStaticAssets();
   await Promise.all([
     moduleContext.watch(),
     contentContext.watch(),

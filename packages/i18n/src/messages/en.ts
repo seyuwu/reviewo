@@ -427,6 +427,8 @@ export const enMessages = {
   "chat.loading": "Loading chat...",
   "chat.loadError": "Could not load chat.",
   "chat.empty": "No messages yet. Start the conversation.",
+  "chat.loadOlder": "Load earlier messages",
+  "chat.loadingOlder": "Loading earlier messages...",
   "chat.input.placeholder": "Write a message...",
   "chat.send": "Send",
   "chat.signInRequired": "Sign in to send messages.",

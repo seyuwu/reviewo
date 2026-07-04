@@ -101,6 +101,9 @@ importers:
       '@reviewo/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@reviewo/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       socket.io-client:
         specifier: ^4.8.1
         version: 4.8.3
@@ -120,6 +123,9 @@ importers:
       '@reviewo/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@reviewo/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@tanstack/react-query':
         specifier: ^5.101.1
         version: 5.101.1(react@19.2.7)
@@ -150,7 +156,11 @@ importers:
 
   packages/i18n: {}
 
-  packages/shared: {}
+  packages/shared:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.0.0
 
   packages/types: {}
 

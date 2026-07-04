@@ -1592,13 +1592,76 @@ button.sign-in-cta {
 }
 
 .chat-drawer-header h3 {
-  margin: 0;
   font-size: 1rem;
+}
+
+.chat-drawer-header-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.chat-drawer-header-top {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.chat-drawer-header-top h3 {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  margin: 0;
+  min-width: 0;
+}
+
+.chat-drawer-header-top-center {
+  align-items: stretch;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chat-drawer-header-top .popup-chat-locale-switch {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  gap: 0.25rem;
+}
+
+.popup-chat-locale-button {
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid #a3a3a3;
+  border-radius: 999px;
+  color: #171717;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  min-width: 2rem;
+  padding: 0.35rem 0.5rem;
+  width: auto;
+}
+
+.popup-chat-locale-button.is-active {
+  background: #171717;
+  border-color: #171717;
+  color: #ffffff;
 }
 
 .chat-entity-title {
   flex-shrink: 0;
-  max-width: 45%;
+  font-size: 0.75rem;
+  max-width: 38%;
   overflow-wrap: anywhere;
   text-align: right;
 }
@@ -1610,6 +1673,37 @@ button.sign-in-cta {
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+}
+
+.chat-load-older-button {
+  align-items: center;
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: #525252;
+  cursor: pointer;
+  display: flex;
+  flex: 1 1 auto;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.35rem 0.5rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.chat-load-older-button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .chat-drawer-footer {

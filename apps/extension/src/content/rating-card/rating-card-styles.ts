@@ -1183,6 +1183,107 @@ export const RATING_CARD_STYLES = `
   min-width: 0;
 }
 
+.reviewo-chat-drawer-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.reviewo-chat-drawer-header-top {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.reviewo-chat-drawer-header-top-center {
+  align-items: stretch;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.reviewo-chat-title {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+  min-width: 0;
+}
+
+.reviewo-chat-drawer-header-top .entity-chat-locale-switch {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+}
+
+.reviewo-chat-load-older {
+  align-items: center;
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: #525252;
+  cursor: pointer;
+  display: flex;
+  flex: 1 1 auto;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 5px 8px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.reviewo-chat-load-older:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.entity-chat-locale-switch {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 3px;
+}
+
+.entity-chat-locale-button {
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid #a3a3a3;
+  border-radius: 999px;
+  color: #171717;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  min-width: 28px;
+  padding: 4px 7px;
+  width: auto;
+}
+
+.entity-chat-locale-button.is-active {
+  background: #171717;
+  border-color: #171717;
+  box-shadow: none;
+  color: #ffffff;
+}
+
 .reviewo-chat-drawer-body {
   display: flex;
   flex: 1 1 0;
@@ -1190,12 +1291,6 @@ export const RATING_CARD_STYLES = `
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-}
-
-.reviewo-chat-title {
-  font-size: 14px;
-  font-weight: 700;
-  margin: 0;
 }
 
 .reviewo-chat-message-list {

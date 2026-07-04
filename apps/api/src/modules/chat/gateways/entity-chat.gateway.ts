@@ -1,5 +1,10 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import {
+  buildEntityChatSocketRoomName,
+  normalizeEntityChatLocale,
+  type EntityChatLocale
+} from "@reviewo/shared";
+import {
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
@@ -20,14 +25,24 @@ import { EntityChatService } from "../services/entity-chat.service.js";
 
 interface JoinRoomPayload {
   entityId: string;
+  locale?: EntityChatLocale;
+  limit?: number;
 }
 
 interface SendMessagePayload {
   entityId: string;
+  locale?: EntityChatLocale;
   message: string;
 }
 
+interface ChatSocketSession {
+  entityId: string;
+  locale: EntityChatLocale;
+  room: string;
+}
+
 interface AuthenticatedSocketData {
+  chatSession?: ChatSocketSession;
   user: AuthenticatedUser | null;
 }
 
@@ -66,26 +81,34 @@ export class EntityChatGateway implements OnGatewayConnection, OnGatewayDisconne
   }
 
   async handleDisconnect(client: Socket): Promise<void> {
-    const entityId = client.data.entityId as string | undefined;
+    const session = getSocketData(client).chatSession;
     const userId = getSocketData(client).user?.id;
 
-    if (!entityId) {
+    if (!session) {
       return;
     }
 
     if (userId) {
-      await this.entityChatService.leaveRoom(entityId, userId);
+      await this.entityChatService.leaveRoom(session.entityId, userId, session.locale);
     }
 
-    this.emitRoomOnlineCount(entityId);
+    this.emitRoomOnlineCount(session);
+    delete getSocketData(client).chatSession;
   }
 
   @SubscribeMessage("join")
   async handleJoin(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: JoinRoomPayload
-  ): Promise<{ entityId: string; messages: EntityChatMessageDto[]; onlineCount: number }> {
+  ): Promise<{
+    entityId: string;
+    locale: EntityChatLocale;
+    messages: EntityChatMessageDto[];
+    nextCursor: string | null;
+    onlineCount: number;
+  }> {
     const entityId = payload.entityId;
+    const locale = normalizeEntityChatLocale(payload.locale);
 
     if (!entityId) {
       throw createAppException({
@@ -95,56 +118,71 @@ export class EntityChatGateway implements OnGatewayConnection, OnGatewayDisconne
       });
     }
 
-    const previousEntityId = client.data.entityId as string | undefined;
+    const session = buildChatSession(entityId, locale);
+    const previousSession = getSocketData(client).chatSession;
     const userId = getSocketData(client).user?.id;
 
-    if (previousEntityId && previousEntityId !== entityId) {
+    if (previousSession && previousSession.room !== session.room) {
       if (userId) {
-        await this.entityChatService.leaveRoom(previousEntityId, userId);
+        await this.entityChatService.leaveRoom(
+          previousSession.entityId,
+          userId,
+          previousSession.locale
+        );
       }
 
-      await client.leave(roomName(previousEntityId));
-      this.emitRoomOnlineCount(previousEntityId);
+      await client.leave(previousSession.room);
+      this.emitRoomOnlineCount(previousSession);
     }
 
-    await client.join(roomName(entityId));
-    client.data.entityId = entityId;
+    await client.join(session.room);
+    getSocketData(client).chatSession = session;
 
-    const page = await this.entityChatService.listMessages(entityId);
+    const page = await this.entityChatService.listMessages(
+      entityId,
+      undefined,
+      payload.limit,
+      locale
+    );
 
     if (userId) {
-      await this.entityChatService.joinRoom(entityId, userId);
+      await this.entityChatService.joinRoom(entityId, userId, locale);
     }
 
-    const onlineCount = this.emitRoomOnlineCount(entityId);
+    const onlineCount = this.emitRoomOnlineCount(session);
 
     return {
       entityId,
+      locale,
       messages: page.messages,
+      nextCursor: page.nextCursor,
       onlineCount
     };
   }
 
   @SubscribeMessage("leave")
-  async handleLeave(@ConnectedSocket() client: Socket): Promise<{ entityId: string; onlineCount: number } | null> {
-    const entityId = client.data.entityId as string | undefined;
+  async handleLeave(
+    @ConnectedSocket() client: Socket
+  ): Promise<{ entityId: string; locale: EntityChatLocale; onlineCount: number } | null> {
+    const session = getSocketData(client).chatSession;
     const userId = getSocketData(client).user?.id;
 
-    if (!entityId) {
+    if (!session) {
       return null;
     }
 
-    await client.leave(roomName(entityId));
-    delete client.data.entityId;
+    await client.leave(session.room);
+    delete getSocketData(client).chatSession;
 
     if (userId) {
-      await this.entityChatService.leaveRoom(entityId, userId);
+      await this.entityChatService.leaveRoom(session.entityId, userId, session.locale);
     }
 
-    const onlineCount = this.emitRoomOnlineCount(entityId);
+    const onlineCount = this.emitRoomOnlineCount(session);
 
     return {
-      entityId,
+      entityId: session.entityId,
+      locale: session.locale,
       onlineCount
     };
   }
@@ -164,50 +202,66 @@ export class EntityChatGateway implements OnGatewayConnection, OnGatewayDisconne
       });
     }
 
-    const message = await this.entityChatService.sendMessage(payload.entityId, payload.message, currentUser);
+    const session = getSocketData(client).chatSession;
+    const locale = normalizeEntityChatLocale(payload.locale ?? session?.locale);
+    const message = await this.entityChatService.sendMessage(
+      payload.entityId,
+      payload.message,
+      currentUser,
+      locale
+    );
 
-    this.broadcastNewMessage(payload.entityId, message);
+    this.broadcastNewMessage(buildChatSession(payload.entityId, locale), message);
 
     return message;
   }
 
-  broadcastNewMessage(entityId: string, message: EntityChatMessageDto): void {
-    this.server.to(roomName(entityId)).emit("new_message", message);
+  broadcastNewMessage(session: ChatSocketSession, message: EntityChatMessageDto): void {
+    this.server.to(session.room).emit("new_message", message);
   }
 
   @SubscribeMessage("heartbeat")
   async handleHeartbeat(@ConnectedSocket() client: Socket): Promise<{ onlineCount: number } | null> {
-    const entityId = client.data.entityId as string | undefined;
+    const session = getSocketData(client).chatSession;
     const userId = getSocketData(client).user?.id;
 
-    if (!entityId || !userId) {
+    if (!session || !userId) {
       return null;
     }
 
-    await this.entityChatService.joinRoom(entityId, userId);
-    const onlineCount = this.emitRoomOnlineCount(entityId);
+    await this.entityChatService.joinRoom(session.entityId, userId, session.locale);
+    const onlineCount = this.emitRoomOnlineCount(session);
 
     return { onlineCount };
   }
 
-  private emitRoomOnlineCount(entityId: string): number {
-    const onlineCount = this.readRoomOnlineCount(entityId);
+  private emitRoomOnlineCount(session: ChatSocketSession): number {
+    const onlineCount = this.readRoomOnlineCount(session.room);
 
-    this.server.to(roomName(entityId)).emit("online_count", {
-      entityId,
+    this.server.to(session.room).emit("online_count", {
+      entityId: session.entityId,
+      locale: session.locale,
       onlineCount
     });
 
     return onlineCount;
   }
 
-  private readRoomOnlineCount(entityId: string): number {
-    return readSocketRooms(this.server).get(roomName(entityId))?.size ?? 0;
+  private readRoomOnlineCount(room: string): number {
+    return readSocketRooms(this.server).get(room)?.size ?? 0;
   }
 }
 
-export function roomName(entityId: string): string {
-  return `entity:${entityId}`;
+export function roomName(entityId: string, locale: EntityChatLocale = "ru"): string {
+  return buildEntityChatSocketRoomName(entityId, locale);
+}
+
+function buildChatSession(entityId: string, locale: EntityChatLocale): ChatSocketSession {
+  return {
+    entityId,
+    locale,
+    room: roomName(entityId, locale)
+  };
 }
 
 function extractHandshakeToken(client: Socket): string | null {

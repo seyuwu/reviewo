@@ -9,6 +9,7 @@ import {
   Req,
   UseGuards
 } from "@nestjs/common";
+import { buildEntityChatSocketRoomName, normalizeEntityChatLocale } from "@reviewo/shared";
 
 import { CurrentUser } from "../../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
@@ -24,6 +25,7 @@ import type {
   EntityChatMessagesPageDto,
   EntityChatOnlineCountDto
 } from "../dto/entity-chat.dto.js";
+import { EntityChatLocaleQueryDto } from "../dto/entity-chat-locale.dto.js";
 import {
   ActiveNowQueryDto,
   ListEntityChatMessagesQueryDto,
@@ -45,14 +47,15 @@ export class EntityChatController {
     @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string,
     @Query() query: ListEntityChatMessagesQueryDto
   ): Promise<EntityChatMessagesPageDto> {
-    return this.entityChatService.listMessages(entityId, query.before, query.limit);
+    return this.entityChatService.listMessages(entityId, query.before, query.limit, query.locale);
   }
 
   @Get("entities/:entityId/online")
   async getOnlineCount(
-    @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string
+    @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string,
+    @Query() query: EntityChatLocaleQueryDto
   ): Promise<EntityChatOnlineCountDto> {
-    return this.entityChatService.getOnlineCount(entityId);
+    return this.entityChatService.getOnlineCount(entityId, query.locale);
   }
 
   @Get("active-now")
@@ -67,9 +70,22 @@ export class EntityChatController {
     @Body() input: SendEntityChatMessageDto,
     @CurrentUser() currentUser: AuthenticatedUser
   ): Promise<EntityChatMessageDto> {
-    const message = await this.entityChatService.sendMessage(entityId, input.message, currentUser);
+    const locale = normalizeEntityChatLocale(input.locale);
+    const message = await this.entityChatService.sendMessage(
+      entityId,
+      input.message,
+      currentUser,
+      locale
+    );
 
-    this.entityChatGateway.broadcastNewMessage(entityId, message);
+    this.entityChatGateway.broadcastNewMessage(
+      {
+        entityId,
+        locale,
+        room: buildEntityChatSocketRoomName(entityId, locale)
+      },
+      message
+    );
 
     return message;
   }
@@ -78,6 +94,7 @@ export class EntityChatController {
   @UseGuards(JwtAuthGuard)
   async heartbeatPresence(
     @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string,
+    @Query() query: EntityChatLocaleQueryDto,
     @CurrentUser() currentUser: AuthenticatedUser,
     @Req() request: RequestLike
   ): Promise<EntityChatOnlineCountDto> {
@@ -85,10 +102,12 @@ export class EntityChatController {
       createPresenceHeartbeatRateLimitRules(currentUser.id, request)
     );
 
-    const onlineCount = await this.entityChatService.joinRoom(entityId, currentUser.id);
+    const locale = normalizeEntityChatLocale(query.locale);
+    const onlineCount = await this.entityChatService.joinRoom(entityId, currentUser.id, locale);
 
     return {
       entityId,
+      locale,
       onlineCount
     };
   }

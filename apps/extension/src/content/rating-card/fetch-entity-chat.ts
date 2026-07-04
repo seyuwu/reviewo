@@ -4,6 +4,10 @@ import type {
   EntityChatOnlineCount
 } from "../../popup/services/entity-chat-api.js";
 import {
+  appendEntityChatLocaleParam,
+  type EntityChatLocale
+} from "../../shared/entity-chat/locale.js";
+import {
   createAuthenticatedApiRequestMessage,
   createPublicApiRequestMessage,
   ExtensionMessageType
@@ -66,10 +70,10 @@ async function readAuthenticatedData<T>(options: {
   };
 }
 
-export async function fetchEntityChatMessages(
+function buildMessagesPath(
   entityId: string,
-  options?: { before?: string; limit?: number }
-): Promise<EntityChatMessagesPage> {
+  options?: { before?: string; limit?: number; locale?: EntityChatLocale }
+): string {
   const params = new URLSearchParams();
 
   if (options?.before) {
@@ -80,10 +84,18 @@ export async function fetchEntityChatMessages(
     params.set("limit", String(options.limit));
   }
 
+  appendEntityChatLocaleParam(params, options?.locale ?? "ru");
+
   const query = params.toString();
-  const result = await readPublicData<EntityChatMessagesPage>(
-    `/chat/entities/${encodeURIComponent(entityId)}/messages${query ? `?${query}` : ""}`
-  );
+
+  return `/chat/entities/${encodeURIComponent(entityId)}/messages${query ? `?${query}` : ""}`;
+}
+
+export async function fetchEntityChatMessages(
+  entityId: string,
+  options?: { before?: string; limit?: number; locale?: EntityChatLocale }
+): Promise<EntityChatMessagesPage> {
+  const result = await readPublicData<EntityChatMessagesPage>(buildMessagesPath(entityId, options));
 
   if (result.errorMessage) {
     throw new Error(result.errorMessage);
@@ -92,9 +104,16 @@ export async function fetchEntityChatMessages(
   return result.data ?? { messages: [], nextCursor: null };
 }
 
-export async function fetchEntityChatOnlineCount(entityId: string): Promise<EntityChatOnlineCount> {
+export async function fetchEntityChatOnlineCount(
+  entityId: string,
+  locale: EntityChatLocale = "ru"
+): Promise<EntityChatOnlineCount> {
+  const params = new URLSearchParams();
+  appendEntityChatLocaleParam(params, locale);
+  const query = params.toString();
+
   const result = await readPublicData<EntityChatOnlineCount>(
-    `/chat/entities/${encodeURIComponent(entityId)}/online`
+    `/chat/entities/${encodeURIComponent(entityId)}/online${query ? `?${query}` : ""}`
   );
 
   if (result.errorMessage) {
@@ -104,10 +123,17 @@ export async function fetchEntityChatOnlineCount(entityId: string): Promise<Enti
   return result.data ?? { entityId, onlineCount: 0 };
 }
 
-export async function pingEntityChatPresence(entityId: string): Promise<EntityChatOnlineCount> {
+export async function pingEntityChatPresence(
+  entityId: string,
+  locale: EntityChatLocale = "ru"
+): Promise<EntityChatOnlineCount> {
+  const params = new URLSearchParams();
+  appendEntityChatLocaleParam(params, locale);
+  const query = params.toString();
+
   const result = await readAuthenticatedData<EntityChatOnlineCount>({
     method: "POST",
-    path: `/chat/entities/${encodeURIComponent(entityId)}/presence`
+    path: `/chat/entities/${encodeURIComponent(entityId)}/presence${query ? `?${query}` : ""}`
   });
 
   if (result.errorMessage) {
@@ -120,10 +146,11 @@ export async function pingEntityChatPresence(entityId: string): Promise<EntityCh
 export async function sendEntityChatMessage(
   entityId: string,
   message: string,
-  _accessToken: string
+  _accessToken: string,
+  locale: EntityChatLocale = "ru"
 ): Promise<EntityChatMessage> {
   const result = await readAuthenticatedData<EntityChatMessage>({
-    body: { message },
+    body: { locale, message },
     method: "POST",
     path: `/chat/entities/${encodeURIComponent(entityId)}/messages`
   });

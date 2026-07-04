@@ -1,4 +1,14 @@
 import type { TranslateFn } from "@reviewo/i18n";
+import {
+  appendEntityChatMessageNewest,
+  ENTITY_CHAT_CARD_CACHE_MAX_ENTRIES,
+  ENTITY_CHAT_CLIENT_INITIAL_LIMIT,
+  ENTITY_CHAT_CLIENT_OLDER_LIMIT,
+  mergeEntityChatMessagesNewest,
+  prependEntityChatMessagesOldest,
+  resolveEntityChatOlderCursor,
+  trimEntityChatMessagesNewest
+} from "@reviewo/shared";
 
 import type { EntityChatMessage } from "../../popup/services/entity-chat-api.js";
 import { connectEntityChatSocket } from "../../popup/services/entity-chat-socket.js";
@@ -11,11 +21,28 @@ import {
   sendEntityChatMessage
 } from "./fetch-entity-chat.js";
 import {
+  bindEntityChatLocaleSwitch,
+  buildEntityChatConnectionKey,
+  DEFAULT_ENTITY_CHAT_LOCALE,
+  renderEntityChatLocaleSelectorMarkup,
+  updateEntityChatLocaleSelectorUi,
+  type EntityChatLocale
+} from "../../shared/entity-chat/locale.js";
+import {
   CHAT_ONLINE_POLL_MS,
   formatChatOnlineCountLabel,
   formatChatSendErrorMessage,
   updateChatOnlineCountElement
 } from "../../shared/entity-chat/chat-ui-helpers.js";
+import {
+  appendChatMessagesToList,
+  captureChatListScrollAnchor,
+  CARD_CHAT_MESSAGE_LIST_DOM,
+  prependChatMessagesToList,
+  replaceChatMessageList,
+  scrollChatListToBottom
+} from "../../shared/entity-chat/chat-message-list-dom.js";
+import { LruMap } from "../../shared/entity-chat/chat-cache-lru.js";
 
 export interface CardChatDrawerActions {
   onRequestSignIn: () => void;
@@ -29,25 +56,8 @@ export interface CardChatDrawerOptions {
 }
 
 const expandedStateByEntity = new Map<string, boolean>();
+const localeByEntity = new Map<string, EntityChatLocale>();
 const CHAT_MESSAGE_SYNC_MS = 2000;
-
-function mergeChatMessages(
-  current: EntityChatMessage[],
-  incoming: EntityChatMessage[]
-): EntityChatMessage[] {
-  if (current.length === 0) {
-    return incoming;
-  }
-
-  const knownIds = new Set(current.map((item) => item.id));
-  const appended = incoming.filter((item) => !knownIds.has(item.id));
-
-  if (appended.length === 0) {
-    return current;
-  }
-
-  return [...current, ...appended];
-}
 
 interface CardChatCache {
   connection: ReturnType<typeof connectEntityChatSocket> | null;
@@ -57,19 +67,20 @@ interface CardChatCache {
   onlineCount: number;
 }
 
-const chatCacheByEntity = new Map<string, CardChatCache>();
+const chatCacheByEntity = new LruMap<CardChatCache>(ENTITY_CHAT_CARD_CACHE_MAX_ENTRIES);
+
+function evictChatCache(_key: string, cache: CardChatCache): void {
+  cache.connection?.disconnect();
+}
 
 export function clearCardChatDrawerState(): void {
-  for (const cache of chatCacheByEntity.values()) {
-    cache.connection?.disconnect();
-  }
-
-  chatCacheByEntity.clear();
+  chatCacheByEntity.clear(evictChatCache);
   expandedStateByEntity.clear();
 }
 
-function getChatCache(entityId: string): CardChatCache {
-  const existing = chatCacheByEntity.get(entityId);
+function getChatCache(entityId: string, locale: EntityChatLocale): CardChatCache {
+  const key = buildEntityChatConnectionKey(entityId, locale);
+  const existing = chatCacheByEntity.get(key);
 
   if (existing) {
     return existing;
@@ -83,16 +94,18 @@ function getChatCache(entityId: string): CardChatCache {
     onlineCount: 0
   };
 
-  chatCacheByEntity.set(entityId, cache);
+  chatCacheByEntity.set(key, cache, evictChatCache);
   return cache;
 }
 
-function disconnectChatCache(entityId: string): void {
-  const cache = chatCacheByEntity.get(entityId);
+function disconnectChatCache(entityId: string, locale: EntityChatLocale): void {
+  const key = buildEntityChatConnectionKey(entityId, locale);
+  const cache = chatCacheByEntity.get(key);
   cache?.connection?.disconnect();
 
   if (cache) {
     cache.connection = null;
+    chatCacheByEntity.set(key, cache, evictChatCache);
   }
 }
 
@@ -136,18 +149,28 @@ export function bindCardChatDrawer(
     return;
   }
 
-  const cache = getChatCache(entityId);
+  let cache = getChatCache(entityId, localeByEntity.get(entityId) ?? DEFAULT_ENTITY_CHAT_LOCALE);
+  let chatLocale = localeByEntity.get(entityId) ?? DEFAULT_ENTITY_CHAT_LOCALE;
   let connection = cache.connection;
   let messages = cache.messages;
   let nextCursor = cache.nextCursor;
   let onlineCount = cache.onlineCount;
   let isLoadingOlder = false;
   let hasLoadedMessages = cache.hasLoadedMessages;
-  let isBootstrapping = false;
+  let chatLoadGeneration = 0;
   let onlinePollTimer: number | undefined;
   let messageSyncTimer: number | undefined;
   let isSyncingMessages = false;
   let composerBound = false;
+
+  const readCacheKey = (): string => buildEntityChatConnectionKey(entityId, chatLocale);
+
+  const bumpChatLoadGeneration = (): number => {
+    chatLoadGeneration += 1;
+    return chatLoadGeneration;
+  };
+
+  const isStaleChatLoad = (generation: number): boolean => generation !== chatLoadGeneration;
 
   const syncCache = (): void => {
     cache.connection = connection;
@@ -155,6 +178,7 @@ export function bindCardChatDrawer(
     cache.messages = messages;
     cache.nextCursor = nextCursor;
     cache.onlineCount = onlineCount;
+    chatCacheByEntity.set(readCacheKey(), cache, evictChatCache);
   };
 
   const connectLiveUpdates = (): void => {
@@ -162,20 +186,21 @@ export function bindCardChatDrawer(
       return;
     }
 
-    connection = connectEntityChatSocket(entityId, options.accessToken, {
-      onMessages: (initialMessages) => {
-        messages = initialMessages;
-        syncCache();
-        renderDrawerContent();
-      },
-      onNewMessage: (message) => {
-        if (messages.some((item) => item.id === message.id)) {
-          return;
+    connection = connectEntityChatSocket(entityId, chatLocale, options.accessToken, {
+      onMessages: (initialMessages, incomingNextCursor) => {
+        messages = mergeEntityChatMessagesNewest(messages, initialMessages);
+
+        if (incomingNextCursor !== undefined) {
+          nextCursor = resolveEntityChatOlderCursor(messages.length, incomingNextCursor, nextCursor);
         }
 
-        messages = [...messages, message];
         syncCache();
-        renderDrawerContent();
+        syncMessagesToDom();
+      },
+      onNewMessage: (message) => {
+        messages = appendEntityChatMessageNewest(messages, message);
+        syncCache();
+        syncMessagesToDom();
       },
       onOnlineCount: (count) => {
         onlineCount = count;
@@ -198,8 +223,8 @@ export function bindCardChatDrawer(
     try {
       const accessToken = options.accessToken ?? (await getExtensionSessionAccessToken());
       const result = accessToken
-        ? await pingEntityChatPresence(entityId)
-        : await fetchEntityChatOnlineCount(entityId);
+        ? await pingEntityChatPresence(entityId, chatLocale)
+        : await fetchEntityChatOnlineCount(entityId, chatLocale);
 
       onlineCount = result.onlineCount;
       syncCache();
@@ -217,14 +242,17 @@ export function bindCardChatDrawer(
     isSyncingMessages = true;
 
     try {
-      const page = await fetchEntityChatMessages(entityId, { limit: 100 });
-      const mergedMessages = mergeChatMessages(messages, page.messages);
+      const page = await fetchEntityChatMessages(entityId, {
+        limit: ENTITY_CHAT_CLIENT_INITIAL_LIMIT,
+        locale: chatLocale
+      });
+      const mergedMessages = mergeEntityChatMessagesNewest(messages, page.messages);
 
       if (mergedMessages !== messages) {
         messages = mergedMessages;
-        nextCursor ??= page.nextCursor;
+        nextCursor = resolveEntityChatOlderCursor(messages.length, page.nextCursor, nextCursor);
         syncCache();
-        renderDrawerContent();
+        syncMessagesToDom();
       }
     } catch {
       // Keep socket as the primary path and use polling only as a live fallback.
@@ -308,12 +336,141 @@ export function bindCardChatDrawer(
     composerBound = true;
   };
 
-  const renderDrawerContent = (): void => {
-    host.innerHTML = renderCardChatMessagesMarkup(t, onlineCount, messages);
-    bindCardChatMessageList(host, loadOlderMessages);
+  const switchChatLocale = (nextLocale: EntityChatLocale): void => {
+    if (nextLocale === chatLocale && hasLoadedMessages) {
+      return;
+    }
+
+    disconnectChatCache(entityId, chatLocale);
+    connection = null;
+    stopOnlinePolling();
+    stopMessageSync();
+
+    chatLocale = nextLocale;
+    localeByEntity.set(entityId, chatLocale);
+    cache = getChatCache(entityId, chatLocale);
+    connection = cache.connection;
+    messages = cache.messages;
+    nextCursor = cache.nextCursor;
+    onlineCount = cache.onlineCount;
+    hasLoadedMessages = cache.hasLoadedMessages;
+
+    if (host.querySelector(".reviewo-chat-drawer")) {
+      updateEntityChatLocaleSelectorUi(host, chatLocale);
+    }
+
+    if (!(expandedStateByEntity.get(entityId) ?? false)) {
+      return;
+    }
+
+    if (!hasLoadedMessages) {
+      void bootstrapChat(bumpChatLoadGeneration());
+      return;
+    }
+
+    mountDrawer(true);
+    startOnlinePolling();
+    connectLiveUpdates();
+    startMessageSync();
+  };
+
+  const getMessageListBody = (): HTMLElement | null =>
+    host.querySelector<HTMLElement>("[data-reviewo-chat-drawer-body]");
+
+  const updateLoadOlderButton = (): void => {
+    const button = host.querySelector<HTMLButtonElement>("[data-reviewo-chat-load-older]");
+
+    if (!button) {
+      return;
+    }
+
+    button.disabled = !nextCursor || isLoadingOlder;
+    button.textContent = t(isLoadingOlder ? "chat.loadingOlder" : "chat.loadOlder");
+  };
+
+  const getMessageList = (): HTMLElement | null =>
+    host.querySelector<HTMLElement>(CARD_CHAT_MESSAGE_LIST_DOM.listSelector);
+
+  const scrollMessageListToBottom = (): void => {
+    scrollChatListToBottom(getMessageList());
+  };
+
+  const syncMessagesToDom = (): void => {
+    const body = getMessageListBody();
+
+    if (!body) {
+      return;
+    }
+
+    if (messages.length > 0 && !host.querySelector("[data-reviewo-chat-load-older]")) {
+      mountDrawer(false);
+      return;
+    }
+
+    const list = body.querySelector<HTMLElement>(CARD_CHAT_MESSAGE_LIST_DOM.listSelector);
+
+    if (messages.length === 0) {
+      replaceChatMessageList(body, [], t("chat.empty"), CARD_CHAT_MESSAGE_LIST_DOM, escapeHtmlText);
+      updateLoadOlderButton();
+      return;
+    }
+
+    if (!list) {
+      replaceChatMessageList(body, messages, t("chat.empty"), CARD_CHAT_MESSAGE_LIST_DOM, escapeHtmlText);
+      updateLoadOlderButton();
+      return;
+    }
+
+    appendChatMessagesToList(list, messages, CARD_CHAT_MESSAGE_LIST_DOM, escapeHtmlText);
+    updateLoadOlderButton();
+  };
+
+  const mountDrawer = (scrollToBottom = true): void => {
+    host.innerHTML = renderCardChatMessagesMarkup(t, onlineCount, chatLocale, {
+      isLoadingOlder,
+      nextCursor,
+      showLoadOlder: messages.length > 0
+    });
+    bindEntityChatLocaleSwitch(host, switchChatLocale);
+    host.querySelector<HTMLButtonElement>("[data-reviewo-chat-load-older]")?.addEventListener("click", () => {
+      void loadOlderMessages();
+    });
     ensureComposerBound();
+
+    const body = getMessageListBody();
+
+    if (body) {
+      replaceChatMessageList(body, messages, t("chat.empty"), CARD_CHAT_MESSAGE_LIST_DOM, escapeHtmlText);
+    }
+
     updateOnlineCountUi();
-    scrollMessagesToBottom(host.querySelector<HTMLElement>("[data-reviewo-chat-message-list]"));
+
+    if (scrollToBottom) {
+      requestAnimationFrame(() => {
+        scrollMessageListToBottom();
+      });
+    }
+  };
+
+  const ensureDrawerMounted = (scrollToBottom = false): void => {
+    if (host.querySelector(".reviewo-chat-drawer")) {
+      syncMessagesToDom();
+      updateOnlineCountUi();
+
+      if (scrollToBottom) {
+        requestAnimationFrame(() => {
+          scrollMessageListToBottom();
+        });
+      }
+
+      return;
+    }
+
+    mountDrawer(scrollToBottom);
+  };
+
+  const renderDrawerContent = (): void => {
+    ensureDrawerMounted(true);
   };
 
   const renderDrawer = (): void => {
@@ -321,7 +478,7 @@ export function bindCardChatDrawer(
     setExpandedUi(expanded);
 
     if (!expanded) {
-      disconnectChatCache(entityId);
+      disconnectChatCache(entityId, chatLocale);
       connection = null;
       syncCache();
       stopOnlinePolling();
@@ -329,7 +486,7 @@ export function bindCardChatDrawer(
       return;
     }
 
-    if (isBootstrapping) {
+    if (chatPanel.classList.contains("is-loading")) {
       return;
     }
 
@@ -343,7 +500,7 @@ export function bindCardChatDrawer(
     setExpandedUi(nextExpanded);
 
     if (!nextExpanded) {
-      disconnectChatCache(entityId);
+      disconnectChatCache(entityId, chatLocale);
       connection = null;
       syncCache();
       stopOnlinePolling();
@@ -353,7 +510,7 @@ export function bindCardChatDrawer(
     startOnlinePolling();
 
     if (!hasLoadedMessages) {
-      void bootstrapChat();
+      void bootstrapChat(bumpChatLoadGeneration());
       return;
     }
 
@@ -366,7 +523,7 @@ export function bindCardChatDrawer(
     setExpandedUi(true);
 
     if (!hasLoadedMessages) {
-      void bootstrapChat();
+      void bootstrapChat(bumpChatLoadGeneration());
     } else {
       connectLiveUpdates();
       startMessageSync();
@@ -374,40 +531,58 @@ export function bindCardChatDrawer(
     }
   }
 
-  async function bootstrapChat(): Promise<void> {
-    if (isBootstrapping || hasLoadedMessages) {
+  async function bootstrapChat(generation: number): Promise<void> {
+    if (isStaleChatLoad(generation)) {
       return;
     }
 
-    isBootstrapping = true;
+    if (hasLoadedMessages) {
+      return;
+    }
+
     chatPanel.classList.add("is-loading");
     host.innerHTML = `<p class="reviewo-meta">${escapeHtmlText(t("chat.loading"))}</p>`;
     chatFooter.hidden = false;
+    const locale = chatLocale;
 
     try {
-      const page = await fetchEntityChatMessages(entityId, { limit: 100 });
+      const page = await fetchEntityChatMessages(entityId, {
+        limit: ENTITY_CHAT_CLIENT_INITIAL_LIMIT,
+        locale
+      });
 
-      messages = page.messages;
+      if (isStaleChatLoad(generation) || chatLocale !== locale) {
+        return;
+      }
+
+      messages = trimEntityChatMessagesNewest(page.messages);
       nextCursor = page.nextCursor;
 
       try {
-        const online = await fetchEntityChatOnlineCount(entityId);
+        const online = await fetchEntityChatOnlineCount(entityId, locale);
         onlineCount = online.onlineCount;
       } catch {
         onlineCount = 0;
       }
 
+      if (isStaleChatLoad(generation) || chatLocale !== locale) {
+        return;
+      }
+
       hasLoadedMessages = true;
       syncCache();
-      renderDrawerContent();
+      mountDrawer();
       connectLiveUpdates();
       startMessageSync();
       void refreshOnlineCount();
     } catch {
-      host.innerHTML = `<p class="reviewo-chat-error">${escapeHtmlText(t("chat.loadError"))}</p>`;
+      if (!isStaleChatLoad(generation) && chatLocale === locale) {
+        host.innerHTML = `<p class="reviewo-chat-error">${escapeHtmlText(t("chat.loadError"))}</p>`;
+      }
     } finally {
-      chatPanel.classList.remove("is-loading");
-      isBootstrapping = false;
+      if (!isStaleChatLoad(generation)) {
+        chatPanel.classList.remove("is-loading");
+      }
     }
   }
 
@@ -416,28 +591,42 @@ export function bindCardChatDrawer(
       return;
     }
 
+    const list = host.querySelector<HTMLElement>(CARD_CHAT_MESSAGE_LIST_DOM.listSelector);
+    const anchor = list ? captureChatListScrollAnchor(list) : null;
+
     isLoadingOlder = true;
-    const list = host.querySelector<HTMLElement>("[data-reviewo-chat-message-list]");
-    const previousHeight = list?.scrollHeight ?? 0;
+    updateLoadOlderButton();
 
     try {
       const page = await fetchEntityChatMessages(entityId, {
         before: nextCursor,
-        limit: 50
+        limit: ENTITY_CHAT_CLIENT_OLDER_LIMIT,
+        locale: chatLocale
       });
 
-      messages = [...page.messages, ...messages];
+      messages = prependEntityChatMessagesOldest(messages, page.messages);
       nextCursor = page.nextCursor;
       syncCache();
-      renderDrawerContent();
 
-      const updatedList = host.querySelector<HTMLElement>("[data-reviewo-chat-message-list]");
+      if (list && anchor) {
+        prependChatMessagesToList(list, page.messages, CARD_CHAT_MESSAGE_LIST_DOM, escapeHtmlText, anchor);
+      } else {
+        const body = getMessageListBody();
 
-      if (updatedList) {
-        updatedList.scrollTop = updatedList.scrollHeight - previousHeight;
+        if (body) {
+          replaceChatMessageList(
+            body,
+            messages,
+            t("chat.empty"),
+            CARD_CHAT_MESSAGE_LIST_DOM,
+            escapeHtmlText,
+            anchor
+          );
+        }
       }
     } finally {
       isLoadingOlder = false;
+      updateLoadOlderButton();
     }
   }
 
@@ -478,14 +667,16 @@ export function bindCardChatDrawer(
       }
 
       if (!created) {
-        created = await sendEntityChatMessage(entityId, text, accessToken);
+        created = await sendEntityChatMessage(entityId, text, accessToken, chatLocale);
       }
 
       if (!messages.some((item) => item.id === created.id)) {
-        messages = [...messages, created];
+        messages = appendEntityChatMessageNewest(messages, created);
         syncCache();
-        renderDrawerContent();
+        syncMessagesToDom();
       }
+
+      scrollMessageListToBottom();
 
       if (input) {
         input.value = "";
@@ -518,48 +709,38 @@ function getCardHost(container: HTMLElement): HTMLElement | null {
   return null;
 }
 
-function scrollMessagesToBottom(list: HTMLElement | null): void {
-  if (!list) {
-    return;
-  }
-
-  requestAnimationFrame(() => {
-    list.scrollTop = list.scrollHeight;
-  });
-}
-
 function renderCardChatMessagesMarkup(
   t: TranslateFn,
   onlineCount: number,
-  messages: EntityChatMessage[]
+  chatLocale: EntityChatLocale,
+  options: { isLoadingOlder: boolean; nextCursor: string | null; showLoadOlder: boolean }
 ): string {
-  const messageMarkup =
-    messages.length === 0
-      ? `<p class="reviewo-meta">${escapeHtmlText(t("chat.empty"))}</p>`
-      : `<ul class="reviewo-chat-message-list" data-reviewo-chat-message-list>
-          ${messages
-            .map(
-              (message) => `
-            <li class="reviewo-chat-message">
-              <strong>${escapeHtmlText(message.displayName)}:</strong>
-              <span>${escapeHtmlText(message.message)}</span>
-            </li>
-          `
-            )
-            .join("")}
-        </ul>`;
+  const loadOlderButtonMarkup = options.showLoadOlder
+    ? `<button
+          type="button"
+          class="reviewo-chat-load-older"
+          data-reviewo-chat-load-older
+          ${!options.nextCursor || options.isLoadingOlder ? "disabled" : ""}
+        >
+          ${escapeHtmlText(options.isLoadingOlder ? t("chat.loadingOlder") : t("chat.loadOlder"))}
+        </button>`
+    : "";
 
   return `
     <section class="reviewo-chat-drawer" aria-label="${escapeHtmlAttribute(t("chat.title"))}">
       <div class="reviewo-chat-drawer-header">
-        <div>
-          <h3 class="reviewo-chat-title">${escapeHtmlText(t("chat.title"))}</h3>
+        <div class="reviewo-chat-drawer-header-main">
+          <div class="reviewo-chat-drawer-header-top">
+            <h3 class="reviewo-chat-title">${escapeHtmlText(t("chat.title"))}</h3>
+            <div class="reviewo-chat-drawer-header-top-center">${loadOlderButtonMarkup}</div>
+            ${renderEntityChatLocaleSelectorMarkup(chatLocale)}
+          </div>
           <p class="reviewo-meta" data-reviewo-chat-online-count>${escapeHtmlText(
             formatChatOnlineCountLabel(t, onlineCount)
           )}</p>
         </div>
       </div>
-      <div class="reviewo-chat-drawer-body">${messageMarkup}</div>
+      <div class="reviewo-chat-drawer-body" data-reviewo-chat-drawer-body></div>
     </section>
   `;
 }
@@ -629,19 +810,6 @@ function bindChatComposerKeyboardGuard(target: HTMLElement | null): void {
   target.addEventListener("keydown", stopPageHotkeyPropagation);
   target.addEventListener("keypress", stopPageHotkeyPropagation);
   target.addEventListener("keyup", stopPageHotkeyPropagation);
-}
-
-function bindCardChatMessageList(
-  host: HTMLElement,
-  loadOlderMessages: () => Promise<void>
-): void {
-  host.querySelector<HTMLElement>("[data-reviewo-chat-message-list]")?.addEventListener("scroll", (event) => {
-    const list = event.currentTarget as HTMLElement;
-
-    if (list.scrollTop <= 24) {
-      void loadOlderMessages();
-    }
-  });
 }
 
 function escapeHtmlText(value: string): string {

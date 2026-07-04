@@ -1,4 +1,5 @@
 import { HttpStatus, Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { normalizeEntityChatLocale, type EntityChatLocale } from "@reviewo/shared";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
@@ -38,27 +39,44 @@ export class EntityChatService implements OnModuleInit {
     }, CLEANUP_INTERVAL_MS).unref();
   }
 
-  async listMessages(entityId: string, before?: string, limit?: number): Promise<EntityChatMessagesPageDto> {
+  async listMessages(
+    entityId: string,
+    before?: string,
+    limit?: number,
+    localeInput?: EntityChatLocale
+  ): Promise<EntityChatMessagesPageDto> {
+    const locale = normalizeEntityChatLocale(localeInput);
     await this.assertEntityIsPublic(entityId);
 
-    const rows = await this.entityChatRepository.listMessagesWithAuthors(entityId, before, limit);
+    const rows = await this.entityChatRepository.listMessagesWithAuthors(
+      entityId,
+      locale,
+      before,
+      limit
+    );
     const chronological = [...rows].reverse();
     const messages = chronological.map((row) => mapMessageDto(row));
     const oldestLoaded = rows.at(-1);
     const pageSize = limit ?? 100;
 
     return {
+      locale,
       messages,
       nextCursor: rows.length >= Math.min(pageSize, 100) && oldestLoaded ? oldestLoaded.id : null
     };
   }
 
-  async getOnlineCount(entityId: string): Promise<EntityChatOnlineCountDto> {
+  async getOnlineCount(
+    entityId: string,
+    localeInput?: EntityChatLocale
+  ): Promise<EntityChatOnlineCountDto> {
+    const locale = normalizeEntityChatLocale(localeInput);
     await this.assertEntityIsPublic(entityId);
 
     return {
       entityId,
-      onlineCount: await this.presenceService.getOnlineCount(entityId)
+      locale,
+      onlineCount: await this.presenceService.getOnlineCount(entityId, locale)
     };
   }
 
@@ -89,8 +107,10 @@ export class EntityChatService implements OnModuleInit {
   async sendMessage(
     entityId: string,
     message: string,
-    currentUser: AuthenticatedUser
+    currentUser: AuthenticatedUser,
+    localeInput?: EntityChatLocale
   ): Promise<EntityChatMessageDto> {
+    const locale = normalizeEntityChatLocale(localeInput);
     await this.assertEntityIsPublic(entityId);
     await this.chatRateLimiterService.assertCanSendMessage(currentUser.id);
 
@@ -106,6 +126,7 @@ export class EntityChatService implements OnModuleInit {
 
     const created = await this.entityChatRepository.createMessage({
       entityId,
+      locale,
       message: trimmedMessage,
       userId: currentUser.id
     });
@@ -115,18 +136,28 @@ export class EntityChatService implements OnModuleInit {
       displayName: currentUser.displayName,
       entityId: created.entityId,
       id: created.id,
+      locale: created.locale,
       message: created.message
     };
   }
 
-  async joinRoom(entityId: string, userId: string): Promise<number> {
+  async joinRoom(
+    entityId: string,
+    userId: string,
+    localeInput?: EntityChatLocale
+  ): Promise<number> {
+    const locale = normalizeEntityChatLocale(localeInput);
     await this.assertEntityIsPublic(entityId);
 
-    return this.presenceService.markOnline(entityId, userId);
+    return this.presenceService.markOnline(entityId, userId, locale);
   }
 
-  async leaveRoom(entityId: string, userId: string): Promise<number> {
-    return this.presenceService.markOffline(entityId, userId);
+  async leaveRoom(
+    entityId: string,
+    userId: string,
+    localeInput?: EntityChatLocale
+  ): Promise<number> {
+    return this.presenceService.markOffline(entityId, userId, normalizeEntityChatLocale(localeInput));
   }
 
   private async assertEntityIsPublic(entityId: string): Promise<void> {
@@ -163,6 +194,7 @@ function mapMessageDto(row: {
   createdAt: Date;
   entityId: string;
   id: string;
+  locale: string;
   message: string;
   user: {
     displayName: string;
@@ -173,6 +205,7 @@ function mapMessageDto(row: {
     displayName: row.user.displayName,
     entityId: row.entityId,
     id: row.id,
+    locale: normalizeEntityChatLocale(row.locale),
     message: row.message
   };
 }

@@ -1,0 +1,35 @@
+.localeSwitch {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.localeButton {
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid #a3a3a3;
+  border-radius: 999px;
+  color: #171717;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  min-width: 2rem;
+  padding: 0.35rem 0.5rem;
+  width: auto;
+}
+
+.localeButton:hover:not(.localeButtonActive),
+.localeButton:focus-visible:not(.localeButtonActive) {
+  background: #fcfcfc;
+  border-color: #737373;
+}
+
+.localeButtonActive {
+  background: #171717;
+  border-color: #171717;
+  color: #ffffff;
+}

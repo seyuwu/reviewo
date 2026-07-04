@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@reviewo/i18n": "workspace:*",
+    "@reviewo/shared": "workspace:*",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
