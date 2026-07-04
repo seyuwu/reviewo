@@ -1,14 +1,16 @@
-Обновление в будущем:
+Обновление на VPS:
 
+```bash
 cd /opt/opinia && git pull
 docker compose --env-file .env.production \
   -f docker-compose.yml -f docker-compose.prod.yml \
   -f docker-compose.host-override.yml \
   up -d --build
-Поздравляю — Opinia в проде рядом с logITika.
+```
 
+**Статус:** Opinia в production — [opinia.ru](https://opinia.ru), `api.opinia.ru`, расширение в Chrome Web Store. Workflow: [../development-workflow.md](../development-workflow.md).
 
-# Деплой Reviewo на VDS Selectel (рядом с logITika)
+# Деплой Opinia на VDS Selectel (рядом с logITika)
 
 Пошаговый гайд для выката **Reviewo** на уже работающем сервере с **logITika** (проект 1 — не трогать).
 
@@ -43,7 +45,7 @@ docker compose --env-file .env.production \
 | **PostgreSQL** | Docker, только внутри compose-сети |
 | **Redis** | Docker, чат / rate limits |
 | **MinIO** | Docker, S3-хранилище |
-| **Chrome-расширение** | **не на VPS** — у пользователей / Chrome Web Store |
+| **Chrome-расширение** | **Chrome Web Store** (Opinia) — не на VPS |
 | **Telegram-бот** | **нет** в текущем стеке |
 
 Расширение ходит на API по HTTPS: `https://api.<ваш-домен>/...`
@@ -368,18 +370,22 @@ nginx -t && systemctl reload nginx
 
 ## 7. Chrome-расширение
 
-Расширение **не деплоится на VPS**. Соберите локально или на сервере:
+Расширение **не деплоится на VPS**. Оно **опубликовано в Chrome Web Store** (Opinia) и ходит на `https://api.opinia.ru`.
+
+Для новой версии соберите локально или на сервере:
 
 ```bash
-cd /opt/reviewo   # или на своём ПК
+cd /opt/opinia   # или на своём ПК
 
-EXTENSION_API_BASE_URL=https://api.<домен> \
-EXTENSION_WEB_BASE_URL=https://<домен> \
+EXTENSION_API_BASE_URL=https://api.opinia.ru \
+EXTENSION_WEB_BASE_URL=https://opinia.ru \
 NODE_ENV=production \
   corepack pnpm --filter @reviewo/extension build
 ```
 
-Артефакты: `apps/extension/dist` — загрузка unpacked в Chrome или публикация в Chrome Web Store.
+Артефакты: `apps/extension/dist` — zip в [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
+
+Для **локальной разработки** используйте обычную сборку без production-переменных и загрузку unpacked из `dist` (см. [../development-workflow.md](../development-workflow.md)).
 
 После установки добавьте `chrome-extension://<ID>` в `CORS_ALLOWED_ORIGINS` и перезапустите API:
 

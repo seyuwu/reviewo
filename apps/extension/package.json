@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:dev": "node scripts/build.mjs",
+    "build:store": "node scripts/build.mjs --store",
     "dev": "node scripts/build.mjs --watch",
     "lint": "eslint .",
     "test": "node scripts/build.mjs && node scripts/verify-build.mjs && tsc -p tsconfig.test.json && node --test dist-test/shared/page-url.test.js dist-test/shared/page-identity.test.js dist-test/shared/review-limits.test.js dist-test/shared/review-snippet.test.js dist-test/shared/site-snooze.test.js dist-test/shared/web-auth-sync-policy.test.js dist-test/background/tab-resolve-cache.test.js dist-test/popup/review-sort.test.js dist-test/popup/review-display.test.js dist-test/popup/review-xss.test.js dist-test/content/rating-card/format-display.test.js dist-test/content/rating-card/card-page-title.test.js dist-test/content/rating-card/page-content-ready.test.js dist-test/content/rating-card/read-page-title.test.js dist-test/content/rating-card/card-responsive-scale.test.js dist-test/popup/navigation.test.js",

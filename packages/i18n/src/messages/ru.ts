@@ -166,6 +166,8 @@ export const ruMessages: MessageDictionary = {
   "card.auth.headerEyebrow": "Войти в Opinia",
   "card.auth.backAriaLabel": "Назад к карточке",
   "card.dismissAriaLabel": "Закрыть карточку Opinia",
+  "card.pin.pinAriaLabel": "Закрепить карточку",
+  "card.pin.unpinAriaLabel": "Открепить карточку",
   "card.rate.label": "Ваша оценка",
   "card.rate.groupAriaLabel": "Оценить сайт",
   "card.moreDetails": "Подробнее",
@@ -192,6 +194,11 @@ export const ruMessages: MessageDictionary = {
   "snooze.panel.label": "Отключить на этом сайте",
   "snooze.panel.durationAriaLabel": "Срок отключения Opinia на сайте",
   "snooze.panel.durationTooltip": "Скрыть Opinia на этом сайте на {duration}",
+  "snooze.panel.disableEverywhere": "Отключить везде",
+  "snooze.disableEverywhere.toast":
+    "Нажмите {hotkey}, чтобы снова показать карточку. Включить автопоказ можно в настройках расширения.",
+  "snooze.disableEverywhere.toastNoHotkey":
+    "Автопоказ выключен. Включить снова можно в настройках расширения.",
   "snooze.duration.24h": "24ч",
   "snooze.duration.7d": "7д",
   "snooze.duration.30d": "30д",

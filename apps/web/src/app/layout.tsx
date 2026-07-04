@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ReactNode } from "react";
 
 import { AppChrome } from "../components/app-chrome";
+import { GoogleAnalytics } from "../components/google-analytics";
 import { AppProviders } from "./providers";
 import "./globals.css";
 
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
+        <GoogleAnalytics />
         <AppProviders>
           <AppChrome>{children}</AppChrome>
         </AppProviders>

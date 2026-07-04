@@ -164,6 +164,8 @@ export const enMessages = {
   "card.auth.headerEyebrow": "Sign in to Opinia",
   "card.auth.backAriaLabel": "Back to rating card",
   "card.dismissAriaLabel": "Dismiss Opinia card",
+  "card.pin.pinAriaLabel": "Pin card",
+  "card.pin.unpinAriaLabel": "Unpin card",
   "card.rate.label": "Your rating",
   "card.rate.groupAriaLabel": "Rate this site",
   "card.moreDetails": "More details",
@@ -190,6 +192,11 @@ export const enMessages = {
   "snooze.panel.label": "Disable on this site",
   "snooze.panel.durationAriaLabel": "Opinia snooze duration on this site",
   "snooze.panel.durationTooltip": "Hide Opinia on this site for {duration}",
+  "snooze.panel.disableEverywhere": "Disable everywhere",
+  "snooze.disableEverywhere.toast":
+    "Press {hotkey} to show the card again. Turn auto-show back on in extension Settings.",
+  "snooze.disableEverywhere.toastNoHotkey":
+    "Auto-show is off. Turn it back on in extension Settings.",
   "snooze.duration.24h": "24h",
   "snooze.duration.7d": "7d",
   "snooze.duration.30d": "30d",

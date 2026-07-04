@@ -8,8 +8,13 @@ const extensionRoot = join(currentDirectory, "..");
 const publicDirectory = join(extensionRoot, "public");
 const distDirectory = join(extensionRoot, "dist");
 const watchMode = process.argv.includes("--watch");
-const apiBaseUrl = process.env.EXTENSION_API_BASE_URL ?? "http://localhost:3000";
-const webBaseUrl = process.env.EXTENSION_WEB_BASE_URL ?? "http://localhost:3001";
+const isStoreBuild = process.argv.includes("--store");
+const isProductionBuild = process.env.NODE_ENV === "production" || isStoreBuild;
+const apiBaseUrl =
+  process.env.EXTENSION_API_BASE_URL ??
+  (isStoreBuild ? "https://api.opinia.ru" : "http://localhost:3000");
+const webBaseUrl =
+  process.env.EXTENSION_WEB_BASE_URL ?? (isStoreBuild ? "https://opinia.ru" : "http://localhost:3001");
 
 validateProductionUrl("EXTENSION_API_BASE_URL", apiBaseUrl);
 validateProductionUrl("EXTENSION_WEB_BASE_URL", webBaseUrl);
@@ -79,10 +84,11 @@ function writeManifest() {
   const manifestPath = join(publicDirectory, "manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 
-  if (process.env.NODE_ENV === "production") {
+  if (isProductionBuild) {
     const webMatch = `${new URL(webBaseUrl).origin}/*`;
     const apiMatch = `${new URL(apiBaseUrl).origin}/*`;
 
+    manifest.name = "Opinia";
     manifest.host_permissions = [apiMatch];
     manifest.content_scripts = manifest.content_scripts.map((script) => {
       if (script.js?.includes("web-auth-content.js")) {
@@ -97,9 +103,31 @@ function writeManifest() {
         exclude_matches: [webMatch]
       };
     });
+  } else {
+    manifest.name = "Opinia (Dev)";
   }
 
   writeFileSync(join(distDirectory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+function logBuildSummary() {
+  const mode = isProductionBuild ? "PRODUCTION (Chrome Web Store)" : "DEVELOPMENT (local unpacked)";
+  const manifestName = isProductionBuild ? "Opinia" : "Opinia (Dev)";
+
+  console.info(
+    [
+      "",
+      `Opinia extension build: ${mode}`,
+      `  manifest name: ${manifestName}`,
+      `  API: ${apiBaseUrl}`,
+      `  Web: ${webBaseUrl}`,
+      `  output: ${distDirectory}`,
+      isProductionBuild
+        ? "  Load this build only for Store upload — not for local dev."
+        : "  Load unpacked from dist in chrome://extensions. Disable the Store version while developing.",
+      ""
+    ].join("\n")
+  );
 }
 
 async function runBuild() {
@@ -119,6 +147,7 @@ async function runBuild() {
   });
   removeStaleContentSourceMap();
   copyStaticAssets();
+  logBuildSummary();
 }
 
 async function runWatch() {
@@ -166,6 +195,7 @@ async function runWatch() {
   });
 
   copyStaticAssets();
+  logBuildSummary();
   await Promise.all([
     moduleContext.watch(),
     contentContext.watch(),

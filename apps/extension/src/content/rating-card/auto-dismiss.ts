@@ -7,13 +7,18 @@ export type AutoDismissHost = HTMLElement & {
   reviewoAutoDismissRoot?: HTMLElement;
   reviewoAutoDismissSeconds?: number;
   reviewoAutoDismissSuspended?: boolean;
+  reviewoCardPinned?: boolean;
   reviewoDismissTimer?: ReturnType<typeof setTimeout>;
   reviewoIsClosing?: boolean;
   reviewoOutsideDismissCleanup?: () => void;
 };
 
+function isAutoDismissBlocked(host: AutoDismissHost): boolean {
+  return host.reviewoAutoDismissSuspended === true || host.reviewoCardPinned === true;
+}
+
 function scheduleAutoDismiss(host: AutoDismissHost, delayMs: number): void {
-  if (host.reviewoAutoDismissSuspended) {
+  if (isAutoDismissBlocked(host)) {
     return;
   }
 
@@ -63,7 +68,7 @@ export function bindAutoDismiss(
   };
 
   const scheduleAfterPointerLeave = (): void => {
-    if (host.reviewoAutoDismissSuspended) {
+    if (isAutoDismissBlocked(host)) {
       return;
     }
 
@@ -107,6 +112,10 @@ export function suspendAutoDismiss(host: AutoDismissHost): void {
 }
 
 export function resumeAutoDismiss(host: AutoDismissHost): void {
+  if (host.reviewoCardPinned) {
+    return;
+  }
+
   const interactionRoot = host.reviewoAutoDismissRoot;
   const autoDismissSeconds = host.reviewoAutoDismissSeconds ?? 0;
 
@@ -148,7 +157,7 @@ export function bindOutsideDismiss(host: AutoDismissHost): void {
   }, 0);
 
   const handlePointerDown = (event: PointerEvent): void => {
-    if (ignoreOutsidePointer || host.reviewoIsClosing) {
+    if (ignoreOutsidePointer || host.reviewoIsClosing || host.reviewoCardPinned) {
       return;
     }
 

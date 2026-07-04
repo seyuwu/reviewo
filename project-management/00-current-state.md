@@ -2,10 +2,10 @@
 
 ## Snapshot
 
-- Date: 2026-06-28
+- Date: 2026-07-03
 - Current stage: Post-MVP — Entity Live Chat MVP
 - Stage status: Entity Live Chat MVP completed
-- MVP readiness: **Ready for first deployment** (with documented limitations)
+- MVP readiness: **Deployed to production** — [opinia.ru](https://opinia.ru), Chrome Web Store extension
 - Last completed stage: Entity Live Chat MVP
 - Next stage: Deferred post-MVP items (see Stage 33 RFC backlog)
 

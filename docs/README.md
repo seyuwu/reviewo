@@ -6,6 +6,7 @@ This directory is the long-term home for project documentation. Content is being
 
 | Path | Description |
 | ---- | ----------- |
+| [development-workflow.md](./development-workflow.md) | Локальная разработка → GitHub → production (Opinia в Chrome Web Store и на VPS) |
 | [deployment/mvp-deploy.md](./deployment/mvp-deploy.md) | MVP production deployment notes (Stage 32) |
 | [deployment/selectel-vds-guide.md](./deployment/selectel-vds-guide.md) | Пошаговый деплой на VDS Selectel (рядом с другим Docker-проектом) |
 | [testing/mvp-e2e-flow.md](./testing/mvp-e2e-flow.md) | MVP end-to-end user journey (Stage 31) |

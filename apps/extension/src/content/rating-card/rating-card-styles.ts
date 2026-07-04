@@ -148,6 +148,61 @@ export const RATING_CARD_STYLES = `
   max-width: 42%;
 }
 
+.reviewo-header-controls {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.reviewo-pin {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: #a3a3a3;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+  width: 28px;
+}
+
+.reviewo-pin-icon {
+  display: block;
+  height: 17px;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  width: 17px;
+}
+
+.reviewo-pin.is-pinned .reviewo-pin-icon {
+  transform: rotate(-45deg) scale(1.08);
+}
+
+.reviewo-pin:hover,
+.reviewo-pin:focus-visible {
+  background: #f5f5f5;
+  color: #525252;
+}
+
+.reviewo-pin.is-pinned {
+  background: rgba(212, 175, 55, 0.14);
+  color: #b8860b;
+}
+
+.reviewo-pin.is-pinned:hover,
+.reviewo-pin.is-pinned:focus-visible {
+  background: rgba(212, 175, 55, 0.22);
+  color: #996515;
+}
+
 .reviewo-site-snooze {
   align-items: flex-end;
   display: flex;
@@ -196,6 +251,31 @@ export const RATING_CARD_STYLES = `
 }
 
 .reviewo-site-snooze-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.reviewo-disable-everywhere-button {
+  background: transparent;
+  border: 0;
+  color: #737373;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0;
+  text-align: right;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 180ms ease;
+}
+
+.reviewo-disable-everywhere-button:hover:not(:disabled),
+.reviewo-disable-everywhere-button:focus-visible:not(:disabled) {
+  color: #171717;
+}
+
+.reviewo-disable-everywhere-button:disabled {
   cursor: default;
   opacity: 0.55;
 }

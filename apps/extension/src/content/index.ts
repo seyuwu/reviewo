@@ -7,6 +7,7 @@ import {
 import { LOCALE_PREFERENCE_STORAGE_KEY } from "@reviewo/i18n";
 
 import { hideRatingCard, isRatingCardVisible, refreshVisibleRatingCardLocale, showRatingCardForResolveResult, showRatingCardOnDemand } from "./rating-card/rating-card.js";
+import { isAnyRatingCardPinned } from "./rating-card/card-pin.js";
 import {
   isResolveResultForCurrentPage,
   requestShowRatingCardIfAllowed,
@@ -73,6 +74,10 @@ function triggerManualRatingCardShow(): void {
 
 function toggleManualRatingCardWithHotkey(): void {
   if (isRatingCardVisible()) {
+    if (isAnyRatingCardPinned()) {
+      return;
+    }
+
     hideRatingCard({ animated: true });
     return;
   }

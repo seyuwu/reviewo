@@ -122,13 +122,30 @@ corepack pnpm start
 
 ## Browser extension
 
-The extension is not a long-running server. Build artifacts for manual install:
+The extension is not deployed on the VPS. **Opinia is published in the Chrome Web Store**; production builds talk to `https://api.opinia.ru` and `https://opinia.ru`.
+
+Development workflow (local → GitHub → production): [../development-workflow.md](../development-workflow.md).
+
+### Local development (unpacked)
+
+Default build targets localhost:
 
 ```bash
 corepack pnpm --filter @reviewo/extension build
+# or watch: corepack pnpm --filter @reviewo/extension build --watch
 ```
 
-Load unpacked from `apps/extension/dist` in Chrome.
+Load unpacked from `apps/extension/dist` in Chrome (`chrome://extensions`).
+
+### Production build (Chrome Web Store)
+
+```bash
+corepack pnpm --filter @reviewo/extension build:store
+```
+
+Do **not** use this output for local unpacked development — it overwrites `dist` with production URLs. Run `build:dev` afterward to switch back to localhost.
+
+Upload the `apps/extension/dist` zip via the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole). Add `chrome-extension://<extension-id>` to `CORS_ALLOWED_ORIGINS` on the API if it changed.
 
 Optional Compose profile to build extension artifacts inside Docker:
 

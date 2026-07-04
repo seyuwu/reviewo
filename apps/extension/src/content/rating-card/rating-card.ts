@@ -4,7 +4,10 @@ import {
   markExtensionContextInvalidated,
   removeStorageChangedListener
 } from "../extension-context.js";
-import { readExtensionPreferences } from "../../shared/extension-preferences-storage.js";
+import {
+  readExtensionPreferences,
+  saveExtensionPreferences
+} from "../../shared/extension-preferences-storage.js";
 import type { ExtensionUserPreferences } from "../../shared/preferences.js";
 import { extensionConfig } from "../../shared/config.js";
 import type { ExtensionResolveFoundResponse } from "../../shared/types/resolve.js";
@@ -44,6 +47,12 @@ import {
   bindCardSettingsTip,
   renderCardSettingsTipMarkup
 } from "./card-settings-tip.js";
+import { showDisableEverywhereFeedback } from "./card-disable-everywhere-feedback.js";
+import {
+  bindCardPinButton,
+  renderCardPinButtonMarkup,
+  setRatingCardPinned
+} from "./card-pin.js";
 import {
   bindCardChatDrawer,
   clearCardChatDrawerState,
@@ -248,6 +257,8 @@ export async function showRatingCard(
     settingsTipHotkeyEnabled: boolean;
     settingsTipHotkeyLabel: string;
     showSettingsTip: boolean;
+    onSiteRatingCardEnabled: boolean;
+    isPinned: boolean;
   } = {
     accessToken: null,
     authMode: "register",
@@ -267,7 +278,9 @@ export async function showRatingCard(
     activeReviewIndex: 0,
     settingsTipHotkeyEnabled: preferences.ratingCardHotkeyEnabled,
     settingsTipHotkeyLabel: formatRatingCardHotkeyLabel(preferences.ratingCardHotkey, t),
-    showSettingsTip: false
+    showSettingsTip: false,
+    onSiteRatingCardEnabled: preferences.onSiteRatingCardEnabled,
+    isPinned: false
   };
 
   let isCardContentReady = false;
@@ -380,6 +393,10 @@ export async function showRatingCard(
     return pageTitle ?? cardState.cachedPageTitle;
   }
 
+  function syncCardPinDismissBehavior(cardHost: RatingCardHost): void {
+    setRatingCardPinned(cardHost, cardState.isPinned);
+  }
+
   function renderCard(): void {
     if (!isCardContentReady || !isCardStillRelevant()) {
       if (!isCardStillRelevant()) {
@@ -445,7 +462,10 @@ export async function showRatingCard(
           <h2 class="reviewo-title" title="${escapeHtmlAttribute(cardTitle)}">${escapeHtmlText(cardTitle)}</h2>
         </div>
         <div class="reviewo-header-aside">
-          <button type="button" class="reviewo-dismiss" aria-label="${escapeHtmlAttribute(t("card.dismissAriaLabel"))}">&times;</button>
+          <div class="reviewo-header-controls">
+            ${renderCardPinButtonMarkup(t, cardState.isPinned)}
+            <button type="button" class="reviewo-dismiss" aria-label="${escapeHtmlAttribute(t("card.dismissAriaLabel"))}">&times;</button>
+          </div>
         </div>
       </header>
     `;
@@ -453,13 +473,29 @@ export async function showRatingCard(
 
   function bindAuthCardActions(): void {
     const pageSessionKey = readRatingCardSessionKey(cardState.resolveResponse.url.input);
+    const cardHost = host as RatingCardHost;
 
-    cardElement.querySelector(".reviewo-dismiss")?.addEventListener("click", () => {
+    const dismissCard = (): void => {
       cardState.pendingRatingScore = null;
       cardState.cardView = "main";
+      cardState.isPinned = false;
+      setRatingCardPinned(cardHost, false);
       requestDismissRatingCard(pageSessionKey);
       hideRatingCard();
-    });
+    };
+
+    cardElement.querySelector(".reviewo-dismiss")?.addEventListener("click", dismissCard);
+
+    bindCardPinButton(
+      cardElement,
+      cardHost,
+      () => cardState.isPinned,
+      (pinned) => {
+        cardState.isPinned = pinned;
+      },
+      t
+    );
+    syncCardPinDismissBehavior(cardHost);
 
     bindCardAuthPanel(cardElement, t, {
       authMode: cardState.authMode,
@@ -547,8 +583,13 @@ export async function showRatingCard(
           <h2 class="reviewo-title" title="${escapeHtmlAttribute(cardTitle)}">${escapeHtmlText(cardTitle)}</h2>
         </div>
         <div class="reviewo-header-aside">
-          ${renderSiteSnoozePanelMarkup(t)}
-          <button type="button" class="reviewo-dismiss" aria-label="${escapeHtmlAttribute(t("card.dismissAriaLabel"))}">&times;</button>
+          ${renderSiteSnoozePanelMarkup(t, {
+            showDisableEverywhere: cardState.onSiteRatingCardEnabled
+          })}
+          <div class="reviewo-header-controls">
+            ${renderCardPinButtonMarkup(t, cardState.isPinned)}
+            <button type="button" class="reviewo-dismiss" aria-label="${escapeHtmlAttribute(t("card.dismissAriaLabel"))}">&times;</button>
+          </div>
         </div>
       </header>
     `;
@@ -622,16 +663,52 @@ export async function showRatingCard(
 
   function bindCardActions(): void {
     const pageSessionKey = readRatingCardSessionKey(cardState.resolveResponse.url.input);
+    const cardHost = host as RatingCardHost;
 
-    cardElement.querySelector(".reviewo-dismiss")?.addEventListener("click", () => {
+    const dismissCard = (): void => {
+      cardState.isPinned = false;
+      setRatingCardPinned(cardHost, false);
       requestDismissRatingCard(pageSessionKey);
       hideRatingCard();
+    };
+
+    cardElement.querySelector(".reviewo-dismiss")?.addEventListener("click", dismissCard);
+
+    bindSiteSnoozePanel(cardElement, cardState.resolveResponse.url.input, {
+      onSnoozed: () => {
+        requestDismissRatingCard(pageSessionKey);
+        hideRatingCard();
+      },
+      onDisableEverywhere: async () => {
+        cardState.onSiteRatingCardEnabled = false;
+        cardElement.querySelector(".reviewo-disable-everywhere-button")?.remove();
+
+        const preferences = await readExtensionPreferences();
+        const hotkeyLabel = formatRatingCardHotkeyLabel(preferences.ratingCardHotkey, t);
+
+        showDisableEverywhereFeedback({
+          hotkeyEnabled: preferences.ratingCardHotkeyEnabled,
+          hotkeyLabel,
+          t
+        });
+
+        await saveExtensionPreferences({
+          ...preferences,
+          onSiteRatingCardEnabled: false
+        });
+      }
     });
 
-    bindSiteSnoozePanel(cardElement, cardState.resolveResponse.url.input, () => {
-      requestDismissRatingCard(pageSessionKey);
-      hideRatingCard();
-    });
+    bindCardPinButton(
+      cardElement,
+      cardHost,
+      () => cardState.isPinned,
+      (pinned) => {
+        cardState.isPinned = pinned;
+      },
+      t
+    );
+    syncCardPinDismissBehavior(cardHost);
 
     bindCardSettingsTip(cardElement);
 
@@ -855,6 +932,7 @@ export async function showRatingCard(
         latestPreferences.ratingCardHotkey,
         t
       );
+      cardState.onSiteRatingCardEnabled = latestPreferences.onSiteRatingCardEnabled;
 
       if (!document.contains(host)) {
         return;

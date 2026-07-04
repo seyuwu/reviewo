@@ -14,7 +14,10 @@ const SNOOZE_DURATION_MESSAGE_KEYS: Record<SiteSnoozeDuration, MessageKey> = {
   "1y": "snooze.duration.1y"
 };
 
-export function renderSiteSnoozePanelMarkup(t: TranslateFn): string {
+export function renderSiteSnoozePanelMarkup(
+  t: TranslateFn,
+  options: { showDisableEverywhere: boolean }
+): string {
   const optionsMarkup = SITE_SNOOZE_DURATIONS.map((duration) => {
     const durationLabel = t(SNOOZE_DURATION_MESSAGE_KEYS[duration]);
 
@@ -30,20 +33,38 @@ export function renderSiteSnoozePanelMarkup(t: TranslateFn): string {
     `;
   }).join("");
 
+  const disableEverywhereMarkup = options.showDisableEverywhere
+    ? `
+      <button
+        type="button"
+        class="reviewo-disable-everywhere-button"
+        data-disable-everywhere
+      >
+        ${escapeHtmlText(t("snooze.panel.disableEverywhere"))}
+      </button>
+    `
+    : "";
+
   return `
     <div class="reviewo-site-snooze">
       <span class="reviewo-site-snooze-label">${escapeHtmlText(t("snooze.panel.label"))}</span>
       <div class="reviewo-site-snooze-options" role="group" aria-label="${escapeHtmlAttribute(t("snooze.panel.durationAriaLabel"))}">
         ${optionsMarkup}
       </div>
+      ${disableEverywhereMarkup}
     </div>
   `;
+}
+
+export interface SiteSnoozePanelHandlers {
+  onDisableEverywhere: () => void | Promise<void>;
+  onSnoozed: () => void;
 }
 
 export function bindSiteSnoozePanel(
   container: ParentNode,
   pageUrl: string,
-  onSnoozed: () => void
+  handlers: SiteSnoozePanelHandlers
 ): void {
   const hostname = readSiteHostname(pageUrl);
 
@@ -57,9 +78,13 @@ export function bindSiteSnoozePanel(
 
       button.disabled = true;
       void snoozeSite(hostname, duration).then(() => {
-        onSnoozed();
+        handlers.onSnoozed();
       });
     });
+  });
+
+  container.querySelector<HTMLButtonElement>("[data-disable-everywhere]")?.addEventListener("click", () => {
+    void handlers.onDisableEverywhere();
   });
 }
 
