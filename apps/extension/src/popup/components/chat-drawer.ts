@@ -359,7 +359,6 @@ export function bindChatDrawerToggle(
 
     host.innerHTML = renderChatDrawerMarkup(
       t,
-      entityTitleLabel(options.entityTitle, t),
       onlineCount,
       chatLocale,
       {
@@ -734,7 +733,6 @@ export function bindChatDrawerToggle(
 
 function renderChatDrawerMarkup(
   t: TranslateFn,
-  entityTitle: string,
   onlineCount: number,
   chatLocale: EntityChatLocale,
   options: {
@@ -768,7 +766,6 @@ function renderChatDrawerMarkup(
             formatChatOnlineCountLabel(t, onlineCount)
           )}</p>
         </div>
-        <p class="muted-copy chat-entity-title">${escapeHtml(entityTitle)}</p>
       </div>
       <div class="chat-drawer-body" data-chat-drawer-body></div>
       <div class="chat-drawer-footer">
@@ -846,8 +843,4 @@ function bindChatDrawerControls(
   if (drawer && resizeHandle) {
     bindChatDrawerResizeHandle(drawer, resizeHandle, popupChatDrawerResizeConfig);
   }
-}
-
-function entityTitleLabel(title: string, t: TranslateFn): string {
-  return title.trim() || t("brand.name");
 }

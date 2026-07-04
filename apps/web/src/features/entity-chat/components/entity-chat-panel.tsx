@@ -57,7 +57,7 @@ interface EntityChatPanelProps {
 export function EntityChatPanel({
   accessToken,
   entityId,
-  entityTitle,
+  entityTitle: _entityTitle,
   isAuthenticated,
   onRequestSignIn,
   placement = "main"
@@ -86,8 +86,7 @@ export function EntityChatPanel({
   const onlinePollRef = useRef<number | undefined>(undefined);
   const shouldStickToBottomRef = useRef(true);
   const olderScrollAnchorRef = useRef<ReturnType<typeof captureChatListScrollAnchor> | null>(null);
-
-  const entityTitleLabel = entityTitle.trim() || t("brand.name");
+  const pendingScrollToBottomRef = useRef(false);
 
   const disconnectSocket = useCallback((): void => {
     connectionRef.current?.disconnect();
@@ -137,6 +136,11 @@ export function EntityChatPanel({
 
     list.scrollTop = list.scrollHeight - list.clientHeight;
     return true;
+  }, []);
+
+  const requestScrollToBottom = useCallback((): void => {
+    pendingScrollToBottomRef.current = true;
+    shouldStickToBottomRef.current = true;
   }, []);
 
   handlersRef.current = {
@@ -191,7 +195,7 @@ export function EntityChatPanel({
       setMessages(trimEntityChatMessagesNewest(page.messages));
       setNextCursor(page.nextCursor);
       setHasLoadedMessages(true);
-      shouldStickToBottomRef.current = true;
+      requestScrollToBottom();
 
       try {
         const online = await fetchEntityChatOnlineCount(entityId, chatLocale);
@@ -206,20 +210,21 @@ export function EntityChatPanel({
     } finally {
       setIsBootstrapping(false);
     }
-  }, [chatLocale, entityId, hasLoadedMessages, isBootstrapping, refreshOnlineCount, t]);
+  }, [chatLocale, entityId, hasLoadedMessages, isBootstrapping, refreshOnlineCount, requestScrollToBottom, t]);
 
   const loadOlderMessages = useCallback(async (): Promise<void> => {
     if (!nextCursor || isLoadingOlder) {
       return;
     }
 
-    setIsLoadingOlder(true);
-    shouldStickToBottomRef.current = false;
     const list = messageListRef.current;
 
     if (list) {
       olderScrollAnchorRef.current = captureChatListScrollAnchor(list);
     }
+
+    setIsLoadingOlder(true);
+    shouldStickToBottomRef.current = false;
 
     try {
       const page = await fetchEntityChatMessages(entityId, {
@@ -228,12 +233,23 @@ export function EntityChatPanel({
         locale: chatLocale
       });
 
-      setMessages((current) => prependEntityChatMessagesOldest(current, page.messages));
+      setMessages((current) => {
+        const next = prependEntityChatMessagesOldest(current, page.messages);
+
+        if (next.length === current.length) {
+          olderScrollAnchorRef.current = null;
+        }
+
+        return next;
+      });
       setNextCursor(page.nextCursor);
+    } catch {
+      olderScrollAnchorRef.current = null;
+      setSendError(t("chat.loadError"));
     } finally {
       setIsLoadingOlder(false);
     }
-  }, [chatLocale, entityId, isLoadingOlder, nextCursor]);
+  }, [chatLocale, entityId, isLoadingOlder, nextCursor, t]);
 
   const finishClose = useCallback((): void => {
     if (closeTimerRef.current !== undefined) {
@@ -263,13 +279,19 @@ export function EntityChatPanel({
 
     setIsClosing(false);
     setExpanded(true);
-    shouldStickToBottomRef.current = true;
+    requestScrollToBottom();
     startOnlinePolling();
 
     if (!hasLoadedMessages) {
       void bootstrapChat();
+      return;
     }
-  }, [bootstrapChat, hasLoadedMessages, startOnlinePolling]);
+
+    scrollMessagesToBottom();
+    requestAnimationFrame(() => {
+      scrollMessagesToBottom();
+    });
+  }, [bootstrapChat, hasLoadedMessages, requestScrollToBottom, scrollMessagesToBottom, startOnlinePolling]);
 
   const handleToggle = (): void => {
     if (expanded) {
@@ -314,7 +336,7 @@ export function EntityChatPanel({
 
       setMessages((current) => appendEntityChatMessageNewest(current, created!));
       setDraft("");
-      shouldStickToBottomRef.current = true;
+      requestScrollToBottom();
     } catch (error) {
       setSendError(formatChatSendErrorMessage(t, error));
     } finally {
@@ -344,9 +366,9 @@ export function EntityChatPanel({
       setHasLoadedMessages(false);
       setSendError(null);
       setDraft("");
-      shouldStickToBottomRef.current = true;
+      requestScrollToBottom();
     },
-    [chatLocale, disconnectSocket, stopOnlinePolling]
+    [chatLocale, disconnectSocket, requestScrollToBottom, stopOnlinePolling]
   );
 
   useEffect(() => {
@@ -378,26 +400,40 @@ export function EntityChatPanel({
   }, [accessToken, chatLocale, entityId, hasLoadedMessages, isChatLive, startOnlinePolling, stopOnlinePolling]);
 
   useLayoutEffect(() => {
-    if ((!expanded && !isSidebar) || isClosing || isLoadingOlder) {
+    if ((!expanded && !isSidebar) || isClosing) {
       return;
     }
 
-    if (shouldStickToBottomRef.current) {
-      scrollMessagesToBottom();
-    }
-  }, [expanded, isClosing, isLoadingOlder, isSidebar, messages, scrollMessagesToBottom]);
-
-  useLayoutEffect(() => {
-    const anchor = olderScrollAnchorRef.current;
     const list = messageListRef.current;
 
-    if (!anchor || !list) {
+    if (!list) {
       return;
     }
 
-    preserveChatListScrollPosition(list, anchor);
-    olderScrollAnchorRef.current = null;
-  }, [messages]);
+    const anchor = olderScrollAnchorRef.current;
+
+    if (anchor) {
+      preserveChatListScrollPosition(list, anchor);
+      olderScrollAnchorRef.current = null;
+      return;
+    }
+
+    if (isLoadingOlder) {
+      return;
+    }
+
+    const shouldScroll =
+      pendingScrollToBottomRef.current ||
+      (shouldStickToBottomRef.current && !olderScrollAnchorRef.current);
+
+    if (shouldScroll) {
+      scrollMessagesToBottom();
+      requestAnimationFrame(() => {
+        scrollMessagesToBottom();
+        pendingScrollToBottomRef.current = false;
+      });
+    }
+  }, [expanded, isClosing, isLoadingOlder, isSidebar, messages, scrollMessagesToBottom]);
 
   useEffect(() => {
     if (isSidebar || (!expanded && !isSidebar) || isClosing || isBootstrapping) {
@@ -467,9 +503,6 @@ export function EntityChatPanel({
             </div>
             <p className="muted-copy">{formatChatOnlineCountLabel(t, onlineCount)}</p>
           </div>
-          {!isSidebar ? (
-            <p className={`muted-copy ${styles.chatEntityTitle}`}>{entityTitleLabel}</p>
-          ) : null}
         </div>
 
         <div className={styles.chatDrawerBody}>
@@ -549,12 +582,6 @@ export function EntityChatPanel({
       }${expanded ? ` ${styles.chatSectionExpanded}` : ""}`}
       aria-label={t("chat.title")}
     >
-      {isSidebar ? (
-        <div className="section-heading">
-          <h2>{entityTitleLabel}</h2>
-        </div>
-      ) : null}
-
       <div className={panelClassName} data-chat-drawer-panel>
         <div className={styles.chatDrawerPanelInner}>
           <div className={styles.chatDrawerHost}>{chatBody}</div>

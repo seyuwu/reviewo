@@ -17,6 +17,7 @@ import {
 } from "../domain-tree.js";
 import type { EntityViewModel, RecentEntityRecord } from "../types.js";
 import { buildEntityPageUrl, entityViewFromResolve, escapeHtml } from "../view-helpers.js";
+import { bindAuthPromptTriggers } from "../bind-auth-prompt-triggers.js";
 import { sendExtensionMessage } from "../services/popup-messaging.js";
 import { entityViewFromChildItem } from "../domain-tree.js";
 import {

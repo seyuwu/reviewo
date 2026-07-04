@@ -36,11 +36,5 @@ export function preserveChatListScrollPosition(
   list: HTMLElement,
   anchor: ChatListScrollAnchor
 ): void {
-  const nextScrollTop = Math.max(0, anchor.scrollTop + (list.scrollHeight - anchor.scrollHeight));
-
-  list.scrollTop = nextScrollTop;
-
-  requestAnimationFrame(() => {
-    list.scrollTop = nextScrollTop;
-  });
+  list.scrollTop = Math.max(0, anchor.scrollTop + (list.scrollHeight - anchor.scrollHeight));
 }
