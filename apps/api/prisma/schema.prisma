@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["auth", "chat", "entities", "ratings", "reviews", "users", "reputation"]
+  schemas  = ["auth", "chat", "entities", "growth", "ratings", "reviews", "users", "reputation"]
 }
 
 model User {
@@ -386,4 +386,18 @@ model EntityChatMessage {
   @@index([createdAt])
   @@map("entity_chat_messages")
   @@schema("chat")
+}
+
+model BattleVote {
+  id        String   @id @default(uuid()) @db.Uuid
+  pairKey   String   @map("pair_key")
+  entityId  String   @map("entity_id") @db.Uuid
+  voterKey  String   @map("voter_key")
+  userId    String?  @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([pairKey, voterKey])
+  @@index([pairKey])
+  @@map("battle_votes")
+  @@schema("growth")
 }

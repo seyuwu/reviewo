@@ -64,6 +64,7 @@ describe("RatingsService", () => {
         throw new Error("not used");
       },
       findEntityById: async () => null,
+      findEntityBySlug: async () => null,
       hideEntity: async () => entity,
       listChildEntities: async () => [],
       resolveEntityByUrl: async () => ({
@@ -73,6 +74,7 @@ describe("RatingsService", () => {
         resolution: "not_found"
       }),
       searchEntities: async () => [],
+      searchEntitiesRanked: async () => [],
       unhideEntity: async () => entity
     };
     const service = new RatingsService(
@@ -91,6 +93,7 @@ describe("RatingsService", () => {
         throw new Error("not used");
       },
       findEntityById: async () => entity,
+      findEntityBySlug: async () => entity,
       hideEntity: async () => entity,
       listChildEntities: async () => [],
       resolveEntityByUrl: async () => ({
@@ -100,6 +103,7 @@ describe("RatingsService", () => {
         resolution: "found"
       }),
       searchEntities: async () => [],
+      searchEntitiesRanked: async () => [],
       unhideEntity: async () => entity
     };
     const repository = {
@@ -130,6 +134,7 @@ describe("RatingsService", () => {
         throw new Error("not used");
       },
       findEntityById: async () => entity,
+      findEntityBySlug: async () => entity,
       hideEntity: async () => entity,
       listChildEntities: async () => [],
       resolveEntityByUrl: async () => ({
@@ -139,6 +144,7 @@ describe("RatingsService", () => {
         resolution: "found"
       }),
       searchEntities: async () => [],
+      searchEntitiesRanked: async () => [],
       unhideEntity: async () => entity
     };
     const repository = {

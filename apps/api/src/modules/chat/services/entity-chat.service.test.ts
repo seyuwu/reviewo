@@ -170,6 +170,7 @@ function createService(overrides: {
       updatedAt: "2026-06-28T00:00:00.000Z",
       visibility: "ACTIVE"
     }),
+    findEntityBySlug: async () => null,
     hideEntity: async () => {
       throw new Error("not used");
     },
@@ -181,6 +182,7 @@ function createService(overrides: {
       resolution: "not_found"
     }),
     searchEntities: async () => [],
+    searchEntitiesRanked: async () => [],
     unhideEntity: async () => {
       throw new Error("not used");
     }

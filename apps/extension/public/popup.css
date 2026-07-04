@@ -775,6 +775,41 @@ a.secondary-button {
   font-size: 0.8125rem;
 }
 
+.search-results-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.search-results-divider {
+  height: 1px;
+  background: var(--color-card-border);
+}
+
+.entity-list-item-canonical {
+  background: linear-gradient(180deg, #f5f5f5, #ffffff);
+  gap: 0.25rem;
+}
+
+.entity-list-item-badge {
+  align-self: start;
+  background: #ffffff;
+  border: 1px solid rgb(23 23 23 / 8%);
+  border-radius: 999px;
+  color: var(--color-accent);
+  display: inline-flex;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  text-transform: uppercase;
+}
+
+.entity-list-item-rating {
+  color: var(--color-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
 .section-eyebrow {
   color: var(--color-accent);
   font-size: 0.6875rem;

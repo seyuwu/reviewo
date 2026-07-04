@@ -16,7 +16,7 @@ None.
 
 ## Current Progress
 
-Entity Live Chat MVP delivered backend `ChatModule`, Redis presence, WebSocket gateway, REST chat endpoints, extension popup chat drawer, Active Now panel, unit tests, and documentation updates without changing ratings/reviews/reputation/extension resolve flows.
+Entity Live Chat is available on extension popup, extension rating card, and web entity page sidebar. Locale-scoped rooms (`ru`/`en`), incremental DOM updates, and simplified scroll behavior are in place. v1 polish (2026-07-04/05) fixed locale-switch races, web older-message scroll, extension popup auth import, and Next.js route 404 after Docker web restart.
 
 ## Blockers
 

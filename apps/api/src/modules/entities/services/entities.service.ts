@@ -8,6 +8,7 @@ import { createAppException } from "../../../common/exceptions/app.exception.js"
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import { CreateEntityDto } from "../dto/create-entity.dto.js";
 import { EntityDto } from "../dto/entity.dto.js";
+import type { RankedSearchEntityDto } from "../dto/ranked-search-entity.dto.js";
 import { TrustCheckResponseDto } from "../dto/trust-check-response.dto.js";
 import { createEntityCreatedEvent } from "../events/entity-created.event.js";
 import type { EnsureEntityForUrlInput } from "../interfaces/ensure-entity-for-url.js";
@@ -20,6 +21,7 @@ import type { CreateEntityRecordInput } from "../repositories/entities.repositor
 import { EntitiesRepository } from "../repositories/entities.repository.js";
 import { createSlug, createSlugFromCanonicalUrl } from "./entity-slug.js";
 import { sanitizeLazyEntityTitle, isGenericLazyEntityTitle } from "./lazy-entity-title.js";
+import { rankSearchResults, collectCanonicalRootLookupUrls } from "./search-ranking.js";
 
 @Injectable()
 export class EntitiesService implements EntitiesPort {
@@ -107,6 +109,16 @@ export class EntitiesService implements EntitiesPort {
 
   async findEntityById(id: string): Promise<EntityDto | null> {
     const entity = await this.entitiesRepository.findById(id);
+
+    if (!entity || entity.visibility !== EntityVisibility.ACTIVE) {
+      return null;
+    }
+
+    return toEntityDto(entity);
+  }
+
+  async findEntityBySlug(slug: string): Promise<EntityDto | null> {
+    const entity = await this.entitiesRepository.findBySlug(slug.trim().toLowerCase());
 
     if (!entity || entity.visibility !== EntityVisibility.ACTIVE) {
       return null;
@@ -405,21 +417,109 @@ export class EntitiesService implements EntitiesPort {
   }
 
   async searchEntities(query: string): Promise<EntityDto[]> {
-    const normalizedUrl = this.urlNormalizer.normalize(query);
+    const rankedRows = await this.performRankedSearch(query);
+
+    return rankedRows.map(({ entity }) => toEntityDto(entity));
+  }
+
+  async searchEntitiesRanked(query: string): Promise<RankedSearchEntityDto[]> {
+    const rankedRows = await this.performRankedSearch(query);
+
+    return rankedRows.map(({ entity, ranking }) => toRankedSearchEntityDto(entity, ranking));
+  }
+
+  private async performRankedSearch(query: string): Promise<RankedSearchRow[]> {
+    const normalizedQuery = query.trim();
+    const normalizedUrl = this.urlNormalizer.normalize(normalizedQuery);
 
     if (normalizedUrl) {
       const entity = await this.entitiesRepository.findByCanonicalUrl(normalizedUrl);
 
       if (entity && entity.visibility === EntityVisibility.ACTIVE) {
-        return [toEntityDto(entity)];
+        const metricsByEntityId = await this.entitiesRepository.getSearchMetricsByEntityIds([
+          entity.id
+        ]);
+        const metrics = metricsByEntityId.get(entity.id) ?? {
+          avgScore: null,
+          reviewsCount: 0,
+          votesCount: 0
+        };
+        const isSiteRoot =
+          this.urlNormalizer.getSiteRootCanonicalUrl(normalizedUrl) === entity.canonicalUrl;
+
+        return [
+          {
+            entity,
+            ranking: {
+              avgScore: metrics.avgScore,
+              resultKind: isSiteRoot ? "canonical_site" : "entity",
+              reviewsCount: metrics.reviewsCount,
+              votesCount: metrics.votesCount
+            }
+          }
+        ];
       }
 
       return [];
     }
 
-    const entities = await this.entitiesRepository.search(query.trim());
+    const entities = await this.entitiesRepository.search(normalizedQuery);
+    const canonicalLookupMap = await this.loadCanonicalRootLookupMap(normalizedQuery);
+    const entityById = new Map<string, Entity>();
 
-    return entities.map(toEntityDto);
+    for (const entity of entities) {
+      entityById.set(entity.id, entity);
+    }
+
+    for (const entity of canonicalLookupMap.values()) {
+      entityById.set(entity.id, entity);
+    }
+
+    const entityIds = [...entityById.keys()];
+    const metricsByEntityId = await this.entitiesRepository.getSearchMetricsByEntityIds(entityIds);
+    const rankedEntities = rankSearchResults(
+      entities,
+      normalizedQuery,
+      metricsByEntityId,
+      this.urlNormalizer,
+      (canonicalUrl) => canonicalLookupMap.get(canonicalUrl) ?? null
+    );
+
+    return rankedEntities.map((rankedEntity) => {
+      const entity = entityById.get(rankedEntity.id);
+
+      if (!entity) {
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Entity was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+
+      return {
+        entity,
+        ranking: {
+          avgScore: rankedEntity.avgScore,
+          resultKind: rankedEntity.resultKind,
+          reviewsCount: rankedEntity.reviewsCount,
+          votesCount: rankedEntity.votesCount
+        }
+      };
+    });
+  }
+
+  private async loadCanonicalRootLookupMap(query: string): Promise<Map<string, Entity>> {
+    const canonicalLookupMap = new Map<string, Entity>();
+
+    for (const canonicalUrl of collectCanonicalRootLookupUrls(query, this.urlNormalizer)) {
+      const entity = await this.entitiesRepository.findByCanonicalUrl(canonicalUrl);
+
+      if (entity && entity.visibility === EntityVisibility.ACTIVE) {
+        canonicalLookupMap.set(canonicalUrl, entity);
+      }
+    }
+
+    return canonicalLookupMap;
   }
 
   private normalizeCanonicalUrl(canonicalUrl: string | undefined): string | undefined {
@@ -454,6 +554,37 @@ function toEntityDto(entity: Entity): EntityDto {
     updatedAt: entity.updatedAt.toISOString(),
     visibility: entity.visibility
   };
+}
+
+function toRankedSearchEntityDto(
+  entity: Entity,
+  ranking: RankedSearchRanking
+): RankedSearchEntityDto {
+  return {
+    avgScore: ranking.avgScore,
+    canonicalUrl: entity.canonicalUrl,
+    description: entity.description,
+    id: entity.id,
+    parentId: entity.parentId,
+    resultKind: ranking.resultKind,
+    reviewsCount: ranking.reviewsCount,
+    slug: entity.slug,
+    title: entity.title,
+    type: entity.type,
+    votesCount: ranking.votesCount
+  };
+}
+
+interface RankedSearchRanking {
+  avgScore: number | null;
+  resultKind: RankedSearchEntityDto["resultKind"];
+  reviewsCount: number;
+  votesCount: number;
+}
+
+interface RankedSearchRow {
+  entity: Entity;
+  ranking: RankedSearchRanking;
 }
 
 function createEntityNotFoundException(): Error {

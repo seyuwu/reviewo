@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { Entity, EntityType, EntityVisibility, Prisma } from "#prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
+import type { SearchEntityMetrics } from "../services/search-ranking.js";
 
 export interface CreateEntityRecordInput {
   canonicalUrl?: string;
@@ -68,9 +69,6 @@ export class EntitiesRepository {
 
   async search(query: string): Promise<Entity[]> {
     return this.prismaService.entity.findMany({
-      orderBy: {
-        updatedAt: "desc"
-      },
       take: 20,
       where: {
         OR: [
@@ -96,6 +94,73 @@ export class EntitiesRepository {
         visibility: "ACTIVE"
       }
     });
+  }
+
+  async getSearchMetricsByEntityIds(entityIds: string[]): Promise<Map<string, SearchEntityMetrics>> {
+    if (entityIds.length === 0) {
+      return new Map();
+    }
+
+    const [aggregates, reviewCounts] = await Promise.all([
+      this.prismaService.ratingAggregate.findMany({
+        where: {
+          entityId: {
+            in: entityIds
+          }
+        }
+      }),
+      this.prismaService.review.groupBy({
+        _count: {
+          _all: true
+        },
+        by: ["entityId"],
+        where: {
+          entityId: {
+            in: entityIds
+          },
+          visibility: "ACTIVE"
+        }
+      })
+    ]);
+
+    const metricsByEntityId = new Map<string, SearchEntityMetrics>();
+
+    for (const entityId of entityIds) {
+      metricsByEntityId.set(entityId, {
+        avgScore: null,
+        reviewsCount: 0,
+        votesCount: 0
+      });
+    }
+
+    for (const aggregate of aggregates) {
+      const existingMetrics = metricsByEntityId.get(aggregate.entityId) ?? {
+        avgScore: null,
+        reviewsCount: 0,
+        votesCount: 0
+      };
+
+      metricsByEntityId.set(aggregate.entityId, {
+        ...existingMetrics,
+        avgScore: aggregate.votesCount > 0 ? Number(aggregate.avgScore) : null,
+        votesCount: aggregate.votesCount
+      });
+    }
+
+    for (const reviewCount of reviewCounts) {
+      const existingMetrics = metricsByEntityId.get(reviewCount.entityId) ?? {
+        avgScore: null,
+        reviewsCount: 0,
+        votesCount: 0
+      };
+
+      metricsByEntityId.set(reviewCount.entityId, {
+        ...existingMetrics,
+        reviewsCount: reviewCount._count._all
+      });
+    }
+
+    return metricsByEntityId;
   }
 
   async findChildrenByParentId(parentId: string, limit: number): Promise<Entity[]> {

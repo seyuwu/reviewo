@@ -5,6 +5,7 @@ import { AppLogger } from "./common/logger/app-logger.service.js";
 import { RateLimitingModule } from "./common/rate-limiting/rate-limiting.module.js";
 import { AppConfigModule } from "./config/app-config.module.js";
 import { DatabaseModule } from "./database/database.module.js";
+import { GrowthModule } from "./modules/growth/growth.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
 import { ChatModule } from "./modules/chat/chat.module.js";
@@ -43,7 +44,8 @@ import { RedisModule } from "./redis/redis.module.js";
     ModerationModule,
     RecommendationModule,
     ReputationModule,
-    ChatModule
+    ChatModule,
+    GrowthModule
   ],
   providers: [AppLogger, GlobalExceptionFilter]
 })

@@ -4,6 +4,7 @@ import "reflect-metadata";
 
 import {
   assertCreated,
+  authHeaders,
   createTestApplication,
   readJson,
   type TestApplicationContext
@@ -79,11 +80,68 @@ describe("Critical API endpoints", { skip: !shouldRunIntegrationTests }, () => {
     const response = await fetch(`${context.baseUrl}/search/entities?query=${query}`);
     const body = await readJson<{
       canCreateEntity: boolean;
+      query: string;
       results: unknown[];
     }>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.results.length, 0);
     assert.equal(body.canCreateEntity, true);
+    assert.equal(typeof body.query, "string");
+  });
+
+  it("GET /search/entities returns ranking fields for matched entities", async () => {
+    const suffix = Date.now();
+    const email = `search-shape-${suffix}@example.com`;
+    const siteUrl = `https://search-shape-${suffix}.example/`;
+    const registerResponse = await fetch(`${context.baseUrl}/auth/register`, {
+      body: JSON.stringify({
+        displayName: "Search Shape User",
+        email,
+        password: "Password123!"
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const registerBody = await readJson<{ accessToken: string }>(registerResponse);
+
+    assertCreated(registerResponse);
+
+    const createEntityResponse = await fetch(`${context.baseUrl}/entities`, {
+      body: JSON.stringify({
+        canonicalUrl: siteUrl,
+        title: `Search Shape ${suffix}`,
+        type: "website"
+      }),
+      headers: authHeaders(registerBody.accessToken),
+      method: "POST"
+    });
+
+    assertCreated(createEntityResponse);
+
+    const searchResponse = await fetch(
+      `${context.baseUrl}/search/entities?query=${encodeURIComponent(`search-shape-${suffix}`)}`
+    );
+    const searchBody = await readJson<{
+      canCreateEntity: boolean;
+      results: Array<{
+        avgScore: number | null;
+        id: string;
+        resultKind: "canonical_site" | "entity";
+        reviewsCount: number;
+        title: string;
+        votesCount: number;
+      }>;
+    }>(searchResponse);
+
+    assert.equal(searchResponse.status, 200);
+    assert.equal(searchBody.canCreateEntity, false);
+    assert.ok(searchBody.results.length > 0);
+    assert.equal(searchBody.results[0]?.resultKind, "canonical_site");
+    assert.equal(searchBody.results[0]?.votesCount, 0);
+    assert.equal(searchBody.results[0]?.reviewsCount, 0);
+    assert.equal(searchBody.results[0]?.avgScore, null);
   });
 });

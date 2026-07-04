@@ -33,6 +33,7 @@ describe("ExtensionApiService.listEntityChildren", () => {
         throw new Error("not used");
       },
       findEntityById: async () => childEntity,
+      findEntityBySlug: async () => childEntity,
       hideEntity: async () => childEntity,
       listChildEntities: async () => [childEntity],
       resolveEntityByUrl: async () => ({
@@ -42,6 +43,7 @@ describe("ExtensionApiService.listEntityChildren", () => {
         resolution: "not_found"
       }),
       searchEntities: async () => [],
+      searchEntitiesRanked: async () => [],
       unhideEntity: async () => childEntity
     };
     const ratingsPort: RatingsPort = {

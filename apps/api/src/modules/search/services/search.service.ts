@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import { ENTITIES_PORT } from "../../entities/interfaces/entities.port.js";
 import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
-import type { EntityDto } from "../../entities/dto/entity.dto.js";
+import type { RankedSearchEntityDto } from "../../entities/dto/ranked-search-entity.dto.js";
 import {
   SearchEntitiesResponseDto,
   SearchEntityResultDto
@@ -17,7 +17,7 @@ export class SearchService {
 
   async searchEntities(query: string): Promise<SearchEntitiesResponseDto> {
     const normalizedQuery = query.trim();
-    const entities = await this.entitiesPort.searchEntities(normalizedQuery);
+    const entities = await this.entitiesPort.searchEntitiesRanked(normalizedQuery);
 
     return {
       canCreateEntity: entities.length === 0,
@@ -27,13 +27,17 @@ export class SearchService {
   }
 }
 
-function toSearchEntityResultDto(entity: EntityDto): SearchEntityResultDto {
+function toSearchEntityResultDto(entity: RankedSearchEntityDto): SearchEntityResultDto {
   return {
+    avgScore: entity.avgScore,
     canonicalUrl: entity.canonicalUrl,
     description: entity.description,
     id: entity.id,
+    resultKind: entity.resultKind,
+    reviewsCount: entity.reviewsCount,
     slug: entity.slug,
     title: entity.title,
-    type: entity.type
+    type: entity.type,
+    votesCount: entity.votesCount
   };
 }

@@ -38,6 +38,7 @@ function createEntitiesPort(overrides: Partial<EntitiesPort>): EntitiesPort {
       mode: "created"
     }),
     findEntityById: async () => entity,
+    findEntityBySlug: async () => entity,
     hideEntity: async () => entity,
     listChildEntities: async () => [],
     resolveEntityByUrl: async () => ({
@@ -47,6 +48,7 @@ function createEntitiesPort(overrides: Partial<EntitiesPort>): EntitiesPort {
       resolution: "not_found"
     }),
     searchEntities: async () => [],
+    searchEntitiesRanked: async () => [],
     unhideEntity: async () => entity,
     ...overrides
   };

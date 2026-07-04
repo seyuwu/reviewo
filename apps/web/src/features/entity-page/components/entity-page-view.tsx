@@ -8,6 +8,8 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { FormFeedback } from "../../../components/form-feedback";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { EntityChatPanel } from "../../entity-chat/components/entity-chat-panel";
+import { EntityGrowthPanel } from "../../growth/components/entity-growth-panel";
+import { ShareSheet } from "../../growth/components/share-sheet";
 import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
 import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { ApiError } from "../../../lib/api/api-error";
@@ -35,6 +37,7 @@ interface EntityPageViewProps {
 export function EntityPageView({ entityId }: EntityPageViewProps) {
   const searchParams = useSearchParams();
   const returnQuery = searchParams.get("q")?.trim() ?? "";
+  const shouldOpenChat = searchParams.get("chat") === "open";
   const queryClient = useQueryClient();
   const t = useTranslation();
   const { resolvedLocale: locale } = useLocale();
@@ -46,6 +49,7 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   const [ratingErrorMessage, setRatingErrorMessage] = useState<string | null>(null);
   const [reviewStatusMessage, setReviewStatusMessage] = useState<string | null>(null);
   const [reviewErrorMessage, setReviewErrorMessage] = useState<string | null>(null);
+  const [isShareOpen, setIsShareOpen] = useState(false);
   const hasHydratedReviewRef = useRef(false);
 
   const entityPageQuery = useQuery({
@@ -194,6 +198,19 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
     <section className="entity-page ui-fade-in" aria-labelledby="entity-page-heading">
       <EntityHero pageData={pageData} returnQuery={returnQuery} />
 
+      {isShareOpen ? (
+        <ShareSheet
+          avgScore={pageData.rating.avgScore}
+          entityId={entityId}
+          entityTitle={pageData.entity.title}
+          reviewsCount={pageData.meta.reviewsCount}
+          trustConfidence={pageData.trust.confidence}
+          onClose={() => {
+            setIsShareOpen(false);
+          }}
+        />
+      ) : null}
+
       <div
         className={`entity-page-grid ${styles.pageGrid}`}
         style={{
@@ -221,10 +238,20 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
           className={`entity-page-aside ${styles.asideColumn}`}
           aria-label={t("web.entity.asideAriaLabel")}
         >
+          <EntityGrowthPanel
+            entityId={entityId}
+            entitySlug={pageData.entity.slug}
+            entityTitle={pageData.entity.title}
+            onShareClick={() => {
+              setIsShareOpen(true);
+            }}
+          />
+
           <EntityChatPanel
             accessToken={accessToken ?? null}
             entityId={entityId}
             entityTitle={pageData.entity.title}
+            initialExpanded={shouldOpenChat}
             isAuthenticated={canInteract}
             placement="sidebar"
             onRequestSignIn={() => {

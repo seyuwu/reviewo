@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
 
 import { useAuthSession } from "../features/auth/hooks/use-auth-session";
@@ -12,8 +13,14 @@ interface AppChromeProps {
 }
 
 export function AppChrome({ children }: AppChromeProps) {
+  const pathname = usePathname();
+  const isEmbedRoute = pathname.startsWith("/embed");
   const { authSession, isAuthSessionLoaded, signOut } = useAuthSession();
   const t = useTranslation();
+
+  if (isEmbedRoute) {
+    return <>{children}</>;
+  }
 
   const authNavState = !isAuthSessionLoaded ? "loading" : authSession ? "signed-in" : "guest";
 

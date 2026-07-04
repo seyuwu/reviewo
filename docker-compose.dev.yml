@@ -68,6 +68,7 @@ services:
       NODE_ENV: development
       DEV_PNPM_FILTER: "@reviewo/web"
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3000}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3001}
     volumes: *dev-workspace-volumes
     command: *dev-service-command
 

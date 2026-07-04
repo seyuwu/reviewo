@@ -49,6 +49,7 @@ interface EntityChatPanelProps {
   accessToken: string | null;
   entityId: string;
   entityTitle: string;
+  initialExpanded?: boolean;
   isAuthenticated: boolean;
   onRequestSignIn?: () => void;
   placement?: "main" | "sidebar";
@@ -57,14 +58,15 @@ interface EntityChatPanelProps {
 export function EntityChatPanel({
   accessToken,
   entityId,
-  entityTitle: _entityTitle,
+  entityTitle,
+  initialExpanded = false,
   isAuthenticated,
   onRequestSignIn,
   placement = "main"
 }: EntityChatPanelProps) {
   const t = useTranslation();
   const isSidebar = placement === "sidebar";
-  const [expanded, setExpanded] = useState(isSidebar);
+  const [expanded, setExpanded] = useState(isSidebar || initialExpanded);
   const [isClosing, setIsClosing] = useState(false);
   const [messages, setMessages] = useState<EntityChatMessage[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -80,6 +82,7 @@ export function EntityChatPanel({
   const connectionRef = useRef<EntityChatSocketConnection | null>(null);
   const handlersRef = useRef<EntityChatSocketHandlers>({});
   const drawerRef = useRef<HTMLElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
   const resizeHandleRef = useRef<HTMLDivElement | null>(null);
   const messageListRef = useRef<HTMLUListElement | null>(null);
   const closeTimerRef = useRef<number | undefined>(undefined);
@@ -345,6 +348,14 @@ export function EntityChatPanel({
   };
 
   useEffect(() => {
+    if (!initialExpanded || !sectionRef.current) {
+      return;
+    }
+
+    sectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [initialExpanded]);
+
+  useEffect(() => {
     if ((!expanded && !isSidebar) || hasLoadedMessages || isBootstrapping) {
       return;
     }
@@ -577,6 +588,7 @@ export function EntityChatPanel({
 
   return (
     <section
+      ref={sectionRef}
       className={`panel-card form-stack ${styles.chatSection}${
         isSidebar ? ` ${styles.chatSectionSidebar}` : ""
       }${expanded ? ` ${styles.chatSectionExpanded}` : ""}`}

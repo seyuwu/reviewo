@@ -5,6 +5,10 @@ const nextConfig = {
   async headers() {
     return [
       {
+        headers: createEmbedHeaders(),
+        source: "/embed/:path*"
+      },
+      {
         headers: createSecurityHeaders(),
         source: "/:path*"
       }
@@ -15,6 +19,15 @@ const nextConfig = {
 };
 
 export default nextConfig;
+
+function createEmbedHeaders() {
+  return [
+    {
+      key: "Content-Security-Policy",
+      value: "frame-ancestors *"
+    }
+  ];
+}
 
 function createSecurityHeaders() {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
@@ -82,9 +95,16 @@ function resolveWebSocketOrigin(value) {
 
 function validatePublicEnvironment() {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3001";
 
-  if (process.env.NODE_ENV === "production" && !isHttpsOrLocalhost(apiBaseUrl)) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL must use HTTPS in production");
+  if (process.env.NODE_ENV === "production") {
+    if (!isHttpsOrLocalhost(apiBaseUrl)) {
+      throw new Error("NEXT_PUBLIC_API_BASE_URL must use HTTPS in production");
+    }
+
+    if (!isHttpsOrLocalhost(siteUrl)) {
+      throw new Error("NEXT_PUBLIC_SITE_URL must use HTTPS in production");
+    }
   }
 }
 

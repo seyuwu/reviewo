@@ -1,3 +1,46 @@
+.chatInviteButton {
+  align-items: center;
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: #525252;
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  justify-content: center;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.35rem 0.5rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.chatInviteButton:hover {
+  border-color: rgb(212 175 55 / 45%);
+}
+
+.chatInviteCopyLink {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.chatInviteCopyLink .growth-inline-status {
+  font-size: 0.625rem;
+  margin: 0;
+  text-align: center;
+}
+
 .chatSection {
   display: flex;
   flex-direction: column;
@@ -97,7 +140,7 @@
 }
 
 .chatDrawerHeaderTop {
-  align-items: stretch;
+  align-items: flex-start;
   display: flex;
   flex-wrap: nowrap;
   gap: 0.35rem;
@@ -117,6 +160,8 @@
   align-items: stretch;
   display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.35rem;
   min-width: 0;
 }
 

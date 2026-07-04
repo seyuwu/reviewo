@@ -4,26 +4,20 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useId, useState } from "react";
 
+import { TrendingNowPanel } from "../../growth/components/trending-now-panel";
 import { useTranslation } from "../../i18n/locale-provider";
 import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
 import { checkUrlTrust } from "../api/trust-check";
 import { useEntitySearch } from "../hooks/use-entity-search";
 import type { SearchEntityResult } from "../types/search-entities";
 
-type HomeMode = "trust" | "search";
-
 export function HomeSearch() {
   const t = useTranslation();
   const inputId = useId();
   const trustCheckInputId = useId();
-  const trustTabId = useId();
-  const searchTabId = useId();
-  const trustPanelId = useId();
-  const searchPanelId = useId();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q")?.trim() ?? "";
-  const [mode, setMode] = useState<HomeMode>(initialQuery ? "search" : "trust");
   const [query, setQuery] = useState(initialQuery);
   const [trustCheckUrl, setTrustCheckUrl] = useState("");
   const [trustCheckError, setTrustCheckError] = useState<string | null>(null);
@@ -39,11 +33,7 @@ export function HomeSearch() {
   } = useEntitySearch(query);
 
   useEffect(() => {
-    const nextQuery = searchParams.get("q")?.trim() ?? "";
-    setQuery(nextQuery);
-    if (nextQuery) {
-      setMode("search");
-    }
+    setQuery(searchParams.get("q")?.trim() ?? "");
   }, [searchParams]);
 
   const results = searchData?.results ?? [];
@@ -97,137 +87,103 @@ export function HomeSearch() {
           <p className="home-hub-subtitle">{t("web.home.subtitle")}</p>
         </header>
 
-        <div className="home-hub-tabs" role="tablist" aria-label={t("web.home.title")}>
-          <button
-            type="button"
-            className="home-hub-tab"
-            id={trustTabId}
-            role="tab"
-            aria-selected={mode === "trust"}
-            aria-controls={trustPanelId}
-            onClick={() => {
-              setMode("trust");
-            }}
+        <div className="home-hub-panel">
+          <p className="home-hub-panel-copy">{t("web.home.searchBlockHint")}</p>
+
+          <form
+            className="search-form home-hub-form home-hub-input-row"
+            role="search"
+            onSubmit={handleSubmit}
           >
-            {t("web.home.trustCheck.title")}
-          </button>
-          <button
-            type="button"
-            className="home-hub-tab"
-            id={searchTabId}
-            role="tab"
-            aria-selected={mode === "search"}
-            aria-controls={searchPanelId}
-            onClick={() => {
-              setMode("search");
-            }}
-          >
-            {t("web.home.searchBlockEyebrow")}
-          </button>
+            <label className="sr-only" htmlFor={inputId}>
+              {t("web.home.searchLabel")}
+            </label>
+            <input
+              id={inputId}
+              autoComplete="off"
+              maxLength={200}
+              placeholder={t("web.home.searchPlaceholder")}
+              type="search"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+              }}
+            />
+            <button type="submit" disabled={!trimmedQuery}>
+              {t("common.search")}
+            </button>
+          </form>
+
+          {isSearchActive ? (
+            <div
+              className={`home-hub-search-output${isFetching ? " home-hub-search-output-fetching" : ""}`}
+              aria-live="polite"
+            >
+              {isWaitingForResults && !showResults ? (
+                <p className="home-hub-search-status">
+                  <span className="state-dot state-dot-loading" aria-hidden="true" />
+                  {t("web.home.searching")}
+                </p>
+              ) : null}
+
+              {isError ? (
+                <p className="home-hub-search-status home-hub-search-status-error">
+                  {t("web.home.searchError")}
+                </p>
+              ) : null}
+
+              {showResults ? (
+                <SearchHitList query={debouncedQuery || trimmedQuery} results={results} />
+              ) : null}
+
+              {showEmptyState && !shouldShowCreateHint ? (
+                <p className="home-hub-search-status">
+                  {t("web.home.noResults", { query: debouncedQuery })}
+                </p>
+              ) : null}
+
+              {shouldShowCreateHint ? (
+                <CreateEntityHint query={searchData?.query ?? debouncedQuery} />
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
-        {mode === "trust" ? (
-          <div
-            className="home-hub-panel"
-            id={trustPanelId}
-            role="tabpanel"
-            aria-labelledby={trustTabId}
-          >
-            <p className="home-hub-panel-copy">{t("web.home.trustCheck.subtitle")}</p>
+        <TrendingNowPanel />
 
-            <form className="trust-check-form home-hub-form" onSubmit={handleTrustCheckSubmit}>
-              <label className="sr-only" htmlFor={trustCheckInputId}>
-                {t("web.home.trustCheck.fieldLabel")}
-              </label>
-              <div className="search-form home-hub-input-row">
-                <input
-                  id={trustCheckInputId}
-                  autoComplete="off"
-                  maxLength={2048}
-                  placeholder={t("web.home.trustCheck.placeholder")}
-                  type="text"
-                  value={trustCheckUrl}
-                  onChange={(event) => {
-                    setTrustCheckUrl(event.target.value);
-                  }}
-                />
-                <button type="submit" disabled={!trustCheckUrl.trim() || isCheckingTrust}>
-                  {isCheckingTrust
-                    ? t("web.home.trustCheck.checking")
-                    : t("web.home.trustCheck.action")}
-                </button>
-              </div>
-              {trustCheckError ? (
-                <p className="error-message trust-check-error">{trustCheckError}</p>
-              ) : null}
-            </form>
+        <section className="home-hub-secondary panel-card">
+          <div className="section-heading">
+            <p className="result-type">{t("web.home.trustCheck.title")}</p>
+            <h2>{t("web.home.trustCheck.subtitle")}</h2>
           </div>
-        ) : (
-          <div
-            className="home-hub-panel"
-            id={searchPanelId}
-            role="tabpanel"
-            aria-labelledby={searchTabId}
-          >
-            <p className="home-hub-panel-copy">{t("web.home.searchBlockHint")}</p>
 
-            <form
-              className="search-form home-hub-form home-hub-input-row"
-              role="search"
-              onSubmit={handleSubmit}
-            >
-              <label className="sr-only" htmlFor={inputId}>
-                {t("web.home.searchLabel")}
-              </label>
+          <form className="trust-check-form home-hub-form" onSubmit={handleTrustCheckSubmit}>
+            <label className="sr-only" htmlFor={trustCheckInputId}>
+              {t("web.home.trustCheck.fieldLabel")}
+            </label>
+            <div className="search-form home-hub-input-row">
               <input
-                id={inputId}
+                id={trustCheckInputId}
                 autoComplete="off"
-                maxLength={200}
-                placeholder={t("web.home.searchPlaceholder")}
-                type="search"
-                value={query}
+                maxLength={2048}
+                placeholder={t("web.home.trustCheck.placeholder")}
+                type="text"
+                value={trustCheckUrl}
                 onChange={(event) => {
-                  setQuery(event.target.value);
+                  setTrustCheckUrl(event.target.value);
                 }}
               />
-              <button type="submit" disabled={!trimmedQuery}>
-                {t("common.search")}
+              <button type="submit" disabled={!trustCheckUrl.trim() || isCheckingTrust}>
+                {isCheckingTrust
+                  ? t("web.home.trustCheck.checking")
+                  : t("web.home.trustCheck.action")}
               </button>
-            </form>
-
-            {isSearchActive ? (
-              <div
-                className={`home-hub-search-output${isFetching ? " home-hub-search-output-fetching" : ""}`}
-                aria-live="polite"
-              >
-                {isWaitingForResults && !showResults ? (
-                  <p className="home-hub-search-status">
-                    <span className="state-dot state-dot-loading" aria-hidden="true" />
-                    {t("web.home.searching")}
-                  </p>
-                ) : null}
-
-                {isError ? (
-                  <p className="home-hub-search-status home-hub-search-status-error">
-                    {t("web.home.searchError")}
-                  </p>
-                ) : null}
-
-                {showResults ? (
-                  <SearchHitList query={debouncedQuery || trimmedQuery} results={results} />
-                ) : null}
-
-                {showEmptyState && !shouldShowCreateHint ? (
-                  <p className="home-hub-search-status">{t("web.home.noResults", { query: debouncedQuery })}</p>
-                ) : null}
-
-                {shouldShowCreateHint ? (
-                  <CreateEntityHint query={searchData?.query ?? debouncedQuery} />
-                ) : null}
-              </div>
+            </div>
+            {trustCheckError ? (
+              <p className="error-message trust-check-error">{trustCheckError}</p>
             ) : null}
-          </div>
-        )}
+          </form>
+        </section>
       </section>
     </div>
   );
@@ -240,28 +196,103 @@ interface SearchHitListProps {
 
 function SearchHitList({ query, results }: SearchHitListProps) {
   const t = useTranslation();
+  const [canonicalResult, ...otherResults] =
+    results[0]?.resultKind === "canonical_site" ? results : [null, ...results];
+  const regularResults = otherResults.filter(
+    (entity): entity is SearchEntityResult => entity !== null
+  );
 
   return (
     <div className="home-search-hit-list" aria-label={t("web.home.resultsAriaLabel")}>
-      {results.map((entity) => {
-        const subtitle = entity.description ?? entity.canonicalUrl ?? entity.slug;
+      {canonicalResult ? (
+        <>
+          <CanonicalSearchHit entity={canonicalResult} query={query} />
+          {regularResults.length > 0 ? <div className="home-search-hit-divider" role="separator" /> : null}
+        </>
+      ) : null}
 
-        return (
-          <Link
-            className="home-search-hit"
-            href={`/entities/${entity.id}?q=${encodeURIComponent(query)}`}
-            key={entity.id}
-          >
-            <span className="home-search-hit-main">
-              <span className="result-type">{formatEntityTypeLabel(t, entity.type)}</span>
-              <span className="home-search-hit-title">{entity.title}</span>
-            </span>
-            {subtitle ? <span className="home-search-hit-url">{subtitle}</span> : null}
-          </Link>
-        );
-      })}
+      {regularResults.map((entity) => (
+        <SearchHit entity={entity} key={entity.id} query={query} />
+      ))}
     </div>
   );
+}
+
+interface SearchHitProps {
+  entity: SearchEntityResult;
+  query: string;
+}
+
+function SearchHit({ entity, query }: SearchHitProps) {
+  const t = useTranslation();
+  const subtitle = entity.description ?? entity.canonicalUrl ?? entity.slug;
+
+  return (
+    <Link
+      className="home-search-hit"
+      href={`/entities/${entity.id}?q=${encodeURIComponent(query)}`}
+    >
+      <span className="home-search-hit-main">
+        <span className="result-type">{formatEntityTypeLabel(t, entity.type)}</span>
+        <span className="home-search-hit-title">{entity.title}</span>
+      </span>
+      {subtitle ? <span className="home-search-hit-url">{subtitle}</span> : null}
+    </Link>
+  );
+}
+
+interface CanonicalSearchHitProps {
+  entity: SearchEntityResult;
+  query: string;
+}
+
+function CanonicalSearchHit({ entity, query }: CanonicalSearchHitProps) {
+  const t = useTranslation();
+  const hostname = formatSearchHostname(entity.canonicalUrl);
+
+  return (
+    <Link
+      className="home-search-hit home-search-hit-canonical"
+      href={`/entities/${entity.id}?q=${encodeURIComponent(query)}`}
+    >
+      <span className="home-search-hit-badge">{t("search.canonical.badge")}</span>
+      <span className="home-search-hit-main">
+        <span className="home-search-hit-title">{entity.title}</span>
+        {hostname ? <span className="home-search-hit-url">{hostname}</span> : null}
+      </span>
+      <span className="home-search-hit-rating">
+        {entity.votesCount > 0 && entity.avgScore !== null ? (
+          <>
+            <span className="home-search-hit-rating-score" aria-hidden="true">
+              ★
+            </span>
+            <span>{formatScore(entity.avgScore)}</span>
+            <span className="home-search-hit-rating-meta">
+              {t("search.canonical.ratings", { count: entity.votesCount })}
+            </span>
+          </>
+        ) : (
+          <span className="home-search-hit-rating-meta">{t("search.canonical.noRatings")}</span>
+        )}
+      </span>
+    </Link>
+  );
+}
+
+function formatSearchHostname(canonicalUrl: string | null): string | null {
+  if (!canonicalUrl) {
+    return null;
+  }
+
+  try {
+    return new URL(canonicalUrl).hostname;
+  } catch {
+    return canonicalUrl;
+  }
+}
+
+function formatScore(score: number): string {
+  return score.toFixed(1);
 }
 
 interface CreateEntityHintProps {

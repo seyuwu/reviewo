@@ -610,10 +610,13 @@ Goal: add per-entity live chat without breaking existing rating/review/reputatio
 Scope:
 
 - PostgreSQL `chat.entity_chat_messages` table only (optional `is_hidden` / `hidden_reason`).
-- Redis presence (`chat:entity:{entityId}:online`).
-- WebSocket namespace `/chat`, room id = `entityId`.
+- Redis presence (`chat:entity:{entityId}:{locale}:online`).
+- WebSocket namespace `/chat`, room id = `{entityId}:{locale}`.
 - REST: latest messages, cursor pagination, active now, online count.
-- Extension popup chat drawer (`↑ Обсуждение`) with scroll-up history load.
+- Extension popup chat drawer (`↑ Обсуждение`) with button-triggered older-message load.
+- Extension rating card inline chat.
+- Web entity page sidebar chat panel.
+- Locale-separated rooms: `ru` (default) and `en`.
 - Active Now from deterministic message activity ranking (no AI).
 - Soft anti-spam via reputation trust score cooldowns.
 
@@ -623,8 +626,9 @@ Out of scope (v1):
 
 Verification:
 
-- Chat send/receive works for an entity.
+- Chat send/receive works for an entity on popup, rating card, and web sidebar.
 - Popup drawer expands without replacing entity summary card.
-- Last 100 messages load; older messages load by cursor.
+- Last 100 messages load; older messages load by cursor via button.
 - Active Now shows genuinely active entities.
+- Locale switch loads correct room without stale messages.
 - Existing rating/review/reputation/extension flows remain intact.

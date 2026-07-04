@@ -2,16 +2,16 @@
 
 ## Snapshot
 
-- Date: 2026-07-03
-- Current stage: Post-MVP — Entity Live Chat MVP
-- Stage status: Entity Live Chat MVP completed
+- Date: 2026-07-05
+- Current stage: Post-MVP — Entity Live Chat
+- Stage status: Entity Live Chat MVP completed; v1 client polish completed (2026-07-04/05)
 - MVP readiness: **Deployed to production** — [opinia.ru](https://opinia.ru), Chrome Web Store extension
-- Last completed stage: Entity Live Chat MVP
+- Last completed stage: Entity Live Chat v1 client polish
 - Next stage: Deferred post-MVP items (see Stage 33 RFC backlog)
 
 ## Implemented Capabilities
 
-The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, read MVP trust confidence for an entity through the backend API, and participate in per-entity live chat from the extension popup. Entity Live Chat stores messages in PostgreSQL, tracks online presence in Redis, streams updates over WebSocket (`/chat` namespace), exposes REST endpoints for history/cursor pagination/active-now/online count, and applies soft send-rate limits based on reputation trust score.
+The first product capabilities are implemented: users can register, sign in, read the current authenticated user, create entities with normalized canonical URLs, fetch entities by id, fetch composed entity page data, search entities through the dedicated Search Module, resolve URLs for the browser extension, quick-rate entities through the Extension API, rate entities, update their previous rating, read rating aggregates, read their own rating, leave or update one text review per entity, like/unlike useful reviews, list entity reviews, read MVP trust confidence for an entity through the backend API, and participate in per-entity live chat from the extension popup, the extension rating card, and the web entity page sidebar. Entity Live Chat stores messages in PostgreSQL, tracks online presence in Redis per locale, streams updates over WebSocket (`/chat` namespace with locale-scoped rooms), exposes REST endpoints for history/cursor pagination/active-now/online count, and applies soft send-rate limits based on reputation trust score. Chat locales are `ru` (default) and `en`; each entity+locale pair is a separate room.
 
 The project currently contains temporary root-level markdown documentation. The documentation is accepted as the source of truth until it is moved into `docs/`.
 
@@ -246,8 +246,10 @@ The Web Entity Page MVP is initialized:
 - Entity page includes a review form using `PUT /reviews/entities/:entityId/my-review`.
 - Entity page reads current user rating/review when a minimal web auth session exists.
 - Entity page refreshes composed data through TanStack Query invalidation after rating/review updates.
+- Entity page includes review like/unlike controls for authenticated users.
+- Entity page sidebar includes `EntityChatPanel` for per-entity live chat (resizable drawer, locale switch, cursor pagination, WebSocket updates).
 - Minimal web auth is shared between entity creation and entity page interactions.
-- Review pagination, review likes UI, recommendations, moderation, profile UI, full auth UI, and extension UI are intentionally not implemented.
+- Review pagination, recommendations, moderation, profile UI, full auth UI, and extension UI are intentionally not implemented.
 
 The Web Profile MVP is initialized:
 
@@ -299,6 +301,45 @@ Extension Submit Rating is initialized:
 - Card updates average score, votes count, trust confidence, and selected rating after a successful write.
 - Unauthenticated users see a sign-in hint and disabled rating controls.
 - Lazy entity creation, `not_found` rating flow, and site-specific parsers are intentionally not implemented.
+
+Entity Live Chat MVP is initialized:
+
+- `chat.entity_chat_messages` stores per-entity messages with optional `locale`, `is_hidden`, and `hidden_reason`.
+- Redis presence uses locale-scoped keys (`chat:entity:{entityId}:{locale}:online`).
+- WebSocket namespace `/chat`; socket room id = `{entityId}:{locale}` via shared helpers in `@reviewo/shared`.
+- REST endpoints: `GET/POST /chat/entities/:entityId/messages`, `GET /chat/entities/:entityId/online`, `GET /chat/active-now`, `POST /chat/entities/:entityId/presence`.
+- Trust-based send cooldowns reuse reputation trust score.
+- Message retention: 90 days and max 5000 messages per entity via in-process cleanup job.
+- Active Now ranking uses deterministic SQL aggregation over recent message activity (no AI).
+
+Extension popup Entity Live Chat is initialized:
+
+- Expandable chat drawer on home and entity screens (`↑ Обсуждение`).
+- Active Now panel on home screen.
+- Locale switch (`ru` / `en`), resizable drawer height, cursor pagination for older messages.
+- Incremental message list DOM updates (append/prepend/replace) via shared `chat-message-list-dom` helpers.
+- Scroll-to-bottom only when opening chat or sending a message; older messages load via explicit button only.
+
+Extension rating card Entity Live Chat is initialized:
+
+- Inline chat section in the content-script rating card for `found` entities.
+- Same locale-scoped rooms, REST/WebSocket flow, and incremental DOM updates as popup chat.
+- Per-entity LRU message cache with locale-aware connection keys.
+
+Web Entity Live Chat is initialized:
+
+- `EntityChatPanel` in the entity page sidebar (`/entities/:entityId`).
+- Locale switch, resizable panel height, REST history + WebSocket live updates, online count polling.
+- Authenticated send; unauthenticated users see sign-in prompt linking to `/profile`.
+- Scroll-to-bottom on panel open and after send; older messages via button with scroll-anchor preservation.
+
+Entity Live Chat v1 polish (2026-07-04/05):
+
+- Fixed locale-switch race: stale async bootstrap ignored via load-generation tokens; locale selector UI syncs immediately.
+- Removed redundant entity title label above web chat sidebar (freed vertical space).
+- Fixed web “Load earlier messages” scroll jump (merged layout effects, anchor preservation).
+- Fixed missing `bindAuthPromptTriggers` import in extension popup home screen.
+- Fixed Next.js `/entities/*` 404 after Docker web restart on Windows (stale `.next` cache; workaround: clear cache and restart web container).
 
 Roadmap update:
 
@@ -397,3 +438,7 @@ Stage 30 created the testing baseline with API unit/integration coverage, web ro
 Stage 31 created automated API E2E coverage for the main MVP user journey (extension lazy-create path and manual web create fallback), shared integration test harness, and E2E flow documentation. It did not add browser extension Playwright/Cypress automation.
 
 Stage 32 added production environment validation (required `DATABASE_URL` and `CORS_ALLOWED_ORIGINS` in production), production log levels, `start:prod` with automatic migrations, root `db:migrate`/`db:seed` scripts, fixed production Compose commands for API and web, web Docker build arg for `NEXT_PUBLIC_API_BASE_URL`, and MVP deployment documentation. It did not add cloud-specific IaC or managed hosting automation.
+
+Post-MVP Entity Live Chat MVP (2026-06-28) added backend chat module, Redis presence, WebSocket gateway, extension popup chat drawer, and Active Now panel. It did not add web chat UI, rating card chat, locale-separated rooms, or chat v2 features (reactions, replies, attachments, edits/deletes, AI moderation).
+
+Post-MVP Entity Live Chat v1 polish (2026-07-04/05) added web entity page sidebar chat, extension rating card inline chat, locale-scoped rooms (`ru`/`en`), simplified scroll and incremental DOM updates, and fixed locale-switch races, web older-message scroll, extension popup auth import, and Next.js `/entities/*` 404 after Docker web restart on Windows. It did not add chat moderation integration, dedicated retention workers, or chat v2 features.

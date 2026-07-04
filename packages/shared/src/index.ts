@@ -12,6 +12,13 @@ export {
 } from "./entity-chat.js";
 
 export {
+  buildCompareSlug,
+  buildPairKey,
+  parseCompareSlug,
+  type ParsedCompareSlug
+} from "./compare-slug.js";
+
+export {
   appendEntityChatMessageNewest,
   ENTITY_CHAT_CARD_CACHE_MAX_ENTRIES,
   ENTITY_CHAT_CLIENT_INITIAL_LIMIT,

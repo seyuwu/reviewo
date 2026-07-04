@@ -21,7 +21,9 @@ CMD ["corepack", "pnpm", "--filter", "@reviewo/web", "dev"]
 FROM base AS production
 
 ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+ARG NEXT_PUBLIC_SITE_URL=http://localhost:3001
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 ENV NODE_ENV=production
 ENV APP_NAME=web
 

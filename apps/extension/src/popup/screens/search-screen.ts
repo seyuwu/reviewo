@@ -132,22 +132,69 @@ function renderSearchResults(
     `;
   }
 
+  const [canonicalResult, ...otherResults] =
+    results[0]?.resultKind === "canonical_site" ? results : [null, ...results];
+  const regularResults = otherResults.filter(
+    (item): item is SearchEntityResult => item !== null
+  );
+
   return `
-    <ul class="entity-list">
-      ${results
-        .map(
-          (item) => `
-        <li>
-          <button type="button" class="entity-list-item" data-entity-id="${escapeHtml(item.id)}">
-            <strong>${escapeHtml(item.title)}</strong>
-            <span>${escapeHtml(item.slug)}</span>
-          </button>
-        </li>
+    <div class="search-results-list">
+      ${
+        canonicalResult
+          ? `
+        <button type="button" class="entity-list-item entity-list-item-canonical" data-entity-id="${escapeHtml(canonicalResult.id)}">
+          <span class="entity-list-item-badge">${escapeHtml(t("search.canonical.badge"))}</span>
+          <strong>${escapeHtml(canonicalResult.title)}</strong>
+          <span>${escapeHtml(formatSearchHostname(canonicalResult.canonicalUrl) ?? canonicalResult.slug)}</span>
+          <span class="entity-list-item-rating">${escapeHtml(formatSearchRating(t, canonicalResult))}</span>
+        </button>
+        ${regularResults.length > 0 ? `<div class="search-results-divider" role="separator"></div>` : ""}
       `
-        )
-        .join("")}
-    </ul>
+          : ""
+      }
+      ${
+        regularResults.length > 0
+          ? `
+        <ul class="entity-list">
+          ${regularResults
+            .map(
+              (item) => `
+            <li>
+              <button type="button" class="entity-list-item" data-entity-id="${escapeHtml(item.id)}">
+                <strong>${escapeHtml(item.title)}</strong>
+                <span>${escapeHtml(item.slug)}</span>
+              </button>
+            </li>
+          `
+            )
+            .join("")}
+        </ul>
+      `
+          : ""
+      }
+    </div>
   `;
+}
+
+function formatSearchHostname(canonicalUrl: string | null): string | null {
+  if (!canonicalUrl) {
+    return null;
+  }
+
+  try {
+    return new URL(canonicalUrl).hostname;
+  } catch {
+    return canonicalUrl;
+  }
+}
+
+function formatSearchRating(t: TranslateFn, entity: SearchEntityResult): string {
+  if (entity.votesCount > 0 && entity.avgScore !== null) {
+    return `★ ${entity.avgScore.toFixed(1)} · ${t("search.canonical.ratings", { count: entity.votesCount })}`;
+  }
+
+  return t("search.canonical.noRatings");
 }
 
 function bindSearchResults(

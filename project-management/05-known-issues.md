@@ -66,9 +66,20 @@
 ## Extension Docker Service Uses Placeholder Command
 
 - Description: `extension` container currently runs `pnpm check` and stays alive because the real extension application is not implemented yet. The `web` container now runs the Next.js dev server.
-- Status: Intentional limitation until the extension implementation stage.
-- Possible solution: Replace the extension placeholder command with a real extension app command during the relevant app implementation stage.
-- Priority: Medium.
+- Status: **Outdated** — extension container runs watch build in development; entry retained for historical context.
+- Possible solution: Remove or rewrite this entry when cleaning up known issues.
+- Priority: Low.
+
+## Next.js `/entities/*` Routes Can 404 After Docker Web Restart (Windows)
+
+- Description: After restarting the `web` container on Windows with bind-mounted source, Next.js Turbopack may serve 404 for all `/entities/*` routes (including `/entities/new`) even though route files exist under `apps/web/src/app/entities/`. Other routes like `/` and `/profile` still work.
+- Status: Known dev environment workaround available.
+- Possible solution: Clear stale Next cache inside the web container and restart:
+  ```powershell
+  docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml exec web sh -c "rm -rf /workspace/apps/web/.next"
+  docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml restart web
+  ```
+- Priority: Low.
 
 ## Docker Development Uses Dev Volumes
 

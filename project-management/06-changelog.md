@@ -1227,3 +1227,35 @@
   - Chat unit tests: message pagination, presence, room naming, active-now ranking, trust cooldown.
   - Extension tests: existing navigation/review/rating flows still pass (`44/44`).
   - Apply migration `20260628140000_add_entity_chat_foundation` before using chat in Docker dev stack.
+
+## 2026-07-05 - Entity Live Chat v1 Client Polish
+
+- Stage: Post-MVP / Entity Live Chat v1 polish
+- Summary: Extended Entity Live Chat to web entity page sidebar and extension rating card; added locale-scoped chat rooms (`ru`/`en`); simplified scroll behavior; fixed locale-switch races, web older-message loading, extension popup auth prompt import, and Next.js `/entities/*` route 404 after Docker web restart.
+- Created files (high level):
+  - `apps/web/src/features/entity-chat/**`
+  - `apps/extension/src/content/rating-card/card-chat-drawer.ts`
+  - `apps/extension/src/shared/entity-chat/chat-message-list-dom.ts`
+  - `packages/shared/src/entity-chat.ts`
+  - `packages/shared/src/entity-chat-messages.ts`
+- Changed files (high level):
+  - `apps/extension/src/popup/components/chat-drawer.ts`
+  - `apps/extension/src/popup/screens/home-screen.ts`
+  - `apps/extension/src/shared/entity-chat/locale.ts`
+  - `apps/web/src/features/entity-page/components/entity-page-view.tsx`
+  - `apps/web/src/features/entity-chat/components/entity-chat-panel.tsx`
+  - `apps/api/src/modules/chat/**` (locale query param support)
+- UX / behavior changes:
+  - Chat scroll uses native `overflow-y: auto`; auto-scroll to bottom only on open and send.
+  - Older messages load via explicit button only (no wheel-triggered pagination).
+  - Extension chat uses incremental DOM updates instead of full list re-renders on every socket event.
+  - Locale switch disconnects stale sockets and ignores in-flight bootstrap responses.
+  - Web chat sidebar no longer shows entity title above the panel.
+- Bug fixes:
+  - `ReferenceError: bindAuthPromptTriggers is not defined` in extension popup home screen.
+  - Web “Load earlier messages” scroll position jump.
+  - Next.js `/entities/*` returning 404 after Docker web restart on Windows bind mounts (clear `apps/web/.next` and restart web).
+- Verification:
+  - `/entities/:id` and `/entities/new` return 200 after web cache clear.
+  - Extension popup and rating card chat send/receive with locale switch.
+  - Web entity page chat panel loads, sends, and loads older messages without scroll jump.
