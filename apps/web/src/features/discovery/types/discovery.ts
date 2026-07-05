@@ -29,4 +29,31 @@ export interface DiscoveryEntityRankListResponse {
   items: DiscoveryEntityRankItem[];
 }
 
+export interface DiscoveryStatsResponse {
+  activeBattles: number;
+  onlineNow: number;
+}
+
 export type DiscoveryRatingsWindow = "week" | "all";
+
+export type DiscussionFeedMode = "live" | "recent" | "popular";
+
+export interface DiscussionFeedItem {
+  avgScore: number | null;
+  entityId: string;
+  entitySlug: string;
+  entityTitle: string;
+  messageCount: number;
+  onlineCount: number;
+  previewMessage: string | null;
+  votesCount: number | null;
+}
+
+export interface DiscussionFeedResponse {
+  items: DiscussionFeedItem[];
+  mode: DiscussionFeedMode;
+}
+
+export interface RandomBattleResponse {
+  item: BattlePairListItem | null;
+}

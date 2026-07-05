@@ -109,4 +109,68 @@ export class DiscoveryRepository {
       LIMIT ${safeLimit}
     `;
   }
+
+  async listTopRootEntitiesByVotes(limit: number): Promise<TopEntityRow[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 30));
+
+    return this.prismaService.$queryRaw<TopEntityRow[]>`
+      SELECT
+        e.id AS "entityId",
+        e.slug AS "slug",
+        e.title AS "title",
+        ra.votes_count::int AS "votesCount",
+        ra.avg_score::float8 AS "avgScore"
+      FROM ratings.rating_aggregates ra
+      INNER JOIN entities.entities e ON e.id = ra.entity_id
+      WHERE e.visibility = 'ACTIVE'::entities.entity_visibility
+        AND e.parent_id IS NULL
+        AND (
+          e.canonical_url IS NULL
+          OR length(regexp_replace(e.canonical_url, '^https?://[^/]+', '')) <= 1
+        )
+        AND ra.votes_count >= ${MIN_TOP_VOTES}
+      ORDER BY ra.votes_count DESC, ra.avg_score DESC
+      LIMIT ${safeLimit}
+    `;
+  }
+
+  async listTopChildEntitiesByVotes(limit: number): Promise<TopEntityRow[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 30));
+
+    return this.prismaService.$queryRaw<TopEntityRow[]>`
+      SELECT
+        e.id AS "entityId",
+        e.slug AS "slug",
+        e.title AS "title",
+        ra.votes_count::int AS "votesCount",
+        ra.avg_score::float8 AS "avgScore"
+      FROM ratings.rating_aggregates ra
+      INNER JOIN entities.entities e ON e.id = ra.entity_id
+      WHERE e.visibility = 'ACTIVE'::entities.entity_visibility
+        AND (
+          e.parent_id IS NOT NULL
+          OR (
+            e.canonical_url IS NOT NULL
+            AND length(regexp_replace(e.canonical_url, '^https?://[^/]+', '')) > 1
+          )
+        )
+        AND ra.votes_count >= ${MIN_TOP_VOTES}
+      ORDER BY ra.votes_count DESC, ra.avg_score DESC
+      LIMIT ${safeLimit}
+    `;
+  }
+
+  async countActiveBattlePairs(): Promise<number> {
+    const rows = await this.prismaService.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*)::bigint AS count
+      FROM (
+        SELECT pair_key
+        FROM growth.battle_votes
+        GROUP BY pair_key
+        HAVING COUNT(*) >= 1
+      ) active_pairs
+    `;
+
+    return Number(rows[0]?.count ?? 0);
+  }
 }

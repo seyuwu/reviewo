@@ -12,30 +12,31 @@ interface TopsPageViewProps {
   initialWindow?: DiscoveryRatingsWindow | undefined;
 }
 
-export function TopsPageView({ initialItems, initialWindow = "all" }: TopsPageViewProps) {
+export function TopsPageView({ initialItems, initialWindow = "week" }: TopsPageViewProps) {
   const t = useTranslation();
-  const hasInitialAllTimeData = initialItems !== undefined && initialWindow === "all";
+  const hasInitialData = initialItems !== undefined;
   const [window, setWindow] = useState<DiscoveryRatingsWindow>(initialWindow);
   const [items, setItems] = useState<DiscoveryEntityRankItem[]>(initialItems ?? []);
-  const [isLoading, setIsLoading] = useState(!hasInitialAllTimeData);
+  const [loadedWindow, setLoadedWindow] = useState<DiscoveryRatingsWindow | null>(
+    hasInitialData ? initialWindow : null
+  );
+  const [isLoading, setIsLoading] = useState(!hasInitialData);
 
   useEffect(() => {
-    if (window === "all" && hasInitialAllTimeData) {
-      return;
-    }
-
     let cancelled = false;
-    setIsLoading(true);
+    setIsLoading(loadedWindow !== window);
 
     void fetchTopRatings(window, 20)
       .then((response) => {
         if (!cancelled) {
           setItems(response.items);
+          setLoadedWindow(window);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setItems([]);
+          setLoadedWindow(window);
         }
       })
       .finally(() => {
@@ -47,7 +48,7 @@ export function TopsPageView({ initialItems, initialWindow = "all" }: TopsPageVi
     return () => {
       cancelled = true;
     };
-  }, [hasInitialAllTimeData, window]);
+  }, [window]);
 
   return (
     <div className="home-hub">

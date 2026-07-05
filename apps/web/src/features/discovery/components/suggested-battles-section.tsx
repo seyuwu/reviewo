@@ -2,18 +2,18 @@
 
 import { useEffect, useState } from "react";
 
-import { fetchActiveBattles, fetchSuggestedBattles } from "../api/discovery-api";
+import { fetchSuggestedBattles } from "../api/discovery-api";
 import type { BattlePairListItem } from "../types/discovery";
 import { getFallbackBattlePairsFromClient } from "../lib/client-battle-fallback";
 import { useTranslation } from "../../i18n/locale-provider";
 import { BattlePairList } from "./battle-pair-list";
 import { FeedSection } from "./feed-section";
 
-interface PopularBattlesSectionProps {
+interface SuggestedBattlesSectionProps {
   initialPairs?: BattlePairListItem[] | undefined;
 }
 
-export function PopularBattlesSection({ initialPairs }: PopularBattlesSectionProps) {
+export function SuggestedBattlesSection({ initialPairs }: SuggestedBattlesSectionProps) {
   const t = useTranslation();
   const hasInitialData = initialPairs !== undefined;
   const [pairs, setPairs] = useState<BattlePairListItem[]>(initialPairs ?? []);
@@ -22,28 +22,13 @@ export function PopularBattlesSection({ initialPairs }: PopularBattlesSectionPro
   useEffect(() => {
     let cancelled = false;
 
-    void fetchActiveBattles(4)
-      .then((activeResponse) => {
-        if (cancelled) {
-          return;
-        }
-
-        if (activeResponse.items.length > 0) {
-          setPairs(activeResponse.items);
-          return;
-        }
-
-        return fetchSuggestedBattles(4).then((suggestedResponse) => {
-          if (cancelled) {
-            return;
-          }
-
+    void fetchSuggestedBattles(4)
+      .then((response) => {
+        if (!cancelled) {
           setPairs(
-            suggestedResponse.items.length > 0
-              ? suggestedResponse.items
-              : getFallbackBattlePairsFromClient()
+            response.items.length > 0 ? response.items : getFallbackBattlePairsFromClient()
           );
-        });
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -63,8 +48,8 @@ export function PopularBattlesSection({ initialPairs }: PopularBattlesSectionPro
 
   return (
     <FeedSection
-      heading={t("web.homeFeed.sectionBattles")}
-      headingId="home-feed-battles"
+      heading={t("web.homeFeed.sectionSuggestedBattles")}
+      headingId="home-feed-suggested-battles"
       viewAllHref="/battles"
     >
       {isLoading ? (

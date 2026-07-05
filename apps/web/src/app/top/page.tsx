@@ -10,13 +10,13 @@ export const metadata: Metadata = {
 };
 
 export default async function TopPage() {
-  const topResponse = await fetchTopRatingsServer("all", 20);
+  const topResponse = await fetchTopRatingsServer("week", 20);
   const initialItems = topResponse?.items ?? [];
 
   return (
     <main className="shell shell-home">
       <Suspense fallback={null}>
-        <TopsPageView initialItems={initialItems} initialWindow="all" />
+        <TopsPageView initialItems={initialItems} initialWindow="week" />
       </Suspense>
     </main>
   );

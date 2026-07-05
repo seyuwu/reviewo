@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode } from "react";
+import { ReactNode, Suspense } from "react";
 
 import { useAuthSession } from "../features/auth/hooks/use-auth-session";
 import { LocaleSwitcher } from "../features/i18n/locale-switcher";
 import { useTranslation } from "../features/i18n/locale-provider";
+import { HeaderActivityNav } from "./header-activity-nav";
+import { HeaderSearchBar } from "./header-search-bar";
 import { SiteFooter } from "./site-footer";
 
 interface AppChromeProps {
@@ -15,11 +17,10 @@ interface AppChromeProps {
 
 export function AppChrome({ children }: AppChromeProps) {
   const pathname = usePathname();
-  const isEmbedRoute = pathname.startsWith("/embed");
   const { authSession, isAuthSessionLoaded, signOut } = useAuthSession();
   const t = useTranslation();
 
-  if (isEmbedRoute) {
+  if (pathname.startsWith("/embed")) {
     return <>{children}</>;
   }
 
@@ -32,18 +33,14 @@ export function AppChrome({ children }: AppChromeProps) {
           <Link className="app-brand" href="/">
             {t("brand.name")}
           </Link>
-          <nav className="app-chrome-nav" aria-label={t("web.nav.ariaLabel")}>
-            <div className="app-nav-segment">
-              <Link className={navLinkClass(pathname, "/search")} href="/search">
-                {t("web.nav.search")}
-              </Link>
-              <Link className={navLinkClass(pathname, "/battles")} href="/battles">
-                {t("web.nav.battles")}
-              </Link>
-              <Link className={navLinkClass(pathname, "/top")} href="/top">
-                {t("web.nav.tops")}
-              </Link>
-            </div>
+
+          <Suspense fallback={<div className="app-chrome-search app-chrome-search-fallback" aria-hidden="true" />}>
+            <HeaderSearchBar />
+          </Suspense>
+
+          <div className="app-chrome-right">
+            <HeaderActivityNav />
+
             <div className="app-chrome-tools">
               <LocaleSwitcher />
               <div className="app-chrome-auth" data-state={authNavState}>
@@ -53,8 +50,7 @@ export function AppChrome({ children }: AppChromeProps) {
                   </Link>
                 </div>
                 <div className="app-chrome-auth-cluster signed-in-cluster">
-                  <span className="app-nav-user">{authSession?.displayName ?? t("web.nav.account")}</span>
-                  <Link className="app-nav-link" href="/profile">
+                  <Link className="app-nav-link" href="/profile" title={authSession?.displayName ?? t("web.nav.account")}>
                     {t("web.nav.profile")}
                   </Link>
                   <button type="button" className="app-nav-button" onClick={signOut}>
@@ -63,17 +59,11 @@ export function AppChrome({ children }: AppChromeProps) {
                 </div>
               </div>
             </div>
-          </nav>
+          </div>
         </div>
       </header>
       {children}
       <SiteFooter />
     </div>
   );
-}
-
-function navLinkClass(pathname: string, href: string): string {
-  const isActive = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
-
-  return isActive ? "app-nav-segment-link is-active" : "app-nav-segment-link";
 }

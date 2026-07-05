@@ -1,14 +1,18 @@
-import { Controller, Get, Query } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 
 import type {
   BattlePairListDto,
-  DiscoveryEntityRankListDto
+  DiscoveryEntityRankListDto,
+  DiscussionFeedDto,
+  DiscoveryStatsDto,
+  RandomBattleDto
 } from "../dto/discovery.dto.js";
 import {
   DiscoveryLimitQueryDto,
   DiscoveryRatingsRisingQueryDto,
   DiscoveryRatingsTopQueryDto
 } from "../dto/discovery-query.dto.js";
+import { SitePresenceHeartbeatDto } from "../dto/site-presence-heartbeat.dto.js";
 import { assertDiscoveryLimit, DiscoveryService } from "../services/discovery.service.js";
 
 @Controller()
@@ -33,5 +37,25 @@ export class DiscoveryController {
   @Get("discovery/ratings/rising")
   async getRisingRatings(@Query() query: DiscoveryRatingsRisingQueryDto): Promise<DiscoveryEntityRankListDto> {
     return this.discoveryService.getRisingRatings(query.window ?? "day", assertDiscoveryLimit(query.limit, 20));
+  }
+
+  @Get("discovery/discussions/feed")
+  async getDiscussionFeed(@Query() query: DiscoveryLimitQueryDto): Promise<DiscussionFeedDto> {
+    return this.discoveryService.getDiscussionFeed(assertDiscoveryLimit(query.limit, 6));
+  }
+
+  @Get("discovery/battles/random")
+  async getRandomBattle(): Promise<RandomBattleDto> {
+    return this.discoveryService.getRandomBattle();
+  }
+
+  @Get("discovery/stats")
+  async getStats(): Promise<DiscoveryStatsDto> {
+    return this.discoveryService.getStats();
+  }
+
+  @Post("discovery/presence/heartbeat")
+  async registerSitePresence(@Body() body: SitePresenceHeartbeatDto): Promise<DiscoveryStatsDto> {
+    return this.discoveryService.registerSiteVisitor(body.visitorId);
   }
 }

@@ -3,6 +3,8 @@ import { buildCompareSlug } from "@reviewo/shared";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
+import { EntityChatService } from "../../chat/services/entity-chat.service.js";
+import { PresenceService } from "../../chat/services/presence.service.js";
 import { ENTITIES_PORT } from "../../entities/interfaces/entities.port.js";
 import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
 import type { EntityDto } from "../../entities/dto/entity.dto.js";
@@ -10,7 +12,11 @@ import { BattleVoteRepository } from "../../growth/repositories/battle-vote.repo
 import type {
   BattlePairListDto,
   BattlePairListItemDto,
-  DiscoveryEntityRankListDto
+  DiscoveryEntityRankListDto,
+  DiscussionFeedDto,
+  DiscussionFeedItemDto,
+  DiscoveryStatsDto,
+  RandomBattleDto
 } from "../dto/discovery.dto.js";
 import { DiscoveryRepository } from "../repositories/discovery.repository.js";
 
@@ -19,9 +25,35 @@ export class DiscoveryService {
   constructor(
     private readonly discoveryRepository: DiscoveryRepository,
     private readonly battleVoteRepository: BattleVoteRepository,
+    private readonly entityChatService: EntityChatService,
+    private readonly presenceService: PresenceService,
     @Inject(ENTITIES_PORT)
     private readonly entitiesPort: EntitiesPort
   ) {}
+
+  async getStats(): Promise<DiscoveryStatsDto> {
+    const [activeBattles, onlineNow] = await Promise.all([
+      this.discoveryRepository.countActiveBattlePairs(),
+      this.presenceService.getSiteVisitorCount()
+    ]);
+
+    return {
+      activeBattles,
+      onlineNow
+    };
+  }
+
+  async registerSiteVisitor(visitorId: string): Promise<DiscoveryStatsDto> {
+    const [activeBattles, onlineNow] = await Promise.all([
+      this.discoveryRepository.countActiveBattlePairs(),
+      this.presenceService.markSiteVisitor(visitorId)
+    ]);
+
+    return {
+      activeBattles,
+      onlineNow
+    };
+  }
 
   async getActiveBattles(limit = 12): Promise<BattlePairListDto> {
     const rows = await this.discoveryRepository.listActiveBattlePairs(limit);
@@ -39,36 +71,18 @@ export class DiscoveryService {
   }
 
   async getSuggestedBattles(limit = 12): Promise<BattlePairListDto> {
-    const topEntities = await this.discoveryRepository.listTopEntitiesByVotes(Math.max(limit * 2, 8));
+    const poolSize = Math.max(limit * 2, 12);
+    const [rootEntities, childEntities] = await Promise.all([
+      this.discoveryRepository.listTopRootEntitiesByVotes(poolSize),
+      this.discoveryRepository.listTopChildEntitiesByVotes(poolSize)
+    ]);
     const items: BattlePairListItemDto[] = [];
     const seenPairSlugs = new Set<string>();
 
-    for (let index = 0; index + 1 < topEntities.length && items.length < limit; index += 2) {
-      const left = topEntities[index];
-      const right = topEntities[index + 1];
+    await this.appendEntityPairs(items, rootEntities, limit, seenPairSlugs);
 
-      if (!left || !right) {
-        continue;
-      }
-
-      const item = await this.composeBattlePairFromEntities(left, right, true, seenPairSlugs);
-
-      if (item) {
-        items.push(item);
-      }
-    }
-
-    if (topEntities.length >= 2 && items.length < limit) {
-      const first = topEntities[0];
-      const last = topEntities[topEntities.length - 1];
-
-      if (first && last && first.entityId !== last.entityId) {
-        const item = await this.composeBattlePairFromEntities(first, last, true, seenPairSlugs);
-
-        if (item) {
-          items.push(item);
-        }
-      }
+    if (items.length < limit) {
+      await this.appendEntityPairs(items, childEntities, limit, seenPairSlugs);
     }
 
     return { items: items.slice(0, limit) };
@@ -118,6 +132,107 @@ export class DiscoveryService {
         votesCount: row.votesCount
       }))
     };
+  }
+
+  async getDiscussionFeed(limit = 6): Promise<DiscussionFeedDto> {
+    const safeLimit = Math.max(1, Math.min(limit, 20));
+    const activeNow = await this.entityChatService.getActiveNow(safeLimit);
+
+    if (activeNow.items.length > 0) {
+      return {
+        items: activeNow.items.map((item) => mapActiveNowToFeedItem(item)),
+        mode: "live"
+      };
+    }
+
+    const recent = await this.entityChatService.getRecentDiscussions(safeLimit);
+
+    if (recent.items.length > 0) {
+      return {
+        items: recent.items.map((item) => mapActiveNowToFeedItem(item)),
+        mode: "recent"
+      };
+    }
+
+    const popular = await this.discoveryRepository.listTopEntitiesByVotes(safeLimit);
+
+    return {
+      items: popular.map((row) => ({
+        avgScore: row.avgScore,
+        entityId: row.entityId,
+        entitySlug: row.slug,
+        entityTitle: row.title,
+        messageCount: 0,
+        onlineCount: 0,
+        previewMessage: null,
+        votesCount: row.votesCount
+      })),
+      mode: "popular"
+    };
+  }
+
+  async getRandomBattle(): Promise<RandomBattleDto> {
+    const [rootEntities, childEntities] = await Promise.all([
+      this.discoveryRepository.listTopRootEntitiesByVotes(20),
+      this.discoveryRepository.listTopChildEntitiesByVotes(20)
+    ]);
+    const entityPools = [rootEntities, childEntities].filter((entities) => entities.length >= 2);
+
+    for (const requireUnbattled of [true, false]) {
+      for (const entities of entityPools) {
+        const item = await this.pickRandomBattleFromEntities(entities, requireUnbattled);
+
+        if (item) {
+          return { item };
+        }
+      }
+    }
+
+    return { item: null };
+  }
+
+  private async pickRandomBattleFromEntities(
+    entities: Array<{ entityId: string; slug: string; title: string }>,
+    requireUnbattled: boolean
+  ): Promise<BattlePairListItemDto | null> {
+    const candidatePairs = buildEntityPairCandidates(entities);
+    shuffleInPlace(candidatePairs);
+
+    for (const [left, right] of candidatePairs) {
+      const item = await this.composeBattlePairFromEntities(left, right, true, new Set<string>());
+
+      if (!item) {
+        continue;
+      }
+
+      if (!requireUnbattled || item.totalVotes === 0) {
+        return item;
+      }
+    }
+
+    return null;
+  }
+
+  private async appendEntityPairs(
+    items: BattlePairListItemDto[],
+    entities: Array<{ entityId: string; slug: string; title: string }>,
+    limit: number,
+    seenPairSlugs: Set<string>
+  ): Promise<void> {
+    for (let index = 0; index + 1 < entities.length && items.length < limit; index += 2) {
+      const left = entities[index];
+      const right = entities[index + 1];
+
+      if (!left || !right) {
+        continue;
+      }
+
+      const item = await this.composeBattlePairFromEntities(left, right, true, seenPairSlugs);
+
+      if (item) {
+        items.push(item);
+      }
+    }
   }
 
   private async composeBattlePairItem(
@@ -231,4 +346,60 @@ export function assertDiscoveryLimit(limit: number | undefined, fallback: number
   }
 
   return limit;
+}
+
+function mapActiveNowToFeedItem(item: {
+  entityId: string;
+  entitySlug: string;
+  entityTitle: string;
+  messageCount: number;
+  onlineCount: number;
+  previewMessage: string | null;
+}): DiscussionFeedItemDto {
+  return {
+    avgScore: null,
+    entityId: item.entityId,
+    entitySlug: item.entitySlug,
+    entityTitle: item.entityTitle,
+    messageCount: item.messageCount,
+    onlineCount: item.onlineCount,
+    previewMessage: item.previewMessage,
+    votesCount: null
+  };
+}
+
+type EntityPairCandidate = [
+  { entityId: string; slug: string; title: string },
+  { entityId: string; slug: string; title: string }
+];
+
+function buildEntityPairCandidates(
+  entities: Array<{ entityId: string; slug: string; title: string }>
+): EntityPairCandidate[] {
+  const pairs: EntityPairCandidate[] = [];
+
+  for (let leftIndex = 0; leftIndex < entities.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < entities.length; rightIndex += 1) {
+      const left = entities[leftIndex];
+      const right = entities[rightIndex];
+
+      if (left && right && left.entityId !== right.entityId) {
+        pairs.push([left, right]);
+      }
+    }
+  }
+
+  return pairs;
+}
+
+function shuffleInPlace<T>(items: T[]): void {
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const current = items[index];
+
+    if (current !== undefined) {
+      items[index] = items[swapIndex] as T;
+      items[swapIndex] = current;
+    }
+  }
 }

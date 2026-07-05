@@ -2,7 +2,9 @@ import { serverApiRequest } from "../../../lib/api/server-api-client";
 import type {
   BattlePairListResponse,
   DiscoveryEntityRankListResponse,
-  DiscoveryRatingsWindow
+  DiscoveryRatingsWindow,
+  DiscussionFeedResponse,
+  RandomBattleResponse
 } from "../types/discovery";
 
 async function safeServerRequest<T>(path: string): Promise<T | null> {
@@ -32,4 +34,12 @@ export function fetchTopRatingsServer(
 
 export function fetchRisingRatingsServer(limit = 20): Promise<DiscoveryEntityRankListResponse | null> {
   return safeServerRequest<DiscoveryEntityRankListResponse>(`/discovery/ratings/rising?window=day&limit=${limit}`);
+}
+
+export function fetchDiscussionFeedServer(limit = 6): Promise<DiscussionFeedResponse | null> {
+  return safeServerRequest<DiscussionFeedResponse>(`/discovery/discussions/feed?limit=${limit}`);
+}
+
+export function fetchRandomBattleServer(): Promise<RandomBattleResponse | null> {
+  return safeServerRequest<RandomBattleResponse>("/discovery/battles/random");
 }

@@ -82,6 +82,23 @@ export class EntityChatService implements OnModuleInit {
 
   async getActiveNow(limit = 5): Promise<ActiveNowListDto> {
     const rows = await this.entityChatRepository.findActiveNowAggregates(limit);
+
+    return {
+      items: await this.mapDiscussionAggregateRows(rows)
+    };
+  }
+
+  async getRecentDiscussions(limit = 6): Promise<ActiveNowListDto> {
+    const rows = await this.entityChatRepository.findRecentDiscussionAggregates(limit);
+
+    return {
+      items: await this.mapDiscussionAggregateRows(rows)
+    };
+  }
+
+  private async mapDiscussionAggregateRows(
+    rows: Awaited<ReturnType<EntityChatRepository["findActiveNowAggregates"]>>
+  ): Promise<ActiveNowItemDto[]> {
     const items: ActiveNowItemDto[] = [];
 
     for (const row of rows) {
@@ -101,7 +118,7 @@ export class EntityChatService implements OnModuleInit {
       });
     }
 
-    return { items };
+    return items;
   }
 
   async sendMessage(

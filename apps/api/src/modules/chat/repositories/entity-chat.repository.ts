@@ -163,8 +163,20 @@ export class EntityChatRepository {
   }
 
   async findActiveNowAggregates(limit: number): Promise<ActiveNowAggregateRow[]> {
+    return this.findDiscussionAggregates(limit, ACTIVE_NOW_WINDOW_MINUTES, 2);
+  }
+
+  async findRecentDiscussionAggregates(limit: number, windowDays = 7): Promise<ActiveNowAggregateRow[]> {
+    return this.findDiscussionAggregates(limit, windowDays * 24 * 60, 1);
+  }
+
+  private async findDiscussionAggregates(
+    limit: number,
+    windowMinutes: number,
+    minMessages: number
+  ): Promise<ActiveNowAggregateRow[]> {
     const safeLimit = Math.max(1, Math.min(limit, 20));
-    const windowStart = new Date(Date.now() - ACTIVE_NOW_WINDOW_MINUTES * 60_000);
+    const windowStart = new Date(Date.now() - windowMinutes * 60_000);
 
     return this.prismaService.$queryRaw<ActiveNowAggregateRow[]>`
       SELECT
@@ -187,12 +199,12 @@ export class EntityChatRepository {
       INNER JOIN entities.entities e ON e.id = m.entity_id
       WHERE m.is_hidden = false
         AND m.created_at >= ${windowStart}
-        AND e.visibility = 'ACTIVE'
+        AND e.visibility = 'ACTIVE'::entities.entity_visibility
       GROUP BY m.entity_id, e.title, e.slug
-      HAVING COUNT(*) >= 2
+      HAVING COUNT(*) >= ${minMessages}
       ORDER BY
-        (COUNT(*) * 2 + COUNT(DISTINCT m.user_id)) DESC,
-        MAX(m.created_at) DESC
+        MAX(m.created_at) DESC,
+        (COUNT(*) * 2 + COUNT(DISTINCT m.user_id)) DESC
       LIMIT ${safeLimit}
     `;
   }

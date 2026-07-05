@@ -28,3 +28,30 @@ export interface DiscoveryEntityRankItemDto {
 export interface DiscoveryEntityRankListDto {
   items: DiscoveryEntityRankItemDto[];
 }
+
+export interface DiscoveryStatsDto {
+  activeBattles: number;
+  onlineNow: number;
+}
+
+export type DiscussionFeedMode = "live" | "recent" | "popular";
+
+export interface DiscussionFeedItemDto {
+  avgScore: number | null;
+  entityId: string;
+  entitySlug: string;
+  entityTitle: string;
+  messageCount: number;
+  onlineCount: number;
+  previewMessage: string | null;
+  votesCount: number | null;
+}
+
+export interface DiscussionFeedDto {
+  items: DiscussionFeedItemDto[];
+  mode: DiscussionFeedMode;
+}
+
+export interface RandomBattleDto {
+  item: BattlePairListItemDto | null;
+}

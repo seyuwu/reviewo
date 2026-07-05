@@ -1,11 +1,13 @@
 "use client";
 
 import { useTranslation } from "../../i18n/locale-provider";
+import { ActiveBattlesSection } from "./active-battles-section";
 import { BestWeekSection } from "./best-week-section";
 import { CompactSearchBar } from "./compact-search-bar";
 import { DiscussingNowSection } from "./discussing-now-section";
-import { PopularBattlesSection } from "./popular-battles-section";
+import { RandomBattleSection } from "./random-battle-section";
 import { RisingTodaySection } from "./rising-today-section";
+import { SuggestedBattlesSection } from "./suggested-battles-section";
 import type { HomeFeedInitialData } from "../lib/load-home-feed-data";
 
 interface HomeFeedViewProps {
@@ -25,10 +27,12 @@ export function HomeFeedView({ initialData }: HomeFeedViewProps) {
 
         <CompactSearchBar />
 
-        <DiscussingNowSection />
-        <PopularBattlesSection initialPairs={initialData?.battlePairs} />
+        <RandomBattleSection battle={initialData?.randomBattle.item} />
+        <DiscussingNowSection initialFeed={initialData?.discussionFeed} />
+        <ActiveBattlesSection initialPairs={initialData?.activeBattlePairs} />
         <RisingTodaySection initialItems={initialData?.risingItems} />
         <BestWeekSection initialItems={initialData?.weekTopItems} />
+        <SuggestedBattlesSection initialPairs={initialData?.suggestedBattlePairs} />
       </section>
     </div>
   );

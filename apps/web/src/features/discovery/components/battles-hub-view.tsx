@@ -22,10 +22,6 @@ export function BattlesHubView({ initialActivePairs, initialSuggestedPairs }: Ba
   const [isLoading, setIsLoading] = useState(!hasInitialData);
 
   useEffect(() => {
-    if (hasInitialData) {
-      return;
-    }
-
     let cancelled = false;
 
     void Promise.all([fetchActiveBattles(12), fetchSuggestedBattles(12)])
@@ -56,7 +52,7 @@ export function BattlesHubView({ initialActivePairs, initialSuggestedPairs }: Ba
     return () => {
       cancelled = true;
     };
-  }, [hasInitialData]);
+  }, []);
 
   return (
     <div className="home-hub">

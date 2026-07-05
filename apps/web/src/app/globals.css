@@ -424,9 +424,9 @@ button:disabled {
 
 .app-chrome-inner {
   align-items: center;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
+  display: grid;
+  gap: 0.75rem 1rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   margin: 0 auto;
   max-width: 76rem;
   padding: 0.85rem 1.25rem;
@@ -434,65 +434,149 @@ button:disabled {
 
 .app-brand {
   color: var(--color-primary);
+  flex: 0 0 auto;
   font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-decoration: none;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.app-chrome-nav {
+.app-chrome-search {
   align-items: center;
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.app-nav-segment {
-  align-items: center;
-  background: var(--color-primary-soft);
+  background: rgb(255 255 255 / 96%);
   border: 1px solid var(--color-card-border);
   border-radius: 999px;
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.2rem;
-  padding: 0.22rem;
+  display: flex;
+  gap: 0.45rem;
+  justify-self: center;
+  max-width: 34rem;
+  min-height: 2.65rem;
+  padding: 0.28rem 0.35rem 0.28rem 1rem;
+  width: min(100%, 34rem);
 }
 
-.app-nav-segment-link {
-  align-items: center;
-  border: 1px solid transparent;
-  border-radius: 999px;
+.app-chrome-search-fallback {
+  min-height: 2.65rem;
+}
+
+.app-chrome-search input {
+  background: transparent;
+  border: 0;
+  color: var(--color-text);
+  flex: 1 1 auto;
+  font: inherit;
+  font-size: 0.9375rem;
+  min-width: 0;
+  outline: none;
+}
+
+.app-chrome-search input::placeholder {
   color: var(--color-text-muted);
+}
+
+.app-chrome-search button {
+  align-items: center;
+  background: var(--color-primary);
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
   display: inline-flex;
-  font-size: 0.875rem;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.8125rem;
   font-weight: 700;
-  justify-content: center;
-  line-height: 1.1;
-  min-height: 2.15rem;
+  min-height: 2rem;
   padding: 0.45rem 0.95rem;
-  text-decoration: none;
   transition:
     background-color 180ms ease,
-    border-color 180ms ease,
-    color 180ms ease,
     transform 180ms ease;
   white-space: nowrap;
 }
 
-.app-nav-segment-link:hover {
-  background: rgb(255 255 255 / 88%);
-  color: var(--color-primary);
+.app-chrome-search button:hover {
+  background: #000;
+  transform: translateY(-1px);
 }
 
-.app-nav-segment-link.is-active {
+.app-chrome-right {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.app-activity-nav {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.app-activity-link {
+  align-items: center;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-card-border);
+  border-radius: 999px;
+  color: inherit;
+  display: inline-flex;
+  gap: 0.4rem;
+  min-height: 2.35rem;
+  padding: 0.35rem 0.75rem 0.35rem 0.55rem;
+  text-decoration: none;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.app-activity-link:hover {
+  background: rgb(255 255 255 / 96%);
+  border-color: rgb(212 175 55 / 45%);
+  transform: translateY(-1px);
+}
+
+.app-activity-link.is-active {
   background: rgb(255 255 255 / 96%);
   border-color: rgb(212 175 55 / 45%);
   box-shadow: 0 1px 0 rgb(255 255 255 / 80%) inset;
+}
+
+.app-activity-icon {
+  flex: 0 0 auto;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.app-activity-copy {
+  align-items: baseline;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.35rem;
+  min-width: 0;
+}
+
+.app-activity-value {
   color: var(--color-primary);
+  font-size: 0.875rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.app-activity-label {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.app-activity-label-only {
+  color: var(--color-text);
+  font-size: 0.8125rem;
 }
 
 .app-chrome-tools {
@@ -1962,6 +2046,73 @@ h1 {
   color: var(--color-primary);
 }
 
+.discovery-random-battle {
+  background: linear-gradient(135deg, rgb(212 175 55 / 12%), rgb(255 255 255 / 92%));
+  border: 1px solid rgb(212 175 55 / 35%);
+  border-radius: 1.25rem;
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.15rem 1.25rem;
+}
+
+.discovery-random-battle-subtitle {
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  margin: 0;
+}
+
+.discovery-random-battle-matchup {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: center;
+}
+
+.discovery-random-battle-side {
+  font-size: 1.25rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.discovery-random-battle-vs {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.discovery-random-battle-meta {
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  margin: 0;
+  text-align: center;
+}
+
+.discovery-random-battle-cta {
+  align-self: center;
+  background: var(--color-primary);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 2.75rem;
+  min-width: 10rem;
+  padding: 0.75rem 1.35rem;
+  text-decoration: none;
+  transition:
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.discovery-random-battle-cta:hover {
+  background: rgb(180 140 20);
+  transform: translateY(-1px);
+}
+
 .discovery-battle-pair-list {
   display: grid;
   gap: 0.65rem;
@@ -2427,32 +2578,51 @@ h1 {
   }
 }
 
+@media (max-width: 960px) {
+  .app-chrome-inner {
+    grid-template-columns: 1fr auto;
+  }
+
+  .app-chrome-search {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    max-width: none;
+    width: 100%;
+  }
+
+  .app-chrome-right {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
 @media (max-width: 640px) {
   .app-chrome-inner {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 0.85rem;
+    gap: 0.65rem;
+    padding-inline: 1rem;
   }
 
-  .app-chrome-nav {
-    justify-content: stretch;
-    width: 100%;
+  .app-chrome-search button {
+    padding-inline: 0.75rem;
   }
 
-  .app-nav-segment {
+  .app-activity-nav {
     flex: 1 1 auto;
-    justify-content: space-between;
-    width: 100%;
+    gap: 0.25rem;
   }
 
-  .app-nav-segment-link {
-    flex: 1 1 0;
-    padding-inline: 0.65rem;
+  .app-activity-link {
+    padding-inline: 0.55rem;
   }
 
-  .app-chrome-tools {
-    justify-content: space-between;
-    width: 100%;
+  .app-activity-label {
+    display: none;
+  }
+
+  .app-activity-label-only {
+    display: inline;
+    font-size: 0.75rem;
   }
 
   .shell {

@@ -12,7 +12,7 @@ import { PresenceService } from "./services/presence.service.js";
 
 @Module({
   controllers: [EntityChatController],
-  exports: [EntityChatService],
+  exports: [EntityChatService, PresenceService],
   imports: [AuthModule, EntitiesModule, UsersModule],
   providers: [
     EntityChatRepository,
