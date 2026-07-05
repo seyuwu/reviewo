@@ -9,6 +9,7 @@ import { GrowthModule } from "./modules/growth/growth.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
 import { ChatModule } from "./modules/chat/chat.module.js";
+import { DiscoveryModule } from "./modules/discovery/discovery.module.js";
 import { EntityPageModule } from "./modules/entity-page/entity-page.module.js";
 import { EntitiesModule } from "./modules/entities/entities.module.js";
 import { ExtensionApiModule } from "./modules/extension-api/extension-api.module.js";
@@ -45,6 +46,7 @@ import { RedisModule } from "./redis/redis.module.js";
     RecommendationModule,
     ReputationModule,
     ChatModule,
+    DiscoveryModule,
     GrowthModule
   ],
   providers: [AppLogger, GlobalExceptionFilter]

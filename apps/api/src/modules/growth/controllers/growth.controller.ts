@@ -16,6 +16,14 @@ import { GrowthCompareService } from "../services/growth-compare.service.js";
 export class GrowthController {
   constructor(private readonly growthCompareService: GrowthCompareService) {}
 
+  @Get("compare/entities/:leftEntityId/:rightEntityId")
+  async getCompareByEntityIds(
+    @Param("leftEntityId") leftEntityId: string,
+    @Param("rightEntityId") rightEntityId: string
+  ): Promise<GrowthCompareResponseDto> {
+    return this.growthCompareService.getCompareByEntityIds(leftEntityId, rightEntityId);
+  }
+
   @Get("compare/:pairSlug")
   async getCompare(@Param("pairSlug") pairSlug: string): Promise<GrowthCompareResponseDto> {
     return this.growthCompareService.getCompare(pairSlug);

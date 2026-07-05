@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { BackToSearchLink } from "../../../components/back-to-search-link";
 import { EntityPageView } from "../../../features/entity-page/components/entity-page-view";
 import { serverApiRequest } from "../../../lib/api/server-api-client";
 import type { EntityPageResponse } from "../../../features/entity-page/types/entity-page";
@@ -57,7 +56,6 @@ export default async function EntityPageRoute({ params, searchParams }: EntityPa
 
   return (
     <main className="shell entity-route">
-      <BackToSearchLink query={q} />
       <Suspense fallback={null}>
         <EntityPageView entityId={entityId} />
       </Suspense>

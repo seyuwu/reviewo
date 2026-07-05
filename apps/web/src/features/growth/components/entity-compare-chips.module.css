@@ -1,0 +1,83 @@
+.wrap {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.hint {
+  margin: 0;
+}
+
+.search {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.searchForm {
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 0;
+}
+
+.searchOutput {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.searchStatus {
+  margin: 0;
+}
+
+.searchResults {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.searchHitButton {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.suggestions {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.suggestionsStatus {
+  margin: 0;
+}
+
+.label {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.chip {
+  background: #ffffff;
+  border: 1px solid var(--color-card-border);
+  border-radius: 999px;
+  color: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.4rem 0.75rem;
+  text-decoration: none;
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.chip:hover {
+  border-color: rgb(212 175 55 / 45%);
+  transform: translateY(-1px);
+}

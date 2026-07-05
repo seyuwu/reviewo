@@ -52,6 +52,30 @@ export class GrowthCompareService {
     };
   }
 
+  async getCompareByEntityIds(
+    leftEntityId: string,
+    rightEntityId: string
+  ): Promise<GrowthCompareResponseDto> {
+    const [left, right] = await Promise.all([
+      this.entitiesPort.findEntityById(leftEntityId.trim()),
+      this.entitiesPort.findEntityById(rightEntityId.trim())
+    ]);
+
+    if (!left || !right || left.id === right.id) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Compare pair was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    return {
+      left: await this.composeSide(left),
+      pairSlug: `${left.slug}-vs-${right.slug}`,
+      right: await this.composeSide(right)
+    };
+  }
+
   async getBattle(
     pairSlug: string,
     voterHeader?: string,
@@ -105,19 +129,26 @@ export class GrowthCompareService {
     const existingVote = await this.battleVoteRepository.findVote(pairKey, voterKey);
 
     if (existingVote) {
-      throw createAppException({
-        code: AppErrorCode.Conflict,
-        message: "You have already voted in this battle",
-        statusCode: HttpStatus.CONFLICT
+      if (existingVote.entityId === entityId) {
+        return {
+          battle: await this.getBattle(pairSlug, voterHeader, request)
+        };
+      }
+
+      await this.battleVoteRepository.updateVote({
+        entityId,
+        pairKey,
+        ...(userId ? { userId } : {}),
+        voterKey
+      });
+    } else {
+      await this.battleVoteRepository.createVote({
+        entityId,
+        pairKey,
+        ...(userId ? { userId } : {}),
+        voterKey
       });
     }
-
-    await this.battleVoteRepository.createVote({
-      entityId,
-      pairKey,
-      ...(userId ? { userId } : {}),
-      voterKey
-    });
 
     return {
       battle: await this.getBattle(pairSlug, voterHeader, request)

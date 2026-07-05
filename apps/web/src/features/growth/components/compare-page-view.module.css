@@ -1,0 +1,256 @@
+.layout {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.hero {
+  display: grid;
+  gap: 0.45rem;
+  padding-inline: 0.25rem;
+}
+
+.heroCopy {
+  margin: 0;
+}
+
+.matchup {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem 0.85rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.matchupSide {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.matchupSideRight {
+  text-align: right;
+}
+
+.matchupLabel {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.matchupName {
+  font-size: clamp(1.65rem, 4vw, 2.35rem);
+  font-weight: 800;
+  line-height: 1.15;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.matchupVs {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.votePanel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.voteHint {
+  font-size: 0.875rem;
+  margin: 0;
+  text-align: center;
+}
+
+.grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+@media (min-width: 768px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.voteCardWrap {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.voteCard {
+  background: rgb(255 255 255 / 82%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 1.25rem;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 1rem 1.1rem;
+  position: relative;
+  text-align: left;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+  width: 100%;
+}
+
+.voteCardWrapVoted .voteCard,
+.voteCardVoted .voteCard {
+  border-color: rgb(212 175 55 / 45%);
+}
+
+.voteCard:hover:not(:disabled),
+.voteCard:focus-visible:not(:disabled) {
+  border-color: rgb(212 175 55 / 55%);
+  box-shadow: 0 10px 28px rgb(23 23 23 / 8%);
+  transform: translateY(-2px);
+}
+
+.voteCard:disabled {
+  cursor: default;
+  transform: none;
+}
+
+.voteCardTitle {
+  font-size: clamp(1.25rem, 2.2vw, 1.55rem);
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.voteCardScore {
+  color: var(--color-primary);
+  font-size: 1.65rem;
+}
+
+.voteCardStats {
+  color: var(--color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  gap: 0.4rem 0.75rem;
+}
+
+.voteCardAction {
+  background: rgb(0 0 0 / 4%);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  opacity: 0;
+  padding: 0.35rem 0.75rem;
+  transition: opacity 180ms ease;
+  width: fit-content;
+}
+
+.voteCardActionActive {
+  background: rgb(212 175 55 / 14%);
+  color: var(--color-primary);
+  opacity: 1;
+}
+
+.voteCard:hover:not(:disabled) .voteCardAction,
+.voteCard:focus-visible:not(:disabled) .voteCardAction {
+  opacity: 1;
+}
+
+.entityLink {
+  color: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  width: fit-content;
+}
+
+.entityLink:hover {
+  color: var(--color-primary);
+}
+
+.results {
+  border-top: 1px solid var(--color-card-border);
+  display: grid;
+  gap: 0.55rem;
+  padding-top: 0.75rem;
+}
+
+.resultRow {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.resultLabel {
+  align-items: baseline;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+}
+
+.resultLabel span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resultTrack {
+  background: var(--color-primary-soft);
+  border-radius: 999px;
+  height: 0.65rem;
+  overflow: hidden;
+}
+
+.resultFill {
+  background: linear-gradient(90deg, #d4af37, #f59e0b);
+  border-radius: inherit;
+  height: 100%;
+  min-width: 0.35rem;
+}
+
+.voteStatus {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0.15rem 0 0;
+}
+
+.totalVotes {
+  margin: 0;
+}
+
+.invite {
+  border-top: 1px solid var(--color-card-border);
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.75rem;
+}
+
+.invite h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .matchup {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .matchupSideRight {
+    text-align: left;
+  }
+
+  .matchupVs {
+    order: -1;
+  }
+}

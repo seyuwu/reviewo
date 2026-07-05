@@ -5,12 +5,19 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { BackToSearchLink } from "../../../components/back-to-search-link";
 import { FormFeedback } from "../../../components/form-feedback";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { EntityChatPanel } from "../../entity-chat/components/entity-chat-panel";
-import { EntityGrowthPanel } from "../../growth/components/entity-growth-panel";
+import { EntityCompareChips } from "../../growth/components/entity-compare-chips";
+import { EmbedCodeModalTrigger } from "../../growth/components/embed-code-modal";
 import { ShareSheet } from "../../growth/components/share-sheet";
-import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
+import {
+  capturePopoverAnchor,
+  serializePopoverAnchor,
+  type PopoverAnchor
+} from "../../growth/lib/anchored-popover-style";
+import { EntityHeroBar } from "./entity-hero-bar";
 import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { ApiError } from "../../../lib/api/api-error";
 import { publicEnv } from "../../../lib/config/public-env";
@@ -24,6 +31,7 @@ import {
   upsertMyReview
 } from "../api/entity-page";
 import type { EntityPageResponse, RatingAggregate, Review, TrustConfidence } from "../types/entity-page";
+import { sortEntityReviews, type EntityReviewSort } from "../lib/sort-entity-reviews";
 import styles from "./entity-page.module.css";
 import { ReviewTextContent } from "./review-text-content";
 
@@ -49,7 +57,11 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   const [ratingErrorMessage, setRatingErrorMessage] = useState<string | null>(null);
   const [reviewStatusMessage, setReviewStatusMessage] = useState<string | null>(null);
   const [reviewErrorMessage, setReviewErrorMessage] = useState<string | null>(null);
-  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [shareAnchor, setShareAnchor] = useState<PopoverAnchor | null>(null);
+  const [syncedChatHeight, setSyncedChatHeight] = useState<number | undefined>(undefined);
+  const [syncedReviewsPanelHeight, setSyncedReviewsPanelHeight] = useState<number | undefined>(undefined);
+  const leftTopStackRef = useRef<HTMLDivElement>(null);
+  const asideFormsRef = useRef<HTMLDivElement>(null);
   const hasHydratedReviewRef = useRef(false);
 
   const entityPageQuery = useQuery({
@@ -141,6 +153,58 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
     hasHydratedReviewRef.current = true;
   }, [myReviewQuery.isSuccess, myReviewQuery.data?.text]);
 
+  useEffect(() => {
+    const node = leftTopStackRef.current;
+
+    if (!node) {
+      return;
+    }
+
+    const syncChatHeight = (): void => {
+      setSyncedChatHeight(Math.round(node.getBoundingClientRect().height));
+    };
+
+    syncChatHeight();
+
+    const observer = new ResizeObserver(syncChatHeight);
+    observer.observe(node);
+    window.addEventListener("resize", syncChatHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncChatHeight);
+    };
+  }, [entityId, entityPageQuery.data, entityPageQuery.isSuccess]);
+
+  useEffect(() => {
+    const node = asideFormsRef.current;
+
+    if (!node) {
+      return;
+    }
+
+    const syncReviewsPanelHeight = (): void => {
+      setSyncedReviewsPanelHeight(Math.round(node.getBoundingClientRect().height));
+    };
+
+    syncReviewsPanelHeight();
+
+    const observer = new ResizeObserver(syncReviewsPanelHeight);
+    observer.observe(node);
+    window.addEventListener("resize", syncReviewsPanelHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncReviewsPanelHeight);
+    };
+  }, [
+    entityId,
+    entityPageQuery.data,
+    entityPageQuery.isSuccess,
+    myReviewQuery.data?.text,
+    reviewText
+  ]);
+
   const pageData = entityPageQuery.data;
   const canInteract = Boolean(accessToken);
   const trimmedReviewText = reviewText.trim();
@@ -195,73 +259,77 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   }
 
   return (
-    <section className="entity-page ui-fade-in" aria-labelledby="entity-page-heading">
-      <EntityHero pageData={pageData} returnQuery={returnQuery} />
+    <section className={`entity-page ui-fade-in ${styles.entityPageShell}`} aria-labelledby="entity-page-heading">
+      <BackToSearchLink query={returnQuery} />
 
-      {isShareOpen ? (
+      {shareAnchor ? (
         <ShareSheet
+          anchor={shareAnchor}
           avgScore={pageData.rating.avgScore}
           entityId={entityId}
           entityTitle={pageData.entity.title}
           reviewsCount={pageData.meta.reviewsCount}
           trustConfidence={pageData.trust.confidence}
           onClose={() => {
-            setIsShareOpen(false);
+            setShareAnchor(null);
           }}
         />
       ) : null}
 
-      <div
-        className={`entity-page-grid ${styles.pageGrid}`}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 26rem)",
-          maxWidth: "100%",
-          minWidth: 0,
-          overflow: "hidden",
-          width: "100%"
-        }}
-      >
-        <div className={`entity-page-main ${styles.mainColumn}`}>
+      <div className={styles.pageGrid}>
+        <div className={styles.pageGridHero}>
+          <EntityHeroBar pageData={pageData} returnQuery={returnQuery} />
+        </div>
+
+        <div className={styles.mainColumn} ref={leftTopStackRef}>
           <RatingSummary rating={pageData.rating} />
-          <TrustSummary trust={pageData.trust} />
+          <TrustSummary compact trust={pageData.trust} />
+        </div>
+
+        <div
+          className={`${styles.asideColumn} ${styles.asideChat}`}
+          id="entity-live-chat"
+          style={
+            syncedChatHeight
+              ? { height: syncedChatHeight, maxHeight: syncedChatHeight }
+              : undefined
+          }
+        >
+          <EntityChatPanel
+            accessToken={accessToken ?? null}
+            entityId={entityId}
+            entityTitle={pageData.entity.title}
+            initialExpanded
+            isAuthenticated={canInteract}
+            placement="sidebar"
+            scrollIntoViewOnMount={shouldOpenChat}
+            onRequestSignIn={() => {
+              window.location.assign("/profile");
+            }}
+          />
+        </div>
+
+        <div className={styles.mainColumn}>
           <ReviewsList
             accessToken={accessToken}
             canInteract={canInteract}
             entityId={entityId}
+            panelHeight={syncedReviewsPanelHeight}
             reviews={pageData.reviews}
             reviewsCount={pageData.meta.reviewsCount}
           />
         </div>
 
-        <aside
-          className={`entity-page-aside ${styles.asideColumn}`}
+        <div
+          ref={asideFormsRef}
+          className={`${styles.asideColumn} ${styles.asideForms}`}
           aria-label={t("web.entity.asideAriaLabel")}
         >
-          <EntityGrowthPanel
-            entityId={entityId}
-            entitySlug={pageData.entity.slug}
-            entityTitle={pageData.entity.title}
-            onShareClick={() => {
-              setIsShareOpen(true);
-            }}
-          />
-
-          <EntityChatPanel
-            accessToken={accessToken ?? null}
-            entityId={entityId}
-            entityTitle={pageData.entity.title}
-            initialExpanded={shouldOpenChat}
-            isAuthenticated={canInteract}
-            placement="sidebar"
-            onRequestSignIn={() => {
-              window.location.assign("/profile");
-            }}
-          />
-
-          <ExtensionInstallCta />
-
-          <form className={`panel-card form-stack ${styles.constrainedPanel}`} onSubmit={handleRatingSubmit}>
+          <form
+            id="entity-rate-form"
+            className={`panel-card form-stack ${styles.constrainedPanel}`}
+            onSubmit={handleRatingSubmit}
+          >
             <div className="section-heading">
               <p className="result-type">{t("web.entity.rateTitle")}</p>
               <h2>{t("web.entity.rateThisEntity")}</h2>
@@ -355,76 +423,44 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
 
             <FormFeedback errorMessage={reviewErrorMessage} statusMessage={reviewStatusMessage} />
           </form>
-        </aside>
+        </div>
+
+        <section className={`panel-card ${styles.pageGridFull}`} id="entity-compare">
+          <EntityCompareChips entityId={entityId} entitySlug={pageData.entity.slug} />
+        </section>
+
+        <section
+          className={`panel-card ${styles.pageGridFull} ${styles.mainFooter}`}
+          id="entity-page-footer"
+          aria-labelledby="entity-page-footer-heading"
+        >
+          <div className="section-heading">
+            <p className="result-type">{t("web.entity.footerEyebrow")}</p>
+            <h2 id="entity-page-footer-heading">{t("web.entity.footerTitle")}</h2>
+          </div>
+          <div className={styles.footerActions}>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={(event) => {
+                setShareAnchor(serializePopoverAnchor(capturePopoverAnchor(event.nativeEvent)));
+              }}
+            >
+              {t("growth.share.button")}
+            </button>
+            <EmbedCodeModalTrigger
+              className="secondary-button"
+              entityId={entityId}
+              entityTitle={pageData.entity.title}
+            />
+          </div>
+        </section>
+
+        <div className={styles.pageGridFull}>
+          <ExtensionInstallCta />
+        </div>
       </div>
     </section>
-  );
-}
-
-function EntityHero({
-  pageData,
-  returnQuery
-}: {
-  pageData: EntityPageResponse;
-  returnQuery: string;
-}) {
-  const t = useTranslation();
-  const parentHref = pageData.parent
-    ? buildEntityHref(pageData.parent.id, returnQuery)
-    : null;
-
-  return (
-    <header className="entity-hero">
-      <div>
-        {pageData.parent ? (
-          <nav className="entity-breadcrumb" aria-label={t("web.entity.breadcrumbAriaLabel")}>
-            <Link className="entity-breadcrumb-link" href={parentHref ?? "#"}>
-              {pageData.parent.title}
-            </Link>
-            <span className="entity-breadcrumb-separator" aria-hidden="true">
-              →
-            </span>
-            <span className="entity-breadcrumb-current">{pageData.entity.title}</span>
-          </nav>
-        ) : null}
-        <p className="eyebrow">{formatEntityTypeLabel(t, pageData.entity.type)}</p>
-        <h1 id="entity-page-heading">{pageData.entity.title}</h1>
-        <p className="hero-copy">
-          {pageData.entity.description ??
-            pageData.entity.canonicalUrl ??
-            t("web.entity.defaultDescription")}
-        </p>
-        {pageData.parent ? (
-          <p className="entity-parent-link-row">
-            <Link className="entity-parent-link" href={parentHref ?? "#"}>
-              {t("web.entity.viewSiteReviews", { title: pageData.parent.title })}
-            </Link>
-          </p>
-        ) : null}
-      </div>
-
-      <div className="entity-stat-grid" aria-label={t("web.entity.statsAriaLabel")}>
-        <EntityStat label={t("web.entity.average")} value={formatScore(pageData.rating.avgScore)} />
-        <EntityStat label={t("web.entity.votes")} value={String(pageData.rating.votesCount)} />
-        <EntityStat
-          label={t("web.entity.confidence")}
-          value={formatReliabilityPercent(pageData.trust.confidence)}
-        />
-        <EntityStat
-          label={t("web.entity.reviewsCount")}
-          value={String(pageData.meta.reviewsCount)}
-        />
-      </div>
-    </header>
-  );
-}
-
-function EntityStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="entity-stat-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   );
 }
 
@@ -467,10 +503,27 @@ function RatingSummary({ rating }: { rating: RatingAggregate }) {
   );
 }
 
-function TrustSummary({ trust }: { trust: TrustConfidence }) {
+function TrustSummary({ compact = false, trust }: { compact?: boolean; trust: TrustConfidence }) {
   const t = useTranslation();
   const reliabilityLabel = formatRatingReliability(t, trust);
   const manipulationRiskLabel = formatManipulationRiskLabel(t, trust.manipulationRisk);
+
+  if (compact) {
+    return (
+      <section
+        className={`panel-card entity-section entity-trust-compact ${styles.constrainedPanel}`}
+        aria-labelledby="trust-summary-heading"
+      >
+        <div className="section-heading section-heading-row">
+          <h2 id="trust-summary-heading">{reliabilityLabel}</h2>
+          {manipulationRiskLabel ? <span className="muted-copy">{manipulationRiskLabel}</span> : null}
+        </div>
+        <div className="trust-meter trust-meter-compact" aria-hidden="true">
+          <span style={{ width: `${Math.round(trust.confidence * 100)}%` }} />
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className={`panel-card entity-section ${styles.constrainedPanel}`} aria-labelledby="trust-summary-heading">
@@ -553,12 +606,14 @@ function ReviewsList({
   accessToken,
   canInteract,
   entityId,
+  panelHeight,
   reviews: initialReviews,
   reviewsCount
 }: {
   accessToken: string | undefined;
   canInteract: boolean;
   entityId: string;
+  panelHeight: number | undefined;
   reviews: Review[];
   reviewsCount: number;
 }) {
@@ -567,13 +622,19 @@ function ReviewsList({
   const queryClient = useQueryClient();
   const previousEntityIdRef = useRef(entityId);
   const [reviews, setReviews] = useState(initialReviews);
+  const [reviewSort, setReviewSort] = useState<EntityReviewSort>("likes");
   const [voteErrorMessage, setVoteErrorMessage] = useState<string | null>(null);
   const [pendingReviewId, setPendingReviewId] = useState<string | null>(null);
+  const displayedReviews = useMemo(
+    () => sortEntityReviews(reviews, reviewSort),
+    [reviewSort, reviews]
+  );
 
   useEffect(() => {
     if (previousEntityIdRef.current !== entityId) {
       previousEntityIdRef.current = entityId;
       setReviews(initialReviews);
+      setReviewSort("likes");
       return;
     }
 
@@ -652,89 +713,110 @@ function ReviewsList({
   }
 
   return (
-    <section className={`panel-card entity-section ${styles.constrainedPanel}`} aria-labelledby="reviews-heading">
-      <div className="section-heading section-heading-row">
-        <div>
-          <p className="result-type">{t("web.entity.reviewsEyebrow")}</p>
-          <h2 id="reviews-heading">{t("web.entity.topReviews")}</h2>
+    <section
+      className={`panel-card entity-section ${styles.constrainedPanel} ${styles.reviewsPanel}`}
+      aria-labelledby="reviews-heading"
+      style={panelHeight ? { height: panelHeight, maxHeight: panelHeight } : undefined}
+    >
+      <div className={`section-heading section-heading-row ${styles.reviewsPanelHeader}`}>
+        <p className="result-type" id="reviews-heading">
+          {t("web.entity.reviewsEyebrow")}
+        </p>
+        <div className={styles.reviewsPanelMeta}>
+          <label className={styles.reviewSortLabel}>
+            {t("reviews.sort.label")}
+            <select
+              aria-label={t("reviews.sort.label")}
+              className={styles.reviewSortSelect}
+              value={reviewSort}
+              onChange={(event) => {
+                setReviewSort(event.target.value as EntityReviewSort);
+              }}
+            >
+              <option value="likes">{t("reviews.sort.mostHelpful")}</option>
+              <option value="newest">{t("reviews.sort.newest")}</option>
+            </select>
+          </label>
+          <span className="result-action">
+            {t("web.entity.totalReviews", { count: reviewsCount })}
+          </span>
         </div>
-        <span className="result-action">
-          {t("web.entity.totalReviews", { count: reviewsCount })}
-        </span>
       </div>
 
-      {reviews.length > 0 ? (
-        <div className={`review-list ${styles.reviewList}`}>
-          {reviews.map((review) => {
-            const isOwnReview = review.isOwnReview;
-            const canVote = canInteract && !isOwnReview;
+      <div className={styles.reviewsPanelBody}>
+        {displayedReviews.length > 0 ? (
+          <div className={`review-list ${styles.reviewList}`}>
+            {displayedReviews.map((review) => {
+              const isOwnReview = review.isOwnReview;
+              const canVote = canInteract && !isOwnReview;
 
-            return (
-              <article
-                className={`review-card ${styles.reviewCard}${isOwnReview ? " is-own-review" : ""}`}
-                key={review.id}
-              >
-                <ReviewTextContent text={review.text} />
-                <div className="review-card-footer">
-                  <div
-                    className="review-vote-controls"
-                    role="group"
-                    aria-label={t("reviews.vote.groupAriaLabel")}
-                  >
-                    <button
-                      type="button"
-                      className={
-                        review.likedByCurrentUser
-                          ? "review-vote-button review-like-button is-active"
-                          : "review-vote-button review-like-button"
-                      }
-                      aria-pressed={review.likedByCurrentUser}
-                      disabled={!canVote}
-                      title={
-                        isOwnReview
-                          ? t("reviews.vote.ownReviewTooltip")
-                          : review.likedByCurrentUser
-                            ? t("reviews.vote.unlikeTooltip")
-                            : t("reviews.vote.likeTooltip")
-                      }
-                      onClick={() => {
-                        handleToggleLike(review);
-                      }}
+              return (
+                <article
+                  className={`review-card ${styles.reviewCard}${isOwnReview ? " is-own-review" : ""}`}
+                  key={review.id}
+                >
+                  <ReviewTextContent text={review.text} />
+                  <div className="review-card-footer">
+                    <div
+                      className="review-vote-controls"
+                      role="group"
+                      aria-label={t("reviews.vote.groupAriaLabel")}
                     >
-                      👍 {review.likesCount}
-                    </button>
-                    <button
-                      type="button"
-                      className="review-vote-button review-unlike-button"
-                      disabled={!canVote || !review.likedByCurrentUser}
-                      title={
-                        isOwnReview
-                          ? t("reviews.vote.ownReviewTooltip")
-                          : t("reviews.vote.unlikeTooltip")
-                      }
-                      onClick={() => {
-                        handleToggleLike(review);
-                      }}
-                    >
-                      👎
-                    </button>
+                      <button
+                        type="button"
+                        className={
+                          review.likedByCurrentUser
+                            ? "review-vote-button review-like-button is-active"
+                            : "review-vote-button review-like-button"
+                        }
+                        aria-pressed={review.likedByCurrentUser}
+                        disabled={!canVote}
+                        title={
+                          isOwnReview
+                            ? t("reviews.vote.ownReviewTooltip")
+                            : review.likedByCurrentUser
+                              ? t("reviews.vote.unlikeTooltip")
+                              : t("reviews.vote.likeTooltip")
+                        }
+                        onClick={() => {
+                          handleToggleLike(review);
+                        }}
+                      >
+                        👍 {review.likesCount}
+                      </button>
+                      <button
+                        type="button"
+                        className="review-vote-button review-unlike-button"
+                        disabled={!canVote || !review.likedByCurrentUser}
+                        title={
+                          isOwnReview
+                            ? t("reviews.vote.ownReviewTooltip")
+                            : t("reviews.vote.unlikeTooltip")
+                        }
+                        onClick={() => {
+                          handleToggleLike(review);
+                        }}
+                      >
+                        👎
+                      </button>
+                    </div>
+                    <div className="review-meta">
+                      {isOwnReview ? (
+                        <span className="review-you-label">{t("reviews.author.you")}</span>
+                      ) : null}
+                      <span>
+                        {t("web.entity.updated", { date: formatDate(review.updatedAt, locale) })}
+                      </span>
+                    </div>
                   </div>
-                  <div className="review-meta">
-                    {isOwnReview ? (
-                      <span className="review-you-label">{t("reviews.author.you")}</span>
-                    ) : null}
-                    <span>
-                      {t("web.entity.updated", { date: formatDate(review.updatedAt, locale) })}
-                    </span>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="muted-copy">{t("web.entity.firstReviewHint")}</p>
-      )}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p className={`muted-copy ${styles.reviewsEmptyHint}`}>{t("web.entity.firstReviewHint")}</p>
+        )}
+      </div>
 
       <FormFeedback errorMessage={voteErrorMessage} />
     </section>

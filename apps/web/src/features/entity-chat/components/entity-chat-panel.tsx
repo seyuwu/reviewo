@@ -53,6 +53,7 @@ interface EntityChatPanelProps {
   isAuthenticated: boolean;
   onRequestSignIn?: () => void;
   placement?: "main" | "sidebar";
+  scrollIntoViewOnMount?: boolean;
 }
 
 export function EntityChatPanel({
@@ -62,7 +63,8 @@ export function EntityChatPanel({
   initialExpanded = false,
   isAuthenticated,
   onRequestSignIn,
-  placement = "main"
+  placement = "main",
+  scrollIntoViewOnMount = false
 }: EntityChatPanelProps) {
   const t = useTranslation();
   const isSidebar = placement === "sidebar";
@@ -221,13 +223,14 @@ export function EntityChatPanel({
     }
 
     const list = messageListRef.current;
+    const wasNearBottom = list ? isChatListNearBottom(list) : true;
 
-    if (list) {
+    if (list && !wasNearBottom) {
       olderScrollAnchorRef.current = captureChatListScrollAnchor(list);
+      shouldStickToBottomRef.current = false;
     }
 
     setIsLoadingOlder(true);
-    shouldStickToBottomRef.current = false;
 
     try {
       const page = await fetchEntityChatMessages(entityId, {
@@ -246,13 +249,17 @@ export function EntityChatPanel({
         return next;
       });
       setNextCursor(page.nextCursor);
+
+      if (wasNearBottom) {
+        requestScrollToBottom();
+      }
     } catch {
       olderScrollAnchorRef.current = null;
       setSendError(t("chat.loadError"));
     } finally {
       setIsLoadingOlder(false);
     }
-  }, [chatLocale, entityId, isLoadingOlder, nextCursor, t]);
+  }, [chatLocale, entityId, isLoadingOlder, nextCursor, requestScrollToBottom, t]);
 
   const finishClose = useCallback((): void => {
     if (closeTimerRef.current !== undefined) {
@@ -348,12 +355,12 @@ export function EntityChatPanel({
   };
 
   useEffect(() => {
-    if (!initialExpanded || !sectionRef.current) {
+    if (!scrollIntoViewOnMount || !sectionRef.current) {
       return;
     }
 
     sectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [initialExpanded]);
+  }, [scrollIntoViewOnMount]);
 
   useEffect(() => {
     if ((!expanded && !isSidebar) || hasLoadedMessages || isBootstrapping) {

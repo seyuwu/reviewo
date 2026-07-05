@@ -6,6 +6,15 @@ export function fetchGrowthCompare(pairSlug: string): Promise<GrowthCompareRespo
   return apiRequest<GrowthCompareResponse>(`/growth/compare/${encodeURIComponent(pairSlug)}`);
 }
 
+export function fetchGrowthCompareByEntityIds(
+  leftEntityId: string,
+  rightEntityId: string
+): Promise<GrowthCompareResponse> {
+  return apiRequest<GrowthCompareResponse>(
+    `/growth/compare/entities/${encodeURIComponent(leftEntityId)}/${encodeURIComponent(rightEntityId)}`
+  );
+}
+
 export function fetchGrowthBattle(pairSlug: string): Promise<GrowthBattleResponse> {
   return apiRequest<GrowthBattleResponse>(`/growth/battle/${encodeURIComponent(pairSlug)}`, {
     headers: {

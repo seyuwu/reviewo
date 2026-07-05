@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ComparePageView } from "../../../features/growth/components/compare-page-view";
 import { serverApiRequest } from "../../../lib/api/server-api-client";
 import { publicEnv } from "../../../lib/config/public-env";
-import type { GrowthCompareResponse } from "../../../features/growth/types/growth";
+import type { GrowthBattleResponse, GrowthCompareResponse } from "../../../features/growth/types/growth";
 
 interface ComparePageProps {
   params: Promise<{
@@ -16,7 +16,9 @@ export async function generateMetadata({ params }: ComparePageProps): Promise<Me
   const { pairSlug } = await params;
 
   try {
-    const compare = await serverApiRequest<GrowthCompareResponse>(`/growth/compare/${pairSlug}`);
+    const compare = await serverApiRequest<GrowthCompareResponse>(
+      `/growth/compare/${encodeURIComponent(pairSlug)}`
+    );
 
     return {
       alternates: {
@@ -41,11 +43,16 @@ export default async function ComparePage({ params }: ComparePageProps) {
   const { pairSlug } = await params;
 
   try {
-    const compare = await serverApiRequest<GrowthCompareResponse>(`/growth/compare/${pairSlug}`);
+    const compare = await serverApiRequest<GrowthCompareResponse>(
+      `/growth/compare/${encodeURIComponent(pairSlug)}`
+    );
+    const battle = await serverApiRequest<GrowthBattleResponse>(
+      `/growth/battle/${encodeURIComponent(pairSlug)}`
+    );
 
     return (
-      <main className="shell">
-        <ComparePageView compare={compare} />
+      <main className="shell shell-compare">
+        <ComparePageView compare={compare} initialBattle={battle} />
       </main>
     );
   } catch {

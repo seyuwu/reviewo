@@ -33,6 +33,26 @@ export class BattleVoteRepository {
     });
   }
 
+  async updateVote(input: {
+    entityId: string;
+    pairKey: string;
+    userId?: string | null;
+    voterKey: string;
+  }) {
+    return this.prismaService.battleVote.update({
+      data: {
+        entityId: input.entityId,
+        ...(input.userId ? { userId: input.userId } : {})
+      },
+      where: {
+        pairKey_voterKey: {
+          pairKey: input.pairKey,
+          voterKey: input.voterKey
+        }
+      }
+    });
+  }
+
   async countVotesByEntity(pairKey: string): Promise<Map<string, number>> {
     const rows = await this.prismaService.battleVote.groupBy({
       by: ["entityId"],

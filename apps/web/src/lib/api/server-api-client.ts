@@ -1,8 +1,29 @@
+import { existsSync } from "node:fs";
+
 import { publicEnv } from "../config/public-env";
 import { ApiError } from "./api-error";
 
+function getServerApiBaseUrl(): string {
+  const internalBaseUrl = process.env.API_INTERNAL_BASE_URL?.trim();
+
+  if (internalBaseUrl) {
+    return internalBaseUrl;
+  }
+
+  const publicApiBaseUrl = publicEnv.apiBaseUrl;
+
+  if (
+    existsSync("/.dockerenv") &&
+    (publicApiBaseUrl.includes("localhost:3000") || publicApiBaseUrl.includes("127.0.0.1:3000"))
+  ) {
+    return "http://api:3000";
+  }
+
+  return publicApiBaseUrl;
+}
+
 export async function serverApiRequest<TResponse>(path: string): Promise<TResponse> {
-  const response = await fetch(new URL(path, publicEnv.apiBaseUrl), {
+  const response = await fetch(new URL(path, getServerApiBaseUrl()), {
     next: { revalidate: 60 }
   });
 
