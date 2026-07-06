@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-
 import { publicEnv } from "../config/public-env";
 import { ApiError } from "./api-error";
 
@@ -10,16 +8,7 @@ function getServerApiBaseUrl(): string {
     return internalBaseUrl;
   }
 
-  const publicApiBaseUrl = publicEnv.apiBaseUrl;
-
-  if (
-    existsSync("/.dockerenv") &&
-    (publicApiBaseUrl.includes("localhost:3000") || publicApiBaseUrl.includes("127.0.0.1:3000"))
-  ) {
-    return "http://api:3000";
-  }
-
-  return publicApiBaseUrl;
+  return publicEnv.apiBaseUrl;
 }
 
 export async function serverApiRequest<TResponse>(path: string): Promise<TResponse> {
