@@ -1,7 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createSlugFromCanonicalUrl } from "./entity-slug.js";
+import { createSlug, createSlugFromCanonicalUrl } from "./entity-slug.js";
+
+describe("createSlug", () => {
+  it("transliterates cyrillic titles instead of collapsing to entity", () => {
+    assert.equal(createSlug("антон"), "anton");
+    assert.equal(createSlug("Ёлка"), "elka");
+  });
+
+  it("falls back to a stable hashed slug when no latin letters remain", () => {
+    const first = createSlug("🙂");
+    const second = createSlug("🙂");
+
+    assert.match(first, /^entity-[a-f0-9]{8}$/);
+    assert.equal(first, second);
+  });
+});
 
 describe("createSlugFromCanonicalUrl", () => {
   it("uses hostname only for site root URLs", () => {

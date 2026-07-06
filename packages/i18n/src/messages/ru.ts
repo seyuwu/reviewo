@@ -485,7 +485,7 @@ export const ruMessages: MessageDictionary = {
   "web.entityCreate.alreadyExists": "Такая страница уже есть в Opinia.",
   "web.entityCreate.alreadyExistsUrl": "Страница с таким URL уже есть в Opinia.",
   "web.entityCreate.alreadyExistsSlug":
-    "Сущность с таким названием уже есть. Поменяй название или укажи другой URL.",
+    "Технический адрес страницы уже занят. Поменяй название или укажи URL.",
   "web.entityCreate.parentNotFound": "Родительская сущность не найдена.",
   "web.entityCreate.validationCanonicalUrl": "Канонический URL должен начинаться с http:// или https://",
   "web.entityCreate.validationTooLong": "Поле «{field}» слишком длинное.",

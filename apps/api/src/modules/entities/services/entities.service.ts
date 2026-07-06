@@ -45,7 +45,10 @@ export class EntitiesService implements EntitiesPort {
       }
     }
 
-    const slug = input.slug ?? createSlug(input.title);
+    const baseSlug = input.slug ?? createSlug(input.title);
+    const slug = await this.createAvailableSlug(baseSlug);
+    const canonicalUrl = this.normalizeCanonicalUrl(input.canonicalUrl);
+    const description = normalizeOptionalString(input.description);
 
     try {
       const recordInput: CreateEntityRecordInput = {
@@ -54,8 +57,6 @@ export class EntitiesService implements EntitiesPort {
         title: input.title.trim(),
         type: input.type
       };
-      const canonicalUrl = this.normalizeCanonicalUrl(input.canonicalUrl);
-      const description = normalizeOptionalString(input.description);
 
       if (canonicalUrl) {
         const existingEntity = await this.entitiesRepository.findByCanonicalUrl(canonicalUrl);
@@ -96,9 +97,20 @@ export class EntitiesService implements EntitiesPort {
       return entityDto;
     } catch (error) {
       if (this.entitiesRepository.isUniqueConstraintError(error)) {
+        const existingEntity =
+          (await this.entitiesRepository.findBySlug(slug)) ??
+          (canonicalUrl ? await this.entitiesRepository.findByCanonicalUrl(canonicalUrl) : null);
+
         throw createAppException({
           code: AppErrorCode.Conflict,
-          message: "Entity with this slug or canonical URL already exists",
+          details: existingEntity
+            ? {
+                entityId: existingEntity.id
+              }
+            : undefined,
+          message: existingEntity?.canonicalUrl
+            ? "Entity with this canonical URL already exists"
+            : "Entity with this slug or canonical URL already exists",
           statusCode: HttpStatus.CONFLICT
         });
       }
@@ -271,8 +283,10 @@ export class EntitiesService implements EntitiesPort {
   }
 
   private async createAvailableUrlSlug(canonicalUrl: string): Promise<string> {
-    const baseSlug = createSlugFromCanonicalUrl(canonicalUrl);
+    return this.createAvailableSlug(createSlugFromCanonicalUrl(canonicalUrl));
+  }
 
+  private async createAvailableSlug(baseSlug: string): Promise<string> {
     for (let index = 0; index < 10; index += 1) {
       const candidate = index === 0 ? baseSlug : `${baseSlug}-${index + 1}`.slice(0, 120);
       const existingEntity = await this.entitiesRepository.findBySlug(candidate);
