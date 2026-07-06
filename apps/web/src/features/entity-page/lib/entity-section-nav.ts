@@ -44,6 +44,33 @@ function isSectionVisible(element: HTMLElement): boolean {
   return visibleHeight >= visibilityThreshold;
 }
 
+function pollUntilScrollStable(onStable: () => void, isCancelled: () => boolean): void {
+  let lastScrollY = window.scrollY;
+  let stableFrames = 0;
+
+  const poll = () => {
+    if (isCancelled()) {
+      return;
+    }
+
+    if (window.scrollY === lastScrollY) {
+      stableFrames += 1;
+
+      if (stableFrames >= 4) {
+        onStable();
+        return;
+      }
+    } else {
+      stableFrames = 0;
+      lastScrollY = window.scrollY;
+    }
+
+    window.requestAnimationFrame(poll);
+  };
+
+  window.requestAnimationFrame(poll);
+}
+
 function waitForScrollEnd(timeoutMs = SCROLL_END_TIMEOUT_MS): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
@@ -65,35 +92,12 @@ function waitForScrollEnd(timeoutMs = SCROLL_END_TIMEOUT_MS): Promise<void> {
 
     const fallbackTimer = window.setTimeout(finish, timeoutMs);
 
-    if ("onscrollend" in window) {
+    if (typeof window.onscrollend !== "undefined") {
       window.addEventListener("scrollend", onScrollEnd, { once: true });
       return;
     }
 
-    let lastScrollY = window.scrollY;
-    let stableFrames = 0;
-
-    const poll = () => {
-      if (settled) {
-        return;
-      }
-
-      if (window.scrollY === lastScrollY) {
-        stableFrames += 1;
-
-        if (stableFrames >= 4) {
-          finish();
-          return;
-        }
-      } else {
-        stableFrames = 0;
-        lastScrollY = window.scrollY;
-      }
-
-      window.requestAnimationFrame(poll);
-    };
-
-    window.requestAnimationFrame(poll);
+    pollUntilScrollStable(finish, () => settled);
   });
 }
 
