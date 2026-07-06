@@ -1259,3 +1259,31 @@
   - `/entities/:id` and `/entities/new` return 200 after web cache clear.
   - Extension popup and rating card chat send/receive with locale switch.
   - Web entity page chat panel loads, sends, and loads older messages without scroll jump.
+
+## 2026-07-06 - Web Discovery & IA
+
+- Stage: Post-MVP / Web Discovery feed + battles
+- Summary: Restructured web IA around discovery feed on `/`, battles hub, tops page, header live stats, discussion cascade without empty state, random/active/suggested battles with root-domain-first pairing, and entity page hero/reviews polish.
+- Reference: `docs/product/web-discovery-and-battles.md`
+- Created modules:
+  - `DiscoveryModule` (`DiscoveryController`, `DiscoveryService`, `DiscoveryRepository`)
+- Created files (high level):
+  - `apps/api/src/modules/discovery/**`
+  - `apps/web/src/features/discovery/**`
+  - `apps/web/src/components/header-activity-nav.tsx`, `header-search-bar.tsx`
+  - `apps/web/src/features/entity-page/components/entity-hero-bar.tsx`
+  - `docs/product/web-discovery-and-battles.md`
+- API endpoints added:
+  - `GET /growth/battles/active`, `/growth/battles/suggested`
+  - `GET /discovery/battles/random`, `/discovery/discussions/feed`
+  - `GET /discovery/ratings/top`, `/discovery/ratings/rising`
+  - `GET /discovery/stats`, `POST /discovery/presence/heartbeat`
+- Behavior highlights:
+  - Battles have **no TTL**; active = ≥ 1 vote in `growth.battle_votes`.
+  - Home shows 4 active battles (hidden if empty), 4 suggested, 6 discussing, 6 rising, 6 best-week, 1 random (SSR per refresh).
+  - Suggested/random: root domains first, child pages as fallback; random prefers unbattled pairs.
+  - Discussion feed cascade: live 30 min → recent 7 d → popular; home never empty.
+  - Header polls stats every 45s; site presence Redis TTL 90s.
+- Verification:
+  - `corepack pnpm --filter @reviewo/api build`
+  - Smoke: `GET /discovery/discussions/feed`, `GET /discovery/battles/random`, home `/`

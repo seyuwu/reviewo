@@ -12,6 +12,7 @@ import { BattleVoteRepository } from "../../growth/repositories/battle-vote.repo
 import type {
   BattlePairListDto,
   BattlePairListItemDto,
+  DiscoveryEntityRankItemDto,
   DiscoveryEntityRankListDto,
   DiscussionFeedDto,
   DiscussionFeedItemDto,
@@ -88,33 +89,27 @@ export class DiscoveryService {
     return { items: items.slice(0, limit) };
   }
 
-  async getTopRatings(window: "week" | "all" = "all", limit = 20): Promise<DiscoveryEntityRankListDto> {
-    if (window === "week") {
+  async getTopRatings(sort: DiscoveryRatingsSort = "votes", limit = 20): Promise<DiscoveryEntityRankListDto> {
+    if (sort === "week") {
       const rows = await this.discoveryRepository.listTopEntitiesByRecentVotes(limit, 7);
 
       return {
-        items: rows.map((row) => ({
-          avgScore: row.avgScore,
-          entityId: row.entityId,
-          recentVotes: Number(row.recentVotes),
-          slug: row.slug,
-          title: row.title,
-          votesCount: row.votesCount
-        }))
+        items: rows.map((row) => mapRankRow(row, Number(row.recentVotes), null))
       };
     }
 
-    const rows = await this.discoveryRepository.listTopEntitiesAllTime(limit);
+    if (sort === "reliability") {
+      const rows = await this.discoveryRepository.listTopEntitiesByReliability(limit);
+
+      return {
+        items: rows.map((row) => mapRankRow(row, 0, row.reliability ?? null))
+      };
+    }
+
+    const rows = await this.discoveryRepository.listTopEntitiesByVotes(limit);
 
     return {
-      items: rows.map((row) => ({
-        avgScore: row.avgScore,
-        entityId: row.entityId,
-        recentVotes: 0,
-        slug: row.slug,
-        title: row.title,
-        votesCount: row.votesCount
-      }))
+      items: rows.map((row) => mapRankRow(row, 0, null))
     };
   }
 
@@ -127,6 +122,7 @@ export class DiscoveryService {
         avgScore: row.avgScore,
         entityId: row.entityId,
         recentVotes: Number(row.recentVotes),
+        reliability: null,
         slug: row.slug,
         title: row.title,
         votesCount: row.votesCount
@@ -346,6 +342,38 @@ export function assertDiscoveryLimit(limit: number | undefined, fallback: number
   }
 
   return limit;
+}
+
+export type DiscoveryRatingsSort = "week" | "votes" | "reliability";
+
+export function normalizeTopRatingsSort(
+  value: "week" | "votes" | "reliability" | "all" | undefined
+): DiscoveryRatingsSort {
+  if (value === "week") {
+    return "week";
+  }
+
+  if (value === "reliability") {
+    return "reliability";
+  }
+
+  return "votes";
+}
+
+function mapRankRow(
+  row: { avgScore: number; entityId: string; slug: string; title: string; votesCount: number },
+  recentVotes: number,
+  reliability: number | null
+): DiscoveryEntityRankItemDto {
+  return {
+    avgScore: row.avgScore,
+    entityId: row.entityId,
+    recentVotes,
+    reliability,
+    slug: row.slug,
+    title: row.title,
+    votesCount: row.votesCount
+  };
 }
 
 function mapActiveNowToFeedItem(item: {

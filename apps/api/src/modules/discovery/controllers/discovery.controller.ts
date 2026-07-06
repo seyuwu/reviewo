@@ -13,7 +13,7 @@ import {
   DiscoveryRatingsTopQueryDto
 } from "../dto/discovery-query.dto.js";
 import { SitePresenceHeartbeatDto } from "../dto/site-presence-heartbeat.dto.js";
-import { assertDiscoveryLimit, DiscoveryService } from "../services/discovery.service.js";
+import { assertDiscoveryLimit, DiscoveryService, normalizeTopRatingsSort } from "../services/discovery.service.js";
 
 @Controller()
 export class DiscoveryController {
@@ -31,7 +31,10 @@ export class DiscoveryController {
 
   @Get("discovery/ratings/top")
   async getTopRatings(@Query() query: DiscoveryRatingsTopQueryDto): Promise<DiscoveryEntityRankListDto> {
-    return this.discoveryService.getTopRatings(query.window ?? "all", assertDiscoveryLimit(query.limit, 20));
+    return this.discoveryService.getTopRatings(
+      normalizeTopRatingsSort(query.sort ?? query.window),
+      assertDiscoveryLimit(query.limit, 20)
+    );
   }
 
   @Get("discovery/ratings/rising")

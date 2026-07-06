@@ -2,11 +2,11 @@
 
 ## Snapshot
 
-- Date: 2026-07-05
-- Current stage: Post-MVP — Entity Live Chat
-- Stage status: Entity Live Chat MVP completed; v1 client polish completed (2026-07-04/05)
+- Date: 2026-07-06
+- Current stage: Post-MVP — Web Discovery & IA
+- Stage status: Home discovery feed, battles hub, header activity nav, and entity page polish completed (2026-07-05/06)
 - MVP readiness: **Deployed to production** — [opinia.ru](https://opinia.ru), Chrome Web Store extension
-- Last completed stage: Entity Live Chat v1 client polish
+- Last completed stage: Web Discovery feed + battles ranking (root domains first)
 - Next stage: Deferred post-MVP items (see Stage 33 RFC backlog)
 
 ## Implemented Capabilities
@@ -340,6 +340,16 @@ Entity Live Chat v1 polish (2026-07-04/05):
 - Fixed web “Load earlier messages” scroll jump (merged layout effects, anchor preservation).
 - Fixed missing `bindAuthPromptTriggers` import in extension popup home screen.
 - Fixed Next.js `/entities/*` 404 after Docker web restart on Windows (stale `.next` cache; workaround: clear cache and restart web container).
+
+Web Discovery & IA (2026-07-05/06):
+
+- Full behavior reference: `docs/product/web-discovery-and-battles.md`.
+- Header: centered search + live stats (active battle pairs count, site visitors online, tops link); stats poll every 45s with site presence heartbeat.
+- Home feed SSR: random battle, discussion cascade (live → recent → popular, never empty), active battles (top 4 by votes, section hidden when empty), rising/best-week ratings, suggested battles (root domains first, then pages).
+- Battles have no time-based expiry; votes accumulate in `growth.battle_votes` indefinitely.
+- `/battles` hub: up to 12 active + 12 suggested pairs and manual compare picker.
+- `/top` default window is week; tab switch refetches with `loadedWindow` tracking.
+- Entity hero bar with pill section nav; reviews panel scroll/sort polish.
 
 Roadmap update:
 

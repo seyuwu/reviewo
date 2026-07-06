@@ -2063,24 +2063,39 @@ h1 {
 
 .discovery-random-battle-matchup {
   align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  justify-content: center;
+  column-gap: 0.85rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  width: 100%;
 }
 
 .discovery-random-battle-side {
   font-size: 1.25rem;
   font-weight: 800;
-  text-align: center;
+  line-height: 1.2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.discovery-random-battle-side:first-child {
+  justify-self: end;
+  text-align: right;
+}
+
+.discovery-random-battle-side:last-child {
+  justify-self: start;
+  text-align: left;
 }
 
 .discovery-random-battle-vs {
   color: var(--color-text-muted);
+  flex-shrink: 0;
   font-size: 0.875rem;
   font-weight: 700;
   letter-spacing: 0.08em;
+  text-align: center;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .discovery-random-battle-meta {

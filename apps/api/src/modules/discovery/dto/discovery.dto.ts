@@ -20,6 +20,7 @@ export interface DiscoveryEntityRankItemDto {
   avgScore: number;
   entityId: string;
   recentVotes: number;
+  reliability: number | null;
   slug: string;
   title: string;
   votesCount: number;

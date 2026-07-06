@@ -4,7 +4,7 @@
 
 No active implementation stage.
 
-Entity Live Chat MVP is completed.
+Web Discovery & IA (home feed, battles hub, header stats) is completed (2026-07-06).
 
 ## Goal
 
@@ -16,7 +16,9 @@ None.
 
 ## Current Progress
 
-Entity Live Chat is available on extension popup, extension rating card, and web entity page sidebar. Locale-scoped rooms (`ru`/`en`), incremental DOM updates, and simplified scroll behavior are in place. v1 polish (2026-07-04/05) fixed locale-switch races, web older-message scroll, extension popup auth import, and Next.js route 404 after Docker web restart.
+- Entity Live Chat: extension popup, rating card, web entity sidebar; locale `ru`/`en`.
+- Web Discovery: home feed, `/battles`, `/top`, header live stats, discussion cascade, random/active/suggested battles.
+- Product behavior doc: `docs/product/web-discovery-and-battles.md`.
 
 ## Blockers
 
@@ -24,4 +26,4 @@ None.
 
 ## Remaining Work
 
-Deferred v1 chat items: reactions, replies, attachments, edits/deletes, AI moderation/summary, personal messages, dedicated cron package (cleanup currently runs in-process interval).
+Deferred: battle time seasons, empty-state fallbacks for rising/best-week on home, chat v2, moderation, dedicated cron for chat retention.

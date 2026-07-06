@@ -6,6 +6,7 @@ This directory is the long-term home for project documentation. Content is being
 
 | Path | Description |
 | ---- | ----------- |
+| [product/web-discovery-and-battles.md](./product/web-discovery-and-battles.md) | Главная лента, битвы, discovery API, лимиты на странице, поведение активных/случайных битв |
 | [development-workflow.md](./development-workflow.md) | Локальная разработка → GitHub → production (Opinia в Chrome Web Store и на VPS) |
 | [deployment/mvp-deploy.md](./deployment/mvp-deploy.md) | MVP production deployment notes (Stage 32) |
 | [deployment/selectel-vds-guide.md](./deployment/selectel-vds-guide.md) | Пошаговый деплой на VDS Selectel (рядом с другим Docker-проектом) |

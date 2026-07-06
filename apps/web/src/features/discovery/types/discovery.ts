@@ -20,6 +20,7 @@ export interface DiscoveryEntityRankItem {
   avgScore: number;
   entityId: string;
   recentVotes: number;
+  reliability: number | null;
   slug: string;
   title: string;
   votesCount: number;
@@ -34,7 +35,7 @@ export interface DiscoveryStatsResponse {
   onlineNow: number;
 }
 
-export type DiscoveryRatingsWindow = "week" | "all";
+export type DiscoveryRatingsSort = "week" | "votes" | "reliability";
 
 export type DiscussionFeedMode = "live" | "recent" | "popular";
 

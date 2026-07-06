@@ -3,40 +3,40 @@
 import { useEffect, useState } from "react";
 
 import { fetchTopRatings } from "../api/discovery-api";
-import type { DiscoveryEntityRankItem, DiscoveryRatingsWindow } from "../types/discovery";
+import type { DiscoveryEntityRankItem, DiscoveryRatingsSort } from "../types/discovery";
 import { useTranslation } from "../../i18n/locale-provider";
 import { EntityRankList } from "./entity-rank-list";
 
 interface TopsPageViewProps {
   initialItems?: DiscoveryEntityRankItem[] | undefined;
-  initialWindow?: DiscoveryRatingsWindow | undefined;
+  initialSort?: DiscoveryRatingsSort | undefined;
 }
 
-export function TopsPageView({ initialItems, initialWindow = "week" }: TopsPageViewProps) {
+export function TopsPageView({ initialItems, initialSort = "votes" }: TopsPageViewProps) {
   const t = useTranslation();
   const hasInitialData = initialItems !== undefined;
-  const [window, setWindow] = useState<DiscoveryRatingsWindow>(initialWindow);
+  const [sort, setSort] = useState<DiscoveryRatingsSort>(initialSort);
   const [items, setItems] = useState<DiscoveryEntityRankItem[]>(initialItems ?? []);
-  const [loadedWindow, setLoadedWindow] = useState<DiscoveryRatingsWindow | null>(
-    hasInitialData ? initialWindow : null
+  const [loadedSort, setLoadedSort] = useState<DiscoveryRatingsSort | null>(
+    hasInitialData ? initialSort : null
   );
   const [isLoading, setIsLoading] = useState(!hasInitialData);
 
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(loadedWindow !== window);
+    setIsLoading(loadedSort !== sort);
 
-    void fetchTopRatings(window, 20)
+    void fetchTopRatings(sort, 20)
       .then((response) => {
         if (!cancelled) {
           setItems(response.items);
-          setLoadedWindow(window);
+          setLoadedSort(sort);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setItems([]);
-          setLoadedWindow(window);
+          setLoadedSort(sort);
         }
       })
       .finally(() => {
@@ -48,7 +48,7 @@ export function TopsPageView({ initialItems, initialWindow = "week" }: TopsPageV
     return () => {
       cancelled = true;
     };
-  }, [window]);
+  }, [sort]);
 
   return (
     <div className="home-hub">
@@ -61,25 +61,25 @@ export function TopsPageView({ initialItems, initialWindow = "week" }: TopsPageV
         <div className="discovery-window-tabs" role="tablist" aria-label={t("web.topsPage.title")}>
           <button
             type="button"
-            className={window === "week" ? "discovery-window-tab is-active" : "discovery-window-tab"}
+            className={sort === "reliability" ? "discovery-window-tab is-active" : "discovery-window-tab"}
             role="tab"
-            aria-selected={window === "week"}
+            aria-selected={sort === "reliability"}
             onClick={() => {
-              setWindow("week");
+              setSort("reliability");
             }}
           >
-            {t("web.topsPage.tabWeek")}
+            {t("web.topsPage.tabReliability")}
           </button>
           <button
             type="button"
-            className={window === "all" ? "discovery-window-tab is-active" : "discovery-window-tab"}
+            className={sort === "votes" ? "discovery-window-tab is-active" : "discovery-window-tab"}
             role="tab"
-            aria-selected={window === "all"}
+            aria-selected={sort === "votes"}
             onClick={() => {
-              setWindow("all");
+              setSort("votes");
             }}
           >
-            {t("web.topsPage.tabAllTime")}
+            {t("web.topsPage.tabVotes")}
           </button>
         </div>
 
@@ -87,7 +87,11 @@ export function TopsPageView({ initialItems, initialWindow = "week" }: TopsPageV
           {isLoading ? (
             <p className="muted-copy">{t("chat.loading")}</p>
           ) : items.length > 0 ? (
-            <EntityRankList items={items} showRecentVotes={window === "week"} />
+            <EntityRankList
+              items={items}
+              showReliability={sort === "reliability"}
+              showVoteCount={sort === "votes"}
+            />
           ) : (
             <p className="muted-copy">{t("web.topsPage.comingSoon")}</p>
           )}

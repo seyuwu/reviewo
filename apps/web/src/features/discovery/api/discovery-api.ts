@@ -2,7 +2,7 @@ import { apiRequest } from "../../../lib/api/api-client";
 import type {
   BattlePairListResponse,
   DiscoveryEntityRankListResponse,
-  DiscoveryRatingsWindow,
+  DiscoveryRatingsSort,
   DiscoveryStatsResponse,
   DiscussionFeedResponse,
   RandomBattleResponse
@@ -17,11 +17,11 @@ export function fetchSuggestedBattles(limit = 12): Promise<BattlePairListRespons
 }
 
 export function fetchTopRatings(
-  window: DiscoveryRatingsWindow = "all",
+  sort: DiscoveryRatingsSort = "votes",
   limit = 20
 ): Promise<DiscoveryEntityRankListResponse> {
   return apiRequest<DiscoveryEntityRankListResponse>(
-    `/discovery/ratings/top?window=${window}&limit=${limit}`
+    `/discovery/ratings/top?sort=${sort}&limit=${limit}`
   );
 }
 

@@ -14,6 +14,7 @@ export interface ActiveBattlePairRow {
 export interface TopEntityRow {
   avgScore: number;
   entityId: string;
+  reliability?: number;
   slug: string;
   title: string;
   votesCount: number;
@@ -106,6 +107,39 @@ export class DiscoveryRepository {
       WHERE e.visibility = 'ACTIVE'::entities.entity_visibility
         AND ra.votes_count >= ${MIN_TOP_VOTES}
       ORDER BY ra.votes_count DESC, ra.avg_score DESC
+      LIMIT ${safeLimit}
+    `;
+  }
+
+  async listTopEntitiesByReliability(limit: number): Promise<TopEntityRow[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 20));
+
+    return this.prismaService.$queryRaw<TopEntityRow[]>`
+      SELECT
+        e.id AS "entityId",
+        e.slug AS "slug",
+        e.title AS "title",
+        ra.votes_count::int AS "votesCount",
+        ra.avg_score::float8 AS "avgScore",
+        COALESCE(
+          ecp.confidence_score::float8,
+          LEAST(
+            1.0::float8,
+            (LEAST(ra.votes_count, 100)::float8 / 100.0) * 0.9
+            + (LEAST(COALESCE(rc.review_count, 0), 20)::float8 / 20.0) * 0.1
+          )
+        ) AS "reliability"
+      FROM ratings.rating_aggregates ra
+      INNER JOIN entities.entities e ON e.id = ra.entity_id
+      LEFT JOIN reputation.entity_confidence_profiles ecp ON ecp.entity_id = e.id
+      LEFT JOIN (
+        SELECT entity_id, COUNT(*)::int AS review_count
+        FROM reviews.reviews
+        GROUP BY entity_id
+      ) rc ON rc.entity_id = e.id
+      WHERE e.visibility = 'ACTIVE'::entities.entity_visibility
+        AND ra.votes_count >= ${MIN_TOP_VOTES}
+      ORDER BY "reliability" DESC, ra.votes_count DESC, ra.avg_score DESC
       LIMIT ${safeLimit}
     `;
   }

@@ -2,7 +2,7 @@ import { serverApiRequest } from "../../../lib/api/server-api-client";
 import type {
   BattlePairListResponse,
   DiscoveryEntityRankListResponse,
-  DiscoveryRatingsWindow,
+  DiscoveryRatingsSort,
   DiscussionFeedResponse,
   RandomBattleResponse
 } from "../types/discovery";
@@ -24,11 +24,11 @@ export function fetchSuggestedBattlesServer(limit = 12): Promise<BattlePairListR
 }
 
 export function fetchTopRatingsServer(
-  window: DiscoveryRatingsWindow = "all",
+  sort: DiscoveryRatingsSort = "votes",
   limit = 20
 ): Promise<DiscoveryEntityRankListResponse | null> {
   return safeServerRequest<DiscoveryEntityRankListResponse>(
-    `/discovery/ratings/top?window=${window}&limit=${limit}`
+    `/discovery/ratings/top?sort=${sort}&limit=${limit}`
   );
 }
 

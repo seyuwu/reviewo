@@ -7,9 +7,16 @@ import type { DiscoveryEntityRankItem } from "../types/discovery";
 interface EntityRankListProps {
   items: DiscoveryEntityRankItem[];
   showRecentVotes?: boolean;
+  showReliability?: boolean;
+  showVoteCount?: boolean;
 }
 
-export function EntityRankList({ items, showRecentVotes = false }: EntityRankListProps) {
+export function EntityRankList({
+  items,
+  showRecentVotes = false,
+  showReliability = false,
+  showVoteCount = false
+}: EntityRankListProps) {
   const t = useTranslation();
 
   if (items.length === 0) {
@@ -37,6 +44,18 @@ export function EntityRankList({ items, showRecentVotes = false }: EntityRankLis
                   </span>
                 </span>
               </span>
+              {showReliability && item.reliability !== null ? (
+                <span className="discovery-rank-meta">
+                  {t("web.topsPage.reliabilityMeta", {
+                    percent: String(Math.round(item.reliability * 100))
+                  })}
+                </span>
+              ) : null}
+              {showVoteCount ? (
+                <span className="discovery-rank-meta">
+                  {t("search.canonical.ratings", { count: item.votesCount })}
+                </span>
+              ) : null}
               {showRecentVotes && item.recentVotes > 0 ? (
                 <span className="discovery-rank-meta">+{item.recentVotes}</span>
               ) : null}

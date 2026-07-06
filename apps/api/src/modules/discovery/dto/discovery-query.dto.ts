@@ -12,8 +12,12 @@ export class DiscoveryLimitQueryDto {
 
 export class DiscoveryRatingsTopQueryDto extends DiscoveryLimitQueryDto {
   @IsOptional()
-  @IsIn(["week", "all"])
-  window?: "week" | "all";
+  @IsIn(["week", "votes", "reliability", "all"])
+  window?: "week" | "votes" | "reliability" | "all";
+
+  @IsOptional()
+  @IsIn(["week", "votes", "reliability", "all"])
+  sort?: "week" | "votes" | "reliability" | "all";
 }
 
 export class DiscoveryRatingsRisingQueryDto extends DiscoveryLimitQueryDto {

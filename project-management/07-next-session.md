@@ -2,80 +2,50 @@
 
 ## Current State
 
-Entity Live Chat is live across all three clients (2026-07-05).
+Web Discovery & IA is live in production path (2026-07-06).
 
-Backend `ChatModule` provides REST + WebSocket chat, Redis locale-scoped presence, trust-based send cooldowns, and message retention cleanup. Extension popup chat drawer, extension rating card inline chat, and web entity page sidebar chat all share locale-separated rooms (`ru` default, `en` optional). Recent polish fixed scroll behavior, locale-switch races, web older-message loading, extension popup auth prompt import, and Next.js `/entities/*` route 404 after Docker web restart.
+Home page is a discovery feed with random battle, discussion cascade, active/suggested battles, and rating highlights. Header shows live battle-pair count and site online visitors. Battles hub, tops page, and compare flow are the primary growth surfaces. Entity page has hero bar polish and review panel UX improvements.
 
-## Already Done (Entity Live Chat)
+**Primary reference:** `docs/product/web-discovery-and-battles.md`
 
-### Backend (2026-06-28)
+## Already Done (Web Discovery)
 
-- Prisma migration `20260628140000_add_entity_chat_foundation`
-- `RedisModule` + `REDIS_URL` env validation
-- Chat endpoints:
-  - `GET /chat/entities/:entityId/messages`
-  - `GET /chat/entities/:entityId/online`
-  - `GET /chat/active-now`
-  - `POST /chat/entities/:entityId/messages` (JWT)
-  - `POST /chat/entities/:entityId/presence` (JWT)
-- WebSocket namespace `/chat` events: `join`, `leave`, `send_message`, `heartbeat`, `new_message`, `online_count`
-- Locale query param on REST and socket room naming via `@reviewo/shared` helpers
+### Backend
 
-### Extension popup (2026-06-28 + 2026-07-04/05)
+- `DiscoveryModule` with endpoints for battles (active/suggested/random), discussion feed cascade, ratings (top/rising), stats, site presence heartbeat.
+- Suggested/random battles prefer root-domain entities, fall back to child/page entities.
+- Discussion feed: live (30 min, 2+ msgs) → recent (7 d, 1+ msg) → popular entities.
+- Active battle count = distinct `pair_key` rows in `growth.battle_votes` with ≥ 1 vote; no battle TTL.
 
-- Components: `ChatDrawer`, `ActiveNowPanel`
-- Locale switch, resizable drawer, incremental DOM message list
-- i18n keys under `chat.*`
+### Web
 
-### Extension rating card (2026-07-04/05)
+- IA: `/`, `/search`, `/battles`, `/top`, `/compare/[pairSlug]`.
+- Home feed SSR + selective client refetch (see product doc for per-section limits).
+- Header activity nav with 45s polling.
+- Entity hero bar, reviews scroll/sort.
 
-- Inline chat section in content-script rating card (`card-chat-drawer.ts`)
-- Same locale/REST/WebSocket flow as popup chat
+## Before Manual Smoke
 
-### Web entity page (2026-07-04/05)
-
-- `EntityChatPanel` in entity page sidebar
-- Locale switch, resizable panel, REST + WebSocket, older-messages button
-
-### Tests
-
-- Chat unit tests: message pagination, presence, room naming, active-now ranking, trust cooldown
-- Shared `@reviewo/shared` entity-chat message merge/trim helpers tested
-- Extension regression tests still pass
-
-## Before Manual Chat Smoke
-
-1. Ensure Redis is running in dev Compose.
-2. Apply migration if needed: `corepack pnpm --filter @reviewo/api db:migrate`.
-3. Rebuild/reload extension dist after changes.
-4. If `/entities/*` returns 404 after Docker web restart on Windows:
-   ```powershell
-   docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml exec web sh -c "rm -rf /workspace/apps/web/.next"
-   docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml restart web
-   ```
+1. API running with Redis (presence).
+2. After backend changes: `docker compose ... restart api` (dev) or prod rebuild.
+3. If `/entities/*` 404 on Windows Docker web: clear `apps/web/.next` and restart web.
 
 ## Remaining Work (Deferred)
 
-- Chat message moderation/hide integration with ModerationModule
-- Dedicated scheduler/worker for retention instead of in-process interval
-- Reactions, replies, threading, attachments, edits/deletes
-- AI summaries or AI moderation
-- CAPTCHA / hard rate limits
-
-## Next Stage
-
-None approved. Pick from Stage 33 post-MVP RFC backlog or extend chat v2 only after explicit approval.
+- Battle seasons / time windows (not implemented; battles are permanent today).
+- Rising/best-week popular fallback when empty (home still shows "quiet" for those sections).
+- Chat v2, moderation integration, dedicated retention worker.
+- Post-MVP RFC backlog (Stage 33).
 
 ## Documents To Read First
 
-1. `project-management/00-current-state.md`
-2. `project-management/06-changelog.md` (2026-06-28 and 2026-07-05 entries)
-3. `project-management/04-decisions.md` (Entity Live Chat MVP Architecture)
+1. `docs/product/web-discovery-and-battles.md`
+2. `project-management/00-current-state.md`
+3. `project-management/06-changelog.md` (2026-07-06 entry)
 
 ## Pay Attention To
 
-- Do not add chat room/participant tables without RFC — room id remains `{entityId}:{locale}`.
-- Keep chat additive; do not merge chat state into rating/review view models.
-- Redis is required for API chat presence (production must set `REDIS_URL`).
-- On Windows Docker dev, clear `apps/web/.next` if Next.js stops serving `/entities/*` routes after restart.
-- One pre-existing flaky API test in `reputation.service.test.ts` (`replaces vote weight...`) may fail intermittently; unrelated to chat.
+- Home active battles section renders **nothing** when the active list is empty (not an error state).
+- Random battle changes only on **full page SSR refresh**, not on client navigation alone.
+- Header "N битвы" is total active **pairs** in DB, not the 4 shown on home.
+- `corepack pnpm --filter @reviewo/i18n build` after i18n key changes.
