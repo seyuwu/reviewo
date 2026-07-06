@@ -78,8 +78,8 @@ describe("ApiRateLimiterService", () => {
         namespace
       })),
       [
-        { limit: 10, namespace: "entities:create:user" },
-        { limit: 30, namespace: "entities:create:ip" }
+        { limit: 20, namespace: "entities:create:user" },
+        { limit: 60, namespace: "entities:create:ip" }
       ]
     );
     assert.deepEqual(

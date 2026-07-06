@@ -31,9 +31,21 @@ export class ApiRateLimiterService {
     }
   }
 
+  async checkWithinLimits(rules: RateLimitRule[]): Promise<void> {
+    for (const rule of rules) {
+      await this.checkWithinLimit(rule);
+    }
+  }
+
+  async recordLimits(rules: RateLimitRule[]): Promise<void> {
+    for (const rule of rules) {
+      await this.recordLimit(rule);
+    }
+  }
+
   private async assertWithinLimit(rule: RateLimitRule): Promise<void> {
     const client = await this.redisService.getClient();
-    const redisKey = `api:rate:${rule.namespace}:${hashRateLimitKey(rule.key)}`;
+    const redisKey = buildRateLimitRedisKey(rule);
     const count = await client.incr(redisKey);
 
     if (count === 1) {
@@ -44,16 +56,30 @@ export class ApiRateLimiterService {
       return;
     }
 
-    const retryAfterSeconds = Math.max(await client.ttl(redisKey), 1);
+    throw await createRateLimitException(rule, redisKey, client);
+  }
 
-    throw createAppException({
-      code: AppErrorCode.TooManyRequests,
-      details: {
-        retryAfterSeconds
-      },
-      message: rule.message,
-      statusCode: HttpStatus.TOO_MANY_REQUESTS
-    });
+  private async checkWithinLimit(rule: RateLimitRule): Promise<void> {
+    const client = await this.redisService.getClient();
+    const redisKey = buildRateLimitRedisKey(rule);
+    const rawCount = await client.get(redisKey);
+    const count = rawCount ? Number(rawCount) : 0;
+
+    if (count < rule.limit) {
+      return;
+    }
+
+    throw await createRateLimitException(rule, redisKey, client);
+  }
+
+  private async recordLimit(rule: RateLimitRule): Promise<void> {
+    const client = await this.redisService.getClient();
+    const redisKey = buildRateLimitRedisKey(rule);
+    const count = await client.incr(redisKey);
+
+    if (count === 1) {
+      await client.expire(redisKey, rule.windowSeconds);
+    }
   }
 }
 
@@ -63,4 +89,25 @@ export function resolveRequestIp(request: RequestLike): string {
 
 function hashRateLimitKey(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 32);
+}
+
+function buildRateLimitRedisKey(rule: RateLimitRule): string {
+  return `api:rate:${rule.namespace}:${hashRateLimitKey(rule.key)}`;
+}
+
+async function createRateLimitException(
+  rule: RateLimitRule,
+  redisKey: string,
+  client: { ttl: (key: string) => Promise<number> }
+) {
+  const retryAfterSeconds = Math.max(await client.ttl(redisKey), 1);
+
+  return createAppException({
+    code: AppErrorCode.TooManyRequests,
+    details: {
+      retryAfterSeconds
+    },
+    message: rule.message,
+    statusCode: HttpStatus.TOO_MANY_REQUESTS
+  });
 }

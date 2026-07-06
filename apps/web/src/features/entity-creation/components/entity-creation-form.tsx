@@ -9,6 +9,7 @@ import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { useTranslation } from "../../i18n/locale-provider";
 import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
 import { createEntity } from "../api/create-entity";
+import { resolveEntityCreateError } from "../lib/resolve-entity-create-error";
 import { entityTypes } from "../types/entity";
 import type { EntityType } from "../types/entity";
 
@@ -59,8 +60,19 @@ export function EntityCreationForm() {
           ? `/entities/${entity.id}?q=${encodeURIComponent(initialQuery.trim())}`
           : `/entities/${entity.id}`
       );
-    } catch {
-      setErrorMessage(t("web.entityCreate.failed"));
+    } catch (error) {
+      const resolvedError = resolveEntityCreateError(error, t);
+
+      if (resolvedError.existingEntityId) {
+        router.push(
+          initialQuery.trim()
+            ? `/entities/${resolvedError.existingEntityId}?q=${encodeURIComponent(initialQuery.trim())}`
+            : `/entities/${resolvedError.existingEntityId}`
+        );
+        return;
+      }
+
+      setErrorMessage(resolvedError.message);
     } finally {
       setIsCreatingEntity(false);
     }

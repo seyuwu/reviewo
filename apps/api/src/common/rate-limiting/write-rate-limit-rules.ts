@@ -11,14 +11,14 @@ export function createEntityCreationRateLimitRules(
   return [
     {
       key: userId,
-      limit: 10,
+      limit: 20,
       message: "Too many entity creation attempts from this account",
       namespace: "entities:create:user",
       windowSeconds: 60 * 60
     },
     {
       key: resolveRequestIp(request),
-      limit: 30,
+      limit: 60,
       message: "Too many entity creation attempts from this network",
       namespace: "entities:create:ip",
       windowSeconds: 60 * 60

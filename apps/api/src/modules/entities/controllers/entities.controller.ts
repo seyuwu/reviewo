@@ -37,11 +37,15 @@ export class EntitiesController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Req() request: RequestLike
   ): Promise<EntityDto> {
-    await this.apiRateLimiterService.assertWithinLimits(
-      createEntityCreationRateLimitRules(currentUser.id, request)
-    );
+    const rateLimitRules = createEntityCreationRateLimitRules(currentUser.id, request);
 
-    return this.entitiesService.createEntity(input, currentUser);
+    await this.apiRateLimiterService.checkWithinLimits(rateLimitRules);
+
+    const entity = await this.entitiesService.createEntity(input, currentUser);
+
+    await this.apiRateLimiterService.recordLimits(rateLimitRules);
+
+    return entity;
   }
 
   @Get("search")
