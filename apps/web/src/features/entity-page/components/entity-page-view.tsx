@@ -18,9 +18,9 @@ import {
   type PopoverAnchor
 } from "../../growth/lib/anchored-popover-style";
 import { EntityHeroBar } from "./entity-hero-bar";
+import { ExtensionEntityCta } from "../../extension/components/extension-entity-cta";
 import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { ApiError } from "../../../lib/api/api-error";
-import { publicEnv } from "../../../lib/config/public-env";
 import {
   getEntityPage,
   getMyRating,
@@ -457,7 +457,7 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
         </section>
 
         <div className={styles.pageGridFull}>
-          <ExtensionInstallCta />
+          <ExtensionEntityCta className={styles.constrainedPanel} />
         </div>
       </div>
     </section>
@@ -541,65 +541,6 @@ function TrustSummary({ compact = false, trust }: { compact?: boolean; trust: Tr
       </div>
     </section>
   );
-}
-
-function ExtensionInstallCta() {
-  const t = useTranslation();
-  const isExtensionInstalled = useReviewoExtensionPresence();
-
-  if (isExtensionInstalled) {
-    return null;
-  }
-
-  return (
-    <aside className={`panel-card extension-cta ${styles.constrainedPanel}`} aria-label={t("web.extensionCta.ariaLabel")}>
-      <div className="section-heading">
-        <p className="result-type">{t("web.extensionCta.eyebrow")}</p>
-        <h2>{t("web.extensionCta.title")}</h2>
-      </div>
-      <p className="muted-copy">{t("web.extensionCta.body")}</p>
-      {publicEnv.extensionInstallUrl ? (
-        <a
-          className="primary-link"
-          href={publicEnv.extensionInstallUrl}
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          {t("web.extensionCta.action")}
-        </a>
-      ) : (
-        <p className="muted-copy extension-cta-note">{t("web.extensionCta.noInstallUrl")}</p>
-      )}
-    </aside>
-  );
-}
-
-function useReviewoExtensionPresence(): boolean {
-  const [isPresent, setIsPresent] = useState(false);
-
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent): void => {
-      if (event.source !== window || event.origin !== window.location.origin) {
-        return;
-      }
-
-      if (
-        event.data?.source === "reviewo-extension" &&
-        event.data?.type === "reviewo:extension-present"
-      ) {
-        setIsPresent(true);
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    window.postMessage({ source: "reviewo-web", type: "reviewo:extension-ping" }, window.location.origin);
-
-    return () => {
-      window.removeEventListener("message", handleMessage);
-    };
-  }, []);
-
-  return isPresent;
 }
 
 function ReviewsList({

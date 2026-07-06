@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ExtensionHeaderLink } from "../features/extension/components/extension-header-link";
 import { fetchDiscoveryStats, pingSitePresence } from "../features/discovery/api/discovery-api";
 import { useTranslation } from "../features/i18n/locale-provider";
 import { getOrCreateVisitorId } from "../lib/site-presence";
@@ -83,6 +84,8 @@ export function HeaderActivityNav() {
           <span className="app-activity-label app-activity-label-only">{t("web.nav.tops")}</span>
         </span>
       </Link>
+
+      <ExtensionHeaderLink />
     </nav>
   );
 }

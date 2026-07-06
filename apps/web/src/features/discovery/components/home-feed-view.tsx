@@ -1,5 +1,6 @@
 "use client";
 
+import { ExtensionHomeBanner } from "../../extension/components/extension-home-banner";
 import { useTranslation } from "../../i18n/locale-provider";
 import { ActiveBattlesSection } from "./active-battles-section";
 import { BestWeekSection } from "./best-week-section";
@@ -26,6 +27,8 @@ export function HomeFeedView({ initialData }: HomeFeedViewProps) {
         </header>
 
         <CompactSearchBar />
+
+        <ExtensionHomeBanner />
 
         <RandomBattleSection battle={initialData?.randomBattle.item} />
         <DiscussingNowSection initialFeed={initialData?.discussionFeed} />

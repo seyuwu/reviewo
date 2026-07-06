@@ -106,9 +106,11 @@ function writeManifest() {
     manifest.host_permissions = [apiMatch];
     manifest.content_scripts = manifest.content_scripts.map((script) => {
       if (script.js?.includes("web-auth-content.js")) {
+        const devWebMatches = ["http://localhost:3001/*", "http://127.0.0.1:3001/*"];
+
         return {
           ...script,
-          matches: [webMatch]
+          matches: [webMatch, ...devWebMatches.filter((match) => match !== webMatch)]
         };
       }
 
