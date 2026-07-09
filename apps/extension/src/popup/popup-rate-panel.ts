@@ -43,7 +43,12 @@ export function renderPopupRatePanel(
           })
           .join("")}
       </div>
-      <button type="button" class="text-link sign-in-cta${options.isAuthenticated ? " is-hidden" : ""}" data-open-auth-prompt>
+      <button
+        type="button"
+        class="text-link sign-in-cta"
+        data-open-auth-prompt
+        ${options.isAuthenticated ? "hidden" : ""}
+      >
         ${escapeHtml(t("rating.signInToRate"))}
       </button>
       ${statusMarkup}

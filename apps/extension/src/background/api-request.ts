@@ -22,10 +22,51 @@ export interface ApiRequestError {
 
 export type ApiRequestResponse<TData = unknown> = ApiRequestError | ApiRequestResult<TData>;
 
+export function resolveApiEndpoint(
+  path: string,
+  apiBaseUrl = extensionConfig.apiBaseUrl
+): URL {
+  if (typeof path !== "string" || path.trim().length === 0) {
+    throw new Error("API path is required.");
+  }
+
+  const normalizedPath = path.trim();
+
+  if (normalizedPath.startsWith("//")) {
+    throw new Error("Protocol-relative API paths are not allowed.");
+  }
+
+  const base = new URL(apiBaseUrl);
+  const endpoint = new URL(normalizedPath, base);
+
+  if (endpoint.origin !== base.origin) {
+    throw new Error("API path must stay on the configured API origin.");
+  }
+
+  if (!endpoint.pathname.startsWith("/")) {
+    throw new Error("Invalid API path.");
+  }
+
+  return endpoint;
+}
+
 export async function apiRequest<TData = unknown>(
   options: ApiRequestOptions
 ): Promise<ApiRequestResponse<TData>> {
-  const endpoint = new URL(options.path, extensionConfig.apiBaseUrl);
+  let endpoint: URL;
+
+  try {
+    endpoint = resolveApiEndpoint(options.path);
+  } catch (error: unknown) {
+    const messageText = error instanceof Error ? error.message : "Invalid API path.";
+
+    return {
+      errorMessage: messageText,
+      ok: false,
+      status: 400
+    };
+  }
+
   const headers: Record<string, string> = {};
 
   if (options.body !== undefined) {

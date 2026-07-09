@@ -7,6 +7,7 @@ export interface SearchEntityResult {
   canonicalUrl: string | null;
   description: string | null;
   id: string;
+  logoUrl?: string | null;
   resultKind: SearchResultKind;
   reviewsCount: number;
   slug: string;

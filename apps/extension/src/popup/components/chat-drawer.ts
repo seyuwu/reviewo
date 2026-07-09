@@ -393,6 +393,14 @@ export function bindChatDrawerToggle(
     syncDrawerHeight();
     updateOnlineCountUi();
 
+    if (document.documentElement.classList.contains("popup-chat-expanded")) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          syncDrawerHeight();
+        });
+      });
+    }
+
     if (scrollToBottom) {
       requestAnimationFrame(() => {
         scrollMessageListToBottom();
@@ -419,6 +427,7 @@ export function bindChatDrawerToggle(
 
   const syncDrawerHeight = (): void => {
     const drawer = host.querySelector<HTMLElement>(".chat-drawer");
+    const isFullPopupChat = document.documentElement.classList.contains("popup-chat-expanded");
 
     if (!drawer) {
       const fallback = Math.min(
@@ -426,6 +435,16 @@ export function bindChatDrawerToggle(
         popupChatDrawerResizeConfig.getMaxHeightPx()
       );
       chatPanel.style.setProperty("--reviewo-chat-panel-max-height", `${fallback}px`);
+      return;
+    }
+
+    if (isFullPopupChat) {
+      const maxHeight = popupChatDrawerResizeConfig.getMaxHeightPx();
+      const storedHeight = readStoredChatDrawerHeight(popupChatDrawerResizeConfig);
+      const height = Math.min(Math.max(storedHeight, popupChatDrawerResizeConfig.minHeightPx), maxHeight);
+      drawer.style.height = `${height}px`;
+      drawer.style.maxHeight = `${height}px`;
+      chatPanel.style.setProperty("--reviewo-chat-panel-max-height", `${height}px`);
       return;
     }
 

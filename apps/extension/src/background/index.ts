@@ -1,6 +1,11 @@
 import { handleAuthMessage } from "./auth-handlers.js";
 import { handlePublicApiMessage } from "./public-api-handlers.js";
 import {
+  registerActionBadgeListeners,
+  updateActionBadgeForTab,
+  updateActionBadgesForEntity
+} from "./action-badge.js";
+import {
   dismissRatingCardForTab,
   markEntityRatedOnTab,
   shouldShowRatingCardForTab
@@ -89,6 +94,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       );
     }
 
+    void updateActionBadgesForEntity(message.payload.entityId, message.payload.canonicalUrl);
+
     return false;
   }
 
@@ -112,6 +119,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         if (tabId !== undefined) {
           cacheTabResolveResult(tabId, result);
+          void updateActionBadgeForTab(tabId);
         }
 
         sendResponse(createResolvePageUrlResultMessage(url, result));
@@ -148,6 +156,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         const result = await resolveUrlWithApi(activeUrl);
         cacheTabResolveResult(activeTab.id, result);
+        void updateActionBadgeForTab(activeTab.id);
         sendResponse(createActiveTabResolveResultMessage(activeUrl, result, pageTitle));
       })
       .catch(() => {
@@ -159,5 +168,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+registerActionBadgeListeners();
 
 console.info("Reviewo extension background worker is ready.");

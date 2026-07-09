@@ -4,6 +4,7 @@ import { createExtensionTranslator } from "../../shared/extension-i18n.js";
 import { searchEntities, type SearchEntityResult } from "../services/search-entities.js";
 import { entityViewFromSearchResult, escapeHtml } from "../view-helpers.js";
 import type { EntityViewModel } from "../types.js";
+import { bindEntityAvatars, renderEntityAvatarMarkup } from "../lib/entity-avatar.js";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -104,6 +105,7 @@ export async function renderSearchScreen(
 
       resultsHost.classList.remove("is-loading");
       resultsHost.innerHTML = renderSearchResults(t, response.results, response.canCreateEntity);
+      bindEntityAvatars(resultsHost);
       bindSearchResults(resultsHost, response.results, actions);
     } catch {
       if (requestId !== activeRequestId) {
@@ -143,11 +145,20 @@ function renderSearchResults(
       ${
         canonicalResult
           ? `
-        <button type="button" class="entity-list-item entity-list-item-canonical" data-entity-id="${escapeHtml(canonicalResult.id)}">
-          <span class="entity-list-item-badge">${escapeHtml(t("search.canonical.badge"))}</span>
-          <strong>${escapeHtml(canonicalResult.title)}</strong>
-          <span>${escapeHtml(formatSearchHostname(canonicalResult.canonicalUrl) ?? canonicalResult.slug)}</span>
-          <span class="entity-list-item-rating">${escapeHtml(formatSearchRating(t, canonicalResult))}</span>
+        <button type="button" class="entity-list-item entity-list-item-with-avatar entity-list-item-canonical" data-entity-id="${escapeHtml(canonicalResult.id)}">
+          ${renderEntityAvatarMarkup({
+            canonicalUrl: canonicalResult.canonicalUrl,
+            entityId: canonicalResult.id,
+            logoUrl: canonicalResult.logoUrl ?? null,
+            size: "sm",
+            title: canonicalResult.title
+          })}
+          <span class="entity-list-item-copy">
+            <span class="entity-list-item-badge">${escapeHtml(t("search.canonical.badge"))}</span>
+            <strong>${escapeHtml(canonicalResult.title)}</strong>
+            <span class="muted-copy">${escapeHtml(formatSearchHostname(canonicalResult.canonicalUrl) ?? canonicalResult.slug)}</span>
+            <span class="entity-list-item-rating">${escapeHtml(formatSearchRating(t, canonicalResult))}</span>
+          </span>
         </button>
         ${regularResults.length > 0 ? `<div class="search-results-divider" role="separator"></div>` : ""}
       `
@@ -161,9 +172,18 @@ function renderSearchResults(
             .map(
               (item) => `
             <li>
-              <button type="button" class="entity-list-item" data-entity-id="${escapeHtml(item.id)}">
-                <strong>${escapeHtml(item.title)}</strong>
-                <span>${escapeHtml(item.slug)}</span>
+              <button type="button" class="entity-list-item entity-list-item-with-avatar" data-entity-id="${escapeHtml(item.id)}">
+                ${renderEntityAvatarMarkup({
+                  canonicalUrl: item.canonicalUrl,
+                  entityId: item.id,
+                  logoUrl: item.logoUrl ?? null,
+                  size: "sm",
+                  title: item.title
+                })}
+                <span class="entity-list-item-copy">
+                  <strong>${escapeHtml(item.title)}</strong>
+                  <span class="muted-copy">${escapeHtml(formatSearchHostname(item.canonicalUrl) ?? item.slug)}</span>
+                </span>
               </button>
             </li>
           `
