@@ -175,26 +175,362 @@ describe("Community contributions endpoints", { skip: !shouldRunIntegrationTests
     assert.equal(resolvedContribution.status, "APPLIED");
 
     const topBySlugResponse = await fetch(`${context.baseUrl}/tops/${createdTop.slug}`);
-    const topBySlug = await readJson<{
-      items: Array<{ entity: { id: string }; position: number }>;
-    }>(topBySlugResponse);
 
-    assert.equal(topBySlugResponse.status, 200);
-    assert.equal(topBySlug.items.length, 2);
-    assert.ok(topBySlug.items.every((item) => item.entity.id !== entityA.id));
-    assert.ok(topBySlug.items.some((item) => item.entity.id === entityB.id && item.position === 2));
-    assert.ok(topBySlug.items.some((item) => item.entity.id === entityC.id));
+    assert.equal(topBySlugResponse.status, 404);
 
     const reverseLookupResponse = await fetch(`${context.baseUrl}/entities/${entityB.id}/tops`);
     const reverseLookup = await readJson<{ items: Array<{ slug: string }> }>(reverseLookupResponse);
 
     assert.equal(reverseLookupResponse.status, 200);
-    assert.ok(reverseLookup.items.some((item) => item.slug === createdTop.slug));
+    assert.equal(reverseLookup.items.length, 0);
 
     const sourceReverseLookupResponse = await fetch(
       `${context.baseUrl}/entities/${entityA.id}/tops`
     );
 
     assert.equal(sourceReverseLookupResponse.status, 404);
+  });
+
+  it("applies LINK_ENTITY when admin resolves the contribution and exposes related presences", async () => {
+    const entityA = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Link Source ${Date.now()}`
+    });
+    const entityB = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Link Target ${Date.now()}`
+    });
+
+    const createLinkResponse = await fetch(
+      `${context.baseUrl}/entities/${entityA.id}/contributions`,
+      {
+        body: JSON.stringify({
+          payload: {
+            reason: "Same subject",
+            relatedEntityId: entityB.id
+          },
+          type: "LINK_ENTITY"
+        }),
+        headers: authHeaders(author.accessToken),
+        method: "POST"
+      }
+    );
+    const linkContribution = await readJson<{ id: string; status: string; tier: string }>(
+      createLinkResponse
+    );
+
+    assertCreated(createLinkResponse);
+    assert.equal(linkContribution.tier, "MODERATION");
+    assert.equal(linkContribution.status, "PENDING");
+
+    const resolveResponse = await fetch(
+      `${context.baseUrl}/admin/contributions/${linkContribution.id}/resolve`,
+      {
+        body: JSON.stringify({ action: "apply" }),
+        headers: authHeaders(admin.accessToken),
+        method: "POST"
+      }
+    );
+    const resolvedContribution = await readJson<{ status: string }>(resolveResponse);
+
+    assertOk(resolveResponse);
+    assert.equal(resolvedContribution.status, "APPLIED");
+
+    const relatedPresencesResponse = await fetch(
+      `${context.baseUrl}/entities/${entityA.id}/related-presences`
+    );
+    const relatedPresences = await readJson<{
+      items: Array<{ id: string; title: string }>;
+    }>(relatedPresencesResponse);
+
+    assert.equal(relatedPresencesResponse.status, 200);
+    assert.equal(relatedPresences.items.length, 1);
+    assert.equal(relatedPresences.items[0]?.id, entityB.id);
+
+    const pageResponse = await fetch(`${context.baseUrl}/entities/${entityB.id}/page`);
+    const pageBody = await readJson<{
+      relatedPresences: Array<{ id: string }>;
+    }>(pageResponse);
+
+    assert.equal(pageResponse.status, 200);
+    assert.equal(pageBody.relatedPresences.length, 1);
+    assert.equal(pageBody.relatedPresences[0]?.id, entityA.id);
+  });
+
+  it("keeps cluster membership on target when MERGE_ENTITY is applied", async () => {
+    const entityA = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Cluster Merge Source ${Date.now()}`
+    });
+    const entityB = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Cluster Merge Target ${Date.now()}`
+    });
+    const entityC = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Cluster Merge Extra ${Date.now()}`
+    });
+
+    const createFirstLinkResponse = await fetch(
+      `${context.baseUrl}/entities/${entityA.id}/contributions`,
+      {
+        body: JSON.stringify({
+          payload: { relatedEntityId: entityB.id },
+          type: "LINK_ENTITY"
+        }),
+        headers: authHeaders(author.accessToken),
+        method: "POST"
+      }
+    );
+    const firstLinkContribution = await readJson<{ id: string }>(createFirstLinkResponse);
+
+    assertCreated(createFirstLinkResponse);
+
+    await fetch(`${context.baseUrl}/admin/contributions/${firstLinkContribution.id}/resolve`, {
+      body: JSON.stringify({ action: "apply" }),
+      headers: authHeaders(admin.accessToken),
+      method: "POST"
+    });
+
+    const createSecondLinkResponse = await fetch(
+      `${context.baseUrl}/entities/${entityB.id}/contributions`,
+      {
+        body: JSON.stringify({
+          payload: { relatedEntityId: entityC.id },
+          type: "LINK_ENTITY"
+        }),
+        headers: authHeaders(author.accessToken),
+        method: "POST"
+      }
+    );
+    const secondLinkContribution = await readJson<{ id: string }>(createSecondLinkResponse);
+
+    assertCreated(createSecondLinkResponse);
+
+    await fetch(`${context.baseUrl}/admin/contributions/${secondLinkContribution.id}/resolve`, {
+      body: JSON.stringify({ action: "apply" }),
+      headers: authHeaders(admin.accessToken),
+      method: "POST"
+    });
+
+    const createMergeResponse = await fetch(
+      `${context.baseUrl}/entities/${entityA.id}/contributions`,
+      {
+        body: JSON.stringify({
+          payload: {
+            sourceEntityId: entityA.id,
+            targetEntityId: entityB.id
+          },
+          type: "MERGE_ENTITY"
+        }),
+        headers: authHeaders(author.accessToken),
+        method: "POST"
+      }
+    );
+    const mergeContribution = await readJson<{ id: string }>(createMergeResponse);
+
+    assertCreated(createMergeResponse);
+
+    const resolveMergeResponse = await fetch(
+      `${context.baseUrl}/admin/contributions/${mergeContribution.id}/resolve`,
+      {
+        body: JSON.stringify({ action: "apply" }),
+        headers: authHeaders(admin.accessToken),
+        method: "POST"
+      }
+    );
+
+    assertOk(resolveMergeResponse);
+
+    const relatedPresencesResponse = await fetch(
+      `${context.baseUrl}/entities/${entityB.id}/related-presences`
+    );
+    const relatedPresences = await readJson<{
+      items: Array<{ id: string }>;
+    }>(relatedPresencesResponse);
+
+    assert.equal(relatedPresencesResponse.status, 200);
+    assert.equal(relatedPresences.items.length, 1);
+    assert.equal(relatedPresences.items[0]?.id, entityC.id);
+
+    const sourceRelatedResponse = await fetch(
+      `${context.baseUrl}/entities/${entityA.id}/related-presences`
+    );
+
+    assert.equal(sourceRelatedResponse.status, 404);
+  });
+
+  it("rejects LINK_ENTITY when entities are already linked", async () => {
+    const entityA = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Already Linked A ${Date.now()}`
+    });
+    const entityB = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Already Linked B ${Date.now()}`
+    });
+
+    const createLinkResponse = await fetch(
+      `${context.baseUrl}/entities/${entityA.id}/contributions`,
+      {
+        body: JSON.stringify({
+          payload: { relatedEntityId: entityB.id },
+          type: "LINK_ENTITY"
+        }),
+        headers: authHeaders(author.accessToken),
+        method: "POST"
+      }
+    );
+    const linkContribution = await readJson<{ id: string }>(createLinkResponse);
+
+    assertCreated(createLinkResponse);
+
+    await fetch(`${context.baseUrl}/admin/contributions/${linkContribution.id}/resolve`, {
+      body: JSON.stringify({ action: "apply" }),
+      headers: authHeaders(admin.accessToken),
+      method: "POST"
+    });
+
+    const duplicateLinkResponse = await fetch(
+      `${context.baseUrl}/entities/${entityA.id}/contributions`,
+      {
+        body: JSON.stringify({
+          payload: { relatedEntityId: entityB.id },
+          type: "LINK_ENTITY"
+        }),
+        headers: authHeaders(author.accessToken),
+        method: "POST"
+      }
+    );
+
+    assert.equal(duplicateLinkResponse.status, 409);
+  });
+
+  it("applies UNLINK_ENTITY when admin resolves the contribution", async () => {
+    const entityA = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Unlink Source ${Date.now()}`
+    });
+    const entityB = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Unlink Target ${Date.now()}`
+    });
+
+    const createLinkResponse = await fetch(
+      `${context.baseUrl}/entities/${entityA.id}/contributions`,
+      {
+        body: JSON.stringify({
+          payload: { relatedEntityId: entityB.id },
+          type: "LINK_ENTITY"
+        }),
+        headers: authHeaders(author.accessToken),
+        method: "POST"
+      }
+    );
+    const linkContribution = await readJson<{ id: string }>(createLinkResponse);
+
+    assertCreated(createLinkResponse);
+
+    await fetch(`${context.baseUrl}/admin/contributions/${linkContribution.id}/resolve`, {
+      body: JSON.stringify({ action: "apply" }),
+      headers: authHeaders(admin.accessToken),
+      method: "POST"
+    });
+
+    const createUnlinkResponse = await fetch(
+      `${context.baseUrl}/entities/${entityA.id}/contributions`,
+      {
+        body: JSON.stringify({
+          payload: { relatedEntityId: entityB.id },
+          type: "UNLINK_ENTITY"
+        }),
+        headers: authHeaders(author.accessToken),
+        method: "POST"
+      }
+    );
+    const unlinkContribution = await readJson<{ id: string; status: string; tier: string }>(
+      createUnlinkResponse
+    );
+
+    assertCreated(createUnlinkResponse);
+    assert.equal(unlinkContribution.tier, "MODERATION");
+    assert.equal(unlinkContribution.status, "PENDING");
+
+    const resolveResponse = await fetch(
+      `${context.baseUrl}/admin/contributions/${unlinkContribution.id}/resolve`,
+      {
+        body: JSON.stringify({ action: "apply" }),
+        headers: authHeaders(admin.accessToken),
+        method: "POST"
+      }
+    );
+
+    assertOk(resolveResponse);
+
+    const relatedPresencesResponse = await fetch(
+      `${context.baseUrl}/entities/${entityA.id}/related-presences`
+    );
+    const relatedPresences = await readJson<{ items: Array<{ id: string }> }>(
+      relatedPresencesResponse
+    );
+
+    assert.equal(relatedPresencesResponse.status, 200);
+    assert.equal(relatedPresences.items.length, 0);
+  });
+
+  it("rejects UPDATE_LOGO contributions with unsafe logo URLs", async () => {
+    const entity = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Unsafe Logo Entity ${Date.now()}`
+    });
+
+    const createContributionResponse = await fetch(
+      `${context.baseUrl}/entities/${entity.id}/contributions`,
+      {
+        body: JSON.stringify({
+          payload: {
+            newValue: "javascript:alert(1)",
+            oldValue: null
+          },
+          type: "UPDATE_LOGO"
+        }),
+        headers: authHeaders(author.accessToken),
+        method: "POST"
+      }
+    );
+
+    assert.equal(createContributionResponse.status, 400);
+  });
+
+  it("applies UPDATE_LOGO into entity_media and syncs entities.logo_url", async () => {
+    const entity = await createTestEntity(context.baseUrl, author.accessToken, {
+      title: `Logo Entity ${Date.now()}`
+    });
+    const nextLogoUrl = "https://example.com/logo.png";
+
+    const createContributionResponse = await fetch(
+      `${context.baseUrl}/entities/${entity.id}/contributions`,
+      {
+        body: JSON.stringify({
+          payload: {
+            newValue: nextLogoUrl,
+            oldValue: null
+          },
+          type: "UPDATE_LOGO"
+        }),
+        headers: authHeaders(author.accessToken),
+        method: "POST"
+      }
+    );
+    const contribution = await readJson<{ id: string }>(createContributionResponse);
+
+    assertCreated(createContributionResponse);
+
+    const resolveResponse = await fetch(
+      `${context.baseUrl}/admin/contributions/${contribution.id}/resolve`,
+      {
+        body: JSON.stringify({ action: "apply" }),
+        headers: authHeaders(admin.accessToken),
+        method: "POST"
+      }
+    );
+
+    assertOk(resolveResponse);
+
+    const entityResponse = await fetch(`${context.baseUrl}/entities/${entity.id}`);
+    const entityBody = await readJson<{ logoUrl: string | null }>(entityResponse);
+
+    assert.equal(entityResponse.status, 200);
+    assert.equal(entityBody.logoUrl, nextLogoUrl);
   });
 });

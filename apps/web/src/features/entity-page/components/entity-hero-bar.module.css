@@ -8,11 +8,24 @@
 }
 
 .heroLayout {
-  align-items: start;
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 1rem 1.25rem;
   justify-content: space-between;
+}
+
+.heroLead {
+  align-items: center;
+  display: flex;
+  flex: 1 1 18rem;
+  gap: 1.1rem;
+  min-width: min(100%, 18rem);
+}
+
+.avatar {
+  align-self: center;
+  flex-shrink: 0;
 }
 
 .identity {

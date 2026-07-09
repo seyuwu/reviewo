@@ -1127,19 +1127,26 @@ export const RATING_CARD_STYLES = `
 .reviewo-card-shell.is-chat-expanded .reviewo-card {
   display: flex;
   flex-direction: column;
-  max-height: min(98vh, 900px);
+  height: min(calc(100vh - 32px), 900px);
+  max-height: min(calc(100vh - 32px), 900px);
   overflow: hidden;
 }
 
 .reviewo-card-shell.is-chat-expanded .reviewo-card-scroll {
-  display: block;
+  display: contents;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-stats {
+  display: none !important;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-card-header {
   flex: 0 0 auto;
-  min-height: auto;
-  overflow: visible;
 }
 
 .reviewo-card-shell.is-chat-expanded .reviewo-rate-section,
-.reviewo-card-shell.is-chat-expanded .reviewo-settings-tip {
+.reviewo-card-shell.is-chat-expanded .reviewo-settings-tip,
+.reviewo-card-shell.is-chat-expanded .reviewo-reviews-panel {
   display: none !important;
 }
 
@@ -1150,6 +1157,64 @@ export const RATING_CARD_STYLES = `
 }
 
 .reviewo-card-shell.is-chat-expanded .reviewo-chat-section {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-chat-section.is-expanded {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-chat-panel {
+  transition: none;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-chat-panel.is-open {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-chat-panel.is-loading.is-open {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-chat-panel-inner {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  height: auto;
+  min-height: 0;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-chat-host {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-chat-drawer-body {
+  flex: 1 1 0;
+  min-height: 72px;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-chat-footer {
+  flex: 0 0 auto;
+}
+
+.reviewo-card-shell.is-chat-expanded .reviewo-chat-toggle {
   flex: 0 0 auto;
 }
 
@@ -1159,6 +1224,31 @@ export const RATING_CARD_STYLES = `
 
 :host([data-placement^="top"]).is-chat-expanded .reviewo-card-shell.is-chat-expanded .reviewo-card {
   overflow: hidden;
+}
+
+@media (max-height: 720px) {
+  .reviewo-card-shell.is-chat-expanded .reviewo-card {
+    height: calc(100vh - 24px);
+    max-height: calc(100vh - 24px);
+    padding-bottom: 14px;
+  }
+
+  .reviewo-card-shell.is-chat-expanded .reviewo-card-header {
+    margin-bottom: 8px;
+  }
+
+  .reviewo-card-shell.is-chat-expanded .reviewo-card-scroll .reviewo-meta {
+    display: none;
+  }
+
+  .reviewo-card-shell.is-chat-expanded .reviewo-eyebrow,
+  .reviewo-card-shell.is-chat-expanded .reviewo-site-snooze {
+    display: none;
+  }
+
+  .reviewo-card-shell.is-chat-expanded .reviewo-title {
+    font-size: 18px;
+  }
 }
 
 .reviewo-chat-drawer {

@@ -5,6 +5,7 @@ export class SearchEntityResultDto {
   canonicalUrl!: string | null;
   description!: string | null;
   id!: string;
+  logoUrl!: string | null;
   resultKind!: SearchResultKind;
   reviewsCount!: number;
   slug!: string;

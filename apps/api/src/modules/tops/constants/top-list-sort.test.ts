@@ -12,6 +12,10 @@ describe("top list sort", () => {
     assert.equal(normalizeTopListSort("unknown"), "recent");
   });
 
+  it("accepts random sort", () => {
+    assert.equal(normalizeTopListSort("random"), "random");
+  });
+
   it("builds engagement order clauses", () => {
     assert.deepEqual(buildTopListOrderBy("comments")[0], { comments: { _count: "desc" } });
   });

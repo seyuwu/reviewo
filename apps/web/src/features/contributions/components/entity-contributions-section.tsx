@@ -1,17 +1,21 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { FormEvent, useMemo, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { FormFeedback } from "../../../components/form-feedback";
 import { ApiError } from "../../../lib/api/api-error";
 import { readApiErrorMessage } from "../../../lib/api/read-api-error";
+import { EntityAvatar } from "../../entities/components/entity-avatar";
+import { isSafeImageSrc } from "../../entities/lib/entity-avatar";
 import { useTranslation } from "../../i18n/locale-provider";
 import { ENTITY_TYPES, formatEntityTypeLabel } from "../../i18n/entity-type-label";
 import { formatContributionTypeLabel } from "../../i18n/contribution-type-label";
 import { formatContributionSummary } from "../lib/format-contribution-summary";
+import { navigateToEntitySection } from "../../entity-page/lib/entity-section-nav";
 import { MergeContributionSummary } from "./merge-contribution-summary";
+import { LinkContributionSummary } from "./link-contribution-summary";
 import {
   createContribution,
   fetchDuplicateSuggestions,
@@ -25,6 +29,7 @@ import styles from "./entity-contributions-section.module.css";
 import { FieldProvenanceBadge } from "./field-provenance-badge";
 import { SuggestCorrectionModal } from "./suggest-correction-modal";
 import { SuggestMergeModal } from "./suggest-merge-modal";
+import { SuggestLinkModal } from "./suggest-link-modal";
 
 interface EntityContributionsSectionProps {
   accessToken: string | undefined;
@@ -39,6 +44,9 @@ interface EntityContributionsSectionProps {
     title: string;
     type: string;
   };
+  onRegisterPairActions?: (actions: {
+    suggestUnlink: (relatedEntityId: string) => void;
+  }) => void;
 }
 
 interface CorrectionField {
@@ -59,7 +67,8 @@ export function EntityContributionsSection({
   canInteract,
   currentUserId,
   isAdmin,
-  entity
+  entity,
+  onRegisterPairActions
 }: EntityContributionsSectionProps) {
   const t = useTranslation();
   const queryClient = useQueryClient();
@@ -68,6 +77,7 @@ export function EntityContributionsSection({
   const [activeField, setActiveField] = useState<CorrectionField | null>(null);
   const [draftValue, setDraftValue] = useState("");
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
 
   const provenanceQuery = useQuery({
     queryFn: () => fetchFieldProvenance(entity.id),
@@ -163,19 +173,40 @@ export function EntityContributionsSection({
       );
     },
     onSuccess: (contribution) => {
-      setStatusMessage(t("contributions.submitSuccess"));
       setErrorMessage(null);
       setActiveField(null);
       setDraftValue("");
-      queryClient.setQueryData<ContributionListResponse>(
-        ["entity-contributions", entity.id],
-        (current) => {
-          const existing = current?.items ?? [];
-          const withoutDuplicate = existing.filter((item) => item.id !== contribution.id);
 
-          return { items: [contribution, ...withoutDuplicate] };
-        }
-      );
+      if (contribution.status === "PENDING") {
+        setStatusMessage(t("contributions.submitSuccess"));
+        queryClient.setQueryData<ContributionListResponse>(
+          ["entity-contributions", entity.id],
+          (current) => {
+            const existing = current?.items ?? [];
+            const withoutDuplicate = existing.filter((item) => item.id !== contribution.id);
+
+            return { items: [contribution, ...withoutDuplicate] };
+          }
+        );
+        return;
+      }
+
+      if (contribution.status === "APPLIED" && contribution.type === "LINK_ENTITY") {
+        setStatusMessage(t("contributions.linkAppliedSuccess"));
+        void refreshEntityPageAfterPairChange(queryClient, entity.id, contribution.payload);
+        window.setTimeout(() => {
+          navigateToEntitySection("entity-related-presences");
+        }, 150);
+        return;
+      }
+
+      if (contribution.status === "APPLIED" && contribution.type === "UNLINK_ENTITY") {
+        setStatusMessage(t("contributions.appliedSuccess"));
+        void refreshEntityPageAfterPairChange(queryClient, entity.id, contribution.payload);
+        return;
+      }
+
+      setStatusMessage(t("contributions.submitSuccess"));
     }
   });
 
@@ -289,10 +320,14 @@ export function EntityContributionsSection({
           contribution.type === "MERGE_ENTITY"
             ? ((contribution.payload as { targetEntityId?: string }).targetEntityId ?? null)
             : null;
+        const shouldRefreshPair =
+          contribution.type === "LINK_ENTITY" || contribution.type === "UNLINK_ENTITY";
 
         void Promise.all([
           queryClient.invalidateQueries({ queryKey: ["entity-provenance", entity.id] }),
-          queryClient.invalidateQueries({ queryKey: ["entity-page", entity.id] }),
+          ...(shouldRefreshPair
+            ? [refreshEntityPageAfterPairChange(queryClient, entity.id, contribution.payload)]
+            : [queryClient.invalidateQueries({ queryKey: ["entity-page", entity.id] })]),
           queryClient.invalidateQueries({ queryKey: ["entity-tops", entity.id] }),
           queryClient.invalidateQueries({ queryKey: ["entity-duplicate-suggestions", entity.id] }),
           ...(mergeTargetId
@@ -367,6 +402,62 @@ export function EntityContributionsSection({
     );
   }
 
+  function handleSuggestLink(relatedEntityId: string, onSuccess?: () => void): void {
+    if (!canInteract || !accessToken) {
+      setErrorMessage(t("contributions.signInRequired"));
+      return;
+    }
+
+    createMutation.mutate(
+      {
+        payload: {
+          reason: t("contributions.linkReason"),
+          relatedEntityId
+        },
+        type: "LINK_ENTITY"
+      },
+      {
+        onSuccess: () => {
+          setStatusMessage(t("contributions.linkSuccess"));
+          onSuccess?.();
+        }
+      }
+    );
+  }
+
+  function handleSuggestUnlink(relatedEntityId: string): void {
+    if (!canInteract || !accessToken) {
+      setErrorMessage(t("contributions.signInRequired"));
+      return;
+    }
+
+    createMutation.mutate(
+      {
+        payload: {
+          reason: t("contributions.unlinkReason"),
+          relatedEntityId
+        },
+        type: "UNLINK_ENTITY"
+      },
+      {
+        onSuccess: () => {
+          setStatusMessage(t("contributions.unlinkSuccess"));
+        }
+      }
+    );
+  }
+
+  const unlinkHandlerRef = useRef(handleSuggestUnlink);
+  unlinkHandlerRef.current = handleSuggestUnlink;
+
+  useEffect(() => {
+    onRegisterPairActions?.({
+      suggestUnlink: (relatedEntityId) => {
+        unlinkHandlerRef.current(relatedEntityId);
+      }
+    });
+  }, [onRegisterPairActions]);
+
   function renderFieldValue(field: CorrectionField): string {
     if (field.fieldKey === "type") {
       return formatEntityTypeLabel(t, entity.type);
@@ -394,7 +485,11 @@ export function EntityContributionsSection({
 
     return (
       <div className={styles.logoPreview}>
-        <img alt="" className={styles.logoImage} src={url} />
+        {isSafeImageSrc(url) ? (
+          <EntityAvatar logoUrl={url} size="sm" title={url} />
+        ) : (
+          <p className={styles.fieldValue}>{url}</p>
+        )}
         <p className={`${styles.fieldValue} ${styles.logoUrl}`}>{url}</p>
       </div>
     );
@@ -485,21 +580,48 @@ export function EntityContributionsSection({
                     {t("contributions.duplicatesHint", { percent: item.matchPercent })}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={!canInteract || createMutation.isPending}
-                  onClick={() => {
-                    handleSuggestMerge(item.entity.id);
-                  }}
-                >
-                  {t("contributions.suggestMerge")}
-                </button>
+                <div className={styles.duplicateActions}>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={!canInteract || createMutation.isPending}
+                    onClick={() => {
+                      handleSuggestLink(item.entity.id);
+                    }}
+                  >
+                    {t("contributions.suggestLink")}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={!canInteract || createMutation.isPending}
+                    onClick={() => {
+                      handleSuggestMerge(item.entity.id);
+                    }}
+                  >
+                    {t("contributions.suggestMerge")}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </div>
       ) : null}
+
+      <div>
+        <h3 className="result-type">{t("contributions.manualLinkTitle")}</h3>
+        <p className="muted-copy">{t("contributions.manualLinkHint")}</p>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={!canInteract || createMutation.isPending}
+          onClick={() => {
+            setLinkModalOpen(true);
+          }}
+        >
+          {t("contributions.manualLinkCta")}
+        </button>
+      </div>
 
       <div>
         <h3 className="result-type">{t("contributions.manualMergeTitle")}</h3>
@@ -569,6 +691,21 @@ export function EntityContributionsSection({
             )}
           </label>
         </SuggestCorrectionModal>
+      ) : null}
+
+      {linkModalOpen ? (
+        <SuggestLinkModal
+          currentEntityId={entity.id}
+          isSubmitting={createMutation.isPending}
+          onClose={() => {
+            setLinkModalOpen(false);
+          }}
+          onSubmit={(relatedEntityId) => {
+            handleSuggestLink(relatedEntityId, () => {
+              setLinkModalOpen(false);
+            });
+          }}
+        />
       ) : null}
 
       {mergeModalOpen ? (
@@ -674,7 +811,11 @@ function PendingContributionCard({
 }) {
   const t = useTranslation();
   const summary =
-    contribution.type === "MERGE_ENTITY" ? null : formatContributionSummary(t, contribution);
+    contribution.type === "MERGE_ENTITY" ||
+    contribution.type === "LINK_ENTITY" ||
+    contribution.type === "UNLINK_ENTITY"
+      ? null
+      : formatContributionSummary(t, contribution);
   const requiredApprovals = contribution.requiredApprovalsWeight ?? 0;
   const isOwnContribution = Boolean(currentUserId && contribution.authorId === currentUserId);
   const canVote = canInteract && !isOwnContribution && contribution.tier !== "MODERATION";
@@ -696,8 +837,10 @@ function PendingContributionCard({
       </div>
       {summary ? (
         <p className="contribution-pending-value">{summary}</p>
-      ) : (
+      ) : contribution.type === "MERGE_ENTITY" ? (
         <MergeContributionSummary currentEntity={currentEntity} payload={contribution.payload} />
+      ) : (
+        <LinkContributionSummary payload={contribution.payload} />
       )}
       {contribution.tier === "MODERATION" && !canModerate ? (
         <p className="contribution-pending-note">{t("contributions.awaitingAdmin")}</p>
@@ -754,4 +897,29 @@ function PendingContributionCard({
       ) : null}
     </article>
   );
+}
+
+function refreshEntityPageAfterPairChange(
+  queryClient: QueryClient,
+  entityId: string,
+  payload: unknown
+): Promise<void> {
+  const relatedEntityId = readRelatedEntityId(payload);
+
+  return Promise.all([
+    queryClient.refetchQueries({ queryKey: ["entity-page", entityId] }),
+    ...(relatedEntityId
+      ? [queryClient.refetchQueries({ queryKey: ["entity-page", relatedEntityId] })]
+      : [])
+  ]).then(() => undefined);
+}
+
+function readRelatedEntityId(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null || !("relatedEntityId" in payload)) {
+    return null;
+  }
+
+  const relatedEntityId = (payload as { relatedEntityId?: unknown }).relatedEntityId;
+
+  return typeof relatedEntityId === "string" ? relatedEntityId : null;
 }

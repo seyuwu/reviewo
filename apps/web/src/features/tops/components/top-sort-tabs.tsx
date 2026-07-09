@@ -51,5 +51,9 @@ function formatTopListSortLabel(sort: TopListSort, t: TranslateFn): string {
     return t("web.userTops.sortViews");
   }
 
+  if (sort === "random") {
+    return t("web.userTops.sortRandom");
+  }
+
   return t("web.userTops.sortForks");
 }

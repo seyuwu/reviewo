@@ -11,6 +11,7 @@ import { readApiErrorMessage } from "../../../lib/api/read-api-error";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { formatContributionSummary } from "../../contributions/lib/format-contribution-summary";
 import { MergeContributionSummary } from "../../contributions/components/merge-contribution-summary";
+import { LinkContributionSummary } from "../../contributions/components/link-contribution-summary";
 import type { ContributionType } from "../../contributions/types/contributions";
 import { formatContributionTypeLabel } from "../../i18n/contribution-type-label";
 import { useTranslation } from "../../i18n/locale-provider";
@@ -25,6 +26,8 @@ import styles from "./admin-page-view.module.css";
 
 const TYPE_FILTERS: AdminContributionTypeFilter[] = [
   "ALL",
+  "LINK_ENTITY",
+  "UNLINK_ENTITY",
   "MERGE_ENTITY",
   "UPDATE_URL",
   "UPDATE_NAME",
@@ -80,7 +83,7 @@ export function AdminPageView() {
           t("contributions.adminResolveFailed")
       );
     },
-    onSuccess: (_result, variables) => {
+    onSuccess: (result, variables) => {
       setErrorMessage(null);
       setStatusMessage(
         variables.action === "apply"
@@ -88,6 +91,26 @@ export function AdminPageView() {
           : t("contributions.rejectedSuccess")
       );
       void queryClient.invalidateQueries({ queryKey: ["admin-contributions"] });
+
+      if (variables.action === "apply" && result.status === "APPLIED") {
+        void queryClient.refetchQueries({ queryKey: ["entity-page", result.entityId] });
+
+        if (result.type === "LINK_ENTITY" || result.type === "UNLINK_ENTITY") {
+          const relatedEntityId = readLinkRelatedEntityId(result.payload);
+
+          if (relatedEntityId) {
+            void queryClient.refetchQueries({ queryKey: ["entity-page", relatedEntityId] });
+          }
+        }
+
+        if (result.type === "MERGE_ENTITY") {
+          const targetEntityId = readMergeTargetEntityId(result.payload);
+
+          if (targetEntityId) {
+            void queryClient.refetchQueries({ queryKey: ["entity-page", targetEntityId] });
+          }
+        }
+      }
     }
   });
 
@@ -197,7 +220,11 @@ function AdminQueueCard({
 }) {
   const t = useTranslation();
   const summary =
-    item.type === "MERGE_ENTITY" ? null : formatContributionSummary(t, item);
+    item.type === "MERGE_ENTITY" ||
+    item.type === "LINK_ENTITY" ||
+    item.type === "UNLINK_ENTITY"
+      ? null
+      : formatContributionSummary(t, item);
   const createdAtLabel = useMemo(
     () =>
       new Intl.DateTimeFormat(undefined, {
@@ -218,6 +245,9 @@ function AdminQueueCard({
               currentEntity={{ id: item.entity.id, title: item.entity.title }}
               payload={item.payload}
             />
+          ) : null}
+          {item.type === "LINK_ENTITY" || item.type === "UNLINK_ENTITY" ? (
+            <LinkContributionSummary payload={item.payload} />
           ) : null}
         </div>
         <span className="contribution-vote-score">{t("contributions.moderationBadge")}</span>
@@ -289,4 +319,24 @@ function formatTypeFilterLabel(
   const count = pendingByType?.[type] ?? 0;
 
   return `${formatContributionTypeLabel(t, type)} (${count})`;
+}
+
+function readLinkRelatedEntityId(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null || !("relatedEntityId" in payload)) {
+    return null;
+  }
+
+  const relatedEntityId = (payload as { relatedEntityId?: unknown }).relatedEntityId;
+
+  return typeof relatedEntityId === "string" ? relatedEntityId : null;
+}
+
+function readMergeTargetEntityId(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null || !("targetEntityId" in payload)) {
+    return null;
+  }
+
+  const targetEntityId = (payload as { targetEntityId?: unknown }).targetEntityId;
+
+  return typeof targetEntityId === "string" ? targetEntityId : null;
 }

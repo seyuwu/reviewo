@@ -580,6 +580,7 @@ function toRankedSearchEntityDto(
     canonicalUrl: entity.canonicalUrl,
     description: entity.description,
     id: entity.id,
+    logoUrl: entity.logoUrl,
     parentId: entity.parentId,
     resultKind: ranking.resultKind,
     reviewsCount: ranking.reviewsCount,

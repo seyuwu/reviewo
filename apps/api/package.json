@@ -18,6 +18,7 @@
     "lint": "eslint .",
     "reputation:backfill": "corepack pnpm build && node dist/scripts/reputation-backfill.js",
     "reputation:replay": "corepack pnpm build && node dist/scripts/reputation-replay.js",
+    "entity-media:backfill": "corepack pnpm build && node dist/scripts/entity-media-backfill.js",
     "system-tops:refresh": "corepack pnpm build && node dist/scripts/system-tops-refresh.js",
     "start": "node dist/main.js",
     "start:prod": "corepack pnpm db:migrate && node dist/main.js",

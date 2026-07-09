@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import type { Entity, EntityType, EntityVisibility, Prisma } from "#prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
+import { createSlug } from "../services/entity-slug.js";
+import { slugPrefixForDuplicateSearch } from "../utils/title-duplicate-match.js";
 import type { SearchEntityMetrics } from "../services/search-ranking.js";
 
 export interface CreateEntityRecordInput {
@@ -68,29 +70,62 @@ export class EntitiesRepository {
   }
 
   async search(query: string): Promise<Entity[]> {
+    const normalizedQuery = query.trim();
+    const slugPattern = normalizedQuery.toLowerCase().replace(/\s+/g, "-");
+    const titleSlug = createSlug(normalizedQuery);
+    const titleSlugPrefix = slugPrefixForDuplicateSearch(titleSlug);
+
+    const filters: Prisma.EntityWhereInput[] = [
+      {
+        title: {
+          contains: normalizedQuery,
+          mode: "insensitive"
+        }
+      },
+      {
+        slug: {
+          contains: slugPattern,
+          mode: "insensitive"
+        }
+      },
+      {
+        canonicalUrl: {
+          contains: normalizedQuery,
+          mode: "insensitive"
+        }
+      }
+    ];
+
+    if (titleSlug.length >= 2) {
+      filters.push(
+        {
+          slug: {
+            equals: titleSlug,
+            mode: "insensitive"
+          }
+        },
+        {
+          slug: {
+            startsWith: `${titleSlug}-`,
+            mode: "insensitive"
+          }
+        }
+      );
+    }
+
+    if (titleSlugPrefix) {
+      filters.push({
+        slug: {
+          startsWith: titleSlugPrefix,
+          mode: "insensitive"
+        }
+      });
+    }
+
     return this.prismaService.entity.findMany({
       take: 20,
       where: {
-        OR: [
-          {
-            title: {
-              contains: query,
-              mode: "insensitive"
-            }
-          },
-          {
-            slug: {
-              contains: query,
-              mode: "insensitive"
-            }
-          },
-          {
-            canonicalUrl: {
-              contains: query,
-              mode: "insensitive"
-            }
-          }
-        ],
+        OR: filters,
         visibility: "ACTIVE"
       }
     });
@@ -180,6 +215,17 @@ export class EntitiesRepository {
     return this.prismaService.entity.update({
       data: {
         visibility
+      },
+      where: {
+        id
+      }
+    });
+  }
+
+  async updateLogoUrl(id: string, logoUrl: string | null): Promise<Entity> {
+    return this.prismaService.entity.update({
+      data: {
+        logoUrl
       },
       where: {
         id

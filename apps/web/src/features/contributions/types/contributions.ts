@@ -4,7 +4,9 @@ export type ContributionType =
   | "UPDATE_DESCRIPTION"
   | "UPDATE_LOGO"
   | "UPDATE_TYPE"
-  | "MERGE_ENTITY";
+  | "MERGE_ENTITY"
+  | "LINK_ENTITY"
+  | "UNLINK_ENTITY";
 
 export type ContributionStatus =
   | "PENDING"

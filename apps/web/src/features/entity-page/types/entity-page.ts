@@ -70,10 +70,24 @@ export interface EntityPageParentSummary {
   title: string;
 }
 
+export interface EntityPageRelatedPresence {
+  canonicalUrl: string | null;
+  id: string;
+  logoUrl: string | null;
+  rating: {
+    avgScore: number;
+    votesCount: number;
+  } | null;
+  slug: string;
+  title: string;
+  type: string;
+}
+
 export interface EntityPageResponse {
   entity: Entity;
   meta: EntityPageMeta;
   parent?: EntityPageParentSummary;
+  relatedPresences: EntityPageRelatedPresence[];
   rating: RatingAggregate;
   reviews: Review[];
   trust: TrustConfidence;

@@ -1,4 +1,4 @@
-export const TOP_LIST_SORTS = ["recent", "likes", "comments", "views", "forks"] as const;
+export const TOP_LIST_SORTS = ["recent", "likes", "comments", "views", "forks", "random"] as const;
 
 export type TopListSort = (typeof TOP_LIST_SORTS)[number];
 

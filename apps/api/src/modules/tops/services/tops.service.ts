@@ -46,6 +46,7 @@ import {
   slugifyTopCategoryTitle
 } from "../utils/top-category-slug.utils.js";
 import { buildForkTopTitle, resolveForkAuthorLabel } from "../utils/build-fork-top-title.js";
+import { normalizeTopSearchQuery } from "../utils/normalize-top-search-query.js";
 import { TopEngagementRepository } from "../repositories/top-engagement.repository.js";
 import { TopsRepository } from "../repositories/tops.repository.js";
 import { toEmptyTopDto, toTopDto, toTopListItemDto } from "./top-mapper.js";
@@ -205,12 +206,15 @@ export class TopsService implements TopsPort {
   async listRecentTops(
     limit: number,
     cursor?: string,
-    sort?: string | null
+    sort?: string | null,
+    searchQuery?: string | null
   ): Promise<TopListResponseDto> {
+    const normalizedSearchQuery = normalizeTopSearchQuery(searchQuery);
     const result = await this.topsRepository.listRecent({
       limit,
       sort: normalizeTopListSort(sort),
-      ...(cursor ? { cursor } : {})
+      ...(cursor ? { cursor } : {}),
+      ...(normalizedSearchQuery ? { searchQuery: normalizedSearchQuery } : {})
     });
 
     return this.toTopListResponse(result.items, result.nextCursor);
@@ -310,7 +314,8 @@ export class TopsService implements TopsPort {
     slug: string,
     limit: number,
     cursor?: string,
-    sort?: string | null
+    sort?: string | null,
+    searchQuery?: string | null
   ): Promise<TopListResponseDto> {
     const category = await this.topCategoriesRepository.findBySlug(slug);
 
@@ -322,11 +327,13 @@ export class TopsService implements TopsPort {
       });
     }
 
+    const normalizedSearchQuery = normalizeTopSearchQuery(searchQuery);
     const result = await this.topsRepository.listByCategory({
       categoryId: category.id,
       limit,
       sort: normalizeTopListSort(sort),
-      ...(cursor ? { cursor } : {})
+      ...(cursor ? { cursor } : {}),
+      ...(normalizedSearchQuery ? { searchQuery: normalizedSearchQuery } : {})
     });
 
     return this.toTopListResponse(result.items, result.nextCursor);
@@ -546,9 +553,12 @@ export class TopsService implements TopsPort {
     const authorIds = [...new Set(tops.map((top) => top.authorId))];
     const authors = await Promise.all(authorIds.map((id) => this.requireUser(id)));
     const authorMap = new Map(authors.map((author) => [author.id, author]));
+    const activeItemCounts = await this.topsRepository.countActiveItemsByTopIds(
+      tops.map((top) => top.id)
+    );
 
     const items: TopListItemDto[] = tops.map((top) =>
-      toTopListItemDto(top, authorMap.get(top.authorId)!)
+      toTopListItemDto(top, authorMap.get(top.authorId)!, activeItemCounts.get(top.id))
     );
 
     return {
@@ -565,11 +575,7 @@ export class TopsService implements TopsPort {
     }
 
     if (top.authorId !== userId) {
-      throw createAppException({
-        code: AppErrorCode.Forbidden,
-        message: "You can only modify your own tops",
-        statusCode: HttpStatus.FORBIDDEN
-      });
+      throw createTopNotFoundException();
     }
 
     return this.loadTopWithItems(top.id);

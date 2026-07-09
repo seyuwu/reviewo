@@ -5,6 +5,7 @@ import { createSlugFromCanonicalUrl } from "../../entities/services/entity-slug.
 import { DUPLICATE_SUGGESTION_LIMIT, DUPLICATE_SUGGESTION_MIN_SCORE } from "../constants/contribution-limits.js";
 import { ContributionsRepository } from "../repositories/contributions.repository.js";
 import { computeTitleTokenOverlap } from "../utils/title-match-tokens.js";
+import { scoreTransliteratedTitleMatch } from "../../entities/utils/title-duplicate-match.js";
 
 export interface DuplicateSuggestion {
   entity: {
@@ -50,6 +51,13 @@ export function scoreDuplicatePair(
     score += 0.5;
     reasons.push("title_match");
   } else {
+    const transliteratedMatch = scoreTransliteratedTitleMatch(left.title, right.title);
+
+    if (transliteratedMatch.reason && transliteratedMatch.score > 0) {
+      score += transliteratedMatch.score;
+      reasons.push(transliteratedMatch.reason);
+    }
+
     const tokenOverlap = computeTitleTokenOverlap(left.title, right.title);
 
     if (tokenOverlap.shorterCoverage === 1 && tokenOverlap.shorterTokenCount >= 2) {

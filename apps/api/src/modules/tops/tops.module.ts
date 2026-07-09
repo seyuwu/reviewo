@@ -12,18 +12,20 @@ import { SystemTopsRepository } from "./repositories/system-tops.repository.js";
 import { TopsRepository } from "./repositories/tops.repository.js";
 import { SystemTopsService } from "./services/system-tops.service.js";
 import { SystemTopsStartupRefreshService } from "./services/system-tops-startup-refresh.service.js";
+import { TopCompositionService } from "./services/top-composition.service.js";
 import { TopsService } from "./services/tops.service.js";
 import { UserTopRankService } from "./services/user-top-rank.service.js";
 
 @Module({
   controllers: [TopsController],
-  exports: [TOPS_PORT, SystemTopsService, TopsService],
+  exports: [TOPS_PORT, SystemTopsService, TopCompositionService, TopsService],
   imports: [AuthModule, EntitiesModule, RatingsModule, UsersModule],
   providers: [
     SystemTopsRepository,
     SystemTopsService,
     SystemTopsStartupRefreshService,
     TopCategoriesRepository,
+    TopCompositionService,
     TopEngagementRepository,
     TopsRepository,
     TopsService,

@@ -3,17 +3,66 @@ import { describe, it } from "node:test";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { AppException } from "../../../common/exceptions/app.exception.js";
+import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
+import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
+import type { RatingsPort } from "../../ratings/interfaces/ratings.port.js";
+import { TopCategoriesRepository } from "../repositories/top-categories.repository.js";
+import { TopEngagementRepository } from "../repositories/top-engagement.repository.js";
+import type { TopsRepository } from "../repositories/tops.repository.js";
+import { UserTopRankService } from "./user-top-rank.service.js";
 import {
   assertValidTopSlug,
   resolveCreateRankMode,
   resolveUpdateRankMode,
+  TopsService,
   validateAndNormalizeTopItems
 } from "./tops.service.js";
 import { TopRankMode, TopSystemSortKey } from "#prisma/client";
+import { UsersRepository } from "../../users/repositories/users.repository.js";
 
 function isAppExceptionWithCode(error: unknown, code: AppErrorCode): error is AppException {
   return error instanceof AppException && error.getErrorResponse().code === code;
 }
+
+function createTopsService(topsRepository: Partial<TopsRepository>): TopsService {
+  return new TopsService(
+    {} as EntitiesPort,
+    {} as RatingsPort,
+    {} as TopCategoriesRepository,
+    {} as TopEngagementRepository,
+    topsRepository as TopsRepository,
+    {} as UserTopRankService,
+    {} as UsersRepository
+  );
+}
+
+const otherUser: AuthenticatedUser = {
+  displayName: "Other User",
+  email: "other@example.com",
+  id: "user-other",
+  role: "USER",
+  status: "ACTIVE",
+  username: "other"
+};
+
+describe("TopsService ownership", () => {
+  it("returns 404 when modifying another user's top", async () => {
+    const service = createTopsService({
+      findById: async () =>
+        ({
+          authorId: "user-owner",
+          id: "top-1",
+          slug: "owned-top"
+        }) as never
+    });
+
+    await assert.rejects(
+      () => service.deleteTop("top-1", otherUser),
+      (error: unknown) =>
+        error instanceof AppException && error.getErrorResponse().code === AppErrorCode.NotFound
+    );
+  });
+});
 
 describe("assertValidTopSlug", () => {
   it("rejects system- prefix", () => {

@@ -100,4 +100,41 @@ describe("scoreDuplicatePair", () => {
     assert.ok(result.matchPercent >= 70);
     assert.ok(result.reasons.includes("title_tokens_subset"));
   });
+
+  it("scores latin and cyrillic title variants", () => {
+    const left = createEntity({
+      id: "left",
+      slug: "ronaldo",
+      title: "ronaldo"
+    });
+    const right = createEntity({
+      id: "right",
+      slug: "ronaldo",
+      title: "Роналдо"
+    });
+
+    const result = scoreDuplicatePair(left, right);
+
+    assert.ok(result.matchPercent >= 70);
+    assert.ok(result.reasons.includes("transliterated_title_match"));
+    assert.ok(result.reasons.includes("slug_match"));
+  });
+
+  it("scores short typo variants in cyrillic titles", () => {
+    const left = createEntity({
+      id: "left",
+      slug: "ronaldo",
+      title: "роналдо"
+    });
+    const right = createEntity({
+      id: "right",
+      slug: "ronaldu",
+      title: "роналду"
+    });
+
+    const result = scoreDuplicatePair(left, right);
+
+    assert.ok(result.matchPercent >= 70);
+    assert.ok(result.reasons.includes("transliterated_title_similarity"));
+  });
 });

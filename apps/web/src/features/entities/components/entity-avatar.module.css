@@ -1,0 +1,60 @@
+.avatar {
+  align-items: center;
+  border-radius: 12px;
+  color: #fff;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-weight: 700;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.withImage {
+  background: #fff;
+  border: 1px solid rgb(23 23 23 / 8%);
+  box-shadow: 0 1px 2px rgb(23 23 23 / 6%);
+}
+
+.sm {
+  border-radius: 8px;
+  font-size: 0.72rem;
+  height: 2rem;
+  width: 2rem;
+}
+
+.md {
+  font-size: 0.85rem;
+  height: 2.75rem;
+  width: 2.75rem;
+}
+
+.lg {
+  border-radius: 16px;
+  font-size: 1.1rem;
+  height: 4.5rem;
+  width: 4.5rem;
+}
+
+.image {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  width: 100%;
+}
+
+.sm.withImage .image {
+  padding: 0.15rem;
+}
+
+.md.withImage .image {
+  padding: 0.22rem;
+}
+
+.lg.withImage .image {
+  padding: 0.55rem;
+}
+
+.initials {
+  line-height: 1;
+}

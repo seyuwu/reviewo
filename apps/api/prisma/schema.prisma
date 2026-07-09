@@ -79,6 +79,26 @@ enum EntityVisibility {
   @@schema("entities")
 }
 
+enum EntityMediaType {
+  LOGO
+  IMAGE
+  COVER
+
+  @@map("entity_media_type")
+  @@schema("entities")
+}
+
+enum EntityMediaSource {
+  MANUAL
+  CONTRIBUTION
+  FAVICON
+  OG_IMAGE
+  MIGRATION
+
+  @@map("entity_media_source")
+  @@schema("entities")
+}
+
 model Entity {
   id           String           @id @default(uuid()) @db.Uuid
   title        String
@@ -94,12 +114,53 @@ model Entity {
   updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
   parent       Entity?          @relation("EntityTree", fields: [parentId], references: [id], onDelete: SetNull)
   children     Entity[]         @relation("EntityTree")
+  clusterMember EntityClusterMember?
+  media        EntityMedia[]
 
   @@index([type])
   @@index([parentId])
   @@index([createdBy])
   @@index([visibility])
   @@map("entities")
+  @@schema("entities")
+}
+
+model EntityMedia {
+  id         String            @id @default(uuid()) @db.Uuid
+  entityId   String            @map("entity_id") @db.Uuid
+  type       EntityMediaType
+  source     EntityMediaSource
+  url        String            @db.VarChar(2048)
+  trustScore Decimal           @map("trust_score") @db.Decimal(4, 3)
+  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  entity     Entity            @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, type, source])
+  @@index([entityId, type])
+  @@map("entity_media")
+  @@schema("entities")
+}
+
+model EntityCluster {
+  id        String                @id @default(uuid()) @db.Uuid
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  members   EntityClusterMember[]
+
+  @@map("entity_clusters")
+  @@schema("entities")
+}
+
+model EntityClusterMember {
+  id        String        @id @default(uuid()) @db.Uuid
+  clusterId String        @map("cluster_id") @db.Uuid
+  entityId  String        @unique @map("entity_id") @db.Uuid
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  cluster   EntityCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  entity    Entity        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
+  @@map("entity_cluster_members")
   @@schema("entities")
 }
 
@@ -110,6 +171,8 @@ enum ContributionType {
   UPDATE_LOGO
   UPDATE_TYPE
   MERGE_ENTITY
+  LINK_ENTITY
+  UNLINK_ENTITY
 
   @@map("contribution_type")
   @@schema("contributions")

@@ -2,6 +2,7 @@ import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
+import { EntityClusterService } from "../../entities/services/entity-cluster.service.js";
 import { ENTITIES_PORT } from "../../entities/interfaces/entities.port.js";
 import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
 import { RATINGS_PORT } from "../../ratings/interfaces/ratings.port.js";
@@ -11,6 +12,7 @@ import type { ReviewsPort } from "../../reviews/interfaces/reviews.port.js";
 import { ReputationDisplayService } from "../../reputation/services/reputation-display.service.js";
 import { EntityPageResponseDto } from "../dto/entity-page-response.dto.js";
 import type { EntityPageParentSummaryDto } from "../dto/entity-page-parent-summary.dto.js";
+import type { RelatedPresencesResponseDto } from "../dto/related-presence.dto.js";
 import type { EntityDto } from "../../entities/dto/entity.dto.js";
 
 const ENTITY_PAGE_REVIEWS_LIMIT = 10;
@@ -24,6 +26,7 @@ export class EntityPageService {
     private readonly ratingsPort: RatingsPort,
     @Inject(REVIEWS_PORT)
     private readonly reviewsPort: ReviewsPort,
+    private readonly entityClusterService: EntityClusterService,
     private readonly reputationDisplayService: ReputationDisplayService
   ) {}
 
@@ -38,7 +41,7 @@ export class EntityPageService {
       });
     }
 
-    const [rating, trust, reviews, reviewsCount, parent] = await Promise.all([
+    const [rating, trust, reviews, reviewsCount, parent, relatedPresences] = await Promise.all([
       this.ratingsPort.getAggregate(entityId),
       this.reputationDisplayService.resolveEntityTrustConfidence(entityId),
       this.reviewsPort.listTopReviewsForEntity(
@@ -47,7 +50,8 @@ export class EntityPageService {
         currentUserId
       ),
       this.reviewsPort.getReviewCountForEntity(entityId),
-      this.resolveParentSummary(entity.parentId)
+      this.resolveParentSummary(entity.parentId),
+      this.resolveRelatedPresences(entityId)
     ]);
 
     return {
@@ -56,9 +60,26 @@ export class EntityPageService {
         reviewsCount
       },
       ...(parent ? { parent } : {}),
+      relatedPresences,
       rating,
       reviews,
       trust
+    };
+  }
+
+  async getRelatedPresences(entityId: string): Promise<RelatedPresencesResponseDto> {
+    const entity = await this.entitiesPort.findEntityById(entityId);
+
+    if (!entity) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Entity was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    return {
+      items: await this.resolveRelatedPresences(entityId)
     };
   }
 
@@ -76,6 +97,32 @@ export class EntityPageService {
     }
 
     return toEntityPageParentSummaryDto(parent);
+  }
+
+  private async resolveRelatedPresences(entityId: string) {
+    const relatedEntities = await this.entityClusterService.listRelatedPresenceEntities(entityId);
+
+    return Promise.all(
+      relatedEntities.map(async (relatedEntity) => {
+        const aggregate = await this.ratingsPort.getAggregate(relatedEntity.id);
+
+        return {
+          canonicalUrl: relatedEntity.canonicalUrl,
+          id: relatedEntity.id,
+          logoUrl: relatedEntity.logoUrl,
+          rating:
+            aggregate.votesCount > 0
+              ? {
+                  avgScore: aggregate.avgScore,
+                  votesCount: aggregate.votesCount
+                }
+              : null,
+          slug: relatedEntity.slug,
+          title: relatedEntity.title,
+          type: relatedEntity.type
+        };
+      })
+    );
   }
 }
 

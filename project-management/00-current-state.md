@@ -362,6 +362,7 @@ User tops & community contributions (2026-07-06):
 - **Top HYBRID rank (RFC 0010 Phase 4 slice 1):** `rankMode=HYBRID` + `systemSortKey`; compute-on-read `systemPosition` / `positionDelta` on `GET /tops/:slug`; editor «Дополнительно» picker; Opinia column on hybrid top page.
 - **Top SYSTEM rank (RFC 0010 Phase 4 slice 2):** `rankMode=SYSTEM` — author picks entities, Opinia sets display order on read; editor hides manual reorder; sort key picker shared with HYBRID. Phase 4 complete.
 - **Contributions (RFC 0011):** entity page section for field corrections, duplicate suggestions, merge proposals; **Stage 1 trust ladder:** all contribution types are `MODERATION` (admin-only apply via `/admin` panel + `POST /admin/contributions/:id/resolve`). Admin queue: `GET /admin/contributions`, stats: `GET /admin/contributions/stats`. Editor Score read-only in profile: `GET /contributions/me/editor-stats`. Improved duplicate detection (token overlap) + manual merge search. `EntityMergeService` repoints ratings, reviews, battles, chat, reputation, and **`tops.top_items`** on merge. Contributor/Moderator roles deferred.
+- **Entity presence clusters (RFC 0012):** `EntityCluster` / `EntityClusterMember`; `LINK_ENTITY` contribution (moderation tier); `EntityClusterService`; `GET /entities/:id/related-presences` + `relatedPresences` on entity page; web block «Связанные страницы», «Связать» on duplicates and manual link modal; merge hook updates cluster membership.
 
 Roadmap update:
 

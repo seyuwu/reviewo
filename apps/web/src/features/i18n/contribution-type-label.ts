@@ -3,6 +3,8 @@ import type { MessageKey, TranslateFn } from "@reviewo/i18n";
 import type { ContributionType } from "../contributions/types/contributions";
 
 const CONTRIBUTION_TYPE_KEYS: Record<ContributionType, MessageKey> = {
+  LINK_ENTITY: "contributions.type.LINK_ENTITY",
+  UNLINK_ENTITY: "contributions.type.UNLINK_ENTITY",
   MERGE_ENTITY: "contributions.type.MERGE_ENTITY",
   UPDATE_DESCRIPTION: "contributions.type.UPDATE_DESCRIPTION",
   UPDATE_LOGO: "contributions.type.UPDATE_LOGO",

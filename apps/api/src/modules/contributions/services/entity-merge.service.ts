@@ -1,7 +1,12 @@
-import { Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable } from "@nestjs/common";
 import { EntityVisibility } from "#prisma/client";
 
+import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
+import { createAppException } from "../../../common/exceptions/app.exception.js";
 import { PrismaService } from "../../../database/prisma.service.js";
+import { EntityClusterService } from "../../entities/services/entity-cluster.service.js";
+import { EntityMediaService } from "../../entities/services/entity-media.service.js";
+import { TopCompositionService } from "../../tops/services/top-composition.service.js";
 
 export interface MergeEntitiesInput {
   moderatorId: string;
@@ -11,25 +16,42 @@ export interface MergeEntitiesInput {
 
 @Injectable()
 export class EntityMergeService {
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly entityClusterService: EntityClusterService,
+    private readonly entityMediaService: EntityMediaService,
+    private readonly topCompositionService: TopCompositionService
+  ) {}
 
   async mergeEntities(input: MergeEntitiesInput): Promise<{ targetEntityId: string }> {
     if (input.sourceEntityId === input.targetEntityId) {
-      throw new Error("Cannot merge entity into itself");
+      throw createAppException({
+        code: AppErrorCode.BadRequest,
+        message: "Cannot merge entity into itself",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
     }
 
-    return this.prismaService.$transaction(async (transaction) => {
+    const result = await this.prismaService.$transaction(async (transaction) => {
       const [source, target] = await Promise.all([
         transaction.entity.findUnique({ where: { id: input.sourceEntityId } }),
         transaction.entity.findUnique({ where: { id: input.targetEntityId } })
       ]);
 
       if (!source || !target) {
-        throw new Error("Source or target entity was not found");
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Source or target entity was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
       }
 
       if (source.visibility !== EntityVisibility.ACTIVE || target.visibility !== EntityVisibility.ACTIVE) {
-        throw new Error("Both entities must be active to merge");
+        throw createAppException({
+          code: AppErrorCode.BadRequest,
+          message: "Both entities must be active to merge",
+          statusCode: HttpStatus.BAD_REQUEST
+        });
       }
 
       await this.mergeTopItems(transaction, input.sourceEntityId, input.targetEntityId);
@@ -38,22 +60,27 @@ export class EntityMergeService {
       await this.mergeBattleVotes(transaction, input.sourceEntityId, input.targetEntityId);
       await this.mergeChatMessages(transaction, input.sourceEntityId, input.targetEntityId);
       await this.mergeReputationRows(transaction, input.sourceEntityId, input.targetEntityId);
+      await this.entityMediaService.moveMediaOnEntityMerge(
+        transaction,
+        input.sourceEntityId,
+        input.targetEntityId
+      );
       await transaction.entity.updateMany({
         data: { parentId: input.targetEntityId },
         where: { parentId: input.sourceEntityId }
       });
 
-      if (!target.canonicalUrl && source.canonicalUrl) {
-        const urlOwner = await transaction.entity.findUnique({
-          where: { canonicalUrl: source.canonicalUrl }
-        });
+      const sourceCanonicalUrl = source.canonicalUrl?.trim() || null;
 
-        if (!urlOwner || urlOwner.id === source.id) {
-          await transaction.entity.update({
-            data: { canonicalUrl: source.canonicalUrl },
-            where: { id: input.targetEntityId }
-          });
-        }
+      if (!target.canonicalUrl && sourceCanonicalUrl) {
+        await transaction.entity.update({
+          data: { canonicalUrl: null },
+          where: { id: input.sourceEntityId }
+        });
+        await transaction.entity.update({
+          data: { canonicalUrl: sourceCanonicalUrl },
+          where: { id: input.targetEntityId }
+        });
       }
 
       if (!target.description && source.description) {
@@ -68,8 +95,22 @@ export class EntityMergeService {
         where: { id: input.sourceEntityId }
       });
 
+      await this.entityClusterService.handleEntityMergeWithClient(
+        transaction,
+        input.sourceEntityId,
+        input.targetEntityId
+      );
+
       return { targetEntityId: input.targetEntityId };
     });
+
+    await this.topCompositionService.syncVisibilityForEntityIds([
+      input.sourceEntityId,
+      input.targetEntityId
+    ]);
+    await this.entityMediaService.syncLogoUrlCache(result.targetEntityId);
+
+    return result;
   }
 
   private async mergeTopItems(

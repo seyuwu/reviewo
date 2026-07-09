@@ -23,7 +23,6 @@ export function HomeFeedView({ initialData }: HomeFeedViewProps) {
       <section className="home-hub-card discovery-feed" aria-labelledby="home-feed-heading">
         <header className="home-hub-header">
           <h1 id="home-feed-heading">{t("web.homeFeed.title")}</h1>
-          <p className="home-hub-subtitle">{t("web.homeFeed.subtitle")}</p>
         </header>
 
         <CompactSearchBar />

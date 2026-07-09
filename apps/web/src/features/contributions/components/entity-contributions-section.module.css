@@ -82,6 +82,14 @@
   background: var(--color-primary-soft);
 }
 
+.duplicateActions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
 .manualMergeResults {
   display: grid;
   gap: 0.65rem;

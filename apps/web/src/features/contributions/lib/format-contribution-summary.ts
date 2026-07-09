@@ -23,6 +23,22 @@ export function formatContributionSummary(
     });
   }
 
+  if (contribution.type === "LINK_ENTITY" || contribution.type === "UNLINK_ENTITY") {
+    const payload = contribution.payload as {
+      relatedEntityId: string;
+      relatedEntityTitle?: string | null;
+    };
+
+    return t(
+      contribution.type === "UNLINK_ENTITY"
+        ? "contributions.unlinkSummary"
+        : "contributions.linkSummary",
+      {
+        relatedTitle: payload.relatedEntityTitle?.trim() || payload.relatedEntityId
+      }
+    );
+  }
+
   const payload = contribution.payload as { newValue?: string; oldValue?: string | null };
 
   if (payload.newValue?.trim()) {

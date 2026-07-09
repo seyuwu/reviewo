@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 
+import { apiRequest } from "../../../lib/api/api-client";
+import { useAuthSession } from "../../auth/hooks/use-auth-session";
+import { createEntity } from "../../entity-creation/api/create-entity";
+import { resolveEntityCreateError } from "../../entity-creation/lib/resolve-entity-create-error";
+import type { Entity } from "../../entity-creation/types/entity";
 import { useTranslation } from "../../i18n/locale-provider";
 import { useEntitySearch } from "../../home-search/hooks/use-entity-search";
 import type { SearchEntityResult } from "../../home-search/types/search-entities";
@@ -32,6 +37,8 @@ export function TopEditorEntitySearch({ addedEntityIds, onAddEntity }: TopEditor
   const showResults = isSearchActive && !isError && results.length > 0;
   const showEmptyState =
     isSearchActive && !isDebouncing && !isPending && !isFetching && !isError && results.length === 0;
+  const shouldShowCreateHint =
+    Boolean(searchData?.canCreateEntity) && showEmptyState && debouncedQuery.length > 0;
 
   return (
     <aside className="top-editor-search-panel panel-card" aria-labelledby="top-editor-search-heading">
@@ -74,8 +81,18 @@ export function TopEditorEntitySearch({ addedEntityIds, onAddEntity }: TopEditor
           </p>
         ) : null}
 
-        {showEmptyState ? (
+        {showEmptyState && !shouldShowCreateHint ? (
           <p className="muted-copy">{t("web.home.noResults", { query: debouncedQuery })}</p>
+        ) : null}
+
+        {shouldShowCreateHint ? (
+          <CreateEntityAndAddHint
+            query={searchData?.query ?? debouncedQuery}
+            onAddEntity={(entity) => {
+              onAddEntity(entity);
+              setSearchQuery("");
+            }}
+          />
         ) : null}
 
         {showResults ? (
@@ -95,6 +112,83 @@ export function TopEditorEntitySearch({ addedEntityIds, onAddEntity }: TopEditor
         ) : null}
       </div>
     </aside>
+  );
+}
+
+function CreateEntityAndAddHint({
+  query,
+  onAddEntity
+}: {
+  query: string;
+  onAddEntity: (entity: TopItemEntity) => void;
+}) {
+  const t = useTranslation();
+  const { authSession } = useAuthSession();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  async function handleCreateAndAdd() {
+    setErrorMessage(null);
+
+    if (!authSession?.accessToken) {
+      setErrorMessage(t("web.entityCreate.signInRequired"));
+      return;
+    }
+
+    const title = query.trim();
+
+    if (!title) {
+      return;
+    }
+
+    setIsCreating(true);
+
+    try {
+      const entity = await createEntity(
+        {
+          title,
+          type: "other"
+        },
+        authSession.accessToken
+      );
+
+      onAddEntity(mapCreatedEntityToTopItem(entity));
+    } catch (error) {
+      const resolvedError = resolveEntityCreateError(error, t);
+
+      if (resolvedError.existingEntityId) {
+        try {
+          const existingEntity = await apiRequest<Entity>(`/entities/${resolvedError.existingEntityId}`);
+          onAddEntity(mapCreatedEntityToTopItem(existingEntity));
+          return;
+        } catch {
+          setErrorMessage(resolvedError.message);
+          return;
+        }
+      }
+
+      setErrorMessage(resolvedError.message);
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  return (
+    <div className="home-search-callout ui-fade-soft">
+      <p className="home-search-callout-title">{t("web.userTops.createEntityHint.title", { query })}</p>
+      <p className="home-search-callout-copy">{t("web.userTops.createEntityHint.body")}</p>
+      <button
+        type="button"
+        className="primary-button"
+        disabled={isCreating}
+        onClick={() => {
+          void handleCreateAndAdd();
+        }}
+      >
+        {isCreating ? t("web.userTops.createEntityHint.creating") : t("web.userTops.createEntityHint.action")}
+      </button>
+      {errorMessage ? <p className="error-message">{errorMessage}</p> : null}
+    </div>
   );
 }
 
@@ -132,6 +226,16 @@ function EntitySearchHit({
 }
 
 function mapSearchResultToEntity(entity: SearchEntityResult): TopItemEntity {
+  return {
+    canonicalUrl: entity.canonicalUrl,
+    id: entity.id,
+    slug: entity.slug,
+    title: entity.title,
+    type: entity.type
+  };
+}
+
+function mapCreatedEntityToTopItem(entity: Entity): TopItemEntity {
   return {
     canonicalUrl: entity.canonicalUrl,
     id: entity.id,

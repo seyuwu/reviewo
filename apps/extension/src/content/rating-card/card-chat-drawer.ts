@@ -298,8 +298,18 @@ export function bindCardChatDrawer(
     cardShell?.classList.toggle("is-chat-expanded", expanded);
     cardHost?.classList.toggle("is-chat-expanded", expanded);
 
+    const card = container.closest<HTMLElement>(".reviewo-card");
+
+    if (card && expanded) {
+      card.style.height = "";
+      card.style.overflow = "";
+      card.style.transition = "";
+    }
+
     container
-      .querySelectorAll<HTMLElement>(".reviewo-rate-section, .reviewo-settings-tip")
+      .querySelectorAll<HTMLElement>(
+        ".reviewo-rate-section, .reviewo-settings-tip, .reviewo-reviews-panel"
+      )
       .forEach((element) => {
         element.hidden = expanded;
       });

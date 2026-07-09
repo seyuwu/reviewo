@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { EntityAvatar } from "../../entities/components/entity-avatar";
 import { formatEntityDisplayName } from "../../growth/lib/format-entity-display-name";
 import { formatScoreOneDecimal } from "../../growth/lib/format-growth-stats";
 import { useTranslation } from "../../i18n/locale-provider";
@@ -41,6 +42,13 @@ export function SystemTopPageView({ top }: SystemTopPageViewProps) {
                     <div className="discovery-rank-item">
                       <span className="discovery-rank-item-main">
                         <span className="discovery-rank-position">{item.position}</span>
+                        <EntityAvatar
+                          canonicalUrl={item.entity.canonicalUrl}
+                          entityId={item.entity.id}
+                          logoUrl={item.entity.logoUrl}
+                          size="sm"
+                          title={label}
+                        />
                         <span>
                           <Link href={`/entities/${item.entity.id}`}>
                             <strong>{label}</strong>

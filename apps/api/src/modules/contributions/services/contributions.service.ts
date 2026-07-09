@@ -1,10 +1,11 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import type { ContributionPolicy, EntityContribution } from "#prisma/client";
-import { ContributionType, EntityType, EntityVisibility } from "#prisma/client";
+import { ContributionType, EntityMediaSource, EntityType, EntityVisibility } from "#prisma/client";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
+import { assertSafeHttpUrl } from "../../../common/validation/assert-safe-http-url.js";
 import { URL_NORMALIZER } from "../../entities/interfaces/url-normalizer.js";
 import type { UrlNormalizer } from "../../entities/interfaces/url-normalizer.js";
 import { MAX_CONTRIBUTIONS_PER_USER_PER_DAY } from "../constants/contribution-limits.js";
@@ -26,9 +27,19 @@ import { ContributionEvaluatorService } from "../services/contribution-evaluator
 import type { ContributionRequirements } from "../services/contribution-evaluator.service.js";
 import { ContributionVoteWeightService } from "../services/contribution-vote-weight.service.js";
 import { DuplicateDetectionService } from "../services/duplicate-detection.service.js";
+import { ENTITY_PAIR_CONTRIBUTION_COOLDOWN_HOURS } from "../../entities/constants/entity-cluster-limits.js";
+import { EntityClusterService } from "../../entities/services/entity-cluster.service.js";
+import { EntityMediaEnrichmentService } from "../../entities/services/entity-media-enrichment.service.js";
+import { EntityMediaService } from "../../entities/services/entity-media.service.js";
 import { EntityMergeService } from "../services/entity-merge.service.js";
-import type { FieldChangePayload, MergeEntityPayload } from "../types/contribution-payload.js";
-import { isFieldChangePayload, isIncomingFieldChangePayload, isMergeEntityPayload } from "../types/contribution-payload.js";
+import type { FieldChangePayload, LinkEntityPayload, MergeEntityPayload, UnlinkEntityPayload } from "../types/contribution-payload.js";
+import {
+  isFieldChangePayload,
+  isIncomingFieldChangePayload,
+  isLinkEntityPayload,
+  isMergeEntityPayload,
+  isUnlinkEntityPayload
+} from "../types/contribution-payload.js";
 import type { Prisma } from "#prisma/client";
 
 @Injectable()
@@ -38,6 +49,9 @@ export class ContributionsService {
     private readonly contributionEvaluatorService: ContributionEvaluatorService,
     private readonly contributionVoteWeightService: ContributionVoteWeightService,
     private readonly duplicateDetectionService: DuplicateDetectionService,
+    private readonly entityClusterService: EntityClusterService,
+    private readonly entityMediaEnrichmentService: EntityMediaEnrichmentService,
+    private readonly entityMediaService: EntityMediaService,
     private readonly entityMergeService: EntityMergeService,
     private readonly usersRepository: UsersRepository,
     @Inject(URL_NORMALIZER)
@@ -63,6 +77,14 @@ export class ContributionsService {
     }
 
     const payload = this.buildValidatedPayload(input.type, entity, input.payload);
+
+    if (input.type === ContributionType.LINK_ENTITY && isLinkEntityPayload(payload)) {
+      await this.assertLinkContributionPreconditions(entity.id, payload.relatedEntityId);
+    }
+
+    if (input.type === ContributionType.UNLINK_ENTITY && isUnlinkEntityPayload(payload)) {
+      await this.assertUnlinkContributionPreconditions(entity.id, payload.relatedEntityId);
+    }
 
     await this.contributionsRepository.supersedePendingContributions(entityId, input.type);
 
@@ -417,8 +439,13 @@ export class ContributionsService {
     const mergeContributions = contributions.filter(
       (contribution) => contribution.type === ContributionType.MERGE_ENTITY
     );
+    const linkContributions = contributions.filter(
+      (contribution) =>
+        contribution.type === ContributionType.LINK_ENTITY ||
+        contribution.type === ContributionType.UNLINK_ENTITY
+    );
 
-    if (mergeContributions.length === 0) {
+    if (mergeContributions.length === 0 && linkContributions.length === 0) {
       return new Map();
     }
 
@@ -431,6 +458,15 @@ export class ContributionsService {
 
       entityIds.add(contribution.payload.sourceEntityId);
       entityIds.add(contribution.payload.targetEntityId);
+    }
+
+    for (const contribution of linkContributions) {
+      if (!isLinkEntityPayload(contribution.payload)) {
+        continue;
+      }
+
+      entityIds.add(contribution.entityId);
+      entityIds.add(contribution.payload.relatedEntityId);
     }
 
     const entities = await this.contributionsRepository.findEntitiesByIds([...entityIds]);
@@ -453,17 +489,43 @@ export class ContributionsService {
       });
     }
 
+    for (const contribution of linkContributions) {
+      if (!isLinkEntityPayload(contribution.payload)) {
+        continue;
+      }
+
+      const linkPayload = contribution.payload;
+
+      payloadByContributionId.set(contribution.id, {
+        reason: linkPayload.reason,
+        relatedEntityId: linkPayload.relatedEntityId,
+        relatedEntityTitle: titleById.get(linkPayload.relatedEntityId) ?? null
+      });
+    }
+
     return payloadByContributionId;
   }
 
   private async enrichContributionPayload(contribution: EntityContribution): Promise<unknown> {
-    if (contribution.type !== ContributionType.MERGE_ENTITY || !isMergeEntityPayload(contribution.payload)) {
-      return contribution.payload;
+    if (contribution.type === ContributionType.MERGE_ENTITY && isMergeEntityPayload(contribution.payload)) {
+      const payloadMap = await this.buildEnrichedPayloadMap([contribution]);
+
+      return payloadMap.get(contribution.id) ?? contribution.payload;
     }
 
-    const payloadMap = await this.buildEnrichedPayloadMap([contribution]);
+    if (contribution.type === ContributionType.LINK_ENTITY && isLinkEntityPayload(contribution.payload)) {
+      const payloadMap = await this.buildEnrichedPayloadMap([contribution]);
 
-    return payloadMap.get(contribution.id) ?? contribution.payload;
+      return payloadMap.get(contribution.id) ?? contribution.payload;
+    }
+
+    if (contribution.type === ContributionType.UNLINK_ENTITY && isUnlinkEntityPayload(contribution.payload)) {
+      const payloadMap = await this.buildEnrichedPayloadMap([contribution]);
+
+      return payloadMap.get(contribution.id) ?? contribution.payload;
+    }
+
+    return contribution.payload;
   }
 
   private resolveContributionRequirements(
@@ -513,13 +575,23 @@ export class ContributionsService {
 
         await this.assertCanonicalUrlAvailable(canonicalUrl, entityId);
         await this.contributionsRepository.updateEntityField(entityId, { canonicalUrl });
+        await this.entityMediaEnrichmentService.refreshAfterCanonicalUrlChange(entityId);
         return;
       }
       case ContributionType.UPDATE_LOGO: {
         const change = this.requireFieldChangePayload(payload);
-        await this.contributionsRepository.updateEntityField(entityId, {
-          logoUrl: change.newValue?.trim() ?? null
-        });
+        const nextLogoUrl = change.newValue?.trim() ?? null;
+
+        if (!nextLogoUrl) {
+          await this.entityMediaService.clearManualLogos(entityId);
+          return;
+        }
+
+        await this.entityMediaService.setManualLogo(
+          entityId,
+          nextLogoUrl,
+          EntityMediaSource.CONTRIBUTION
+        );
         return;
       }
       case ContributionType.UPDATE_TYPE: {
@@ -546,6 +618,24 @@ export class ContributionsService {
         });
         return;
       }
+      case ContributionType.LINK_ENTITY: {
+        const linkPayload = this.requireLinkPayload(payload);
+        await this.entityClusterService.assertEntitiesCanBeLinked(
+          entityId,
+          linkPayload.relatedEntityId
+        );
+        await this.entityClusterService.linkEntities(entityId, linkPayload.relatedEntityId);
+        return;
+      }
+      case ContributionType.UNLINK_ENTITY: {
+        const unlinkPayload = this.requireUnlinkPayload(payload);
+        await this.entityClusterService.assertEntitiesCanBeUnlinked(
+          entityId,
+          unlinkPayload.relatedEntityId
+        );
+        await this.entityClusterService.unlinkEntities(entityId, unlinkPayload.relatedEntityId);
+        return;
+      }
       default:
         throw createAppException({
           code: AppErrorCode.BadRequest,
@@ -559,7 +649,7 @@ export class ContributionsService {
     type: ContributionType,
     entity: { canonicalUrl: string | null; description: string | null; id: string; logoUrl?: string | null; title: string; type: EntityType },
     payload: CreateContributionDto["payload"]
-  ): FieldChangePayload | MergeEntityPayload {
+  ): FieldChangePayload | LinkEntityPayload | MergeEntityPayload | UnlinkEntityPayload {
     if (type === ContributionType.MERGE_ENTITY) {
       if (!isMergeEntityPayload(payload)) {
         throw invalidPayloadException();
@@ -584,6 +674,14 @@ export class ContributionsService {
       return payload;
     }
 
+    if (type === ContributionType.LINK_ENTITY) {
+      return this.buildEntityPairPayload(entity.id, payload);
+    }
+
+    if (type === ContributionType.UNLINK_ENTITY) {
+      return this.buildEntityPairPayload(entity.id, payload);
+    }
+
     if (!isIncomingFieldChangePayload(payload)) {
       throw invalidPayloadException();
     }
@@ -601,6 +699,10 @@ export class ContributionsService {
 
     if (type === ContributionType.UPDATE_URL) {
       this.normalizeCanonicalUrl(newValue);
+    }
+
+    if (type === ContributionType.UPDATE_LOGO) {
+      this.normalizeLogoUrl(newValue);
     }
 
     if (type === ContributionType.UPDATE_TYPE && !Object.values(EntityType).includes(newValue as EntityType)) {
@@ -659,6 +761,116 @@ export class ContributionsService {
     return payload;
   }
 
+  private requireLinkPayload(payload: unknown): LinkEntityPayload {
+    if (!isLinkEntityPayload(payload)) {
+      throw invalidPayloadException();
+    }
+
+    return payload;
+  }
+
+  private requireUnlinkPayload(payload: unknown): UnlinkEntityPayload {
+    if (!isUnlinkEntityPayload(payload)) {
+      throw invalidPayloadException();
+    }
+
+    return payload;
+  }
+
+  private buildEntityPairPayload(
+    entityId: string,
+    payload: CreateContributionDto["payload"]
+  ): LinkEntityPayload {
+    if (!isLinkEntityPayload(payload)) {
+      throw invalidPayloadException();
+    }
+
+    if (payload.relatedEntityId === entityId) {
+      throw createAppException({
+        code: AppErrorCode.BadRequest,
+        message: "Cannot reference the same entity",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    if (!isUuidV4(payload.relatedEntityId)) {
+      throw createAppException({
+        code: AppErrorCode.BadRequest,
+        message: "Related entity id must be a valid UUID",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    return payload;
+  }
+
+  private async assertLinkContributionPreconditions(
+    entityId: string,
+    relatedEntityId: string
+  ): Promise<void> {
+    if (await this.entityClusterService.areEntitiesInSameCluster(entityId, relatedEntityId)) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "Entities are already linked",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
+
+    await this.entityClusterService.assertEntitiesCanBeLinked(entityId, relatedEntityId);
+    await this.entityClusterService.assertClusterCapacityForLink(entityId, relatedEntityId);
+    await this.assertEntityPairContributionCooldown(entityId, relatedEntityId, [
+      ContributionType.LINK_ENTITY,
+      ContributionType.UNLINK_ENTITY
+    ]);
+  }
+
+  private async assertUnlinkContributionPreconditions(
+    entityId: string,
+    relatedEntityId: string
+  ): Promise<void> {
+    await this.entityClusterService.assertEntitiesCanBeUnlinked(entityId, relatedEntityId);
+    await this.assertEntityPairContributionCooldown(entityId, relatedEntityId, [
+      ContributionType.LINK_ENTITY,
+      ContributionType.UNLINK_ENTITY
+    ]);
+  }
+
+  private async assertEntityPairContributionCooldown(
+    entityId: string,
+    relatedEntityId: string,
+    types: ContributionType[]
+  ): Promise<void> {
+    const pending = await this.contributionsRepository.findPendingEntityPairContribution(
+      entityId,
+      relatedEntityId,
+      types
+    );
+
+    if (pending) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "A contribution for this entity pair is already pending",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
+
+    const since = new Date(Date.now() - ENTITY_PAIR_CONTRIBUTION_COOLDOWN_HOURS * 60 * 60 * 1000);
+    const recent = await this.contributionsRepository.findRecentAppliedEntityPairContribution(
+      entityId,
+      relatedEntityId,
+      types,
+      since
+    );
+
+    if (recent) {
+      throw createAppException({
+        code: AppErrorCode.TooManyRequests,
+        message: "This entity pair was updated recently. Try again later.",
+        statusCode: HttpStatus.TOO_MANY_REQUESTS
+      });
+    }
+  }
+
   private normalizeCanonicalUrl(value: string): string {
     const normalized = this.urlNormalizer.normalize(value);
 
@@ -671,6 +883,18 @@ export class ContributionsService {
     }
 
     return normalized;
+  }
+
+  private normalizeLogoUrl(value: string): string {
+    try {
+      return assertSafeHttpUrl(value);
+    } catch {
+      throw createAppException({
+        code: AppErrorCode.BadRequest,
+        message: "Logo URL must be a valid HTTP or HTTPS URL",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
   }
 
   private async assertCanonicalUrlAvailable(canonicalUrl: string, entityId: string): Promise<void> {
@@ -768,13 +992,19 @@ function emptyContributionRequirements(): ContributionRequirements {
 
 function createEmptyPendingByType(): Record<ContributionType, number> {
   return {
+    LINK_ENTITY: 0,
     MERGE_ENTITY: 0,
+    UNLINK_ENTITY: 0,
     UPDATE_DESCRIPTION: 0,
     UPDATE_LOGO: 0,
     UPDATE_NAME: 0,
     UPDATE_TYPE: 0,
     UPDATE_URL: 0
   };
+}
+
+function isUuidV4(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function invalidPayloadException(): Error {

@@ -14,13 +14,15 @@ export const metadata: Metadata = {
 };
 
 interface UserTopsHubPageProps {
-  searchParams: Promise<{ sort?: string }>;
+  searchParams: Promise<{ q?: string; sort?: string }>;
 }
 
 export default async function UserTopsHubPage({ searchParams }: UserTopsHubPageProps) {
-  const sort = parseTopListSort((await searchParams).sort);
+  const resolvedSearchParams = await searchParams;
+  const sort = parseTopListSort(resolvedSearchParams.sort);
+  const searchQuery = resolvedSearchParams.q?.trim() ?? "";
   const [response, categoriesResponse] = await Promise.all([
-    fetchRecentTopsServer(20, sort),
+    fetchRecentTopsServer(20, sort, searchQuery || undefined),
     fetchTopCategoriesServer()
   ]);
 
@@ -30,6 +32,7 @@ export default async function UserTopsHubPage({ searchParams }: UserTopsHubPageP
         <TopsHubView
           categories={categoriesResponse?.items ?? []}
           initialItems={response?.items}
+          initialSearchQuery={searchQuery}
           initialSort={sort}
         />
       </Suspense>

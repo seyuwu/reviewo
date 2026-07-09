@@ -26,7 +26,7 @@ export interface TopsPort {
   deleteTop(topId: string, currentUser: AuthenticatedUser): Promise<TopDto>;
   forkTop(sourceTopId: string, currentUser: AuthenticatedUser): Promise<TopDto>;
   getTopBySlug(slug: string, currentUserId?: string): Promise<TopDto>;
-  listRecentTops(limit: number, cursor?: string): Promise<TopListResponseDto>;
+  listRecentTops(limit: number, cursor?: string, sort?: string | null, searchQuery?: string | null): Promise<TopListResponseDto>;
   listTopComments(
     topId: string,
     limit: number,

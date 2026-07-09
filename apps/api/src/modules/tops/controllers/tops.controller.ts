@@ -65,7 +65,7 @@ export class TopsController {
 
   @Get("tops")
   async listRecentTops(@Query() query: ListTopsQueryDto): Promise<TopListResponseDto> {
-    return this.topsService.listRecentTops(query.limit ?? 20, query.cursor, query.sort);
+    return this.topsService.listRecentTops(query.limit ?? 20, query.cursor, query.sort, query.q);
   }
 
   @Post("tops")
@@ -124,7 +124,8 @@ export class TopsController {
       slug,
       query.limit ?? 20,
       query.cursor,
-      query.sort
+      query.sort,
+      query.q
     );
   }
 

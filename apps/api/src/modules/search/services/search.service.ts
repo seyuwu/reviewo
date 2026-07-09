@@ -33,6 +33,7 @@ function toSearchEntityResultDto(entity: RankedSearchEntityDto): SearchEntityRes
     canonicalUrl: entity.canonicalUrl,
     description: entity.description,
     id: entity.id,
+    logoUrl: entity.logoUrl,
     resultKind: entity.resultKind,
     reviewsCount: entity.reviewsCount,
     slug: entity.slug,

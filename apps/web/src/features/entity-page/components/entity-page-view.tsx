@@ -18,6 +18,7 @@ import {
   type PopoverAnchor
 } from "../../growth/lib/anchored-popover-style";
 import { EntityHeroBar } from "./entity-hero-bar";
+import { EntityRelatedPresencesSection } from "./entity-related-presences-section";
 import { ExtensionEntityCta } from "../../extension/components/extension-entity-cta";
 import { EntityTopsSection } from "../../tops/components/entity-tops-section";
 import { EntityContributionsSection } from "../../contributions/components/entity-contributions-section";
@@ -68,6 +69,8 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   const leftTopStackRef = useRef<HTMLDivElement>(null);
   const asideFormsRef = useRef<HTMLDivElement>(null);
   const hasHydratedReviewRef = useRef(false);
+  const pairActionsRef = useRef<{ suggestUnlink: (relatedEntityId: string) => void } | null>(null);
+  const [unlinkingEntityId, setUnlinkingEntityId] = useState<string | null>(null);
 
   const entityPageQuery = useQuery({
     queryFn: () => getEntityPage(entityId, accessToken),
@@ -317,6 +320,7 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
           <EntityHeroBar
             pageData={pageData}
             returnQuery={returnQuery}
+            showRelatedPresencesNav={(pageData.relatedPresences ?? []).length > 0}
             showUserTopsNav={mergedEntityTops.length > 0}
           />
         </div>
@@ -465,6 +469,24 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
           </form>
         </div>
 
+        <div className={styles.pageGridFull}>
+          <EntityRelatedPresencesSection
+            canUnlink={canInteract}
+            currentEntityId={entityId}
+            items={pageData.relatedPresences ?? []}
+            unlinkingEntityId={unlinkingEntityId}
+            onUnlink={(relatedEntityId) => {
+              setUnlinkingEntityId(relatedEntityId);
+              pairActionsRef.current?.suggestUnlink(relatedEntityId);
+              window.setTimeout(() => {
+                setUnlinkingEntityId((current) =>
+                  current === relatedEntityId ? null : current
+                );
+              }, 1200);
+            }}
+          />
+        </div>
+
         <section className={`panel-card ${styles.pageGridFull}`} id="entity-compare">
           <EntityCompareChips entityId={entityId} entitySlug={pageData.entity.slug} />
         </section>
@@ -476,6 +498,9 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
             currentUserId={authSession?.userId}
             isAdmin={isAdmin}
             entity={pageData.entity}
+            onRegisterPairActions={(actions) => {
+              pairActionsRef.current = actions;
+            }}
           />
         </div>
 

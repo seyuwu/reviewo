@@ -22,6 +22,7 @@ export class TopForkSourceDto {
 export class TopItemEntityDto {
   canonicalUrl!: string | null;
   id!: string;
+  logoUrl!: string | null;
   slug!: string;
   title!: string;
   type!: EntityDto["type"];

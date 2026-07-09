@@ -110,12 +110,7 @@ export function TopsPageView({
 
   return (
     <div className="home-hub">
-      <section className="home-hub-card" aria-labelledby="tops-page-heading">
-        <header className="home-hub-header">
-          <h1 id="tops-page-heading">{t("web.topsPage.title")}</h1>
-          <p className="home-hub-subtitle">{t("web.topsPage.subtitle")}</p>
-        </header>
-
+      <section className="home-hub-card" aria-label={t("web.topsPage.title")}>
         <TopHubTabs
           activeTab={hubView}
           onSelectCatalog={selectCatalogTab}

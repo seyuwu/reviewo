@@ -4,6 +4,7 @@ import { ENTITIES_PORT } from "../../entities/interfaces/entities.port.js";
 import type { EntitiesPort } from "../../entities/interfaces/entities.port.js";
 import { REVIEWS_PORT } from "../../reviews/interfaces/reviews.port.js";
 import type { ReviewsPort } from "../../reviews/interfaces/reviews.port.js";
+import { TopCompositionService } from "../../tops/services/top-composition.service.js";
 import type { HideEntityResponseDto } from "../dto/hide-content-response.dto.js";
 import type { HideReviewResponseDto } from "../dto/hide-content-response.dto.js";
 
@@ -13,11 +14,14 @@ export class ModerationService {
     @Inject(ENTITIES_PORT)
     private readonly entitiesPort: EntitiesPort,
     @Inject(REVIEWS_PORT)
-    private readonly reviewsPort: ReviewsPort
+    private readonly reviewsPort: ReviewsPort,
+    private readonly topCompositionService: TopCompositionService
   ) {}
 
   async hideEntity(entityId: string): Promise<HideEntityResponseDto> {
     const entity = await this.entitiesPort.hideEntity(entityId);
+
+    await this.topCompositionService.syncVisibilityForEntityIds([entityId]);
 
     return {
       entityId: entity.id,

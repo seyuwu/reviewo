@@ -1096,7 +1096,178 @@ details.field[open] > summary {
 }
 
 .top-category-filter-search input {
+  background: rgb(255 255 255 / 96%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+  min-width: 0;
+  outline: 0;
+  padding: 0.55rem 0.75rem;
   width: 100%;
+}
+
+.top-category-filter-search input:focus-visible {
+  border-color: rgb(212 175 55 / 45%);
+  box-shadow: 0 0 0 3px rgb(212 175 55 / 12%);
+}
+
+.tops-hub-card {
+  gap: 1rem;
+}
+
+.tops-hub-search {
+  display: block;
+}
+
+.tops-hub-topbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.tops-hub-topbar .home-hub-tabs {
+  flex: 1 1 16rem;
+  min-width: min(100%, 16rem);
+}
+
+.tops-hub-create-cta {
+  border-radius: 999px;
+  flex-shrink: 0;
+  min-height: 2.65rem;
+  padding-inline: 1.1rem;
+  white-space: nowrap;
+}
+
+.tops-hub-controls {
+  background: rgb(245 245 245 / 54%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 1.15rem;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.tops-hub-controls .top-category-filter {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
+  max-width: none;
+  min-width: 0;
+}
+
+.tops-hub-controls .top-category-filter-label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.tops-hub-controls .top-category-filter-trigger {
+  border-radius: 999px;
+  flex: 1 1 auto;
+  min-height: 2.5rem;
+  min-width: 0;
+}
+
+.tops-hub-sort-row {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tops-hub-controls .top-sort-tabs {
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 0.1rem;
+  scrollbar-width: thin;
+  width: 100%;
+}
+
+.tops-hub-controls .discovery-window-tab {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.82rem;
+}
+
+.tops-hub-results {
+  margin-top: 0;
+}
+
+@media (max-width: 720px) {
+  .tops-hub-topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tops-hub-create-cta {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .tops-hub-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tops-hub-controls .top-category-filter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tops-hub-controls .top-category-filter-trigger {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+.tops-hub-search-field {
+  align-items: center;
+  background: rgb(255 255 255 / 96%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 999px;
+  display: flex;
+  gap: 0.55rem;
+  min-height: 3rem;
+  padding: 0.35rem 1rem 0.35rem 0.9rem;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.tops-hub-search-field:focus-within {
+  background: #fff;
+  border-color: rgb(212 175 55 / 45%);
+  box-shadow: 0 0 0 3px rgb(212 175 55 / 12%);
+}
+
+.tops-hub-search-icon {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.tops-hub-search-field input {
+  background: transparent;
+  border: 0;
+  color: var(--color-text);
+  flex: 1 1 auto;
+  font: inherit;
+  font-size: 0.95rem;
+  min-width: 0;
+  outline: 0;
+  padding: 0.55rem 0;
+}
+
+.tops-hub-search-field input::placeholder {
+  color: #737373;
+}
+
+.tops-hub-search-field input::-webkit-search-cancel-button {
+  cursor: pointer;
 }
 
 .top-category-filter-list {
@@ -1300,13 +1471,28 @@ details.field[open] > summary {
 }
 
 .home-search-hit {
-  display: grid;
-  gap: 0.2rem;
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
   padding: 0.85rem 1rem;
   border-bottom: 1px solid var(--color-card-border);
   color: inherit;
   text-decoration: none;
   transition: background-color 160ms ease;
+}
+
+.home-search-hit-content {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.home-search-hit-canonical-body {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.45rem;
+  min-width: 0;
 }
 
 .home-search-hit:last-child {
@@ -1337,7 +1523,7 @@ details.field[open] > summary {
 }
 
 .home-search-hit-canonical {
-  gap: 0.45rem;
+  gap: 0.75rem;
   padding-top: 1rem;
   padding-bottom: 1rem;
   background: linear-gradient(180deg, rgb(245 245 245 / 92%), rgb(255 255 255 / 88%));

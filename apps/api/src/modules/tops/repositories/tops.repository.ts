@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Prisma, Top, TopItem, TopRankMode, TopSystemSortKey, TopVisibility } from "#prisma/client";
+import { Prisma, type Top, TopItem, TopRankMode, TopSystemSortKey, TopVisibility } from "#prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 import {
@@ -307,9 +307,19 @@ export class TopsRepository {
     categoryId?: string;
     cursor?: string;
     limit: number;
+    searchQuery?: string;
     sort?: TopListSort | string | null;
   }): Promise<{ items: TopListRow[]; nextCursor: string | null }> {
     const sort = normalizeTopListSort(params.sort);
+
+    if (sort === "random") {
+      return this.listPublishedRandom({
+        limit: params.limit,
+        ...(params.categoryId ? { categoryId: params.categoryId } : {}),
+        ...(params.searchQuery ? { searchQuery: params.searchQuery } : {})
+      });
+    }
+
     const orderBy = buildTopListOrderBy(sort);
     const useCursor = sort === "recent" && Boolean(params.cursor);
 
@@ -320,6 +330,14 @@ export class TopsRepository {
       where: {
         visibility: "ACTIVE",
         ...(params.categoryId ? { categoryId: params.categoryId } : {}),
+        ...(params.searchQuery
+          ? {
+              title: {
+                contains: params.searchQuery,
+                mode: "insensitive"
+              }
+            }
+          : {}),
         ...(useCursor && params.cursor
           ? {
               OR: [
@@ -365,9 +383,50 @@ export class TopsRepository {
   async listRecent(params: {
     cursor?: string;
     limit: number;
+    searchQuery?: string;
     sort?: TopListSort | string | null;
   }): Promise<{ items: TopListRow[]; nextCursor: string | null }> {
     return this.listPublished(params);
+  }
+
+  async listPublishedRandom(params: {
+    categoryId?: string;
+    limit: number;
+    searchQuery?: string;
+  }): Promise<{ items: TopListRow[]; nextCursor: string | null }> {
+    const searchPattern = params.searchQuery ? `%${params.searchQuery}%` : null;
+    const idRows = await this.prismaService.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT t.id
+      FROM tops.tops t
+      WHERE t.visibility = 'ACTIVE'::tops.top_visibility
+      ${params.categoryId ? Prisma.sql`AND t.category_id = ${params.categoryId}::uuid` : Prisma.empty}
+      ${searchPattern ? Prisma.sql`AND t.title ILIKE ${searchPattern}` : Prisma.empty}
+      ORDER BY RANDOM()
+      LIMIT ${params.limit}
+    `);
+
+    const ids = idRows.map((row) => row.id);
+
+    if (ids.length === 0) {
+      return { items: [], nextCursor: null };
+    }
+
+    const rows = await this.prismaService.top.findMany({
+      include: topListInclude,
+      where: {
+        id: {
+          in: ids
+        }
+      }
+    });
+    const order = new Map(ids.map((id, index) => [id, index]));
+
+    rows.sort((left, right) => (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0));
+
+    return {
+      items: rows as TopListRow[],
+      nextCursor: null
+    };
   }
 
   async listByAuthor(params: {
@@ -428,11 +487,13 @@ export class TopsRepository {
     categoryId: string;
     cursor?: string;
     limit: number;
+    searchQuery?: string;
     sort?: TopListSort | string | null;
   }): Promise<{ items: TopListRow[]; nextCursor: string | null }> {
     return this.listPublished({
       categoryId: params.categoryId,
       limit: params.limit,
+      ...(params.searchQuery ? { searchQuery: params.searchQuery } : {}),
       ...(params.cursor ? { cursor: params.cursor } : {}),
       ...(params.sort !== undefined ? { sort: params.sort } : {})
     });
@@ -476,6 +537,57 @@ export class TopsRepository {
       title: row.top.title,
       topId: row.top.id
     }));
+  }
+
+  async countActiveItems(topId: string): Promise<number> {
+    const rows = await this.prismaService.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*)::bigint AS count
+      FROM tops.top_items ti
+      INNER JOIN entities.entities e ON e.id = ti.entity_id
+      WHERE ti.top_id = ${topId}::uuid
+        AND e.visibility = 'ACTIVE'::entities.entity_visibility
+    `;
+
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  async countActiveItemsByTopIds(topIds: string[]): Promise<Map<string, number>> {
+    if (topIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await this.prismaService.$queryRaw<Array<{ count: bigint; topId: string }>>`
+      SELECT ti.top_id AS "topId", COUNT(*)::bigint AS count
+      FROM tops.top_items ti
+      INNER JOIN entities.entities e ON e.id = ti.entity_id
+      WHERE ti.top_id = ANY(${topIds}::uuid[])
+        AND e.visibility = 'ACTIVE'::entities.entity_visibility
+      GROUP BY ti.top_id
+    `;
+
+    const counts = new Map<string, number>();
+
+    for (const row of rows) {
+      counts.set(row.topId, Number(row.count));
+    }
+
+    return counts;
+  }
+
+  async findActiveTopIdsForEntities(entityIds: string[]): Promise<string[]> {
+    if (entityIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.prismaService.$queryRaw<Array<{ topId: string }>>`
+      SELECT DISTINCT ti.top_id AS "topId"
+      FROM tops.top_items ti
+      INNER JOIN tops.tops t ON t.id = ti.top_id
+      WHERE ti.entity_id = ANY(${entityIds}::uuid[])
+        AND t.visibility = 'ACTIVE'::tops.top_visibility
+    `;
+
+    return rows.map((row) => row.topId);
   }
 
   isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKnownRequestError {

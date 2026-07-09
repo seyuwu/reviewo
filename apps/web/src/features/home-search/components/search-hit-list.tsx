@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { EntityAvatar } from "../../entities/components/entity-avatar";
 import { useTranslation } from "../../i18n/locale-provider";
 import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
 import type { SearchEntityResult } from "../types/search-entities";
@@ -47,11 +48,20 @@ function SearchHit({ entity, query }: SearchHitProps) {
       className="home-search-hit"
       href={`/entities/${entity.id}?q=${encodeURIComponent(query)}`}
     >
-      <span className="home-search-hit-main">
-        <span className="result-type">{formatEntityTypeLabel(t, entity.type)}</span>
-        <span className="home-search-hit-title">{entity.title}</span>
+      <EntityAvatar
+        canonicalUrl={entity.canonicalUrl}
+        entityId={entity.id}
+        logoUrl={entity.logoUrl}
+        size="sm"
+        title={entity.title}
+      />
+      <span className="home-search-hit-content">
+        <span className="home-search-hit-main">
+          <span className="result-type">{formatEntityTypeLabel(t, entity.type)}</span>
+          <span className="home-search-hit-title">{entity.title}</span>
+        </span>
+        {subtitle ? <span className="home-search-hit-url">{subtitle}</span> : null}
       </span>
-      {subtitle ? <span className="home-search-hit-url">{subtitle}</span> : null}
     </Link>
   );
 }
@@ -70,12 +80,20 @@ function CanonicalSearchHit({ entity, query }: CanonicalSearchHitProps) {
       className="home-search-hit home-search-hit-canonical"
       href={`/entities/${entity.id}?q=${encodeURIComponent(query)}`}
     >
-      <span className="home-search-hit-badge">{t("search.canonical.badge")}</span>
-      <span className="home-search-hit-main">
-        <span className="home-search-hit-title">{entity.title}</span>
-        {hostname ? <span className="home-search-hit-url">{hostname}</span> : null}
-      </span>
-      <span className="home-search-hit-rating">
+      <EntityAvatar
+        canonicalUrl={entity.canonicalUrl}
+        entityId={entity.id}
+        logoUrl={entity.logoUrl}
+        size="sm"
+        title={entity.title}
+      />
+      <span className="home-search-hit-canonical-body">
+        <span className="home-search-hit-badge">{t("search.canonical.badge")}</span>
+        <span className="home-search-hit-main">
+          <span className="home-search-hit-title">{entity.title}</span>
+          {hostname ? <span className="home-search-hit-url">{hostname}</span> : null}
+        </span>
+        <span className="home-search-hit-rating">
         {entity.votesCount > 0 && entity.avgScore !== null ? (
           <>
             <span className="home-search-hit-rating-score" aria-hidden="true">
@@ -89,6 +107,7 @@ function CanonicalSearchHit({ entity, query }: CanonicalSearchHitProps) {
         ) : (
           <span className="home-search-hit-rating-meta">{t("search.canonical.noRatings")}</span>
         )}
+        </span>
       </span>
     </Link>
   );

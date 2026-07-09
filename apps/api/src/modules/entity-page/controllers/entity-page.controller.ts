@@ -4,6 +4,7 @@ import { CurrentUser } from "../../../common/decorators/current-user.decorator.j
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.js";
 import { EntityPageResponseDto } from "../dto/entity-page-response.dto.js";
+import { RelatedPresencesResponseDto } from "../dto/related-presence.dto.js";
 import { EntityPageService } from "../services/entity-page.service.js";
 
 @Controller("entities")
@@ -17,5 +18,12 @@ export class EntityPageController {
     @CurrentUser() currentUser?: AuthenticatedUser
   ): Promise<EntityPageResponseDto> {
     return this.entityPageService.getEntityPage(entityId, currentUser?.id);
+  }
+
+  @Get(":entityId/related-presences")
+  async getRelatedPresences(
+    @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string
+  ): Promise<RelatedPresencesResponseDto> {
+    return this.entityPageService.getRelatedPresences(entityId);
   }
 }

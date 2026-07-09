@@ -26,7 +26,22 @@ export function TopCategoryFilter({ activeSlug = null, categories }: TopCategory
   const [query, setQuery] = useState("");
 
   const sortQuery = topListSortToQueryValue(parseTopListSort(searchParams.get("sort")));
-  const sortSuffix = sortQuery ? `?sort=${sortQuery}` : "";
+  const searchQuery = searchParams.get("q")?.trim() ?? "";
+  const querySuffix = useMemo(() => {
+    const params = new URLSearchParams();
+
+    if (sortQuery) {
+      params.set("sort", sortQuery);
+    }
+
+    if (searchQuery) {
+      params.set("q", searchQuery);
+    }
+
+    const query = params.toString();
+
+    return query ? `?${query}` : "";
+  }, [searchQuery, sortQuery]);
 
   const activeCategory = categories.find((category) => category.slug === activeSlug) ?? null;
   const triggerLabel = activeCategory
@@ -69,7 +84,7 @@ export function TopCategoryFilter({ activeSlug = null, categories }: TopCategory
   }, [isOpen]);
 
   function navigateToCategory(slug: string | null) {
-    const href = slug ? `/tops/category/${slug}${sortSuffix}` : `/tops${sortSuffix}`;
+    const href = slug ? `/tops/category/${slug}${querySuffix}` : `/tops${querySuffix}`;
 
     if (pathname + (searchParams.toString() ? `?${searchParams.toString()}` : "") !== href) {
       router.push(href);

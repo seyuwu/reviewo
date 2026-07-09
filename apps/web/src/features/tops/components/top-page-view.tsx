@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { FormFeedback } from "../../../components/form-feedback";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
+import { EntityAvatar } from "../../entities/components/entity-avatar";
 import { formatEntityDisplayName } from "../../growth/lib/format-entity-display-name";
 import { formatScoreOneDecimal } from "../../growth/lib/format-growth-stats";
 import { formatTopCategoryLabel } from "../../i18n/top-category-label";
@@ -220,6 +221,13 @@ export function TopPageView({ top: initialTop }: TopPageViewProps) {
                     <div className="discovery-rank-item">
                       <span className="discovery-rank-item-main">
                         <span className="discovery-rank-position">{item.position}</span>
+                        <EntityAvatar
+                          canonicalUrl={item.entity.canonicalUrl}
+                          entityId={item.entity.id}
+                          logoUrl={item.entity.logoUrl}
+                          size="sm"
+                          title={label}
+                        />
                         <span>
                           <Link href={`/entities/${item.entity.id}`}>
                             <strong>{label}</strong>

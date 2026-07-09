@@ -51,7 +51,7 @@ function createSecurityHeaders() {
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "form-action 'self'",
-    "img-src 'self' data:",
+    "img-src 'self' data: https:",
     "object-src 'none'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",

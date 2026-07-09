@@ -12,12 +12,19 @@ async function safeServerRequest<T>(path: string): Promise<T | null> {
 
 export function fetchRecentTopsServer(
   limit = 20,
-  sort: TopListSort = "recent"
+  sort: TopListSort = "recent",
+  searchQuery?: string
 ): Promise<TopListResponse | null> {
   const params = new URLSearchParams({ limit: String(limit) });
 
   if (sort !== "recent") {
     params.set("sort", sort);
+  }
+
+  const trimmedQuery = searchQuery?.trim();
+
+  if (trimmedQuery) {
+    params.set("q", trimmedQuery);
   }
 
   return safeServerRequest<TopListResponse>(`/tops?${params.toString()}`);
@@ -42,12 +49,19 @@ export function fetchTopCategoriesServer(): Promise<TopCategoryListResponse | nu
 export function fetchTopsByCategoryServer(
   slug: string,
   limit = 20,
-  sort: TopListSort = "recent"
+  sort: TopListSort = "recent",
+  searchQuery?: string
 ): Promise<TopListResponse | null> {
   const params = new URLSearchParams({ limit: String(limit) });
 
   if (sort !== "recent") {
     params.set("sort", sort);
+  }
+
+  const trimmedQuery = searchQuery?.trim();
+
+  if (trimmedQuery) {
+    params.set("q", trimmedQuery);
   }
 
   return safeServerRequest<TopListResponse>(

@@ -12,6 +12,7 @@ export interface SystemTopCatalogResponseDto {
 export interface SystemTopItemEntityDto {
   canonicalUrl: string | null;
   id: string;
+  logoUrl: string | null;
   slug: string;
   title: string;
   type: string;

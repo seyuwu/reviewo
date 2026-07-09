@@ -156,6 +156,7 @@ export class SystemTopsService {
         entity: {
           canonicalUrl: entity.canonicalUrl,
           id: entity.id,
+          logoUrl: entity.logoUrl,
           slug: entity.slug,
           title: entity.title,
           type: entity.type

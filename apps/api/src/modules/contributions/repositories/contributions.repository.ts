@@ -11,7 +11,9 @@ import type {
 } from "#prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
+import { createSlug } from "../../entities/services/entity-slug.js";
 import { pickTitleSearchTokens } from "../utils/title-match-tokens.js";
+import { slugPrefixForDuplicateSearch } from "../../entities/utils/title-duplicate-match.js";
 
 export interface CreateContributionRecordInput {
   authorId: string;
@@ -251,12 +253,14 @@ export class ContributionsRepository {
     const normalizedTitle = title.trim();
     const titleTokens = pickTitleSearchTokens(normalizedTitle);
     const slugPattern = normalizedTitle.toLowerCase().replace(/\s+/g, "-");
+    const titleSlug = createSlug(normalizedTitle);
+    const titleSlugPrefix = slugPrefixForDuplicateSearch(titleSlug);
 
-    const titleFilters = [
+    const titleFilters: Prisma.EntityWhereInput[] = [
       {
         title: {
           contains: normalizedTitle,
-          mode: "insensitive" as const
+          mode: "insensitive"
         }
       },
       ...(slugPattern.length >= 2
@@ -276,6 +280,32 @@ export class ContributionsRepository {
         }
       }))
     ];
+
+    if (titleSlug.length >= 2) {
+      titleFilters.push(
+        {
+          slug: {
+            equals: titleSlug,
+            mode: "insensitive"
+          }
+        },
+        {
+          slug: {
+            startsWith: `${titleSlug}-`,
+            mode: "insensitive"
+          }
+        }
+      );
+    }
+
+    if (titleSlugPrefix) {
+      titleFilters.push({
+        slug: {
+          startsWith: titleSlugPrefix,
+          mode: "insensitive"
+        }
+      });
+    }
 
     return this.prismaService.entity.findMany({
       take: 30,
@@ -389,5 +419,75 @@ export class ContributionsRepository {
       count: row._count._all,
       status: row.status
     }));
+  }
+
+  async findPendingEntityPairContribution(
+    leftEntityId: string,
+    rightEntityId: string,
+    types: ContributionType[]
+  ): Promise<EntityContribution | null> {
+    if (types.length === 0) {
+      return null;
+    }
+
+    return this.prismaService.entityContribution.findFirst({
+      orderBy: { createdAt: "desc" },
+      where: {
+        OR: [
+          {
+            entityId: leftEntityId,
+            payload: {
+              path: ["relatedEntityId"],
+              equals: rightEntityId
+            }
+          },
+          {
+            entityId: rightEntityId,
+            payload: {
+              path: ["relatedEntityId"],
+              equals: leftEntityId
+            }
+          }
+        ],
+        status: "PENDING",
+        type: { in: types }
+      }
+    });
+  }
+
+  async findRecentAppliedEntityPairContribution(
+    leftEntityId: string,
+    rightEntityId: string,
+    types: ContributionType[],
+    since: Date
+  ): Promise<EntityContribution | null> {
+    if (types.length === 0) {
+      return null;
+    }
+
+    return this.prismaService.entityContribution.findFirst({
+      orderBy: { createdAt: "desc" },
+      where: {
+        OR: [
+          {
+            entityId: leftEntityId,
+            payload: {
+              path: ["relatedEntityId"],
+              equals: rightEntityId
+            }
+          },
+          {
+            entityId: rightEntityId,
+            payload: {
+              path: ["relatedEntityId"],
+              equals: leftEntityId
+            }
+          }
+        ],
+        appliedAt: { gte: since },
+        status: "APPLIED",
+        type: { in: types }
+      }
+    });
   }
 }

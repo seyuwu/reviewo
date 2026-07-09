@@ -11,7 +11,7 @@ import {
 
 interface TopsCategoryPageProps {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ sort?: string }>;
+  searchParams: Promise<{ q?: string; sort?: string }>;
 }
 
 export async function generateMetadata({ params }: TopsCategoryPageProps): Promise<Metadata> {
@@ -32,10 +32,12 @@ export async function generateMetadata({ params }: TopsCategoryPageProps): Promi
 
 export default async function TopsCategoryPage({ params, searchParams }: TopsCategoryPageProps) {
   const { slug } = await params;
-  const sort = parseTopListSort((await searchParams).sort);
+  const resolvedSearchParams = await searchParams;
+  const sort = parseTopListSort(resolvedSearchParams.sort);
+  const searchQuery = resolvedSearchParams.q?.trim() ?? "";
   const [categoriesResponse, topsResponse] = await Promise.all([
     fetchTopCategoriesServer(),
-    fetchTopsByCategoryServer(slug, 20, sort)
+    fetchTopsByCategoryServer(slug, 20, sort, searchQuery || undefined)
   ]);
   const category = categoriesResponse?.items.find((item) => item.slug === slug);
 
@@ -50,6 +52,7 @@ export default async function TopsCategoryPage({ params, searchParams }: TopsCat
           activeCategorySlug={slug}
           categories={categoriesResponse?.items ?? []}
           initialItems={topsResponse?.items ?? []}
+          initialSearchQuery={searchQuery}
           initialSort={sort}
         />
       </Suspense>

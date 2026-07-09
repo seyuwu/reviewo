@@ -7,6 +7,7 @@ export class RankedSearchEntityDto {
   canonicalUrl!: string | null;
   description!: string | null;
   id!: string;
+  logoUrl!: string | null;
   parentId!: string | null;
   resultKind!: SearchResultKind;
   reviewsCount!: number;

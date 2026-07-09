@@ -11,7 +11,15 @@ export interface MergeEntityPayload {
   targetEntityTitle?: string | null;
 }
 
-export type ContributionPayload = FieldChangePayload | MergeEntityPayload;
+export interface LinkEntityPayload {
+  reason?: string;
+  relatedEntityId: string;
+  relatedEntityTitle?: string | null;
+}
+
+export type UnlinkEntityPayload = LinkEntityPayload;
+
+export type ContributionPayload = FieldChangePayload | LinkEntityPayload | MergeEntityPayload;
 
 export function isFieldChangePayload(payload: unknown): payload is FieldChangePayload {
   return (
@@ -35,4 +43,17 @@ export function isMergeEntityPayload(payload: unknown): payload is MergeEntityPa
     "sourceEntityId" in payload &&
     "targetEntityId" in payload
   );
+}
+
+export function isLinkEntityPayload(payload: unknown): payload is LinkEntityPayload {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "relatedEntityId" in payload &&
+    !("sourceEntityId" in payload)
+  );
+}
+
+export function isUnlinkEntityPayload(payload: unknown): payload is UnlinkEntityPayload {
+  return isLinkEntityPayload(payload);
 }

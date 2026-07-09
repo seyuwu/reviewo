@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { EntityAvatar } from "../../entities/components/entity-avatar";
 import { formatScoreOneDecimal, formatStarRating } from "../../growth/lib/format-growth-stats";
 import { formatEntityHeroTitle } from "../../growth/lib/format-entity-display-name";
 import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
@@ -13,10 +14,16 @@ import styles from "./entity-hero-bar.module.css";
 interface EntityHeroBarProps {
   pageData: EntityPageResponse;
   returnQuery: string;
+  showRelatedPresencesNav?: boolean;
   showUserTopsNav?: boolean;
 }
 
-export function EntityHeroBar({ pageData, returnQuery, showUserTopsNav = false }: EntityHeroBarProps) {
+export function EntityHeroBar({
+  pageData,
+  returnQuery,
+  showRelatedPresencesNav = false,
+  showUserTopsNav = false
+}: EntityHeroBarProps) {
   const t = useTranslation();
   const parentHref = pageData.parent ? buildEntityHref(pageData.parent.id, returnQuery) : null;
   const hostname = formatHostname(pageData.entity.canonicalUrl);
@@ -38,17 +45,27 @@ export function EntityHeroBar({ pageData, returnQuery, showUserTopsNav = false }
       ) : null}
 
       <div className={styles.heroLayout}>
-        <div className={styles.identity}>
-          <p className="eyebrow">{formatEntityTypeLabel(t, pageData.entity.type)}</p>
-          <h1 id="entity-page-heading" title={pageData.entity.title}>
-            {displayTitle}
-          </h1>
-          {description ? (
-            <p className={styles.description} title={description}>
-              {description}
-            </p>
-          ) : null}
-          {hostname ? <p className={styles.hostname}>{hostname}</p> : null}
+        <div className={styles.heroLead}>
+          <EntityAvatar
+            canonicalUrl={pageData.entity.canonicalUrl}
+            className={styles.avatar}
+            entityId={pageData.entity.id}
+            logoUrl={pageData.entity.logoUrl}
+            size="lg"
+            title={pageData.entity.title}
+          />
+          <div className={styles.identity}>
+            <p className="eyebrow">{formatEntityTypeLabel(t, pageData.entity.type)}</p>
+            <h1 id="entity-page-heading" title={pageData.entity.title}>
+              {displayTitle}
+            </h1>
+            {description ? (
+              <p className={styles.description} title={description}>
+                {description}
+              </p>
+            ) : null}
+            {hostname ? <p className={styles.hostname}>{hostname}</p> : null}
+          </div>
         </div>
 
         <div className={styles.metricsColumn} aria-label={t("web.entity.statsAriaLabel")}>
@@ -72,6 +89,17 @@ export function EntityHeroBar({ pageData, returnQuery, showUserTopsNav = false }
       </div>
 
       <nav className={styles.anchorLinks} aria-label={t("web.entity.heroLinksAriaLabel")}>
+        {showRelatedPresencesNav ? (
+          <button
+            type="button"
+            className={styles.anchorLink}
+            onClick={() => {
+              navigateToEntitySection("entity-related-presences");
+            }}
+          >
+            {t("contributions.relatedPresencesTitle")}
+          </button>
+        ) : null}
         <button
           type="button"
           className={styles.anchorLink}

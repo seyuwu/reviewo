@@ -41,6 +41,7 @@ export async function toTopDto(context: TopMapperContext): Promise<TopDto> {
       entity: {
         canonicalUrl: entity.canonicalUrl,
         id: entity.id,
+        logoUrl: entity.logoUrl,
         slug: entity.slug,
         title: entity.title,
         type: entity.type
@@ -72,7 +73,7 @@ export async function toTopDto(context: TopMapperContext): Promise<TopDto> {
     forksCount: context.top._count.forks,
     id: context.top.id,
     isOwnTop: context.currentUserId === context.top.authorId,
-    itemCount: context.top.items.length,
+    itemCount: items.length,
     items: items.map(stripStoredPosition),
     likedByCurrentUser: context.likedByCurrentUser ?? false,
     likesCount: context.top._count.likes,
@@ -130,7 +131,8 @@ export function toEmptyTopDto(input: {
 
 export function toTopListItemDto(
   top: TopListRow,
-  author: { displayName: string; id: string }
+  author: { displayName: string; id: string },
+  activeItemCount?: number
 ): TopListItemDto {
   return {
     author,
@@ -140,7 +142,7 @@ export function toTopListItemDto(
     description: top.description,
     forksCount: top._count.forks,
     id: top.id,
-    itemCount: top._count.items,
+    itemCount: activeItemCount ?? top._count.items,
     likesCount: top._count.likes,
     slug: top.slug,
     title: top.title,

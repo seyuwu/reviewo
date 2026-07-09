@@ -29,7 +29,8 @@ function authHeaders(accessToken: string): HeadersInit {
 export function fetchRecentTops(
   limit = 20,
   cursor?: string,
-  sort: TopListSort = "recent"
+  sort: TopListSort = "recent",
+  searchQuery?: string
 ): Promise<TopListResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
 
@@ -39,6 +40,12 @@ export function fetchRecentTops(
 
   if (sort !== "recent") {
     params.set("sort", sort);
+  }
+
+  const trimmedQuery = searchQuery?.trim();
+
+  if (trimmedQuery) {
+    params.set("q", trimmedQuery);
   }
 
   return apiRequest<TopListResponse>(`/tops?${params.toString()}`);
@@ -85,7 +92,8 @@ export function fetchTopsByCategory(
   slug: string,
   limit = 20,
   cursor?: string,
-  sort: TopListSort = "recent"
+  sort: TopListSort = "recent",
+  searchQuery?: string
 ): Promise<TopListResponse> {
   const params = new URLSearchParams({
     limit: String(limit)
@@ -97,6 +105,12 @@ export function fetchTopsByCategory(
 
   if (sort !== "recent") {
     params.set("sort", sort);
+  }
+
+  const trimmedQuery = searchQuery?.trim();
+
+  if (trimmedQuery) {
+    params.set("q", trimmedQuery);
   }
 
   return apiRequest<TopListResponse>(`/tops/category/${encodeURIComponent(slug)}?${params.toString()}`);
