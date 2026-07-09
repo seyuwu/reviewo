@@ -1,7 +1,19 @@
 validatePublicEnvironment();
 
+const watchPollIntervalMs = Number(process.env.WATCHPACK_POLLING_INTERVAL ?? "1000");
+
 /** @type {import("next").NextConfig} */
 const nextConfig = {
+  webpack: (config, { dev }) => {
+    if (dev && process.env.WATCHPACK_POLLING === "true") {
+      config.watchOptions = {
+        aggregateTimeout: 300,
+        poll: watchPollIntervalMs
+      };
+    }
+
+    return config;
+  },
   async headers() {
     return [
       {

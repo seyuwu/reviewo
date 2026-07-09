@@ -22,6 +22,7 @@ const entity = {
   createdAt: "2026-06-27T00:00:00.000Z",
   createdBy: currentUser.id,
   description: null,
+  logoUrl: null,
   id: "22222222-2222-4222-8222-222222222222",
   parentId: null,
   slug: "rate-site-example",

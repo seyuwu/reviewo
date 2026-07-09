@@ -30,6 +30,19 @@
   overflow-wrap: anywhere;
 }
 
+.description {
+  color: var(--color-text-muted);
+  font-size: 0.98rem;
+  line-height: 1.55;
+  margin: 0.15rem 0 0;
+  max-width: 38rem;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
 .hostname {
   color: var(--color-text-muted);
   font-size: 1.05rem;

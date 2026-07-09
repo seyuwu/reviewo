@@ -30,7 +30,7 @@ This file contains work that is outside the current stage. Do not mix active imp
 ## Post-MVP Product Ideas
 
 - Firefox, Edge, and Yandex Browser support.
-- Collections and lists.
+- User Tops & System Tops — see [RFC 0010](../docs/11-rfc/0010-user-tops-and-system-tops.md) (replaces «Collections and lists»).
 - Subscriptions.
 - Embedded rating widgets.
 - Developer tools.

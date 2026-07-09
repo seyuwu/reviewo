@@ -19,6 +19,11 @@ import {
 } from "../../growth/lib/anchored-popover-style";
 import { EntityHeroBar } from "./entity-hero-bar";
 import { ExtensionEntityCta } from "../../extension/components/extension-entity-cta";
+import { EntityTopsSection } from "../../tops/components/entity-tops-section";
+import { EntityContributionsSection } from "../../contributions/components/entity-contributions-section";
+import { getCurrentUserProfile } from "../../profile/api/profile";
+import { fetchEntitySystemTops, fetchEntityTops } from "../../tops/api/tops-api";
+import type { EntityTopAppearance } from "../../tops/types/tops";
 import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { ApiError } from "../../../lib/api/api-error";
 import {
@@ -81,6 +86,37 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
     queryFn: () => getMyReview(entityId, accessToken ?? ""),
     queryKey: ["entity-page", "my-review", entityId, accessToken]
   });
+
+  const entityTopsQuery = useQuery({
+    queryFn: () => fetchEntityTops(entityId),
+    queryKey: ["entity-tops", entityId]
+  });
+
+  const entitySystemTopsQuery = useQuery({
+    queryFn: () => fetchEntitySystemTops(entityId),
+    queryKey: ["entity-system-tops", entityId]
+  });
+
+  const mergedEntityTops = useMemo((): EntityTopAppearance[] => {
+    const userItems = (entityTopsQuery.data?.items ?? []).map((item) => ({
+      ...item,
+      isSystemTop: false as const
+    }));
+    const systemItems = (entitySystemTopsQuery.data?.items ?? []).map((item) => ({
+      ...item,
+      isSystemTop: true as const
+    }));
+
+    return [...userItems, ...systemItems].sort((left, right) => left.position - right.position);
+  }, [entitySystemTopsQuery.data?.items, entityTopsQuery.data?.items]);
+
+  const profileQuery = useQuery({
+    enabled: Boolean(accessToken),
+    queryFn: () => getCurrentUserProfile(accessToken ?? ""),
+    queryKey: ["profile", "me", accessToken]
+  });
+
+  const isAdmin = profileQuery.data?.role === "ADMIN";
 
   const rateMutation = useMutation({
     mutationFn: (score: number) => {
@@ -278,7 +314,11 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
 
       <div className={styles.pageGrid}>
         <div className={styles.pageGridHero}>
-          <EntityHeroBar pageData={pageData} returnQuery={returnQuery} />
+          <EntityHeroBar
+            pageData={pageData}
+            returnQuery={returnQuery}
+            showUserTopsNav={mergedEntityTops.length > 0}
+          />
         </div>
 
         <div className={styles.mainColumn} ref={leftTopStackRef}>
@@ -428,6 +468,20 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
         <section className={`panel-card ${styles.pageGridFull}`} id="entity-compare">
           <EntityCompareChips entityId={entityId} entitySlug={pageData.entity.slug} />
         </section>
+
+        <div className={styles.pageGridFull}>
+          <EntityContributionsSection
+            accessToken={accessToken}
+            canInteract={canInteract}
+            currentUserId={authSession?.userId}
+            isAdmin={isAdmin}
+            entity={pageData.entity}
+          />
+        </div>
+
+        <div className={styles.pageGridFull}>
+          <EntityTopsSection items={mergedEntityTops} />
+        </div>
 
         <section
           className={`panel-card ${styles.pageGridFull} ${styles.mainFooter}`}

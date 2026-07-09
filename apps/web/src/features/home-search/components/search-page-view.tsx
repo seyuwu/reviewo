@@ -1,13 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useId, useState } from "react";
 
 import { useTranslation } from "../../i18n/locale-provider";
 import { checkUrlTrust } from "../api/trust-check";
+import { EntitySearchResultsPanel } from "./entity-search-results-panel";
 import { useEntitySearch } from "../hooks/use-entity-search";
-import { SearchHitList } from "./search-hit-list";
 
 export function SearchPageView() {
   const t = useTranslation();
@@ -34,20 +33,7 @@ export function SearchPageView() {
     setQuery(searchParams.get("q")?.trim() ?? "");
   }, [searchParams]);
 
-  const results = searchData?.results ?? [];
   const isSearchActive = trimmedQuery.length > 0;
-  const isWaitingForResults =
-    isSearchActive && (isDebouncing || isPending || (isFetching && results.length === 0));
-  const showResults = isSearchActive && !isError && results.length > 0;
-  const showEmptyState =
-    isSearchActive &&
-    !isDebouncing &&
-    !isPending &&
-    !isFetching &&
-    !isError &&
-    results.length === 0;
-  const shouldShowCreateHint =
-    Boolean(searchData?.canCreateEntity) && showEmptyState && debouncedQuery.length > 0;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -113,37 +99,15 @@ export function SearchPageView() {
           </form>
 
           {isSearchActive ? (
-            <div
-              className={`home-hub-search-output${isFetching ? " home-hub-search-output-fetching" : ""}`}
-              aria-live="polite"
-            >
-              {isWaitingForResults && !showResults ? (
-                <p className="home-hub-search-status">
-                  <span className="state-dot state-dot-loading" aria-hidden="true" />
-                  {t("web.home.searching")}
-                </p>
-              ) : null}
-
-              {isError ? (
-                <p className="home-hub-search-status home-hub-search-status-error">
-                  {t("web.home.searchError")}
-                </p>
-              ) : null}
-
-              {showResults ? (
-                <SearchHitList query={debouncedQuery || trimmedQuery} results={results} />
-              ) : null}
-
-              {showEmptyState && !shouldShowCreateHint ? (
-                <p className="home-hub-search-status">
-                  {t("web.home.noResults", { query: debouncedQuery })}
-                </p>
-              ) : null}
-
-              {shouldShowCreateHint ? (
-                <CreateEntityHint query={searchData?.query ?? debouncedQuery} />
-              ) : null}
-            </div>
+            <EntitySearchResultsPanel
+              debouncedQuery={debouncedQuery}
+              isDebouncing={isDebouncing}
+              isError={isError}
+              isFetching={isFetching}
+              isPending={isPending}
+              searchData={searchData}
+              trimmedQuery={trimmedQuery}
+            />
           ) : null}
         </div>
 
@@ -181,25 +145,6 @@ export function SearchPageView() {
           </form>
         </section>
       </section>
-    </div>
-  );
-}
-
-interface CreateEntityHintProps {
-  query: string;
-}
-
-function CreateEntityHint({ query }: CreateEntityHintProps) {
-  const t = useTranslation();
-  const createEntityHref = `/entities/new?query=${encodeURIComponent(query)}`;
-
-  return (
-    <div className="home-search-callout ui-fade-soft">
-      <p className="home-search-callout-title">{t("web.home.createHint.title", { query })}</p>
-      <p className="home-search-callout-copy">{t("web.home.createHint.body")}</p>
-      <Link className="primary-link" href={createEntityHref}>
-        {t("web.home.createHint.action")}
-      </Link>
     </div>
   );
 }

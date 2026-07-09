@@ -16,6 +16,7 @@ This directory is the long-term home for project documentation. Content is being
 | [11-rfc/UX-0001-extension-experience-foundation.md](./11-rfc/UX-0001-extension-experience-foundation.md) | RFC UX-0001: Extension experience foundation |
 | [11-rfc/0007-lazy-entity-creation.md](./11-rfc/0007-lazy-entity-creation.md) | RFC: Lazy Entity Creation MVP (**confirmed**, Stage 28) |
 | [11-rfc/0008-content-hiding-moderation-mvp.md](./11-rfc/0008-content-hiding-moderation-mvp.md) | RFC: Content Hiding — Moderation MVP Foundation (**confirmed**, Stage 29) |
+| [11-rfc/0010-user-tops-and-system-tops.md](./11-rfc/0010-user-tops-and-system-tops.md) | RFC 0010: User Tops & System Tops — Top as first-class object |
 
 ## RFCs
 
@@ -26,6 +27,7 @@ Request for Comments documents propose architectural changes before implementati
 | [0007](./11-rfc/0007-lazy-entity-creation.md) | Lazy Entity Creation MVP | **Confirmed** (implements at Stage 28) |
 | [0008](./11-rfc/0008-content-hiding-moderation-mvp.md) | Content Hiding — Moderation MVP Foundation | **Confirmed** (implements at Stage 29) |
 | [0009](./11-rfc/0009-hierarchical-entities.md) | Hierarchical Entities & Extension Display Modes | **Proposed** (Phase 1 in progress) |
+| [0010](./11-rfc/0010-user-tops-and-system-tops.md) | User Tops & System Tops | **Proposed** (post-validation) |
 
 Planned RFC slots (from `Структура.md`): rating system, trust system, extension UI, mobile app, AI summary, recommendation, extension parser, extension cache, extension API, extension settings, extension sync.
 

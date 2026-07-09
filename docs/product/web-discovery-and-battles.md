@@ -9,11 +9,17 @@
 | `/` | Главная — discovery feed (SSR) |
 | `/search` | Поиск сущностей (`?q=`) |
 | `/battles` | Хаб битв: активные + предложенные + ручной выбор пары |
-| `/top` | Топы по рейтингу (вкладки «За неделю» / «Все время») |
+| `/top` | Топы по рейтингу + каталог системных топов |
+| `/top/:systemSlug` | Страница системного топа (например `/top/ai-tools`) |
 | `/compare/[pairSlug]` | Сравнение двух сущностей + голосование в битве |
 | `/compare` | Редирект на `/battles`, если нет query-параметров |
 | `/battle/[pairSlug]` | Редирект на `/compare/[pairSlug]` |
 | `/ratings` | Редирект на `/top` |
+| `/tops` | Пользовательские топы — лента + CTA создать |
+| `/tops/new` | Создание пользовательского топа |
+| `/tops/:slug` | Страница пользовательского топа |
+| `/tops/:slug/edit` | Редактирование своего топа |
+| `/tops/category/:slug` | User tops в категории |
 | `/entities/:id` | Страница сущности |
 | `/entities/new` | Создание сущности |
 
@@ -35,6 +41,51 @@
 | `GET /discovery/ratings/rising?window=day` | Растущие за сутки | 20 | 20 |
 | `GET /discovery/stats` | `{ activeBattles, onlineNow }` | — | — |
 | `POST /discovery/presence/heartbeat` | Heartbeat посетителя сайта | body: `{ visitorId }` | — |
+
+User tops (`TopsModule`, Phase 1):
+
+| Endpoint | Описание |
+| -------- | -------- |
+| `GET /tops` | Недавние пользовательские топы |
+| `POST /tops` | Создать топ (JWT) |
+| `GET /tops/:slug` | Детали топа + items |
+| `PATCH /tops/:id` | Обновить title/description (owner) |
+| `DELETE /tops/:id` | Скрыть топ (owner) |
+| `PUT /tops/:id/items` | Заменить упорядоченный список items (owner) |
+| `GET /entities/:entityId/tops` | В каких пользовательских топах есть сущность |
+| `GET /users/:userId/tops` | Топы автора |
+
+System tops (`TopsModule`, RFC 0010 Phase 2):
+
+| Endpoint | Описание |
+| -------- | -------- |
+| `GET /tops/system` | Каталог системных топов (registry + `computedAt`) |
+| `GET /tops/system/:slug` | Последний snapshot + entity summaries |
+| `GET /entities/:entityId/system-tops` | В каких системных топах есть сущность |
+
+Top categories (`TopsModule`, RFC 0010 Phase 2b):
+
+| Endpoint | Описание |
+| -------- | -------- |
+| `GET /tops/categories` | Registry категорий пользовательских топов |
+| `GET /tops/category/:slug` | User tops в категории (`sort=recent\|popular`) |
+
+`POST /tops` и `PATCH /tops/:id` принимают `categoryId` (обязателен при создании).
+
+**Hub `/top`:** sub-nav «Рейтинг | Каталог | Пользовательские»; каталог — карточки system tops.
+
+Community contributions (`ContributionsModule`, RFC 0011):
+
+| Endpoint | Описание |
+| -------- | -------- |
+| `POST /entities/:entityId/contributions` | Предложить исправление (JWT) |
+| `GET /entities/:entityId/contributions` | Активные предложения |
+| `POST /contributions/:id/vote` | Голос за/против (AUTO tier) |
+| `GET /entities/:entityId/field-provenance` | Источник полей (community/author) |
+| `GET /entities/:entityId/duplicate-suggestions` | Эвристика дубликатов |
+| `POST /admin/contributions/:id/resolve` | Apply/reject для MODERATION tier (admin) |
+
+На entity page: секция «Данные сущности» (правки полей, дубликаты, merge proposal). Merge каскадом переносит `tops.top_items` на target entity.
 
 Голосование в битве — отдельно: `GET /growth/battle/:pairSlug`, `POST /growth/battle/:pairSlug/vote` (`GrowthCompareService`).
 

@@ -351,6 +351,18 @@ Web Discovery & IA (2026-07-05/06):
 - `/top` default window is week; tab switch refetches with `loadedWindow` tracking.
 - Entity hero bar with pill section nav; reviews panel scroll/sort polish.
 
+User tops & community contributions (2026-07-06):
+
+- **User tops (RFC 0010 Phase 1):** `/tops` hub, editor, public pages; `TopsModule` API; entity block «В топах» via `GET /entities/:id/tops`. Global `/top` leaderboard unchanged.
+- **System tops (RFC 0010 Phase 2):** registry in code (`system-top-definitions.ts`), snapshots in `tops.system_top_snapshots`, `GET /tops/system` + `/top/:systemSlug`, entity reverse lookup via `GET /entities/:id/system-tops`. Refresh CLI: `pnpm system-tops:refresh`. `/top` hub: sub-nav «Рейтинг | Каталог | Пользовательские».
+- **TopCategory (RFC 0010 Phase 2b):** `tops.top_categories` platform registry (~43 slugs in `top-categories.registry.mjs` + migration), `GET /tops/categories`, `GET /tops/category/:slug`, required `categoryId` on create, searchable combobox on `/tops`, searchable picker in editor; `POST /tops/categories` admin-only.
+- **Profile my tops:** `/profile` section «Мои топы» via `GET /users/:id/tops`.
+- **Top fork (RFC 0010 Phase 3 slice 1):** `POST /tops/:id/fork`, `GET /tops/:id/forks`; attribution + fork CTA on `/tops/:slug`.
+- **Top engagement (RFC 0010 Phase 3 slice 2):** `top_likes` / `top_views` / `top_comments`; `POST /tops/:id/like|view`, comments thread; engagement bar on top page; category `sort=popular` by likes.
+- **Top HYBRID rank (RFC 0010 Phase 4 slice 1):** `rankMode=HYBRID` + `systemSortKey`; compute-on-read `systemPosition` / `positionDelta` on `GET /tops/:slug`; editor «Дополнительно» picker; Opinia column on hybrid top page.
+- **Top SYSTEM rank (RFC 0010 Phase 4 slice 2):** `rankMode=SYSTEM` — author picks entities, Opinia sets display order on read; editor hides manual reorder; sort key picker shared with HYBRID. Phase 4 complete.
+- **Contributions (RFC 0011):** entity page section for field corrections, duplicate suggestions, merge proposals; **Stage 1 trust ladder:** all contribution types are `MODERATION` (admin-only apply via `/admin` panel + `POST /admin/contributions/:id/resolve`). Admin queue: `GET /admin/contributions`, stats: `GET /admin/contributions/stats`. Editor Score read-only in profile: `GET /contributions/me/editor-stats`. Improved duplicate detection (token overlap) + manual merge search. `EntityMergeService` repoints ratings, reviews, battles, chat, reputation, and **`tops.top_items`** on merge. Contributor/Moderator roles deferred.
+
 Roadmap update:
 
 - Docker Infrastructure was added as Stage 3.

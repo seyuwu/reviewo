@@ -9,6 +9,7 @@ import { GrowthModule } from "./modules/growth/growth.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { AuthModule } from "./modules/auth/auth.module.js";
 import { ChatModule } from "./modules/chat/chat.module.js";
+import { ContributionsModule } from "./modules/contributions/contributions.module.js";
 import { DiscoveryModule } from "./modules/discovery/discovery.module.js";
 import { EntityPageModule } from "./modules/entity-page/entity-page.module.js";
 import { EntitiesModule } from "./modules/entities/entities.module.js";
@@ -20,6 +21,7 @@ import { RecommendationModule } from "./modules/recommendation/recommendation.mo
 import { ReputationModule } from "./modules/reputation/reputation.module.js";
 import { ReviewsModule } from "./modules/reviews/reviews.module.js";
 import { SearchModule } from "./modules/search/search.module.js";
+import { TopsModule } from "./modules/tops/tops.module.js";
 import { TrustModule } from "./modules/trust/trust.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
 
@@ -35,10 +37,12 @@ import { RedisModule } from "./redis/redis.module.js";
     AuthModule,
     UsersModule,
     EntitiesModule,
+    ContributionsModule,
     EntityPageModule,
     ExtensionApiModule,
     RatingsModule,
     ReviewsModule,
+    TopsModule,
     TrustModule,
     SearchModule,
     NotificationsModule,

@@ -76,7 +76,7 @@ export function HeaderActivityNav() {
         </span>
       </Link>
 
-      <Link className={activityLinkClass(pathname, "/top")} href="/top" title={t("web.nav.tops")}>
+      <Link className={topsNavLinkClass(pathname)} href="/tops" title={t("web.nav.tops")}>
         <span className="app-activity-icon" aria-hidden="true">
           🏆
         </span>
@@ -92,6 +92,16 @@ export function HeaderActivityNav() {
 
 function activityLinkClass(pathname: string, href: string): string {
   const isActive = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+
+  return isActive ? "app-activity-link is-active" : "app-activity-link";
+}
+
+function topsNavLinkClass(pathname: string): string {
+  const isActive =
+    pathname === "/tops" ||
+    pathname.startsWith("/tops/") ||
+    pathname === "/top" ||
+    pathname.startsWith("/top/");
 
   return isActive ? "app-activity-link is-active" : "app-activity-link";
 }

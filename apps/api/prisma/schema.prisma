@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["auth", "chat", "entities", "growth", "ratings", "reviews", "users", "reputation"]
+  schemas  = ["auth", "chat", "contributions", "entities", "growth", "ratings", "reviews", "tops", "users", "reputation"]
 }
 
 model User {
@@ -86,6 +86,7 @@ model Entity {
   type         EntityType
   visibility   EntityVisibility @default(ACTIVE)
   description  String?
+  logoUrl      String?          @map("logo_url")
   canonicalUrl String?          @unique @map("canonical_url")
   parentId     String?          @map("parent_id") @db.Uuid
   createdBy    String?          @map("created_by") @db.Uuid
@@ -100,6 +101,118 @@ model Entity {
   @@index([visibility])
   @@map("entities")
   @@schema("entities")
+}
+
+enum ContributionType {
+  UPDATE_NAME
+  UPDATE_URL
+  UPDATE_DESCRIPTION
+  UPDATE_LOGO
+  UPDATE_TYPE
+  MERGE_ENTITY
+
+  @@map("contribution_type")
+  @@schema("contributions")
+}
+
+enum ContributionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  APPLIED
+  SUPERSEDED
+
+  @@map("contribution_status")
+  @@schema("contributions")
+}
+
+enum ContributionTier {
+  AUTO
+  MODERATION
+
+  @@map("contribution_tier")
+  @@schema("contributions")
+}
+
+enum ContributionVoteKind {
+  APPROVE
+  REJECT
+
+  @@map("contribution_vote_kind")
+  @@schema("contributions")
+}
+
+enum FieldProvenanceSource {
+  community
+  author
+  system
+
+  @@map("field_provenance_source")
+  @@schema("contributions")
+}
+
+model EntityContribution {
+  id               String             @id @default(uuid()) @db.Uuid
+  entityId         String             @map("entity_id") @db.Uuid
+  authorId         String             @map("author_id") @db.Uuid
+  type             ContributionType
+  payload          Json
+  status           ContributionStatus @default(PENDING)
+  tier             ContributionTier
+  approvalsWeight  Decimal            @default(0) @map("approvals_weight") @db.Decimal(8, 3)
+  rejectionsWeight Decimal            @default(0) @map("rejections_weight") @db.Decimal(8, 3)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt       DateTime?          @map("resolved_at") @db.Timestamptz(6)
+  appliedAt        DateTime?          @map("applied_at") @db.Timestamptz(6)
+  resolvedBy       String?            @map("resolved_by") @db.Uuid
+  votes            ContributionVote[]
+
+  @@index([entityId, status])
+  @@index([authorId])
+  @@index([type, status])
+  @@map("entity_contributions")
+  @@schema("contributions")
+}
+
+model ContributionVote {
+  id             String               @id @default(uuid()) @db.Uuid
+  contributionId String               @map("contribution_id") @db.Uuid
+  voterId        String               @map("voter_id") @db.Uuid
+  kind           ContributionVoteKind
+  weight         Decimal              @db.Decimal(4, 3)
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  contribution   EntityContribution   @relation(fields: [contributionId], references: [id], onDelete: Cascade)
+
+  @@unique([contributionId, voterId])
+  @@index([voterId])
+  @@map("contribution_votes")
+  @@schema("contributions")
+}
+
+model ContributionPolicy {
+  type              ContributionType @id
+  tier              ContributionTier
+  baseApproveWeight Decimal          @map("base_approve_weight") @db.Decimal(6, 3)
+  baseRejectWeight  Decimal          @map("base_reject_weight") @db.Decimal(6, 3)
+  activityScale     Boolean          @default(false) @map("activity_scale")
+  minUniqueVoters   Int              @default(2) @map("min_unique_voters")
+  cooldownHours     Int              @default(0) @map("cooldown_hours")
+
+  @@map("contribution_policies")
+  @@schema("contributions")
+}
+
+model EntityFieldProvenance {
+  entityId       String                @map("entity_id") @db.Uuid
+  field          String
+  source         FieldProvenanceSource
+  contributionId String?               @map("contribution_id") @db.Uuid
+  confirmedAt    DateTime              @map("confirmed_at") @db.Timestamptz(6)
+  votersCount    Int                   @default(0) @map("voters_count")
+
+  @@id([entityId, field])
+  @@map("entity_field_provenance")
+  @@schema("contributions")
 }
 
 model Rating {
@@ -400,4 +513,153 @@ model BattleVote {
   @@index([pairKey])
   @@map("battle_votes")
   @@schema("growth")
+}
+
+enum TopVisibility {
+  ACTIVE
+  HIDDEN
+
+  @@map("top_visibility")
+  @@schema("tops")
+}
+
+enum TopRankMode {
+  MANUAL
+  SYSTEM
+  HYBRID
+
+  @@map("top_rank_mode")
+  @@schema("tops")
+}
+
+enum TopSystemSortKey {
+  RATING
+  POPULARITY
+  TRENDING
+  RELIABILITY
+
+  @@map("top_system_sort_key")
+  @@schema("tops")
+}
+
+enum TopCommentVisibility {
+  ACTIVE
+  HIDDEN
+
+  @@map("top_comment_visibility")
+  @@schema("tops")
+}
+
+model TopCategory {
+  id        String @id @default(uuid()) @db.Uuid
+  slug      String @unique
+  title     String
+  sortOrder Int    @map("sort_order")
+  tops      Top[]
+
+  @@map("top_categories")
+  @@schema("tops")
+}
+
+model Top {
+  id            String            @id @default(uuid()) @db.Uuid
+  slug          String            @unique
+  title         String
+  description   String?
+  authorId      String            @map("author_id") @db.Uuid
+  categoryId    String?           @map("category_id") @db.Uuid
+  forkedFromId  String?           @map("forked_from_id") @db.Uuid
+  visibility    TopVisibility     @default(ACTIVE)
+  rankMode      TopRankMode       @default(MANUAL) @map("rank_mode")
+  systemSortKey TopSystemSortKey? @map("system_sort_key")
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  category      TopCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  forkedFrom    Top?              @relation("TopForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
+  forks         Top[]             @relation("TopForks")
+  items         TopItem[]
+  likes         TopLike[]
+  views         TopView[]
+  comments      TopComment[]
+
+  @@index([authorId])
+  @@index([categoryId])
+  @@index([forkedFromId])
+  @@index([visibility])
+  @@index([rankMode])
+  @@map("tops")
+  @@schema("tops")
+}
+
+model TopItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  topId     String   @map("top_id") @db.Uuid
+  entityId  String   @map("entity_id") @db.Uuid
+  position  Int
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  top       Top      @relation(fields: [topId], references: [id], onDelete: Cascade)
+
+  @@unique([topId, entityId])
+  @@unique([topId, position])
+  @@index([entityId])
+  @@map("top_items")
+  @@schema("tops")
+}
+
+model TopLike {
+  id        String   @id @default(uuid()) @db.Uuid
+  topId     String   @map("top_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  top       Top      @relation(fields: [topId], references: [id], onDelete: Cascade)
+
+  @@unique([topId, userId])
+  @@index([topId])
+  @@index([userId])
+  @@map("top_likes")
+  @@schema("tops")
+}
+
+model TopView {
+  id        String   @id @default(uuid()) @db.Uuid
+  topId     String   @map("top_id") @db.Uuid
+  viewerKey String   @map("viewer_key")
+  userId    String?  @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  top       Top      @relation(fields: [topId], references: [id], onDelete: Cascade)
+
+  @@unique([topId, viewerKey])
+  @@index([topId])
+  @@map("top_views")
+  @@schema("tops")
+}
+
+model TopComment {
+  id         String               @id @default(uuid()) @db.Uuid
+  topId      String               @map("top_id") @db.Uuid
+  authorId   String               @map("author_id") @db.Uuid
+  text       String
+  visibility TopCommentVisibility @default(ACTIVE)
+  createdAt  DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  top        Top                  @relation(fields: [topId], references: [id], onDelete: Cascade)
+
+  @@index([topId])
+  @@index([authorId])
+  @@index([visibility])
+  @@map("top_comments")
+  @@schema("tops")
+}
+
+model SystemTopSnapshot {
+  definitionSlug String   @map("definition_slug")
+  computedAt     DateTime @map("computed_at") @db.Timestamptz(6)
+  items          Json
+
+  @@id([definitionSlug, computedAt])
+  @@index([definitionSlug, computedAt(sort: Desc)])
+  @@map("system_top_snapshots")
+  @@schema("tops")
 }

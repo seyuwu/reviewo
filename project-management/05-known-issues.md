@@ -70,6 +70,23 @@
 - Possible solution: Remove or rewrite this entry when cleaning up known issues.
 - Priority: Low.
 
+## Docker Dev Hot Reload On Windows Bind Mounts
+
+- Description: Docker Desktop on Windows does not propagate file system events from the host (`E:\...`) into Linux containers reliably. Without polling, Next.js and the API may not pick up source edits until a manual container restart.
+- Status: Mitigated in `docker-compose.dev.yml`.
+- Behavior now:
+  - **Web:** `WATCHPACK_POLLING` + webpack dev server (`next dev --webpack`).
+  - **API:** `scripts/dev-watch.mjs` polls `src/**/*.ts` every second, recompiles with `tsc`, restarts `node dist/main.js`.
+- One-time after pulling this change: restart dev stack so containers pick up new env/scripts:
+  ```powershell
+  docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml up -d api web
+  ```
+  If dependencies changed after `git pull`, run once:
+  ```powershell
+  docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.dev.yml exec api corepack pnpm install --frozen-lockfile
+  ```
+- Priority: Low.
+
 ## Next.js `/entities/*` Routes Can 404 After Docker Web Restart (Windows)
 
 - Description: After restarting the `web` container on Windows with bind-mounted source, Next.js Turbopack may serve 404 for all `/entities/*` routes (including `/entities/new`) even though route files exist under `apps/web/src/app/entities/`. Other routes like `/` and `/profile` still work.

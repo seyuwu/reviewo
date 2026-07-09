@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseCompareSlug } from "@reviewo/shared";
 
-import { resolveVoterKey } from "./growth-compare.service.js";
+import { resolveVoterKey } from "../../../common/voter-key.js";
 
 describe("parseCompareSlug integration", () => {
   it("parses hyphenated right slug", () => {

@@ -14,7 +14,11 @@ const requiredRouteFiles = [
   "src/app/compare/[pairSlug]/page.tsx",
   "src/app/battle/[pairSlug]/page.tsx",
   "src/app/embed/entities/[entityId]/page.tsx",
-  "src/app/og/entity/[entityId]/route.tsx"
+  "src/app/og/entity/[entityId]/route.tsx",
+  "src/app/tops/page.tsx",
+  "src/app/tops/new/page.tsx",
+  "src/app/tops/[slug]/page.tsx",
+  "src/app/tops/[slug]/edit/page.tsx"
 ];
 
 describe("Web route smoke", () => {

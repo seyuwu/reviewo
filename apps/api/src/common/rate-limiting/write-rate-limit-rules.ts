@@ -82,6 +82,106 @@ export function createReviewVoteRateLimitRules(
   ];
 }
 
+export function createTopWriteRateLimitRules(
+  userId: string,
+  request: RequestLike
+): RateLimitRule[] {
+  return [
+    {
+      key: userId,
+      limit: 10,
+      message: "Too many top updates from this account",
+      namespace: "tops:write:user",
+      windowSeconds: 60 * 60 * 24
+    },
+    {
+      key: resolveRequestIp(request),
+      limit: 30,
+      message: "Too many top updates from this network",
+      namespace: "tops:write:ip",
+      windowSeconds: 60 * 60 * 24
+    }
+  ];
+}
+
+export function createTopItemsWriteRateLimitRules(
+  userId: string,
+  request: RequestLike
+): RateLimitRule[] {
+  return [
+    {
+      key: userId,
+      limit: 60,
+      message: "Too many top item updates from this account",
+      namespace: "tops:items:write:user",
+      windowSeconds: 60 * 60
+    },
+    {
+      key: resolveRequestIp(request),
+      limit: 180,
+      message: "Too many top item updates from this network",
+      namespace: "tops:items:write:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
+export function createTopCommentWriteRateLimitRules(
+  userId: string,
+  request: RequestLike
+): RateLimitRule[] {
+  return [
+    {
+      key: userId,
+      limit: 30,
+      message: "Too many top comments from this account",
+      namespace: "tops:comment:write:user",
+      windowSeconds: 60 * 60
+    },
+    {
+      key: resolveRequestIp(request),
+      limit: 90,
+      message: "Too many top comments from this network",
+      namespace: "tops:comment:write:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
+export function createTopLikeRateLimitRules(
+  userId: string,
+  request: RequestLike
+): RateLimitRule[] {
+  return [
+    {
+      key: userId,
+      limit: 120,
+      message: "Too many top likes from this account",
+      namespace: "tops:like:user",
+      windowSeconds: 60 * 60
+    },
+    {
+      key: resolveRequestIp(request),
+      limit: 300,
+      message: "Too many top likes from this network",
+      namespace: "tops:like:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
+export function createTopViewRateLimitRules(request: RequestLike): RateLimitRule[] {
+  return [
+    {
+      key: resolveRequestIp(request),
+      limit: 300,
+      message: "Too many top views from this network",
+      namespace: "tops:view:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
 export function createPresenceHeartbeatRateLimitRules(
   userId: string,
   request: RequestLike

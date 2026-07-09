@@ -49,6 +49,16 @@ export class UsersRepository {
     });
   }
 
+  async findByIds(ids: string[]): Promise<User[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return this.prismaService.user.findMany({
+      where: { id: { in: ids } }
+    });
+  }
+
   async findByUsername(username: string): Promise<User | null> {
     return this.prismaService.user.findUnique({
       where: {

@@ -38,7 +38,7 @@ pnpm test / lint                    (источник правды)             
 make dev
 ```
 
-Поднимает Docker-стек: API (`localhost:3000`), web (`localhost:3001`), Postgres, Redis, MinIO. Код монтируется через bind mount — пересборка контейнеров после каждого изменения не нужна.
+Поднимает Docker-стек: API (`localhost:3000`), web (`localhost:3001`), Postgres, Redis, MinIO. Код монтируется через bind mount (`docker-compose.dev.yml`). На Windows Docker file events с диска `E:\` не доходят до контейнера — для hot reload включён polling (см. `project-management/05-known-issues.md`). Пересборка контейнеров после каждого изменения кода не нужна.
 
 Полезные команды:
 
@@ -157,6 +157,24 @@ NODE_ENV=production \
 | **Production** | `https://api.opinia.ru` | `https://opinia.ru` | Chrome Web Store (или unpacked после production-сборки) |
 
 Не смешивайте: Store-версия не должна указывать на localhost; dev-unpacked не заменяет проверку production-сборки перед публикацией.
+
+---
+
+## 6. System tops refresh
+
+После миграций или для обновления материализованных системных топов:
+
+```bash
+docker exec reviewo-dev-api-1 corepack pnpm system-tops:refresh
+```
+
+В dev можно включить refresh при старте API: `SYSTEM_TOPS_REFRESH_ON_STARTUP=true` в `.env.development`.
+
+В production — cron раз в час, например:
+
+```cron
+0 * * * * cd /path/to/reviewo/apps/api && corepack pnpm system-tops:refresh >> /var/log/reviewo-system-tops.log 2>&1
+```
 
 ---
 

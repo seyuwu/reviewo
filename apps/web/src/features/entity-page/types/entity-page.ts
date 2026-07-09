@@ -3,6 +3,7 @@ export interface Entity {
   createdAt: string;
   description: string | null;
   id: string;
+  logoUrl: string | null;
   parentId: string | null;
   slug: string;
   title: string;

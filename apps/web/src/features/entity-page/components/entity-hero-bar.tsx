@@ -13,13 +13,15 @@ import styles from "./entity-hero-bar.module.css";
 interface EntityHeroBarProps {
   pageData: EntityPageResponse;
   returnQuery: string;
+  showUserTopsNav?: boolean;
 }
 
-export function EntityHeroBar({ pageData, returnQuery }: EntityHeroBarProps) {
+export function EntityHeroBar({ pageData, returnQuery, showUserTopsNav = false }: EntityHeroBarProps) {
   const t = useTranslation();
   const parentHref = pageData.parent ? buildEntityHref(pageData.parent.id, returnQuery) : null;
   const hostname = formatHostname(pageData.entity.canonicalUrl);
   const displayTitle = formatEntityHeroTitle(pageData.entity);
+  const description = pageData.entity.description?.trim() ?? "";
 
   return (
     <header className={`entity-hero ${styles.hero}`}>
@@ -41,6 +43,11 @@ export function EntityHeroBar({ pageData, returnQuery }: EntityHeroBarProps) {
           <h1 id="entity-page-heading" title={pageData.entity.title}>
             {displayTitle}
           </h1>
+          {description ? (
+            <p className={styles.description} title={description}>
+              {description}
+            </p>
+          ) : null}
           {hostname ? <p className={styles.hostname}>{hostname}</p> : null}
         </div>
 
@@ -83,6 +90,17 @@ export function EntityHeroBar({ pageData, returnQuery }: EntityHeroBarProps) {
         >
           {t("growth.hero.compare")}
         </button>
+        {showUserTopsNav ? (
+          <button
+            type="button"
+            className={styles.anchorLink}
+            onClick={() => {
+              navigateToEntitySection("entity-user-tops");
+            }}
+          >
+            {t("web.userTops.heroLink")}
+          </button>
+        ) : null}
         <button
           type="button"
           className={styles.anchorLink}

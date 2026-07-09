@@ -67,6 +67,16 @@ const liveConnectionByEntity = new Map<string, ReturnType<typeof connectEntityCh
 const POPUP_CHAT_PANEL_ANIMATION_MS = 360;
 const CHAT_MESSAGE_SYNC_MS = 2000;
 
+export function resetPopupChatDrawerSessionState(): void {
+  for (const connection of liveConnectionByEntity.values()) {
+    connection.disconnect();
+  }
+
+  liveConnectionByEntity.clear();
+  expandedStateByEntity.clear();
+  setPopupChatExpanded(false);
+}
+
 export function setPopupChatExpanded(expanded: boolean): void {
   document.documentElement.classList.toggle("popup-chat-expanded", expanded);
   document.body.classList.toggle("popup-chat-expanded", expanded);
@@ -529,6 +539,10 @@ export function bindChatDrawerToggle(
   };
 
   toggleButton.addEventListener("click", () => {
+    if (chatPanel.classList.contains("is-closing") || chatPanel.classList.contains("is-loading")) {
+      return;
+    }
+
     const expanded = expandedStateByEntity.get(entityId) ?? false;
     const nextExpanded = !expanded;
     expandedStateByEntity.set(entityId, nextExpanded);

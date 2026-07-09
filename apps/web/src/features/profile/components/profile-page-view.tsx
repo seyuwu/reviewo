@@ -16,6 +16,8 @@ import {
   updateCurrentUserProfile
 } from "../api/profile";
 import type { CurrentUserProfile } from "../types/profile";
+import { ProfileUserTopsSection } from "./profile-user-tops-section";
+import { ProfileAdminLink, ProfileEditorStatsSection } from "./profile-editor-stats-section";
 
 type ProfileFlowState = "loading" | "guest" | "authenticated";
 
@@ -88,6 +90,13 @@ export function ProfilePageView() {
                 />
               ) : null}
             </div>
+            {profileQuery.data ? (
+              <>
+                <ProfileAdminLink isAdmin={profileQuery.data.role === "ADMIN"} />
+                <ProfileEditorStatsSection accessToken={accessToken ?? ""} />
+                <ProfileUserTopsSection userId={profileQuery.data.id} />
+              </>
+            ) : null}
           </div>
         </div>
       )}

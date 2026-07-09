@@ -1,6 +1,25 @@
 import type { MessageKey, TranslateFn } from "@reviewo/i18n";
 
-const ENTITY_TYPE_KEYS: Record<string, MessageKey> = {
+export const ENTITY_TYPES = [
+  "website",
+  "page",
+  "video",
+  "channel",
+  "repository",
+  "organization",
+  "product",
+  "book",
+  "movie",
+  "game",
+  "company",
+  "person",
+  "place",
+  "other"
+] as const;
+
+export type EntityTypeValue = (typeof ENTITY_TYPES)[number];
+
+const ENTITY_TYPE_KEYS: Record<EntityTypeValue, MessageKey> = {
   book: "entityType.book",
   channel: "entityType.channel",
   company: "entityType.company",
@@ -18,11 +37,9 @@ const ENTITY_TYPE_KEYS: Record<string, MessageKey> = {
 };
 
 export function formatEntityTypeLabel(t: TranslateFn, type: string): string {
-  const key = ENTITY_TYPE_KEYS[type];
-
-  if (!key) {
+  if (!(type in ENTITY_TYPE_KEYS)) {
     return type;
   }
 
-  return t(key);
+  return t(ENTITY_TYPE_KEYS[type as EntityTypeValue]);
 }

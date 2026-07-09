@@ -1,0 +1,10 @@
+export const MAX_CONTRIBUTIONS_PER_USER_PER_DAY = 20;
+export const DUPLICATE_SUGGESTION_MIN_SCORE = 0.7;
+export const DUPLICATE_SUGGESTION_LIMIT = 10;
+
+/** Override for UPDATE_URL when changing an existing URL (not stub attach). */
+export const UPDATE_URL_CHANGE_BASE_APPROVE_WEIGHT = 4;
+export const UPDATE_URL_CHANGE_ACTIVITY_SCALE = true;
+export const UPDATE_URL_CHANGE_MIN_UNIQUE_VOTERS = 3;
+export const UPDATE_URL_CHANGE_ACTIVITY_BONUS_VOTES_THRESHOLD = 50;
+export const UPDATE_URL_CHANGE_ACTIVITY_BONUS = 2;

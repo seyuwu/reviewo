@@ -1,13 +1,11 @@
-import { createHash } from "node:crypto";
-
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { buildPairKey, parseCompareSlug } from "@reviewo/shared";
 
 import {
   ApiRateLimiterService,
-  resolveRequestIp,
   type RequestLike
 } from "../../../common/rate-limiting/api-rate-limiter.service.js";
+import { resolveVoterKey } from "../../../common/voter-key.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import { ENTITIES_PORT } from "../../entities/interfaces/entities.port.js";
@@ -232,18 +230,4 @@ export class GrowthCompareService {
       votePercent: totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0
     };
   }
-}
-
-export function resolveVoterKey(voterHeader: string | undefined, request?: RequestLike): string {
-  const voterId = voterHeader?.trim() || "anonymous";
-
-  if (!request) {
-    return hashVoterKey(voterId);
-  }
-
-  return hashVoterKey(`${voterId}:${resolveRequestIp(request)}`);
-}
-
-function hashVoterKey(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
 }

@@ -1,0 +1,131 @@
+.entityContributionsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fieldRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-card-border);
+}
+
+.fieldRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.fieldLabel {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.fieldBody {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.fieldMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.fieldValue {
+  margin: 0;
+  word-break: break-word;
+}
+
+.provenanceBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-accent);
+}
+
+.suggestButton {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  padding: 0.4rem 0.85rem;
+  white-space: nowrap;
+}
+
+.pendingList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.duplicateList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.duplicateCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-card-border);
+  background: var(--color-primary-soft);
+}
+
+.manualMergeResults {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.manualMergeHit {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.manualMergeHitSelected {
+  background: rgb(245 245 245 / 88%);
+}
+
+.correctionModal {
+  width: min(100%, 32rem);
+}
+
+.logoPreview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.logoImage {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  border: 1px solid var(--color-card-border);
+  background: var(--color-primary-soft);
+}
+
+.logoUrl {
+  font-size: 0.875rem;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

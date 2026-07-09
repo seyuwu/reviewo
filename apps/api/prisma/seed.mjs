@@ -1,8 +1,26 @@
 import { PrismaClient, UserRole } from "../dist/generated/prisma/client.js";
+import { TOP_CATEGORIES } from "./top-categories.registry.mjs";
 
 const prisma = new PrismaClient();
 
-async function main() {
+async function seedTopCategories() {
+  for (const category of TOP_CATEGORIES) {
+    await prisma.topCategory.upsert({
+      create: category,
+      update: {
+        sortOrder: category.sortOrder,
+        title: category.title
+      },
+      where: {
+        slug: category.slug
+      }
+    });
+  }
+
+  console.log(`Seeded ${TOP_CATEGORIES.length} top categories.`);
+}
+
+async function promoteAdminIfConfigured() {
   const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
 
   if (!adminEmail) {
@@ -36,6 +54,11 @@ async function main() {
   });
 
   console.log(`Promoted ${adminEmail} to ADMIN.`);
+}
+
+async function main() {
+  await seedTopCategories();
+  await promoteAdminIfConfigured();
 }
 
 main()

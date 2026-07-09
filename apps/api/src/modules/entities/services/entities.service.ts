@@ -561,6 +561,7 @@ function toEntityDto(entity: Entity): EntityDto {
     createdAt: entity.createdAt.toISOString(),
     description: entity.description,
     id: entity.id,
+    logoUrl: entity.logoUrl,
     parentId: entity.parentId,
     slug: entity.slug,
     title: entity.title,

@@ -162,6 +162,7 @@ function createService(overrides: {
       createdAt: "2026-06-28T00:00:00.000Z",
       createdBy: null,
       description: null,
+      logoUrl: null,
       id: entityId,
       parentId: null,
       slug: "example",

@@ -23,6 +23,7 @@ function createEntity(overrides: Partial<Record<string, unknown>> = {}) {
     createdAt: new Date("2026-06-27T00:00:00.000Z"),
     createdBy: currentUser.id,
     description: null,
+    logoUrl: null,
     id: "22222222-2222-4222-8222-222222222222",
     parentId: null,
     slug: "lazy-create-example",

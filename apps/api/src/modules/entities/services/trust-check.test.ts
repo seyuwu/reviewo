@@ -13,6 +13,7 @@ function createEntity(overrides: Partial<Record<string, unknown>> = {}) {
     createdAt: new Date("2026-06-28T00:00:00.000Z"),
     createdBy: null,
     description: null,
+    logoUrl: null,
     id: "33333333-3333-4333-8333-333333333333",
     parentId: null,
     slug: "trust-check-example",
