@@ -11,7 +11,7 @@ import styles from "./entity-avatar.module.css";
 
 interface EntityAvatarProps {
   canonicalUrl?: string | null;
-  className?: string;
+  className?: string | undefined;
   entityId?: string;
   logoUrl?: string | null;
   size?: "sm" | "md" | "lg";

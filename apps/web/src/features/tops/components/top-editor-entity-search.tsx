@@ -229,6 +229,7 @@ function mapSearchResultToEntity(entity: SearchEntityResult): TopItemEntity {
   return {
     canonicalUrl: entity.canonicalUrl,
     id: entity.id,
+    logoUrl: entity.logoUrl,
     slug: entity.slug,
     title: entity.title,
     type: entity.type
@@ -239,6 +240,7 @@ function mapCreatedEntityToTopItem(entity: Entity): TopItemEntity {
   return {
     canonicalUrl: entity.canonicalUrl,
     id: entity.id,
+    logoUrl: null,
     slug: entity.slug,
     title: entity.title,
     type: entity.type

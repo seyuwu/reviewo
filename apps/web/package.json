@@ -5,7 +5,7 @@
   "description": "Reviewo web application.",
   "type": "module",
   "scripts": {
-    "build": "next build",
+    "build": "next build --webpack",
     "dev": "corepack pnpm --filter @reviewo/i18n build && next dev --hostname 0.0.0.0 --port 3000 --webpack",
     "lint": "eslint .",
     "start": "next start --hostname 0.0.0.0 --port 3000",
