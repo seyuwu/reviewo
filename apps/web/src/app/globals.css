@@ -3113,7 +3113,8 @@ h1 {
   border: 1px solid var(--color-card-border);
   border-radius: 1rem;
   display: flex;
-  gap: 0.75rem;
+  gap: 0.65rem;
+  min-width: 0;
   padding: 0.85rem 1rem;
 }
 
@@ -3132,6 +3133,108 @@ h1 {
 
 .top-editor-item .home-hub-actions {
   justify-content: flex-start;
+}
+
+.top-editor-position-control {
+  align-items: center;
+  align-self: center;
+  background: rgb(255 255 255 / 92%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  flex-shrink: 0;
+  gap: 0;
+  height: 1.85rem;
+  max-width: fit-content;
+  overflow: hidden;
+  padding: 0;
+  width: fit-content;
+}
+
+.top-editor-position-field {
+  display: flex;
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.top-editor-position-step {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--color-primary);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.55rem;
+  height: 1.85rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 1.35rem;
+}
+
+.top-editor-position-step:hover:not(:disabled) {
+  background: rgb(212 175 55 / 12%);
+}
+
+.top-editor-position-step:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.field .top-editor-item input.top-editor-position-input,
+.field .top-editor-item .top-editor-position-value {
+  align-items: center;
+  appearance: textfield;
+  background: transparent;
+  border: 0;
+  border-inline: 1px solid var(--color-card-border);
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--color-primary);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  height: 1.85rem;
+  justify-content: center;
+  line-height: 1;
+  margin: 0;
+  max-width: 2rem;
+  min-width: 1.75rem;
+  outline: 0;
+  padding: 0;
+  text-align: center;
+  width: 1.75rem;
+}
+
+.field .top-editor-item .top-editor-position-value {
+  cursor: text;
+}
+
+.field .top-editor-item input.top-editor-position-input:focus-visible {
+  box-shadow: inset 0 0 0 2px rgb(212 175 55 / 18%);
+  outline: 0;
+}
+
+.top-editor-item-actions {
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.top-editor-item-action {
+  font-size: 0.8125rem;
+  min-height: 2rem;
+  padding: 0.45rem 0.75rem;
+  width: auto;
+}
+
+.top-editor-slug-preview {
+  margin-top: 0.35rem;
 }
 
 .discovery-rank-item-main {
@@ -3578,6 +3681,12 @@ h1 {
   .home-hub-actions .button-secondary,
   .home-hub-actions button {
     width: 100%;
+  }
+
+  .top-editor-item-actions .button-primary,
+  .top-editor-item-actions .button-secondary,
+  .top-editor-item-actions button {
+    width: auto;
   }
 
   .panel-header {

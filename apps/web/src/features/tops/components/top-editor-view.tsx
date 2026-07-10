@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { FormFeedback } from "../../../components/form-feedback";
 import { ApiError } from "../../../lib/api/api-error";
@@ -16,6 +16,7 @@ import {
   MIN_TOP_ITEMS,
   slugifyTopTitle
 } from "../lib/top-limits";
+import { moveDraftItemToIndex, moveDraftItemToPosition } from "../lib/top-editor-reorder";
 import type { DraftTopItem, Top, TopCategory, TopItemEntity, TopRankModeInput } from "../types/tops";
 import { TopCategoryPicker } from "./top-category-picker";
 import { TopEditorEntitySearch } from "./top-editor-entity-search";
@@ -32,7 +33,6 @@ export function TopEditorView({ mode, initialTop }: TopEditorViewProps) {
   const [title, setTitle] = useState(initialTop?.title ?? "");
   const [description, setDescription] = useState(initialTop?.description ?? "");
   const [slug, setSlug] = useState(initialTop?.slug ?? "");
-  const [slugTouched, setSlugTouched] = useState(mode === "edit");
   const [draftItems, setDraftItems] = useState<DraftTopItem[]>(() =>
     (initialTop?.items ?? []).map((item) => ({
       entity: item.entity,
@@ -62,6 +62,9 @@ export function TopEditorView({ mode, initialTop }: TopEditorViewProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingPositionEntityId, setEditingPositionEntityId] = useState<string | null>(null);
+  const [editingPositionValue, setEditingPositionValue] = useState("");
+  const positionApplyTimersRef = useRef<Map<string, number>>(new Map());
 
   const addedEntityIds = useMemo(
     () => new Set(draftItems.map((item) => item.entity.id)),
@@ -69,10 +72,10 @@ export function TopEditorView({ mode, initialTop }: TopEditorViewProps) {
   );
 
   useEffect(() => {
-    if (!slugTouched) {
+    if (mode === "create") {
       setSlug(slugifyTopTitle(title));
     }
-  }, [slugTouched, title]);
+  }, [mode, title]);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,17 +141,97 @@ export function TopEditorView({ mode, initialTop }: TopEditorViewProps) {
       return;
     }
 
-    setDraftItems((current) => {
-      const next = [...current];
-      const [moved] = next.splice(index, 1);
+    setDraftItems((current) => moveDraftItemToIndex(current, index, targetIndex));
+  }
 
-      if (!moved) {
+  function moveItemToPosition(index: number, position: number) {
+    setDraftItems((current) => moveDraftItemToPosition(current, index, position));
+  }
+
+  function moveItemToTop(index: number) {
+    moveItemToPosition(index, 1);
+  }
+
+  function moveItemToBottom(index: number) {
+    moveItemToPosition(index, draftItems.length);
+  }
+
+  useEffect(() => {
+    return () => {
+      for (const timerId of positionApplyTimersRef.current.values()) {
+        window.clearTimeout(timerId);
+      }
+
+      positionApplyTimersRef.current.clear();
+    };
+  }, []);
+
+  function clearPositionApplyTimer(entityId: string): void {
+    const timerId = positionApplyTimersRef.current.get(entityId);
+
+    if (timerId !== undefined) {
+      window.clearTimeout(timerId);
+      positionApplyTimersRef.current.delete(entityId);
+    }
+  }
+
+  function commitPositionInput(entityId: string, rawValue: string): void {
+    clearPositionApplyTimer(entityId);
+
+    const parsed = Number(rawValue.trim());
+
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    setDraftItems((current) => {
+      const fromIndex = current.findIndex((item) => item.entity.id === entityId);
+
+      if (fromIndex === -1) {
         return current;
       }
 
-      next.splice(targetIndex, 0, moved);
-      return next;
+      return moveDraftItemToPosition(current, fromIndex, parsed);
     });
+    setEditingPositionEntityId(null);
+    setEditingPositionValue("");
+  }
+
+  function schedulePositionInput(entityId: string, rawValue: string): void {
+    clearPositionApplyTimer(entityId);
+
+    const timerId = window.setTimeout(() => {
+      positionApplyTimersRef.current.delete(entityId);
+      commitPositionInput(entityId, rawValue);
+    }, 350);
+
+    positionApplyTimersRef.current.set(entityId, timerId);
+  }
+
+  function beginPositionEditing(entityId: string, position: number): void {
+    clearPositionApplyTimer(entityId);
+    setEditingPositionEntityId(entityId);
+    setEditingPositionValue(String(position));
+  }
+
+  function resetPositionEditing(entityId?: string): void {
+    if (entityId) {
+      clearPositionApplyTimer(entityId);
+    }
+
+    setEditingPositionEntityId(null);
+    setEditingPositionValue("");
+  }
+
+  function stepItemPosition(index: number, direction: -1 | 1): void {
+    const item = draftItems[index];
+
+    if (!item) {
+      return;
+    }
+
+    resetPositionEditing(item.entity.id);
+    moveItem(index, direction);
   }
 
   function removeItem(index: number) {
@@ -217,7 +300,7 @@ export function TopEditorView({ mode, initialTop }: TopEditorViewProps) {
                 {
                   categoryId,
                   ...(description.trim() ? { description: description.trim() } : {}),
-                  slug: slug.trim(),
+                  slug: slugifyTopTitle(title.trim()),
                   title: title.trim(),
                   ...rankPayload
                 },
@@ -282,21 +365,19 @@ export function TopEditorView({ mode, initialTop }: TopEditorViewProps) {
                 maxLength={200}
                 required
               />
+              {mode === "create" ? (
+                <p className="muted-copy top-editor-slug-preview">
+                  {t("web.userTops.slugPreview", { slug: slug || slugifyTopTitle(title) })}
+                </p>
+              ) : null}
             </label>
 
-            <label className="field">
-              <span>{t("web.userTops.fieldSlug")}</span>
-              <input
-                value={slug}
-                onChange={(event) => {
-                  setSlugTouched(true);
-                  setSlug(event.target.value.trim().toLowerCase());
-                }}
-                maxLength={120}
-                required
-                disabled={mode === "edit"}
-              />
-            </label>
+            {mode === "edit" ? (
+              <label className="field">
+                <span>{t("web.userTops.fieldSlug")}</span>
+                <input value={slug} disabled readOnly />
+              </label>
+            ) : null}
 
             <TopCategoryPicker
               categories={categories}
@@ -392,7 +473,112 @@ export function TopEditorView({ mode, initialTop }: TopEditorViewProps) {
                     <li key={item.entity.id}>
                       <div className="top-editor-item">
                         {rankMode !== "SYSTEM" ? (
-                          <span className="discovery-rank-position">{index + 1}</span>
+                          <div className="top-editor-position-control">
+                            <button
+                              type="button"
+                              className="top-editor-position-step"
+                              disabled={index === 0}
+                              aria-label={t("web.userTops.moveUpAria", { title: item.entity.title })}
+                              onClick={() => {
+                                stepItemPosition(index, -1);
+                              }}
+                            >
+                              ▲
+                            </button>
+                            <div className="top-editor-position-field">
+                              {editingPositionEntityId === item.entity.id ? (
+                                <input
+                                  autoFocus
+                                  className="top-editor-position-input"
+                                  type="text"
+                                  value={editingPositionValue}
+                                  inputMode="numeric"
+                                  aria-label={t("web.userTops.positionInputAria", {
+                                    title: item.entity.title
+                                  })}
+                                  onChange={(event) => {
+                                    const nextValue = event.currentTarget.value;
+                                    setEditingPositionValue(nextValue);
+
+                                    const parsed = Number(nextValue);
+
+                                    if (
+                                      !Number.isFinite(parsed) ||
+                                      parsed < 1 ||
+                                      parsed > draftItems.length ||
+                                      nextValue.trim() !== String(parsed)
+                                    ) {
+                                      return;
+                                    }
+
+                                    if (parsed === index + 1) {
+                                      return;
+                                    }
+
+                                    if (draftItems.length < 10 || nextValue.length >= 2) {
+                                      commitPositionInput(item.entity.id, nextValue);
+                                      return;
+                                    }
+
+                                    schedulePositionInput(item.entity.id, nextValue);
+                                  }}
+                                  onBlur={(event) => {
+                                    commitPositionInput(item.entity.id, event.currentTarget.value);
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "ArrowUp") {
+                                      event.preventDefault();
+                                      stepItemPosition(index, -1);
+                                      return;
+                                    }
+
+                                    if (event.key === "ArrowDown") {
+                                      event.preventDefault();
+                                      stepItemPosition(index, 1);
+                                      return;
+                                    }
+
+                                    if (event.key === "Enter") {
+                                      event.preventDefault();
+                                      commitPositionInput(item.entity.id, event.currentTarget.value);
+                                      event.currentTarget.blur();
+                                    }
+
+                                    if (event.key === "Escape") {
+                                      event.preventDefault();
+                                      resetPositionEditing(item.entity.id);
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="top-editor-position-value"
+                                  aria-label={t("web.userTops.positionInputAria", {
+                                    title: item.entity.title
+                                  })}
+                                  onClick={() => {
+                                    beginPositionEditing(item.entity.id, index + 1);
+                                  }}
+                                >
+                                  {index + 1}
+                                </button>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              className="top-editor-position-step"
+                              disabled={index === draftItems.length - 1}
+                              aria-label={t("web.userTops.moveDownAria", {
+                                title: item.entity.title
+                              })}
+                              onClick={() => {
+                                stepItemPosition(index, 1);
+                              }}
+                            >
+                              ▼
+                            </button>
+                          </div>
                         ) : null}
                         <div className="top-editor-item-body">
                           <strong>{item.entity.title}</strong>
@@ -405,34 +591,34 @@ export function TopEditorView({ mode, initialTop }: TopEditorViewProps) {
                             rows={2}
                             maxLength={MAX_TOP_NOTE_LENGTH}
                           />
-                          <div className="home-hub-actions">
+                          <div className="home-hub-actions top-editor-item-actions">
                             {rankMode !== "SYSTEM" ? (
                               <>
                                 <button
                                   type="button"
-                                  className="button-secondary"
+                                  className="button-secondary top-editor-item-action"
                                   disabled={index === 0}
                                   onClick={() => {
-                                    moveItem(index, -1);
+                                    moveItemToTop(index);
                                   }}
                                 >
-                                  {t("web.userTops.moveUp")}
+                                  {t("web.userTops.moveToTop")}
                                 </button>
                                 <button
                                   type="button"
-                                  className="button-secondary"
+                                  className="button-secondary top-editor-item-action"
                                   disabled={index === draftItems.length - 1}
                                   onClick={() => {
-                                    moveItem(index, 1);
+                                    moveItemToBottom(index);
                                   }}
                                 >
-                                  {t("web.userTops.moveDown")}
+                                  {t("web.userTops.moveToBottom")}
                                 </button>
                               </>
                             ) : null}
                             <button
                               type="button"
-                              className="button-secondary"
+                              className="button-secondary top-editor-item-action"
                               onClick={() => {
                                 removeItem(index);
                               }}
