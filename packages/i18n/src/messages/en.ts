@@ -658,7 +658,7 @@ export const enMessages = {
   "web.spotlight.action.compare": "Compare",
   "web.spotlight.action.openTop": "Open top",
   "web.spotlight.homeSectionTitle": "Community spotlight",
-  "web.spotlight.homeSectionCaption": "Earned recommendations from contributors — not paid placement.",
+  "web.spotlight.homeSectionCaption": "Help the project grow — earn credits for contributing and get featured here.",
   "web.spotlight.spendEyebrow": "Get attention",
   "web.spotlight.spendTitle": "Recommend to the feed",
   "web.spotlight.spendBalance": "{balance} credits available · +{grant}/month",

@@ -660,7 +660,7 @@ export const ruMessages: MessageDictionary = {
   "web.spotlight.action.compare": "Сравнить",
   "web.spotlight.action.openTop": "Открыть топ",
   "web.spotlight.homeSectionTitle": "Витрина сообщества",
-  "web.spotlight.homeSectionCaption": "Заработанные рекомендации — не платное размещение.",
+  "web.spotlight.homeSectionCaption": "Помогайте проекту расти - за вклад получайте кредиты и попадайте на главную.",
   "web.spotlight.spendEyebrow": "Получить внимание",
   "web.spotlight.spendTitle": "Рекомендовать в ленту",
   "web.spotlight.spendBalance": "{balance} кредитов · +{grant}/мес",
