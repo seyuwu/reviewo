@@ -1,4 +1,9 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
+import {
+  inferReviewLocaleFromText,
+  normalizeContentLocaleFilter,
+  normalizeEntityChatLocale
+} from "@reviewo/shared";
 import { ReviewVisibility } from "#prisma/client";
 
 import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
@@ -31,14 +36,21 @@ export class ReviewsService implements ReviewsPort {
   async upsertMyReview(
     entityId: string,
     input: UpsertReviewDto,
-    currentUser: AuthenticatedUser
+    currentUser: AuthenticatedUser,
+    localeInput?: string
   ): Promise<ReviewDto> {
     await this.ensureEntityExists(entityId);
 
-    const existingReview = await this.reviewsRepository.findUserReview(entityId, currentUser.id);
+    const locale = resolveReviewLocale(input.locale ?? localeInput, input.text);
+    const existingReview = await this.reviewsRepository.findUserReview(
+      entityId,
+      currentUser.id,
+      locale
+    );
     const review = await this.reviewsRepository.upsertReview({
       authorId: currentUser.id,
       entityId,
+      locale,
       text: input.text.trim()
     });
     const reviewDto = toReviewDto(review, currentUser.id);
@@ -58,10 +70,16 @@ export class ReviewsService implements ReviewsPort {
     return reviewDto;
   }
 
-  async listReviewsForEntity(entityId: string, currentUserId?: string): Promise<ReviewDto[]> {
+  async listReviewsForEntity(
+    entityId: string,
+    currentUserId?: string,
+    localeInput?: string
+  ): Promise<ReviewDto[]> {
     await this.ensureEntityExists(entityId);
 
-    const reviews = await this.reviewsRepository.listByEntity(entityId, currentUserId);
+    const reviews = await this.reviewsRepository.listByEntity(entityId, currentUserId, 50, {
+      locale: normalizeContentLocaleFilter(localeInput)
+    });
 
     return reviews.map((review) => toReviewDto(review, currentUserId));
   }
@@ -69,19 +87,29 @@ export class ReviewsService implements ReviewsPort {
   async listTopReviewsForEntity(
     entityId: string,
     limit: number,
-    currentUserId?: string
+    currentUserId?: string,
+    localeInput?: string
   ): Promise<ReviewDto[]> {
     await this.ensureEntityExists(entityId);
 
-    const reviews = await this.reviewsRepository.listByEntity(entityId, currentUserId, limit);
+    const reviews = await this.reviewsRepository.listByEntity(
+      entityId,
+      currentUserId,
+      limit,
+      {
+        locale: normalizeContentLocaleFilter(localeInput)
+      }
+    );
 
     return reviews.map((review) => toReviewDto(review, currentUserId));
   }
 
-  async getReviewCountForEntity(entityId: string): Promise<number> {
+  async getReviewCountForEntity(entityId: string, localeInput?: string): Promise<number> {
     await this.ensureEntityExists(entityId);
 
-    return this.reviewsRepository.countByEntity(entityId);
+    return this.reviewsRepository.countByEntity(entityId, {
+      locale: normalizeContentLocaleFilter(localeInput)
+    });
   }
 
   async hideReview(reviewId: string): Promise<ReviewDto> {
@@ -138,10 +166,19 @@ export class ReviewsService implements ReviewsPort {
     return toReviewDto(updatedReview);
   }
 
-  async getMyReview(entityId: string, currentUser: AuthenticatedUser): Promise<ReviewDto | null> {
+  async getMyReview(
+    entityId: string,
+    currentUser: AuthenticatedUser,
+    localeInput?: string
+  ): Promise<ReviewDto | null> {
     await this.ensureEntityExists(entityId);
 
-    const review = await this.reviewsRepository.findUserReview(entityId, currentUser.id);
+    const locale = normalizeEntityChatLocale(localeInput);
+    const review = await this.reviewsRepository.findUserReview(
+      entityId,
+      currentUser.id,
+      locale
+    );
 
     return review ? toReviewDto(review, currentUser.id) : null;
   }
@@ -195,6 +232,14 @@ export class ReviewsService implements ReviewsPort {
   }
 }
 
+function resolveReviewLocale(localeInput: string | undefined, text: string): string {
+  if (localeInput === "en" || localeInput === "ru") {
+    return localeInput;
+  }
+
+  return inferReviewLocaleFromText(text);
+}
+
 function toReviewDto(review: ReviewWithVotes, currentUserId?: string): ReviewDto {
   const isOwnReview = currentUserId === review.authorId;
 
@@ -207,6 +252,7 @@ function toReviewDto(review: ReviewWithVotes, currentUserId?: string): ReviewDto
       ? review.votes.some((vote) => vote.userId === currentUserId)
       : false,
     likesCount: review._count.votes,
+    locale: review.locale,
     text: review.text,
     updatedAt: review.updatedAt.toISOString(),
     visibility: review.visibility

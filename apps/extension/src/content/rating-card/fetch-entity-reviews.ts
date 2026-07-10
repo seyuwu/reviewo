@@ -1,8 +1,11 @@
+import type { ContentLocaleParam } from "@reviewo/shared";
+
 import {
   createAuthenticatedApiRequestMessage,
   createPublicApiRequestMessage,
   ExtensionMessageType
 } from "../../shared/messages.js";
+import { appendPathContentLocale } from "../../shared/content-locale.js";
 import { sendExtensionMessage } from "../extension-messaging.js";
 
 export interface CardEntityReview {
@@ -12,6 +15,7 @@ export interface CardEntityReview {
   isOwnReview: boolean;
   likedByCurrentUser: boolean;
   likesCount: number;
+  locale: string;
   text: string;
   updatedAt: string;
 }
@@ -68,13 +72,13 @@ async function readPublicData<T>(path: string): Promise<{ data?: T; errorMessage
 
 export async function fetchEntityReviews(
   entityId: string,
-  isAuthenticated: boolean
+  isAuthenticated: boolean,
+  locale: ContentLocaleParam
 ): Promise<{ errorMessage?: string; reviews?: CardEntityReview[] }> {
+  const path = appendPathContentLocale(`/reviews/entities/${entityId}`, locale);
   const result = isAuthenticated
-    ? await readAuthenticatedData<CardEntityReview[]>({
-        path: `/reviews/entities/${entityId}`
-      })
-    : await readPublicData<CardEntityReview[]>(`/reviews/entities/${entityId}`);
+    ? await readAuthenticatedData<CardEntityReview[]>({ path })
+    : await readPublicData<CardEntityReview[]>(path);
 
   if (result.errorMessage) {
     return {
@@ -87,14 +91,19 @@ export async function fetchEntityReviews(
   };
 }
 
+
 export async function upsertMyEntityReview(
   entityId: string,
-  text: string
+  text: string,
+  locale: ContentLocaleParam
 ): Promise<{ errorMessage?: string; review?: CardEntityReview }> {
   const result = await readAuthenticatedData<CardEntityReview>({
-    body: { text },
+    body: {
+      locale: locale === "all" ? undefined : locale,
+      text
+    },
     method: "PUT",
-    path: `/reviews/entities/${entityId}/my-review`
+    path: appendPathContentLocale(`/reviews/entities/${entityId}/my-review`, locale)
   });
 
   if (result.errorMessage) {

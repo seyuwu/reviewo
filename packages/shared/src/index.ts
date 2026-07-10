@@ -12,6 +12,16 @@ export {
 } from "./entity-chat.js";
 
 export {
+  appendContentLocaleParam,
+  inferReviewLocaleFromText,
+  normalizeContentLocaleFilter,
+  parseContentLocaleParam,
+  resolveContentLocale,
+  type ContentLocaleParam,
+  type LocalePreference
+} from "./content-locale.js";
+
+export {
   buildCompareSlug,
   buildPairKey,
   parseCompareSlug,

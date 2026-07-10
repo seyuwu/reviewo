@@ -115,7 +115,12 @@ export function TopPageView({ top: initialTop }: TopPageViewProps) {
               </Link>
             </p>
           ) : null}
-          <h1 id="user-top-page-heading">{initialTop.title}</h1>
+          <h1 id="user-top-page-heading">
+            {initialTop.title}
+            <span className="top-locale-badge">
+              {initialTop.locale === "ru" ? t("locale.ru") : t("locale.en")}
+            </span>
+          </h1>
           {initialTop.description ? <p className="home-hub-subtitle">{initialTop.description}</p> : null}
           <p className="muted-copy">
             {t("web.userTops.authorMeta", {

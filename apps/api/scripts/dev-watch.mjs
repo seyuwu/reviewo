@@ -39,6 +39,10 @@ async function collectTypeScriptFiles(directory) {
     const fullPath = join(directory, entry.name);
 
     if (entry.isDirectory()) {
+      if (entry.name === "generated") {
+        continue;
+      }
+
       files.push(...(await collectTypeScriptFiles(fullPath)));
       continue;
     }

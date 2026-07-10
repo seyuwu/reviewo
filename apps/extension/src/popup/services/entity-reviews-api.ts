@@ -1,8 +1,11 @@
+import type { ContentLocaleParam } from "@reviewo/shared";
+
 import {
   createAuthenticatedApiRequestMessage,
   createPublicApiRequestMessage,
   ExtensionMessageType
 } from "../../shared/messages.js";
+import { appendPathContentLocale } from "../../shared/content-locale.js";
 import type { ExtensionReview } from "../types/review.js";
 import { sendExtensionMessage } from "./popup-messaging.js";
 
@@ -64,13 +67,13 @@ async function readPublicData<T>(path: string): Promise<{ data?: T; errorMessage
 
 export async function fetchEntityReviews(
   entityId: string,
-  isAuthenticated: boolean
+  isAuthenticated: boolean,
+  locale: ContentLocaleParam
 ): Promise<{ errorMessage?: string; reviews?: ExtensionReview[] }> {
+  const path = appendPathContentLocale(`/reviews/entities/${entityId}`, locale);
   const result = isAuthenticated
-    ? await readAuthenticatedData<ExtensionReview[]>({
-        path: `/reviews/entities/${entityId}`
-      })
-    : await readPublicData<ExtensionReview[]>(`/reviews/entities/${entityId}`);
+    ? await readAuthenticatedData<ExtensionReview[]>({ path })
+    : await readPublicData<ExtensionReview[]>(path);
 
   if (result.errorMessage) {
     return {
@@ -84,10 +87,11 @@ export async function fetchEntityReviews(
 }
 
 export async function fetchMyEntityReview(
-  entityId: string
+  entityId: string,
+  locale: ContentLocaleParam
 ): Promise<{ errorMessage?: string; review?: ExtensionReview | null }> {
   const result = await readAuthenticatedData<ExtensionReview | null>({
-    path: `/reviews/entities/${entityId}/my-review`
+    path: appendPathContentLocale(`/reviews/entities/${entityId}/my-review`, locale)
   });
 
   if (result.errorMessage) {
@@ -103,14 +107,16 @@ export async function fetchMyEntityReview(
 
 export async function upsertMyEntityReview(
   entityId: string,
-  text: string
+  text: string,
+  locale: ContentLocaleParam
 ): Promise<{ errorMessage?: string; review?: ExtensionReview }> {
   const result = await readAuthenticatedData<ExtensionReview>({
     body: {
+      locale: locale === "all" ? undefined : locale,
       text
     },
     method: "PUT",
-    path: `/reviews/entities/${entityId}/my-review`
+    path: appendPathContentLocale(`/reviews/entities/${entityId}/my-review`, locale)
   });
 
   if (result.errorMessage) {

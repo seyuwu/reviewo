@@ -72,19 +72,19 @@ async function readAuthenticatedData<T>(options: {
 
 function buildMessagesPath(
   entityId: string,
-  options?: { before?: string; limit?: number; locale?: EntityChatLocale }
+  options: { before?: string; limit?: number; locale: EntityChatLocale }
 ): string {
   const params = new URLSearchParams();
 
-  if (options?.before) {
+  if (options.before) {
     params.set("before", options.before);
   }
 
-  if (options?.limit) {
+  if (options.limit) {
     params.set("limit", String(options.limit));
   }
 
-  appendEntityChatLocaleParam(params, options?.locale ?? "ru");
+  appendEntityChatLocaleParam(params, options.locale);
 
   const query = params.toString();
 
@@ -93,7 +93,7 @@ function buildMessagesPath(
 
 export async function fetchEntityChatMessages(
   entityId: string,
-  options?: { before?: string; limit?: number; locale?: EntityChatLocale }
+  options: { before?: string; limit?: number; locale: EntityChatLocale }
 ): Promise<EntityChatMessagesPage> {
   const result = await readPublicData<EntityChatMessagesPage>(buildMessagesPath(entityId, options));
 
@@ -106,7 +106,7 @@ export async function fetchEntityChatMessages(
 
 export async function fetchEntityChatOnlineCount(
   entityId: string,
-  locale: EntityChatLocale = "ru"
+  locale: EntityChatLocale
 ): Promise<EntityChatOnlineCount> {
   const params = new URLSearchParams();
   appendEntityChatLocaleParam(params, locale);
@@ -125,7 +125,7 @@ export async function fetchEntityChatOnlineCount(
 
 export async function pingEntityChatPresence(
   entityId: string,
-  locale: EntityChatLocale = "ru"
+  locale: EntityChatLocale
 ): Promise<EntityChatOnlineCount> {
   const params = new URLSearchParams();
   appendEntityChatLocaleParam(params, locale);
@@ -147,7 +147,7 @@ export async function sendEntityChatMessage(
   entityId: string,
   message: string,
   _accessToken: string,
-  locale: EntityChatLocale = "ru"
+  locale: EntityChatLocale
 ): Promise<EntityChatMessage> {
   const result = await readAuthenticatedData<EntityChatMessage>({
     body: { locale, message },

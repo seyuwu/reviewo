@@ -1,3 +1,4 @@
+import { appendContentLocaleToPath } from "../../i18n/content-locale";
 import { apiRequest } from "../../../lib/api/api-client";
 import type {
   EntityPageResponse,
@@ -5,13 +6,22 @@ import type {
   Review,
   UserRating
 } from "../types/entity-page";
+import type { ContentLocaleParam } from "../../i18n/content-locale";
 
-export function getEntityPage(entityId: string, accessToken?: string): Promise<EntityPageResponse> {
+export function getEntityPage(
+  entityId: string,
+  accessToken?: string,
+  locale?: ContentLocaleParam
+): Promise<EntityPageResponse> {
+  const path = locale
+    ? appendContentLocaleToPath(`/entities/${entityId}/page`, locale)
+    : `/entities/${entityId}/page`;
+
   if (!accessToken) {
-    return apiRequest<EntityPageResponse>(`/entities/${entityId}/page`);
+    return apiRequest<EntityPageResponse>(path);
   }
 
-  return apiRequest<EntityPageResponse>(`/entities/${entityId}/page`, {
+  return apiRequest<EntityPageResponse>(path, {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -42,28 +52,40 @@ export function rateEntity(
   });
 }
 
-export function getMyReview(entityId: string, accessToken: string): Promise<Review | null> {
-  return apiRequest<Review | null>(`/reviews/entities/${entityId}/my-review`, {
-    headers: {
-      authorization: `Bearer ${accessToken}`
+export function getMyReview(
+  entityId: string,
+  accessToken: string,
+  locale: ContentLocaleParam
+): Promise<Review | null> {
+  return apiRequest<Review | null>(
+    appendContentLocaleToPath(`/reviews/entities/${entityId}/my-review`, locale),
+    {
+      headers: {
+        authorization: `Bearer ${accessToken}`
+      }
     }
-  });
+  );
 }
 
 export function upsertMyReview(
   entityId: string,
   text: string,
-  accessToken: string
+  accessToken: string,
+  locale: ContentLocaleParam
 ): Promise<Review> {
-  return apiRequest<Review>(`/reviews/entities/${entityId}/my-review`, {
-    body: {
-      text
-    },
-    headers: {
-      authorization: `Bearer ${accessToken}`
-    },
-    method: "PUT"
-  });
+  return apiRequest<Review>(
+    appendContentLocaleToPath(`/reviews/entities/${entityId}/my-review`, locale),
+    {
+      body: {
+        locale: locale === "all" ? undefined : locale,
+        text
+      },
+      headers: {
+        authorization: `Bearer ${accessToken}`
+      },
+      method: "PUT"
+    }
+  );
 }
 
 export function likeReview(reviewId: string, accessToken: string): Promise<Review> {

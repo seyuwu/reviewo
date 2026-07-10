@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { fetchSuggestedBattles } from "../api/discovery-api";
 import type { BattlePairListItem } from "../types/discovery";
 import { getFallbackBattlePairsFromClient } from "../lib/client-battle-fallback";
-import { useTranslation } from "../../i18n/locale-provider";
+import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { BattlePairList } from "./battle-pair-list";
 import { FeedSection } from "./feed-section";
 
@@ -15,6 +15,7 @@ interface SuggestedBattlesSectionProps {
 
 export function SuggestedBattlesSection({ initialPairs }: SuggestedBattlesSectionProps) {
   const t = useTranslation();
+  const { resolvedLocale } = useLocale();
   const hasInitialData = initialPairs !== undefined;
   const [pairs, setPairs] = useState<BattlePairListItem[]>(initialPairs ?? []);
   const [isLoading, setIsLoading] = useState(!hasInitialData);
@@ -22,7 +23,7 @@ export function SuggestedBattlesSection({ initialPairs }: SuggestedBattlesSectio
   useEffect(() => {
     let cancelled = false;
 
-    void fetchSuggestedBattles(4)
+    void fetchSuggestedBattles(4, resolvedLocale)
       .then((response) => {
         if (!cancelled) {
           setPairs(
@@ -44,7 +45,7 @@ export function SuggestedBattlesSection({ initialPairs }: SuggestedBattlesSectio
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [resolvedLocale]);
 
   return (
     <FeedSection

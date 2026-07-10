@@ -1394,6 +1394,20 @@ button.sign-in-cta {
   justify-content: space-between;
 }
 
+.reviews-panel-meta {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.entity-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .reviews-panel-header h2,
 .my-review-form h3 {
   font-size: 0.95rem;

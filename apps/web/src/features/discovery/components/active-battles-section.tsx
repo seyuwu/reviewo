@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { fetchActiveBattles } from "../api/discovery-api";
 import type { BattlePairListItem } from "../types/discovery";
-import { useTranslation } from "../../i18n/locale-provider";
+import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { BattlePairList } from "./battle-pair-list";
 import { FeedSection } from "./feed-section";
 
@@ -14,6 +14,7 @@ interface ActiveBattlesSectionProps {
 
 export function ActiveBattlesSection({ initialPairs }: ActiveBattlesSectionProps) {
   const t = useTranslation();
+  const { resolvedLocale } = useLocale();
   const hasInitialData = initialPairs !== undefined;
   const [pairs, setPairs] = useState<BattlePairListItem[]>(initialPairs ?? []);
   const [isLoading, setIsLoading] = useState(!hasInitialData);
@@ -21,7 +22,7 @@ export function ActiveBattlesSection({ initialPairs }: ActiveBattlesSectionProps
   useEffect(() => {
     let cancelled = false;
 
-    void fetchActiveBattles(4)
+    void fetchActiveBattles(4, resolvedLocale)
       .then((response) => {
         if (!cancelled) {
           setPairs(response.items);
@@ -39,7 +40,7 @@ export function ActiveBattlesSection({ initialPairs }: ActiveBattlesSectionProps
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [resolvedLocale]);
 
   if (!isLoading && pairs.length === 0) {
     return null;

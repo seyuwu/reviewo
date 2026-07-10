@@ -2,6 +2,8 @@ import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import type { ContributionPolicy, EntityContribution } from "#prisma/client";
 import { ContributionType, EntityMediaSource, EntityType, EntityVisibility } from "#prisma/client";
 
+import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
+
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
@@ -32,6 +34,7 @@ import { EntityClusterService } from "../../entities/services/entity-cluster.ser
 import { EntityMediaEnrichmentService } from "../../entities/services/entity-media-enrichment.service.js";
 import { EntityMediaService } from "../../entities/services/entity-media.service.js";
 import { EntityMergeService } from "../services/entity-merge.service.js";
+import { createContributionApprovedEvent } from "../../community/events/contribution-approved.event.js";
 import type { FieldChangePayload, LinkEntityPayload, MergeEntityPayload, UnlinkEntityPayload } from "../types/contribution-payload.js";
 import {
   isFieldChangePayload,
@@ -54,6 +57,7 @@ export class ContributionsService {
     private readonly entityMediaService: EntityMediaService,
     private readonly entityMergeService: EntityMergeService,
     private readonly usersRepository: UsersRepository,
+    private readonly domainEventBus: DomainEventBus,
     @Inject(URL_NORMALIZER)
     private readonly urlNormalizer: UrlNormalizer
   ) {}
@@ -380,6 +384,15 @@ export class ContributionsService {
       resolvedBy,
       status: "APPLIED"
     });
+
+    await this.domainEventBus.publish(
+      createContributionApprovedEvent({
+        authorId: applied.authorId,
+        contributionId: applied.id,
+        contributionType: applied.type,
+        entityId: applied.entityId
+      })
+    );
 
     return this.enrichContributionDto(applied);
   }

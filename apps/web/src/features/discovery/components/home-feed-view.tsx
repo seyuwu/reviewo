@@ -9,6 +9,7 @@ import { DiscussingNowSection } from "./discussing-now-section";
 import { RandomBattleSection } from "./random-battle-section";
 import { RisingTodaySection } from "./rising-today-section";
 import { SuggestedBattlesSection } from "./suggested-battles-section";
+import { SpotlightHomeSection } from "../../spotlight/components/spotlight-home-section";
 import type { HomeFeedInitialData } from "../lib/load-home-feed-data";
 
 interface HomeFeedViewProps {
@@ -30,6 +31,7 @@ export function HomeFeedView({ initialData }: HomeFeedViewProps) {
         <ExtensionHomeBanner />
 
         <RandomBattleSection battle={initialData?.randomBattle.item} />
+        <SpotlightHomeSection initialItems={initialData?.spotlightItems} />
         <DiscussingNowSection initialFeed={initialData?.discussionFeed} />
         <ActiveBattlesSection initialPairs={initialData?.activeBattlePairs} />
         <RisingTodaySection initialItems={initialData?.risingItems} />

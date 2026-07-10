@@ -12,6 +12,7 @@ interface TopsListProps {
   showAuthor?: boolean;
   showCategory?: boolean;
   showEngagement?: boolean;
+  showLocaleBadge?: boolean;
 }
 
 export function TopsList({
@@ -19,9 +20,14 @@ export function TopsList({
   items,
   showAuthor = true,
   showCategory = true,
-  showEngagement = false
+  showEngagement = false,
+  showLocaleBadge = false
 }: TopsListProps) {
   const t = useTranslation();
+
+  function formatLocaleBadge(locale: string): string {
+    return locale === "ru" ? t("locale.ru") : t("locale.en");
+  }
 
   if (items.length === 0) {
     return <p className="muted-copy">{emptyMessage}</p>;
@@ -34,7 +40,12 @@ export function TopsList({
           <Link className="discovery-rank-item" href={`/tops/${item.slug}`}>
             <span className="discovery-rank-item-main">
               <span>
-                <strong>{item.title}</strong>
+                <strong>
+                  {item.title}
+                  {showLocaleBadge ? (
+                    <span className="top-locale-badge">{formatLocaleBadge(item.locale)}</span>
+                  ) : null}
+                </strong>
                 <span className="muted-copy discovery-rank-score">
                   {showAuthor
                     ? t("web.userTops.listMeta", {

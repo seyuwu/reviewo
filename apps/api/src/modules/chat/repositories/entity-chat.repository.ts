@@ -162,18 +162,26 @@ export class EntityChatRepository {
     });
   }
 
-  async findActiveNowAggregates(limit: number): Promise<ActiveNowAggregateRow[]> {
-    return this.findDiscussionAggregates(limit, ACTIVE_NOW_WINDOW_MINUTES, 2);
+  async findActiveNowAggregates(
+    limit: number,
+    locale: EntityChatLocale
+  ): Promise<ActiveNowAggregateRow[]> {
+    return this.findDiscussionAggregates(limit, ACTIVE_NOW_WINDOW_MINUTES, 2, locale);
   }
 
-  async findRecentDiscussionAggregates(limit: number, windowDays = 7): Promise<ActiveNowAggregateRow[]> {
-    return this.findDiscussionAggregates(limit, windowDays * 24 * 60, 1);
+  async findRecentDiscussionAggregates(
+    limit: number,
+    locale: EntityChatLocale,
+    windowDays = 7
+  ): Promise<ActiveNowAggregateRow[]> {
+    return this.findDiscussionAggregates(limit, windowDays * 24 * 60, 1, locale);
   }
 
   private async findDiscussionAggregates(
     limit: number,
     windowMinutes: number,
-    minMessages: number
+    minMessages: number,
+    locale: EntityChatLocale
   ): Promise<ActiveNowAggregateRow[]> {
     const safeLimit = Math.max(1, Math.min(limit, 20));
     const windowStart = new Date(Date.now() - windowMinutes * 60_000);
@@ -190,6 +198,7 @@ export class EntityChatRepository {
           SELECT preview.message
           FROM chat.entity_chat_messages preview
           WHERE preview.entity_id = m.entity_id
+            AND preview.locale = ${locale}
             AND preview.is_hidden = false
             AND preview.created_at >= ${windowStart}
           ORDER BY preview.created_at DESC
@@ -198,6 +207,7 @@ export class EntityChatRepository {
       FROM chat.entity_chat_messages m
       INNER JOIN entities.entities e ON e.id = m.entity_id
       WHERE m.is_hidden = false
+        AND m.locale = ${locale}
         AND m.created_at >= ${windowStart}
         AND e.visibility = 'ACTIVE'::entities.entity_visibility
       GROUP BY m.entity_id, e.title, e.slug

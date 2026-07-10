@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { normalizeEntityChatLocale, type EntityChatLocale } from "@reviewo/shared";
 
+import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
@@ -16,6 +17,7 @@ import type {
 import { EntityChatRepository } from "../repositories/entity-chat.repository.js";
 import { ChatRateLimiterService } from "./chat-rate-limiter.service.js";
 import { PresenceService } from "./presence.service.js";
+import { createDiscussionCreatedEvent } from "../../community/events/discussion-created.event.js";
 
 const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
@@ -28,7 +30,8 @@ export class EntityChatService implements OnModuleInit {
     private readonly entitiesPort: EntitiesPort,
     private readonly entityChatRepository: EntityChatRepository,
     private readonly presenceService: PresenceService,
-    private readonly chatRateLimiterService: ChatRateLimiterService
+    private readonly chatRateLimiterService: ChatRateLimiterService,
+    private readonly domainEventBus: DomainEventBus
   ) {}
 
   onModuleInit(): void {
@@ -80,31 +83,34 @@ export class EntityChatService implements OnModuleInit {
     };
   }
 
-  async getActiveNow(limit = 5): Promise<ActiveNowListDto> {
-    const rows = await this.entityChatRepository.findActiveNowAggregates(limit);
+  async getActiveNow(limit = 5, localeInput?: string): Promise<ActiveNowListDto> {
+    const locale = normalizeEntityChatLocale(localeInput);
+    const rows = await this.entityChatRepository.findActiveNowAggregates(limit, locale);
 
     return {
-      items: await this.mapDiscussionAggregateRows(rows)
+      items: await this.mapDiscussionAggregateRows(rows, locale)
     };
   }
 
-  async getRecentDiscussions(limit = 6): Promise<ActiveNowListDto> {
-    const rows = await this.entityChatRepository.findRecentDiscussionAggregates(limit);
+  async getRecentDiscussions(limit = 6, localeInput?: string): Promise<ActiveNowListDto> {
+    const locale = normalizeEntityChatLocale(localeInput);
+    const rows = await this.entityChatRepository.findRecentDiscussionAggregates(limit, locale);
 
     return {
-      items: await this.mapDiscussionAggregateRows(rows)
+      items: await this.mapDiscussionAggregateRows(rows, locale)
     };
   }
 
   private async mapDiscussionAggregateRows(
-    rows: Awaited<ReturnType<EntityChatRepository["findActiveNowAggregates"]>>
+    rows: Awaited<ReturnType<EntityChatRepository["findActiveNowAggregates"]>>,
+    locale: EntityChatLocale
   ): Promise<ActiveNowItemDto[]> {
     const items: ActiveNowItemDto[] = [];
 
     for (const row of rows) {
       const messageCount = Number(row.messageCount);
       const participantCount = Number(row.participantCount);
-      const onlineCount = await this.presenceService.getOnlineCount(row.entityId);
+      const onlineCount = await this.presenceService.getOnlineCount(row.entityId, locale);
 
       items.push({
         entityId: row.entityId,
@@ -147,6 +153,14 @@ export class EntityChatService implements OnModuleInit {
       message: trimmedMessage,
       userId: currentUser.id
     });
+
+    await this.domainEventBus.publish(
+      createDiscussionCreatedEvent({
+        entityId,
+        messageId: created.id,
+        userId: currentUser.id
+      })
+    );
 
     return {
       createdAt: created.createdAt.toISOString(),

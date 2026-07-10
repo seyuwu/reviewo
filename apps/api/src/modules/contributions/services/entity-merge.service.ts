@@ -197,9 +197,10 @@ export class EntityMergeService {
     for (const review of sourceReviews) {
       const existing = await transaction.review.findUnique({
         where: {
-          authorId_entityId: {
+          authorId_entityId_locale: {
             authorId: review.authorId,
-            entityId: targetEntityId
+            entityId: targetEntityId,
+            locale: review.locale
           }
         }
       });

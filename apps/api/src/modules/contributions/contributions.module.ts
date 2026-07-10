@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { DomainEventsModule } from "../../common/domain-events/domain-events.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { EntitiesModule } from "../entities/entities.module.js";
 import { TopsModule } from "../tops/tops.module.js";
@@ -16,7 +17,7 @@ import { EntityMergeService } from "./services/entity-merge.service.js";
 @Module({
   controllers: [ContributionsController, AdminContributionsController],
   exports: [ContributionsService],
-  imports: [AuthModule, EntitiesModule, TopsModule, UsersModule],
+  imports: [AuthModule, DomainEventsModule, EntitiesModule, TopsModule, UsersModule],
   providers: [
     ContributionsRepository,
     ContributionsService,

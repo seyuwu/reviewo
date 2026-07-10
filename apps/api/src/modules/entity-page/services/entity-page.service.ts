@@ -30,7 +30,11 @@ export class EntityPageService {
     private readonly reputationDisplayService: ReputationDisplayService
   ) {}
 
-  async getEntityPage(entityId: string, currentUserId?: string): Promise<EntityPageResponseDto> {
+  async getEntityPage(
+    entityId: string,
+    currentUserId?: string,
+    localeInput?: string
+  ): Promise<EntityPageResponseDto> {
     const entity = await this.entitiesPort.findEntityById(entityId);
 
     if (!entity) {
@@ -41,15 +45,18 @@ export class EntityPageService {
       });
     }
 
-    const [rating, trust, reviews, reviewsCount, parent, relatedPresences] = await Promise.all([
+    const [rating, trust, reviews, reviewsCount, reviewsCountGlobal, parent, relatedPresences] =
+      await Promise.all([
       this.ratingsPort.getAggregate(entityId),
       this.reputationDisplayService.resolveEntityTrustConfidence(entityId),
       this.reviewsPort.listTopReviewsForEntity(
         entityId,
         ENTITY_PAGE_REVIEWS_LIMIT,
-        currentUserId
+        currentUserId,
+        localeInput
       ),
-      this.reviewsPort.getReviewCountForEntity(entityId),
+      this.reviewsPort.getReviewCountForEntity(entityId, localeInput),
+      this.reviewsPort.getReviewCountForEntity(entityId, "all"),
       this.resolveParentSummary(entity.parentId),
       this.resolveRelatedPresences(entityId)
     ]);
@@ -57,7 +64,8 @@ export class EntityPageService {
     return {
       entity,
       meta: {
-        reviewsCount
+        reviewsCount,
+        reviewsCountGlobal
       },
       ...(parent ? { parent } : {}),
       relatedPresences,

@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode, Suspense } from "react";
+import { ReactNode } from "react";
 
 import { useAuthSession } from "../features/auth/hooks/use-auth-session";
 import { LocaleSwitcher } from "../features/i18n/locale-switcher";
 import { useTranslation } from "../features/i18n/locale-provider";
 import { HeaderActivityNav } from "./header-activity-nav";
-import { HeaderSearchBar } from "./header-search-bar";
 import { SiteFooter } from "./site-footer";
 
 interface AppChromeProps {
@@ -33,10 +32,6 @@ export function AppChrome({ children }: AppChromeProps) {
           <Link className="app-brand" href="/">
             {t("brand.name")}
           </Link>
-
-          <Suspense fallback={<div className="app-chrome-search app-chrome-search-fallback" aria-hidden="true" />}>
-            <HeaderSearchBar />
-          </Suspense>
 
           <div className="app-chrome-right">
             <HeaderActivityNav />

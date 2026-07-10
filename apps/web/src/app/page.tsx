@@ -4,6 +4,7 @@ import { Suspense } from "react";
 
 import { HomeFeedView } from "../features/discovery/components/home-feed-view";
 import { loadHomeFeedData } from "../features/discovery/lib/load-home-feed-data";
+import { resolveServerContentLocale } from "../features/i18n/server-content-locale";
 
 interface HomePageProps {
   searchParams: Promise<{
@@ -24,7 +25,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     redirect(`/search?q=${encodeURIComponent(query)}`);
   }
 
-  const initialData = await loadHomeFeedData();
+  const discussionLocale = await resolveServerContentLocale();
+  const initialData = await loadHomeFeedData(discussionLocale);
 
   return (
     <main className="shell shell-home">

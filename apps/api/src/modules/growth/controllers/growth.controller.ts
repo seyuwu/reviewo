@@ -1,8 +1,9 @@
-import { Controller, Get, Headers, Param, Post, Body, Req, UseGuards } from "@nestjs/common";
+import { Controller, Get, Headers, Param, Post, Body, Query, Req, UseGuards } from "@nestjs/common";
 
 import { CurrentUser } from "../../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import type { RequestLike } from "../../../common/rate-limiting/api-rate-limiter.service.js";
+import { ContentLocaleQueryDto } from "../../../common/dto/content-locale-query.dto.js";
 import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.js";
 import type {
   GrowthBattleResponseDto,
@@ -33,9 +34,10 @@ export class GrowthController {
   async getBattle(
     @Param("pairSlug") pairSlug: string,
     @Headers("x-opinia-voter") voterHeader: string | undefined,
+    @Query() query: ContentLocaleQueryDto,
     @Req() request: RequestLike
   ): Promise<GrowthBattleResponseDto> {
-    return this.growthCompareService.getBattle(pairSlug, voterHeader, request);
+    return this.growthCompareService.getBattle(pairSlug, voterHeader, request, query.locale);
   }
 
   @Post("battle/:pairSlug/vote")
@@ -52,7 +54,8 @@ export class GrowthController {
       body.entityId,
       voterHeader,
       request,
-      currentUser?.id
+      currentUser?.id,
+      body.locale
     );
   }
 }

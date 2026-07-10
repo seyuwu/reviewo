@@ -5,6 +5,8 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { useTranslation } from "../../i18n/locale-provider";
+import { useLocale } from "../../i18n/locale-provider";
+import { ContentLocaleToggle } from "../../i18n/content-locale-toggle";
 import { fetchGrowthBattle, submitGrowthBattleVote } from "../api/growth-api";
 import { formatEntityDisplayName } from "../lib/format-entity-display-name";
 import { formatScoreOneDecimal, formatStarRating, formatTrustPercent } from "../lib/format-growth-stats";
@@ -21,24 +23,27 @@ interface ComparePageViewProps {
 
 export function ComparePageView({ compare, initialBattle }: ComparePageViewProps) {
   const t = useTranslation();
+  const { resolvedLocale } = useLocale();
   const [battle, setBattle] = useState<GrowthBattleResponse | null>(initialBattle ?? null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showAllBattles, setShowAllBattles] = useState(false);
+  const contentLocale = showAllBattles ? "all" : resolvedLocale;
   const leftLabel = formatEntityDisplayName(compare.left.entity);
   const rightLabel = formatEntityDisplayName(compare.right.entity);
   const shareUrl = buildBattleShareUrl(compare.pairSlug);
 
   useEffect(() => {
-    void fetchGrowthBattle(compare.pairSlug)
+    void fetchGrowthBattle(compare.pairSlug, contentLocale)
       .then(setBattle)
       .catch(() => {
         if (initialBattle) {
           setBattle(initialBattle);
         }
       });
-  }, [compare.pairSlug, initialBattle]);
+  }, [compare.pairSlug, contentLocale, initialBattle]);
 
   const voteMutation = useMutation({
-    mutationFn: (entityId: string) => submitGrowthBattleVote(compare.pairSlug, entityId),
+    mutationFn: (entityId: string) => submitGrowthBattleVote(compare.pairSlug, entityId, resolvedLocale),
     onError: () => {
       setErrorMessage(t("growth.battle.error"));
     },
@@ -76,6 +81,15 @@ export function ComparePageView({ compare, initialBattle }: ComparePageViewProps
           </div>
         </div>
         <p className={`hero-copy ${styles.heroCopy}`}>{t("growth.battle.title")}</p>
+        <div className={styles.heroActions}>
+          <ContentLocaleToggle
+            locale={resolvedLocale}
+            showAll={showAllBattles}
+            onToggle={() => {
+              setShowAllBattles((current) => !current);
+            }}
+          />
+        </div>
       </header>
 
       <section className={`panel-card ${styles.votePanel}`}>

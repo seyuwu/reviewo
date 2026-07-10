@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { formatEntityDisplayName } from "../../growth/lib/format-entity-display-name";
 import { fetchDiscussionFeed } from "../api/discovery-api";
 import type { DiscussionFeedMode, DiscussionFeedResponse } from "../types/discovery";
-import { useTranslation } from "../../i18n/locale-provider";
+import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { FeedSection } from "./feed-section";
 
 interface DiscussingNowSectionProps {
@@ -15,6 +15,7 @@ interface DiscussingNowSectionProps {
 
 export function DiscussingNowSection({ initialFeed }: DiscussingNowSectionProps) {
   const t = useTranslation();
+  const { resolvedLocale } = useLocale();
   const hasInitialData = initialFeed !== undefined;
   const [feed, setFeed] = useState<DiscussionFeedResponse>(
     initialFeed ?? { items: [], mode: "popular" }
@@ -24,7 +25,7 @@ export function DiscussingNowSection({ initialFeed }: DiscussingNowSectionProps)
   useEffect(() => {
     let cancelled = false;
 
-    void fetchDiscussionFeed(6)
+    void fetchDiscussionFeed(6, resolvedLocale)
       .then((response) => {
         if (!cancelled) {
           setFeed(response);
@@ -42,7 +43,7 @@ export function DiscussingNowSection({ initialFeed }: DiscussingNowSectionProps)
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [resolvedLocale]);
 
   const heading = resolveDiscussionHeading(t, feed.mode);
 

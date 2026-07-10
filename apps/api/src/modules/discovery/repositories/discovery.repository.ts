@@ -1,4 +1,6 @@
 import { Injectable } from "@nestjs/common";
+import type { ContentLocaleParam } from "@reviewo/shared";
+import { Prisma } from "#prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 
@@ -33,7 +35,7 @@ export interface RisingEntityRow {
 export class DiscoveryRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
-  async listActiveBattlePairs(limit: number): Promise<ActiveBattlePairRow[]> {
+  async listActiveBattlePairs(limit: number, locale?: ContentLocaleParam): Promise<ActiveBattlePairRow[]> {
     const safeLimit = Math.max(1, Math.min(limit, 20));
 
     return this.prismaService.$queryRaw<ActiveBattlePairRow[]>`
@@ -42,6 +44,7 @@ export class DiscoveryRepository {
         COUNT(*)::bigint AS "totalVotes",
         MAX(created_at) AS "lastVoteAt"
       FROM growth.battle_votes
+      ${locale && locale !== "all" ? Prisma.sql`WHERE locale = ${locale}` : Prisma.empty}
       GROUP BY pair_key
       HAVING COUNT(*) >= 1
       ORDER BY COUNT(*) DESC, MAX(created_at) DESC

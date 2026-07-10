@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsIn, IsInt, IsOptional, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class DiscoveryLimitQueryDto {
   @IsOptional()
@@ -8,6 +8,25 @@ export class DiscoveryLimitQueryDto {
   @Min(1)
   @Max(20)
   limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["ru", "en"])
+  locale?: "ru" | "en";
+}
+
+export class DiscoveryBattlesQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["ru", "en", "all"])
+  locale?: "ru" | "en" | "all";
 }
 
 export class DiscoveryRatingsTopQueryDto extends DiscoveryLimitQueryDto {

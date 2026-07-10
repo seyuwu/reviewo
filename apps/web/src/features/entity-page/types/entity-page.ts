@@ -48,6 +48,7 @@ export interface Review {
   isOwnReview: boolean;
   likedByCurrentUser: boolean;
   likesCount: number;
+  locale: string;
   text: string;
   updatedAt: string;
 }
@@ -61,6 +62,7 @@ export interface TrustConfidence {
 
 export interface EntityPageMeta {
   reviewsCount: number;
+  reviewsCountGlobal: number;
 }
 
 export interface EntityPageParentSummary {

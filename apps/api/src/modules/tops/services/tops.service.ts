@@ -1,5 +1,8 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { EntityVisibility, TopRankMode, TopSystemSortKey } from "#prisma/client";
+import { normalizeContentLocaleFilter } from "@reviewo/shared";
+
+import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
@@ -49,8 +52,15 @@ import { buildForkTopTitle, resolveForkAuthorLabel } from "../utils/build-fork-t
 import { normalizeTopSearchQuery } from "../utils/normalize-top-search-query.js";
 import { TopEngagementRepository } from "../repositories/top-engagement.repository.js";
 import { TopsRepository } from "../repositories/tops.repository.js";
+import { resolveTopLocale } from "../lib/resolve-top-locale.js";
 import { toEmptyTopDto, toTopDto, toTopListItemDto } from "./top-mapper.js";
 import { UserTopRankService } from "./user-top-rank.service.js";
+import {
+  createTopCreatedEvent,
+  createTopUpdatedEvent
+} from "../../community/events/top-changed.event.js";
+import { createTopForkedEvent } from "../../community/events/top-forked.event.js";
+import { createTopLikedEvent } from "../../community/events/top-liked.event.js";
 
 @Injectable()
 export class TopsService implements TopsPort {
@@ -63,10 +73,15 @@ export class TopsService implements TopsPort {
     private readonly topEngagementRepository: TopEngagementRepository,
     private readonly topsRepository: TopsRepository,
     private readonly userTopRankService: UserTopRankService,
-    private readonly usersRepository: UsersRepository
+    private readonly usersRepository: UsersRepository,
+    private readonly domainEventBus: DomainEventBus
   ) {}
 
-  async createTop(input: CreateTopDto, currentUser: AuthenticatedUser): Promise<TopDto> {
+  async createTop(
+    input: CreateTopDto,
+    currentUser: AuthenticatedUser,
+    localeInput?: string
+  ): Promise<TopDto> {
     assertValidTopSlug(input.slug);
 
     if (!input.categoryId) {
@@ -81,12 +96,14 @@ export class TopsService implements TopsPort {
 
     const slug = await this.resolveAvailableSlug(input.slug);
     const rankSettings = resolveCreateRankMode(input);
+    const locale = resolveTopLocale(localeInput, input.title, input.description ?? null);
 
     try {
       const top = await this.topsRepository.create({
         authorId: currentUser.id,
         categoryId: input.categoryId,
         description: input.description ?? null,
+        locale,
         rankMode: rankSettings.rankMode,
         slug,
         systemSortKey: rankSettings.systemSortKey,
@@ -95,6 +112,14 @@ export class TopsService implements TopsPort {
 
       const author = await this.requireUser(currentUser.id);
       const category = await this.topCategoriesRepository.findById(input.categoryId);
+
+      await this.domainEventBus.publish(
+        createTopCreatedEvent({
+          categoryId: input.categoryId,
+          topId: top.id,
+          userId: currentUser.id
+        })
+      );
 
       return toEmptyTopDto({
         author,
@@ -159,6 +184,14 @@ export class TopsService implements TopsPort {
 
     const fullTop = await this.loadTopWithItems(updated.id);
 
+    await this.domainEventBus.publish(
+      createTopUpdatedEvent({
+        categoryId: updated.categoryId,
+        topId: updated.id,
+        userId: currentUser.id
+      })
+    );
+
     return this.buildTopDto(fullTop, currentUser.id);
   }
 
@@ -200,6 +233,14 @@ export class TopsService implements TopsPort {
       }))
     );
 
+    await this.domainEventBus.publish(
+      createTopUpdatedEvent({
+        categoryId: updated.categoryId,
+        topId: updated.id,
+        userId: currentUser.id
+      })
+    );
+
     return this.buildTopDto(updated, currentUser.id);
   }
 
@@ -207,11 +248,14 @@ export class TopsService implements TopsPort {
     limit: number,
     cursor?: string,
     sort?: string | null,
-    searchQuery?: string | null
+    searchQuery?: string | null,
+    localeInput?: string
   ): Promise<TopListResponseDto> {
     const normalizedSearchQuery = normalizeTopSearchQuery(searchQuery);
+    const localeFilter = { locale: normalizeContentLocaleFilter(localeInput) };
     const result = await this.topsRepository.listRecent({
       limit,
+      localeFilter,
       sort: normalizeTopListSort(sort),
       ...(cursor ? { cursor } : {}),
       ...(normalizedSearchQuery ? { searchQuery: normalizedSearchQuery } : {})
@@ -223,7 +267,8 @@ export class TopsService implements TopsPort {
   async listTopsByAuthor(
     userId: string,
     limit: number,
-    cursor?: string
+    cursor?: string,
+    localeInput?: string
   ): Promise<TopListResponseDto> {
     const user = await this.usersRepository.findById(userId);
 
@@ -235,9 +280,11 @@ export class TopsService implements TopsPort {
       });
     }
 
+    const localeFilter = { locale: normalizeContentLocaleFilter(localeInput) };
     const result = await this.topsRepository.listByAuthor({
       authorId: userId,
       limit,
+      localeFilter,
       ...(cursor ? { cursor } : {})
     });
 
@@ -315,7 +362,8 @@ export class TopsService implements TopsPort {
     limit: number,
     cursor?: string,
     sort?: string | null,
-    searchQuery?: string | null
+    searchQuery?: string | null,
+    localeInput?: string
   ): Promise<TopListResponseDto> {
     const category = await this.topCategoriesRepository.findBySlug(slug);
 
@@ -328,9 +376,11 @@ export class TopsService implements TopsPort {
     }
 
     const normalizedSearchQuery = normalizeTopSearchQuery(searchQuery);
+    const localeFilter = { locale: normalizeContentLocaleFilter(localeInput) };
     const result = await this.topsRepository.listByCategory({
       categoryId: category.id,
       limit,
+      localeFilter,
       sort: normalizeTopListSort(sort),
       ...(cursor ? { cursor } : {}),
       ...(normalizedSearchQuery ? { searchQuery: normalizedSearchQuery } : {})
@@ -339,7 +389,7 @@ export class TopsService implements TopsPort {
     return this.toTopListResponse(result.items, result.nextCursor);
   }
 
-  async listTopsForEntity(entityId: string): Promise<EntityTopsResponseDto> {
+  async listTopsForEntity(entityId: string, localeInput?: string): Promise<EntityTopsResponseDto> {
     const entity = await this.entitiesPort.findEntityById(entityId);
 
     if (!entity || entity.visibility !== EntityVisibility.ACTIVE) {
@@ -350,7 +400,8 @@ export class TopsService implements TopsPort {
       });
     }
 
-    const items = await this.topsRepository.listAppearancesForEntity(entityId);
+    const localeFilter = { locale: normalizeContentLocaleFilter(localeInput) };
+    const items = await this.topsRepository.listAppearancesForEntity(entityId, localeFilter);
 
     return { items };
   }
@@ -381,6 +432,24 @@ export class TopsService implements TopsPort {
         title
       });
 
+      await this.domainEventBus.publish(
+        createTopCreatedEvent({
+          categoryId: forked.categoryId,
+          topId: forked.id,
+          userId: currentUser.id
+        })
+      );
+
+      await this.domainEventBus.publish(
+        createTopForkedEvent({
+          categoryId: source.categoryId,
+          forkedTopId: forked.id,
+          forkerUserId: currentUser.id,
+          sourceAuthorId: source.authorId,
+          sourceTopId: source.id
+        })
+      );
+
       return this.buildTopDto(forked, currentUser.id);
     } catch (error) {
       if (this.topsRepository.isUniqueConstraintError(error)) {
@@ -394,7 +463,8 @@ export class TopsService implements TopsPort {
   async listTopForks(
     sourceTopId: string,
     limit: number,
-    cursor?: string
+    cursor?: string,
+    localeInput?: string
   ): Promise<TopListResponseDto> {
     const source = await this.topsRepository.findActiveById(sourceTopId);
 
@@ -402,8 +472,10 @@ export class TopsService implements TopsPort {
       throw createTopNotFoundException();
     }
 
+    const localeFilter = { locale: normalizeContentLocaleFilter(localeInput) };
     const result = await this.topsRepository.listForks({
       limit,
+      localeFilter,
       sourceTopId,
       ...(cursor ? { cursor } : {})
     });
@@ -423,6 +495,18 @@ export class TopsService implements TopsPort {
     }
 
     const result = await this.topEngagementRepository.toggleLike(top.id, currentUser.id);
+
+    if (result.liked && result.likeId) {
+      await this.domainEventBus.publish(
+        createTopLikedEvent({
+          categoryId: top.categoryId,
+          likeId: result.likeId,
+          likedByUserId: currentUser.id,
+          topAuthorId: top.authorId,
+          topId: top.id
+        })
+      );
+    }
 
     return {
       likedByCurrentUser: result.liked,

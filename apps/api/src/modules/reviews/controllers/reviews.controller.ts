@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Query,
   Req,
   UseGuards
 } from "@nestjs/common";
@@ -23,6 +24,7 @@ import {
 } from "../../../common/rate-limiting/write-rate-limit-rules.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import { ReviewDto } from "../dto/review.dto.js";
+import { ReviewLocaleQueryDto } from "../dto/review-locale-query.dto.js";
 import { UpsertReviewDto } from "../dto/upsert-review.dto.js";
 import { ReviewsService } from "../services/reviews.service.js";
 
@@ -38,6 +40,7 @@ export class ReviewsController {
   async upsertMyReview(
     @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string,
     @Body() input: UpsertReviewDto,
+    @Query() query: ReviewLocaleQueryDto,
     @CurrentUser() currentUser: AuthenticatedUser,
     @Req() request: RequestLike
   ): Promise<ReviewDto> {
@@ -45,23 +48,25 @@ export class ReviewsController {
       createReviewWriteRateLimitRules(currentUser.id, request)
     );
 
-    return this.reviewsService.upsertMyReview(entityId, input, currentUser);
+    return this.reviewsService.upsertMyReview(entityId, input, currentUser, query.locale);
   }
 
   @Get("reviews/entities/:entityId")
   async listReviews(
-    @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string
+    @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string,
+    @Query() query: ReviewLocaleQueryDto
   ): Promise<ReviewDto[]> {
-    return this.reviewsService.listReviewsForEntity(entityId);
+    return this.reviewsService.listReviewsForEntity(entityId, undefined, query.locale);
   }
 
   @Get("reviews/entities/:entityId/my-review")
   @UseGuards(JwtAuthGuard)
   async getMyReview(
     @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string,
+    @Query() query: ReviewLocaleQueryDto,
     @CurrentUser() currentUser: AuthenticatedUser
   ): Promise<ReviewDto | null> {
-    return this.reviewsService.getMyReview(entityId, currentUser);
+    return this.reviewsService.getMyReview(entityId, currentUser, query.locale);
   }
 
   @Post("reviews/:reviewId/like")

@@ -58,6 +58,7 @@ export interface ChatDrawerMountOptions {
   currentUserId?: string;
   entityId: string;
   entityTitle: string;
+  initialChatLocale?: EntityChatLocale;
   isAuthenticated: boolean;
 }
 
@@ -138,7 +139,7 @@ export function bindChatDrawerToggle(
   }
 
   let connection: ReturnType<typeof connectEntityChatSocket> | null = null;
-  let chatLocale = localeByEntity.get(entityId) ?? DEFAULT_ENTITY_CHAT_LOCALE;
+  let chatLocale = localeByEntity.get(entityId) ?? options.initialChatLocale ?? DEFAULT_ENTITY_CHAT_LOCALE;
   const readConnectionKey = (): string => buildEntityChatConnectionKey(entityId, chatLocale);
   let messages: EntityChatMessage[] = [];
   let nextCursor: string | null = null;

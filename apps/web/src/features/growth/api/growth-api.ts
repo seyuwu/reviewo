@@ -1,3 +1,4 @@
+import { appendContentLocaleToPath, type ContentLocaleParam } from "../../i18n/content-locale";
 import { apiRequest } from "../../../lib/api/api-client";
 import { getOrCreateVoterId } from "../lib/voter-id";
 import type { GrowthBattleResponse, GrowthBattleVoteResponse, GrowthCompareResponse } from "../types/growth";
@@ -15,20 +16,33 @@ export function fetchGrowthCompareByEntityIds(
   );
 }
 
-export function fetchGrowthBattle(pairSlug: string): Promise<GrowthBattleResponse> {
-  return apiRequest<GrowthBattleResponse>(`/growth/battle/${encodeURIComponent(pairSlug)}`, {
+export function fetchGrowthBattle(
+  pairSlug: string,
+  locale?: ContentLocaleParam
+): Promise<GrowthBattleResponse> {
+  const path = locale
+    ? appendContentLocaleToPath(`/growth/battle/${encodeURIComponent(pairSlug)}`, locale)
+    : `/growth/battle/${encodeURIComponent(pairSlug)}`;
+
+  return apiRequest<GrowthBattleResponse>(path, {
     headers: {
       "x-opinia-voter": getOrCreateVoterId()
     }
   });
 }
 
+import type { AppLocale } from "@reviewo/i18n";
+
 export function submitGrowthBattleVote(
   pairSlug: string,
-  entityId: string
+  entityId: string,
+  locale: AppLocale
 ): Promise<GrowthBattleVoteResponse> {
   return apiRequest<GrowthBattleVoteResponse>(`/growth/battle/${encodeURIComponent(pairSlug)}/vote`, {
-    body: { entityId },
+    body: {
+      entityId,
+      locale
+    },
     headers: {
       "x-opinia-voter": getOrCreateVoterId()
     },

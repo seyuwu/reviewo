@@ -1,3 +1,4 @@
+import { appendContentLocaleToPath } from "../../i18n/content-locale";
 import { apiRequest } from "../../../lib/api/api-client";
 import type {
   BattlePairListResponse,
@@ -7,13 +8,28 @@ import type {
   DiscussionFeedResponse,
   RandomBattleResponse
 } from "../types/discovery";
+import type { ContentLocaleParam } from "../../i18n/content-locale";
 
-export function fetchActiveBattles(limit = 12): Promise<BattlePairListResponse> {
-  return apiRequest<BattlePairListResponse>(`/growth/battles/active?limit=${limit}`);
+export function fetchActiveBattles(
+  limit = 12,
+  locale?: ContentLocaleParam
+): Promise<BattlePairListResponse> {
+  const path = locale
+    ? appendContentLocaleToPath(`/growth/battles/active?limit=${limit}`, locale)
+    : `/growth/battles/active?limit=${limit}`;
+
+  return apiRequest<BattlePairListResponse>(path);
 }
 
-export function fetchSuggestedBattles(limit = 12): Promise<BattlePairListResponse> {
-  return apiRequest<BattlePairListResponse>(`/growth/battles/suggested?limit=${limit}`);
+export function fetchSuggestedBattles(
+  limit = 12,
+  locale?: ContentLocaleParam
+): Promise<BattlePairListResponse> {
+  const path = locale
+    ? appendContentLocaleToPath(`/growth/battles/suggested?limit=${limit}`, locale)
+    : `/growth/battles/suggested?limit=${limit}`;
+
+  return apiRequest<BattlePairListResponse>(path);
 }
 
 export function fetchTopRatings(
@@ -40,10 +56,21 @@ export function pingSitePresence(visitorId: string): Promise<DiscoveryStatsRespo
   });
 }
 
-export function fetchDiscussionFeed(limit = 6): Promise<DiscussionFeedResponse> {
-  return apiRequest<DiscussionFeedResponse>(`/discovery/discussions/feed?limit=${limit}`);
+export function fetchDiscussionFeed(
+  limit = 6,
+  locale?: ContentLocaleParam
+): Promise<DiscussionFeedResponse> {
+  const path = locale
+    ? appendContentLocaleToPath(`/discovery/discussions/feed?limit=${limit}`, locale)
+    : `/discovery/discussions/feed?limit=${limit}`;
+
+  return apiRequest<DiscussionFeedResponse>(path);
 }
 
-export function fetchRandomBattle(): Promise<RandomBattleResponse> {
-  return apiRequest<RandomBattleResponse>("/discovery/battles/random");
+export function fetchRandomBattle(locale?: ContentLocaleParam): Promise<RandomBattleResponse> {
+  const path = locale
+    ? appendContentLocaleToPath("/discovery/battles/random", locale)
+    : "/discovery/battles/random";
+
+  return apiRequest<RandomBattleResponse>(path);
 }

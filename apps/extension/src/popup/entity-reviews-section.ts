@@ -1,4 +1,5 @@
 import type { TranslateFn } from "@reviewo/i18n";
+import type { ContentLocaleParam } from "@reviewo/shared";
 
 import {
   fetchEntityReviews,
@@ -13,7 +14,13 @@ import {
 } from "./review-display.js";
 import { sortEntityReviews } from "./review-sort.js";
 import { breakLongUnbrokenText } from "../shared/break-long-text.js";
+import {
+  resolveExtensionContentLocale,
+  resolveReviewsContentLocale
+} from "../shared/content-locale.js";
 import { isReviewByCurrentUser } from "../shared/review-ownership.js";
+import type { LocalePreference } from "@reviewo/i18n";
+import type { PopupReviewDisplayMode } from "../shared/preferences.js";
 import {
   isReviewTextWithinLimit,
   MAX_REVIEW_TEXT_LENGTH,
@@ -26,39 +33,62 @@ import {
   renderReviewCarouselNavMarkup,
   updateReviewCarouselNav
 } from "../shared/review-carousel.js";
-import type { PopupReviewDisplayMode } from "../shared/preferences.js";
 import { escapeHtml } from "./view-helpers.js";
 import type { ExtensionReview, ExtensionReviewSort } from "./types/review.js";
 
 export interface EntityReviewsSectionState {
+  contentLocale: "en" | "ru";
   currentUserId?: string | undefined;
   displayMode: PopupReviewDisplayMode;
   isAuthenticated: boolean;
   reviews: ExtensionReview[];
   reviewsLimit: number;
+  showAllReviews: boolean;
   sort: ExtensionReviewSort;
 }
 
 export interface EntityReviewsSectionRenderOptions {
   displayMode?: PopupReviewDisplayMode;
   hideMyReviewWhenSaved?: boolean;
+  localePreference?: LocalePreference;
   reviewsLimit?: number;
+  showAllReviews?: boolean;
   showReviewForm?: boolean;
+}
+
+export interface EntityReviewsSectionActions {
+  onToggleShowAll?: () => void | Promise<void>;
+}
+
+const showAllReviewsByEntity = new Map<string, boolean>();
+
+export function readEntityReviewsShowAll(entityId: string): boolean {
+  return showAllReviewsByEntity.get(entityId) ?? false;
+}
+
+export function setEntityReviewsShowAll(entityId: string, value: boolean): void {
+  showAllReviewsByEntity.set(entityId, value);
 }
 
 export async function loadEntityReviewsSectionState(
   entityId: string,
   isAuthenticated: boolean,
-  currentUserId?: string,
+  currentUserId: string | undefined,
   options: EntityReviewsSectionRenderOptions = {}
 ): Promise<{
   errorMessage?: string;
   myReviewText?: string;
   state?: EntityReviewsSectionState;
 }> {
+  const localePreference = options.localePreference ?? "auto";
+  const showAllReviews = options.showAllReviews ?? readEntityReviewsShowAll(entityId);
+  const contentLocale = resolveExtensionContentLocale(localePreference);
+  const reviewsLocale = resolveReviewsContentLocale(localePreference, showAllReviews);
+  const myReviewLocale: ContentLocaleParam = contentLocale;
+
   const [reviewsResult, myReviewResult] = await Promise.all([
-    fetchEntityReviews(entityId, isAuthenticated),
-    isAuthenticated ? fetchMyEntityReview(entityId) : Promise.resolve({ review: null })
+    fetchEntityReviews(entityId, isAuthenticated, reviewsLocale),
+    isAuthenticated ? fetchMyEntityReview(entityId, myReviewLocale) : Promise.resolve({ review: null })
   ]);
 
   if (reviewsResult.errorMessage) {
@@ -73,11 +103,13 @@ export async function loadEntityReviewsSectionState(
   return {
     myReviewText,
     state: {
+      contentLocale,
       currentUserId,
       displayMode: options.displayMode ?? "compact",
       isAuthenticated,
       reviews,
       reviewsLimit: options.reviewsLimit ?? 10,
+      showAllReviews,
       sort: "likes"
     }
   };
@@ -105,20 +137,35 @@ export function renderEntityReviewsSectionMarkup(
     hideWhenSaved: hideMyReviewWhenSaved,
     showReviewForm
   });
+  const reviewsTitle = state.showAllReviews
+    ? t("reviews.community.title")
+    : t("web.entity.reviewsLocaleTitle", {
+        locale: state.contentLocale === "ru" ? t("locale.ru") : t("locale.en")
+      });
+  const showAllLabel = state.showAllReviews
+    ? t("web.locale.showLocaleOnly", {
+        locale: state.contentLocale === "ru" ? t("locale.ru") : t("locale.en")
+      })
+    : t("web.locale.showAllLanguages");
 
   return `
     <section class="reviews-panel">
       ${myReviewMarkup}
 
       <div class="reviews-panel-header">
-        <h2>${escapeHtml(t("reviews.community.title"))}</h2>
-        <label class="review-sort-label">
-          ${escapeHtml(t("reviews.sort.label"))}
-          <select data-review-sort>
-            <option value="likes"${state.sort === "likes" ? " selected" : ""}>${escapeHtml(t("reviews.sort.mostHelpful"))}</option>
-            <option value="newest"${state.sort === "newest" ? " selected" : ""}>${escapeHtml(t("reviews.sort.newest"))}</option>
-          </select>
-        </label>
+        <h2>${escapeHtml(reviewsTitle)}</h2>
+        <div class="reviews-panel-meta">
+          <button type="button" class="text-link-button" data-show-all-reviews>
+            ${escapeHtml(showAllLabel)}
+          </button>
+          <label class="review-sort-label">
+            ${escapeHtml(t("reviews.sort.label"))}
+            <select data-review-sort>
+              <option value="likes"${state.sort === "likes" ? " selected" : ""}>${escapeHtml(t("reviews.sort.mostHelpful"))}</option>
+              <option value="newest"${state.sort === "newest" ? " selected" : ""}>${escapeHtml(t("reviews.sort.newest"))}</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div class="review-carousel" data-review-carousel>
@@ -269,7 +316,8 @@ export function bindEntityReviewsSection(
   entityId: string,
   initialState: EntityReviewsSectionState,
   initialMyReviewText: string,
-  renderOptions: EntityReviewsSectionRenderOptions = {}
+  renderOptions: EntityReviewsSectionRenderOptions = {},
+  actions: EntityReviewsSectionActions = {}
 ): void {
   let state = initialState;
   let myReviewText = initialMyReviewText;
@@ -460,6 +508,10 @@ export function bindEntityReviewsSection(
     statusElement.classList.toggle("status-copy-success", tone === "success");
   }
 
+  container.querySelector<HTMLButtonElement>("[data-show-all-reviews]")?.addEventListener("click", () => {
+    void actions.onToggleShowAll?.();
+  });
+
   container.querySelector<HTMLSelectElement>("[data-review-sort]")?.addEventListener("change", (event) => {
     const value = (event.target as HTMLSelectElement).value;
 
@@ -494,7 +546,7 @@ export function bindEntityReviewsSection(
     }
 
     setReviewStatus(t("reviews.save.saving"), "default");
-    const result = await upsertMyEntityReview(entityId, text);
+    const result = await upsertMyEntityReview(entityId, text, state.contentLocale);
 
     if (!result.review) {
       setReviewStatus(result.errorMessage ?? t("reviews.save.error"), "error");

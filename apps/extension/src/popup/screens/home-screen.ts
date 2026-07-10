@@ -17,14 +17,17 @@ import {
   shortenCanonicalUrlForTree
 } from "../domain-tree.js";
 import type { EntityViewModel, RecentEntityRecord } from "../types.js";
-import { buildEntityPageUrl, entityViewFromResolve, escapeHtml } from "../view-helpers.js";
+import { buildEntityPageUrl, buildGlobalTopsUrl, entityViewFromResolve, escapeHtml } from "../view-helpers.js";
+import { resolveExtensionContentLocale } from "../../shared/content-locale.js";
 import { bindAuthPromptTriggers } from "../bind-auth-prompt-triggers.js";
 import { sendExtensionMessage } from "../services/popup-messaging.js";
 import { entityViewFromChildItem } from "../domain-tree.js";
 import {
   bindEntityReviewsSection,
   loadEntityReviewsSectionState,
-  renderEntityReviewsSectionMarkup
+  renderEntityReviewsSectionMarkup,
+  readEntityReviewsShowAll,
+  setEntityReviewsShowAll
 } from "../entity-reviews-section.js";
 import { renderPopupRatePanel } from "../popup-rate-panel.js";
 import {
@@ -173,6 +176,7 @@ export async function renderHomeScreen(
         ? sessionResponse.payload?.session?.accessToken ?? null
         : null,
       currentUserId,
+      preferences,
       t,
       actions
     );
@@ -514,7 +518,9 @@ async function mountHomeReviewsSection(
   const loaded = await loadEntityReviewsSectionState(entityId, isAuthenticated, currentUserId, {
     displayMode: preferences.popupReviewDisplayMode,
     hideMyReviewWhenSaved: false,
-    reviewsLimit: preferences.popupReviewsLimit
+    localePreference: preferences.locale,
+    reviewsLimit: preferences.popupReviewsLimit,
+    showAllReviews: readEntityReviewsShowAll(entityId)
   });
 
   if (!loaded.state) {
@@ -528,7 +534,13 @@ async function mountHomeReviewsSection(
     hideMyReviewWhenSaved: false
   });
   bindEntityReviewsSection(t, host, entityId, loaded.state, loaded.myReviewText ?? "", {
-    hideMyReviewWhenSaved: false
+    hideMyReviewWhenSaved: false,
+    localePreference: preferences.locale
+  }, {
+    onToggleShowAll: async () => {
+      setEntityReviewsShowAll(entityId, !readEntityReviewsShowAll(entityId));
+      await mountHomeReviewsSection(host, entityId, isAuthenticated, currentUserId, preferences, t);
+    }
   });
 }
 
@@ -581,6 +593,7 @@ function mountHomeChatSection(
   isAuthenticated: boolean,
   accessToken: string | null,
   currentUserId: string | undefined,
+  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>,
   t: TranslateFn,
   actions: HomeScreenActions
 ): void {
@@ -601,6 +614,7 @@ function mountHomeChatSection(
       currentUserId,
       entityId,
       entityTitle,
+      initialChatLocale: resolveExtensionContentLocale(preferences.locale),
       isAuthenticated
     },
     {

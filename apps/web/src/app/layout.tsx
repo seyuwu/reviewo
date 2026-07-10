@@ -6,6 +6,8 @@ import { GoogleAnalytics } from "../components/google-analytics";
 import { AppProviders } from "./providers";
 import "./globals.css";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   description: "A universal public opinion layer for entities across the internet.",
   title: "Opinia"

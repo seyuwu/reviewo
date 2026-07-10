@@ -216,6 +216,7 @@ function createService(overrides: {
     entitiesPort,
     repository,
     presenceService,
-    chatRateLimiterService
+    chatRateLimiterService,
+    { publish: async () => undefined } as never
   );
 }

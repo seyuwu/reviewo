@@ -21,6 +21,7 @@ function createTopListRow(overrides: Partial<TopListRow> = {}): TopListRow {
     description: null,
     forkedFromId: null,
     id: "top-1",
+    locale: "ru",
     rankMode: TopRankMode.MANUAL,
     slug: "sample-top",
     systemSortKey: null,

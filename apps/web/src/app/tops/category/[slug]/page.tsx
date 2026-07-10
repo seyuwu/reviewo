@@ -8,6 +8,7 @@ import {
   fetchTopsByCategoryServer,
   parseTopListSort
 } from "../../../../features/tops/api/server-tops-api";
+import { resolveServerContentLocale } from "../../../../features/i18n/server-content-locale";
 
 interface TopsCategoryPageProps {
   params: Promise<{ slug: string }>;
@@ -35,9 +36,10 @@ export default async function TopsCategoryPage({ params, searchParams }: TopsCat
   const resolvedSearchParams = await searchParams;
   const sort = parseTopListSort(resolvedSearchParams.sort);
   const searchQuery = resolvedSearchParams.q?.trim() ?? "";
+  const contentLocale = await resolveServerContentLocale();
   const [categoriesResponse, topsResponse] = await Promise.all([
     fetchTopCategoriesServer(),
-    fetchTopsByCategoryServer(slug, 20, sort, searchQuery || undefined)
+    fetchTopsByCategoryServer(slug, 20, sort, searchQuery || undefined, contentLocale)
   ]);
   const category = categoriesResponse?.items.find((item) => item.slug === slug);
 
@@ -51,6 +53,7 @@ export default async function TopsCategoryPage({ params, searchParams }: TopsCat
         <TopsHubView
           activeCategorySlug={slug}
           categories={categoriesResponse?.items ?? []}
+          initialContentLocale={contentLocale}
           initialItems={topsResponse?.items ?? []}
           initialSearchQuery={searchQuery}
           initialSort={sort}

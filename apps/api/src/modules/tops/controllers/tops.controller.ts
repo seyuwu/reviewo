@@ -30,6 +30,7 @@ import {
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import { AdminGuard } from "../../auth/guards/admin.guard.js";
 import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.js";
+import { ContentLocaleQueryDto } from "../../../common/dto/content-locale-query.dto.js";
 import { CreateTopDto } from "../dto/create-top.dto.js";
 import { CreateTopCategoryDto } from "../dto/create-top-category.dto.js";
 import { CreateTopCommentDto } from "../dto/create-top-comment.dto.js";
@@ -65,13 +66,20 @@ export class TopsController {
 
   @Get("tops")
   async listRecentTops(@Query() query: ListTopsQueryDto): Promise<TopListResponseDto> {
-    return this.topsService.listRecentTops(query.limit ?? 20, query.cursor, query.sort, query.q);
+    return this.topsService.listRecentTops(
+      query.limit ?? 20,
+      query.cursor,
+      query.sort,
+      query.q,
+      query.locale
+    );
   }
 
   @Post("tops")
   @UseGuards(JwtAuthGuard)
   async createTop(
     @Body() input: CreateTopDto,
+    @Query() query: ContentLocaleQueryDto,
     @CurrentUser() currentUser: AuthenticatedUser,
     @Req() request: RequestLike
   ): Promise<TopDto> {
@@ -79,7 +87,7 @@ export class TopsController {
 
     await this.apiRateLimiterService.checkWithinLimits(rateLimitRules);
 
-    const top = await this.topsService.createTop(input, currentUser);
+    const top = await this.topsService.createTop(input, currentUser, query.locale);
 
     await this.apiRateLimiterService.recordLimits(rateLimitRules);
 
@@ -125,7 +133,8 @@ export class TopsController {
       query.limit ?? 20,
       query.cursor,
       query.sort,
-      query.q
+      query.q,
+      query.locale
     );
   }
 
@@ -204,7 +213,7 @@ export class TopsController {
     @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
     @Query() query: ListTopsQueryDto
   ): Promise<TopListResponseDto> {
-    return this.topsService.listTopForks(id, query.limit ?? 20, query.cursor);
+    return this.topsService.listTopForks(id, query.limit ?? 20, query.cursor, query.locale);
   }
 
   @Post("tops/:id/like")
@@ -266,9 +275,10 @@ export class TopsController {
 
   @Get("entities/:entityId/tops")
   async listTopsForEntity(
-    @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string
+    @Param("entityId", new ParseUUIDPipe({ version: "4" })) entityId: string,
+    @Query() query: ContentLocaleQueryDto
   ): Promise<EntityTopsResponseDto> {
-    return this.topsService.listTopsForEntity(entityId);
+    return this.topsService.listTopsForEntity(entityId, query.locale);
   }
 
   @Get("entities/:entityId/system-tops")
@@ -283,6 +293,6 @@ export class TopsController {
     @Param("userId", new ParseUUIDPipe({ version: "4" })) userId: string,
     @Query() query: ListTopsQueryDto
   ): Promise<TopListResponseDto> {
-    return this.topsService.listTopsByAuthor(userId, query.limit ?? 20, query.cursor);
+    return this.topsService.listTopsByAuthor(userId, query.limit ?? 20, query.cursor, query.locale);
   }
 }

@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
-import { buildCompareSlug } from "@reviewo/shared";
+import { buildCompareSlug, normalizeContentLocaleFilter } from "@reviewo/shared";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
@@ -56,12 +56,13 @@ export class DiscoveryService {
     };
   }
 
-  async getActiveBattles(limit = 12): Promise<BattlePairListDto> {
-    const rows = await this.discoveryRepository.listActiveBattlePairs(limit);
+  async getActiveBattles(limit = 12, localeInput?: string): Promise<BattlePairListDto> {
+    const locale = normalizeContentLocaleFilter(localeInput);
+    const rows = await this.discoveryRepository.listActiveBattlePairs(limit, locale);
     const items: BattlePairListItemDto[] = [];
 
     for (const row of rows) {
-      const item = await this.composeBattlePairItem(row.pairKey, Number(row.totalVotes), false);
+      const item = await this.composeBattlePairItem(row.pairKey, Number(row.totalVotes), false, locale);
 
       if (item) {
         items.push(item);
@@ -71,7 +72,8 @@ export class DiscoveryService {
     return { items };
   }
 
-  async getSuggestedBattles(limit = 12): Promise<BattlePairListDto> {
+  async getSuggestedBattles(limit = 12, localeInput?: string): Promise<BattlePairListDto> {
+    const locale = normalizeContentLocaleFilter(localeInput);
     const poolSize = Math.max(limit * 2, 12);
     const [rootEntities, childEntities] = await Promise.all([
       this.discoveryRepository.listTopRootEntitiesByVotes(poolSize),
@@ -80,10 +82,10 @@ export class DiscoveryService {
     const items: BattlePairListItemDto[] = [];
     const seenPairSlugs = new Set<string>();
 
-    await this.appendEntityPairs(items, rootEntities, limit, seenPairSlugs);
+    await this.appendEntityPairs(items, rootEntities, limit, seenPairSlugs, locale);
 
     if (items.length < limit) {
-      await this.appendEntityPairs(items, childEntities, limit, seenPairSlugs);
+      await this.appendEntityPairs(items, childEntities, limit, seenPairSlugs, locale);
     }
 
     return { items: items.slice(0, limit) };
@@ -130,9 +132,9 @@ export class DiscoveryService {
     };
   }
 
-  async getDiscussionFeed(limit = 6): Promise<DiscussionFeedDto> {
+  async getDiscussionFeed(limit = 6, localeInput?: string): Promise<DiscussionFeedDto> {
     const safeLimit = Math.max(1, Math.min(limit, 20));
-    const activeNow = await this.entityChatService.getActiveNow(safeLimit);
+    const activeNow = await this.entityChatService.getActiveNow(safeLimit, localeInput);
 
     if (activeNow.items.length > 0) {
       return {
@@ -141,7 +143,7 @@ export class DiscoveryService {
       };
     }
 
-    const recent = await this.entityChatService.getRecentDiscussions(safeLimit);
+    const recent = await this.entityChatService.getRecentDiscussions(safeLimit, localeInput);
 
     if (recent.items.length > 0) {
       return {
@@ -167,7 +169,8 @@ export class DiscoveryService {
     };
   }
 
-  async getRandomBattle(): Promise<RandomBattleDto> {
+  async getRandomBattle(localeInput?: string): Promise<RandomBattleDto> {
+    const locale = normalizeContentLocaleFilter(localeInput);
     const [rootEntities, childEntities] = await Promise.all([
       this.discoveryRepository.listTopRootEntitiesByVotes(20),
       this.discoveryRepository.listTopChildEntitiesByVotes(20)
@@ -176,7 +179,7 @@ export class DiscoveryService {
 
     for (const requireUnbattled of [true, false]) {
       for (const entities of entityPools) {
-        const item = await this.pickRandomBattleFromEntities(entities, requireUnbattled);
+        const item = await this.pickRandomBattleFromEntities(entities, requireUnbattled, locale);
 
         if (item) {
           return { item };
@@ -189,13 +192,14 @@ export class DiscoveryService {
 
   private async pickRandomBattleFromEntities(
     entities: Array<{ entityId: string; slug: string; title: string }>,
-    requireUnbattled: boolean
+    requireUnbattled: boolean,
+    locale: ReturnType<typeof normalizeContentLocaleFilter>
   ): Promise<BattlePairListItemDto | null> {
     const candidatePairs = buildEntityPairCandidates(entities);
     shuffleInPlace(candidatePairs);
 
     for (const [left, right] of candidatePairs) {
-      const item = await this.composeBattlePairFromEntities(left, right, true, new Set<string>());
+      const item = await this.composeBattlePairFromEntities(left, right, true, new Set<string>(), locale);
 
       if (!item) {
         continue;
@@ -213,7 +217,8 @@ export class DiscoveryService {
     items: BattlePairListItemDto[],
     entities: Array<{ entityId: string; slug: string; title: string }>,
     limit: number,
-    seenPairSlugs: Set<string>
+    seenPairSlugs: Set<string>,
+    locale: ReturnType<typeof normalizeContentLocaleFilter>
   ): Promise<void> {
     for (let index = 0; index + 1 < entities.length && items.length < limit; index += 2) {
       const left = entities[index];
@@ -223,7 +228,7 @@ export class DiscoveryService {
         continue;
       }
 
-      const item = await this.composeBattlePairFromEntities(left, right, true, seenPairSlugs);
+      const item = await this.composeBattlePairFromEntities(left, right, true, seenPairSlugs, locale);
 
       if (item) {
         items.push(item);
@@ -234,7 +239,8 @@ export class DiscoveryService {
   private async composeBattlePairItem(
     pairKey: string,
     totalVotes: number,
-    isSuggested: boolean
+    isSuggested: boolean,
+    locale: ReturnType<typeof normalizeContentLocaleFilter>
   ): Promise<BattlePairListItemDto | null> {
     const entityIds = parsePairKey(pairKey);
 
@@ -251,7 +257,7 @@ export class DiscoveryService {
       return null;
     }
 
-    const voteCounts = await this.battleVoteRepository.countVotesByEntity(pairKey);
+    const voteCounts = await this.battleVoteRepository.countVotesByEntity(pairKey, locale);
     const leftVotes = voteCounts.get(leftEntity.id) ?? 0;
     const rightVotes = voteCounts.get(rightEntity.id) ?? 0;
     const resolvedTotal = leftVotes + rightVotes || totalVotes;
@@ -263,7 +269,8 @@ export class DiscoveryService {
     left: { entityId: string; slug: string; title: string },
     right: { entityId: string; slug: string; title: string },
     isSuggested: boolean,
-    seenPairSlugs: Set<string>
+    seenPairSlugs: Set<string>,
+    locale: ReturnType<typeof normalizeContentLocaleFilter>
   ): Promise<BattlePairListItemDto | null> {
     const [leftEntity, rightEntity] = await Promise.all([
       this.entitiesPort.findEntityById(left.entityId),
@@ -283,7 +290,7 @@ export class DiscoveryService {
     seenPairSlugs.add(pairSlug);
 
     const pairKey = [leftEntity.id, rightEntity.id].sort().join(":");
-    const voteCounts = await this.battleVoteRepository.countVotesByEntity(pairKey);
+    const voteCounts = await this.battleVoteRepository.countVotesByEntity(pairKey, locale);
     const leftVotes = voteCounts.get(leftEntity.id) ?? 0;
     const rightVotes = voteCounts.get(rightEntity.id) ?? 0;
     const totalVotes = leftVotes + rightVotes;

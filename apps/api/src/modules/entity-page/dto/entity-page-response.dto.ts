@@ -7,6 +7,7 @@ import type { EntityPageRelatedPresenceDto } from "./entity-page-related-presenc
 
 export class EntityPageMetaDto {
   reviewsCount!: number;
+  reviewsCountGlobal!: number;
 }
 
 export class EntityPageResponseDto {

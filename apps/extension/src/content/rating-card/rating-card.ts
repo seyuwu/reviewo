@@ -8,7 +8,10 @@ import {
   readExtensionPreferences,
   saveExtensionPreferences
 } from "../../shared/extension-preferences-storage.js";
+import type { ContentLocaleParam } from "@reviewo/shared";
+
 import type { ExtensionUserPreferences } from "../../shared/preferences.js";
+import { resolveExtensionContentLocale, resolveReviewsContentLocale } from "../../shared/content-locale.js";
 import { extensionConfig } from "../../shared/config.js";
 import type { ExtensionResolveFoundResponse } from "../../shared/types/resolve.js";
 import type { ExtensionResolveResponse } from "../../shared/types/resolve.js";
@@ -259,6 +262,8 @@ export async function showRatingCard(
     showSettingsTip: boolean;
     onSiteRatingCardEnabled: boolean;
     isPinned: boolean;
+    localePreference: ExtensionUserPreferences["locale"];
+    showAllReviews: boolean;
   } = {
     accessToken: null,
     authMode: "register",
@@ -280,10 +285,59 @@ export async function showRatingCard(
     settingsTipHotkeyLabel: formatRatingCardHotkeyLabel(preferences.ratingCardHotkey, t),
     showSettingsTip: false,
     onSiteRatingCardEnabled: preferences.onSiteRatingCardEnabled,
-    isPinned: false
+    isPinned: false,
+    localePreference: preferences.locale,
+    showAllReviews: false
   };
 
   let isCardContentReady = false;
+
+  function readMyReviewLocale(): ContentLocaleParam {
+    return resolveExtensionContentLocale(cardState.localePreference);
+  }
+
+  function readReviewsListLocale(): ContentLocaleParam {
+    return resolveReviewsContentLocale(cardState.localePreference, cardState.showAllReviews);
+  }
+
+  async function reloadCommunityReviews(): Promise<void> {
+    if (cardState.resolveResponse.status !== "found") {
+      return;
+    }
+
+    const entityId = getRateTargetEntityId(cardState.resolveResponse);
+    cardState.reviewsError = null;
+
+    if (cardState.isAuthenticated) {
+      const [myReview, reviewsResult] = await Promise.all([
+        fetchMyEntityReview(entityId, readMyReviewLocale()),
+        fetchEntityReviews(entityId, true, readReviewsListLocale())
+      ]);
+
+      cardState.myReviewText = myReview?.text ?? null;
+      cardState.myReviewUpdatedAt = myReview?.updatedAt ?? null;
+
+      if (reviewsResult.errorMessage) {
+        cardState.reviewsError = reviewsResult.errorMessage;
+      } else {
+        cardState.reviews = reviewsResult.reviews ?? [];
+      }
+    } else {
+      const reviewsResult = await fetchEntityReviews(entityId, false, readReviewsListLocale());
+
+      if (reviewsResult.errorMessage) {
+        cardState.reviewsError = reviewsResult.errorMessage;
+      } else {
+        cardState.reviews = reviewsResult.reviews ?? [];
+      }
+    }
+
+    cardState.activeReviewIndex = 0;
+
+    if (isCardContentReady) {
+      renderCard();
+    }
+  }
 
   function isCardStillRelevant(): boolean {
     return (
@@ -309,8 +363,8 @@ export async function showRatingCard(
         const entityId = getRateTargetEntityId(cardState.resolveResponse);
         const [myRatingScore, myReview, reviewsResult] = await Promise.all([
           resolveMyEntityRatingScore(entityId),
-          fetchMyEntityReview(entityId),
-          fetchEntityReviews(entityId, true)
+          fetchMyEntityReview(entityId, readMyReviewLocale()),
+          fetchEntityReviews(entityId, true, readReviewsListLocale())
         ]);
         cardState.myRatingScore = myRatingScore;
         cardState.myReviewText = myReview?.text ?? null;
@@ -352,7 +406,7 @@ export async function showRatingCard(
 
       if (cardState.resolveResponse.status === "found") {
         const entityId = getRateTargetEntityId(cardState.resolveResponse);
-        const reviewsResult = await fetchEntityReviews(entityId, false);
+        const reviewsResult = await fetchEntityReviews(entityId, false, readReviewsListLocale());
 
         if (reviewsResult.errorMessage) {
           cardState.reviewsError = reviewsResult.errorMessage;
@@ -379,7 +433,9 @@ export async function showRatingCard(
       myReviewText: cardState.myReviewText ?? "",
       reviews: cardState.reviews,
       reviewsLimit: cardState.reviewsLimit,
-      sort: cardState.reviewsSort
+      sort: cardState.reviewsSort,
+      contentLocale: resolveExtensionContentLocale(cardState.localePreference),
+      showAllReviews: cardState.showAllReviews
     };
   }
 
@@ -432,7 +488,9 @@ export async function showRatingCard(
         ${renderCommunityReviewsSection()}
         ${renderSettingsTipSection()}
       </div>
-      <a class="reviewo-details" href="${escapeHtmlAttribute(buildEntityPageUrl(display.detailsEntityPagePath))}" target="_blank" rel="noopener noreferrer">${escapeHtmlText(t("card.moreDetails"))}</a>
+      <div class="reviewo-card-links">
+        <a class="reviewo-details" href="${escapeHtmlAttribute(buildEntityPageUrl(display.detailsEntityPagePath))}" target="_blank" rel="noopener noreferrer">${escapeHtmlText(t("card.moreDetails"))}</a>
+      </div>
       ${renderCardChatSectionMarkup(t, cardState.resolveResponse.entity.id)}
     `;
 
@@ -744,6 +802,13 @@ export async function showRatingCard(
             : cardState.myReviewUpdatedAt;
           cardState.reviews = nextState.reviews;
           cardState.reviewsSort = nextState.sort;
+          cardState.showAllReviews = nextState.showAllReviews;
+        },
+        {
+          onToggleShowAll: async () => {
+            cardState.showAllReviews = !cardState.showAllReviews;
+            await reloadCommunityReviews();
+          }
         },
         {
           getActiveIndex: () => cardState.activeReviewIndex,
@@ -761,6 +826,7 @@ export async function showRatingCard(
           accessToken: cardState.accessToken,
           entityId: cardState.resolveResponse.entity.id,
           entityTitle: cardState.resolveResponse.entity.title,
+          initialChatLocale: resolveExtensionContentLocale(cardState.localePreference),
           isAuthenticated: cardState.isAuthenticated
         },
         {
@@ -933,6 +999,13 @@ export async function showRatingCard(
         t
       );
       cardState.onSiteRatingCardEnabled = latestPreferences.onSiteRatingCardEnabled;
+      const localeChanged = cardState.localePreference !== latestPreferences.locale;
+      cardState.localePreference = latestPreferences.locale;
+
+      if (localeChanged) {
+        cardState.showAllReviews = false;
+        void reloadCommunityReviews();
+      }
 
       if (!document.contains(host)) {
         return;

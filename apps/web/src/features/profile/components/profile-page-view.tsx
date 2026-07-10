@@ -17,7 +17,9 @@ import {
 } from "../api/profile";
 import type { CurrentUserProfile } from "../types/profile";
 import { ProfileUserTopsSection } from "./profile-user-tops-section";
-import { ProfileAdminLink, ProfileEditorStatsSection } from "./profile-editor-stats-section";
+import { ProfileAdminLink } from "./profile-editor-stats-section";
+import { ProfileContributionSection } from "./profile-contribution-section";
+import { ProfileTrustSection } from "./profile-trust-section";
 
 type ProfileFlowState = "loading" | "guest" | "authenticated";
 
@@ -93,7 +95,8 @@ export function ProfilePageView() {
             {profileQuery.data ? (
               <>
                 <ProfileAdminLink isAdmin={profileQuery.data.role === "ADMIN"} />
-                <ProfileEditorStatsSection accessToken={accessToken ?? ""} />
+                <ProfileTrustSection accessToken={accessToken ?? ""} userId={profileQuery.data.id} />
+                <ProfileContributionSection accessToken={accessToken ?? ""} />
                 <ProfileUserTopsSection userId={profileQuery.data.id} />
               </>
             ) : null}

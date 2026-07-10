@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["auth", "chat", "contributions", "entities", "growth", "ratings", "reviews", "tops", "users", "reputation"]
+  schemas  = ["auth", "chat", "community", "contributions", "entities", "growth", "ratings", "reviews", "tops", "users", "reputation"]
 }
 
 model User {
@@ -22,6 +22,17 @@ model User {
   updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
   authIdentities     UserAuthIdentity[]
   entityChatMessages EntityChatMessage[]
+  activityEvents     ActivityEvent[]
+  contributionSnapshot UserContributionSnapshot?
+  contributionBadges   UserContributionBadge[]
+  expertiseSnapshots   UserExpertiseSnapshot[]
+  curatorRankSnapshots UserCuratorRankSnapshot[]
+  spotlightCreditBalance SpotlightCreditBalance?
+  spotlightCreditLedger  SpotlightCreditLedger[]
+  spotlightPlacements    SpotlightPlacement[]
+  spotlightPlacementEvents SpotlightPlacementEvent[]
+  communityRecommendations CommunityRecommendation[]
+  recommendationEndorsements RecommendationEndorsement[]
 
   @@map("users")
   @@schema("users")
@@ -321,14 +332,17 @@ model Review {
   id         String           @id @default(uuid()) @db.Uuid
   entityId   String           @map("entity_id") @db.Uuid
   authorId   String           @map("author_id") @db.Uuid
+  locale     String           @default("ru")
   text       String
   visibility ReviewVisibility @default(ACTIVE)
   createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
-  votes      ReviewVote[]
+  votes                  ReviewVote[]
+  communityRecommendations CommunityRecommendation[]
 
-  @@unique([authorId, entityId])
+  @@unique([authorId, entityId, locale])
   @@index([entityId])
+  @@index([entityId, locale])
   @@index([authorId])
   @@index([visibility])
   @@map("reviews")
@@ -569,13 +583,225 @@ model BattleVote {
   pairKey   String   @map("pair_key")
   entityId  String   @map("entity_id") @db.Uuid
   voterKey  String   @map("voter_key")
+  locale    String   @default("ru")
   userId    String?  @map("user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  @@unique([pairKey, voterKey])
+  @@unique([pairKey, voterKey, locale])
   @@index([pairKey])
+  @@index([pairKey, locale])
   @@map("battle_votes")
   @@schema("growth")
+}
+
+enum ContributionLevel {
+  newcomer
+  contributor
+  active_contributor
+  curator
+  pioneer
+
+  @@map("contribution_level")
+  @@schema("community")
+}
+
+model ActivityEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  actionType   String   @map("action_type")
+  entityId     String?  @map("entity_id") @db.Uuid
+  entityType   String?  @map("entity_type")
+  categoryId   String?  @map("category_id") @db.Uuid
+  targetUserId String?  @map("target_user_id") @db.Uuid
+  payload      Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([actionType, createdAt])
+  @@index([entityId, createdAt])
+  @@map("activity_events")
+  @@schema("community")
+}
+
+model UserContributionSnapshot {
+  userId               String            @id @map("user_id") @db.Uuid
+  level                ContributionLevel @default(newcomer)
+  contributionScore    Int               @default(0) @map("contribution_score")
+  ratingsCount         Int               @default(0) @map("ratings_count")
+  reviewsCount         Int               @default(0) @map("reviews_count")
+  battleVotesCount     Int               @default(0) @map("battle_votes_count")
+  topsCount            Int               @default(0) @map("tops_count")
+  entitiesCreatedCount Int               @default(0) @map("entities_created_count")
+  fieldFixesCount      Int               @default(0) @map("field_fixes_count")
+  discussionsCount     Int               @default(0) @map("discussions_count")
+  lastActivityAt       DateTime?         @map("last_activity_at") @db.Timestamptz(6)
+  calculatedAt         DateTime          @default(now()) @updatedAt @map("calculated_at") @db.Timestamptz(6)
+  user                 User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_contribution_snapshots")
+  @@schema("community")
+}
+
+model UserContributionBadge {
+  userId   String   @map("user_id") @db.Uuid
+  badgeKey String   @map("badge_key")
+  earnedAt DateTime @default(now()) @map("earned_at") @db.Timestamptz(6)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, badgeKey])
+  @@index([userId])
+  @@map("user_contribution_badges")
+  @@schema("community")
+}
+
+model UserExpertiseSnapshot {
+  userId       String   @map("user_id") @db.Uuid
+  scopeType    String   @map("scope_type")
+  scopeKey     String   @map("scope_key")
+  score        Int      @default(0)
+  calculatedAt DateTime @default(now()) @updatedAt @map("calculated_at") @db.Timestamptz(6)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, scopeType, scopeKey])
+  @@index([userId, score(sort: Desc)])
+  @@map("user_expertise_snapshots")
+  @@schema("community")
+}
+
+model UserCuratorRankSnapshot {
+  userId       String   @map("user_id") @db.Uuid
+  categoryId   String   @map("category_id") @db.Uuid
+  score        Int      @default(0)
+  calculatedAt DateTime @default(now()) @updatedAt @map("calculated_at") @db.Timestamptz(6)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, categoryId])
+  @@index([categoryId, score(sort: Desc)])
+  @@map("user_curator_rank_snapshots")
+  @@schema("community")
+}
+
+enum SpotlightPlacementType {
+  entity_spotlight
+  battle_boost
+  top_highlight
+
+  @@map("spotlight_placement_type")
+  @@schema("community")
+}
+
+model SpotlightCreditBalance {
+  userId          String   @id @map("user_id") @db.Uuid
+  balance         Int      @default(0)
+  lastGrantPeriod String?  @map("last_grant_period")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("spotlight_credit_balances")
+  @@schema("community")
+}
+
+model SpotlightCreditLedger {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  amount      Int
+  reason      String
+  referenceId String?  @map("reference_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("spotlight_credit_ledger")
+  @@schema("community")
+}
+
+model SpotlightPlacement {
+  id               String                 @id @default(uuid()) @db.Uuid
+  recommendationId String                 @map("recommendation_id") @db.Uuid
+  userId           String                 @map("user_id") @db.Uuid
+  placementType    SpotlightPlacementType @map("placement_type")
+  entityId         String?                @map("entity_id") @db.Uuid
+  topId            String?                @map("top_id") @db.Uuid
+  pairKey          String?                @map("pair_key")
+  pairSlug         String?                @map("pair_slug")
+  cost             Int
+  startsAt         DateTime               @default(now()) @map("starts_at") @db.Timestamptz(6)
+  endsAt           DateTime               @map("ends_at") @db.Timestamptz(6)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  recommendation   CommunityRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events           SpotlightPlacementEvent[]
+
+  @@index([endsAt(sort: Desc), startsAt(sort: Desc)])
+  @@index([recommendationId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("spotlight_placements")
+  @@schema("community")
+}
+
+enum SpotlightPlacementEventType {
+  impression
+  click
+
+  @@map("spotlight_placement_event_type")
+  @@schema("community")
+}
+
+model SpotlightPlacementEvent {
+  id          String                     @id @default(uuid()) @db.Uuid
+  placementId String                     @map("placement_id") @db.Uuid
+  eventType   SpotlightPlacementEventType @map("event_type")
+  viewerKey   String                     @map("viewer_key")
+  userId      String?                    @map("user_id") @db.Uuid
+  createdAt   DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  placement   SpotlightPlacement         @relation(fields: [placementId], references: [id], onDelete: Cascade)
+  user        User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([placementId, eventType, viewerKey])
+  @@index([placementId, createdAt(sort: Desc)])
+  @@index([eventType, createdAt(sort: Desc)])
+  @@map("spotlight_placement_events")
+  @@schema("community")
+}
+
+model RecommendationEndorsement {
+  id               String                  @id @default(uuid()) @db.Uuid
+  recommendationId String                  @map("recommendation_id") @db.Uuid
+  userId           String                  @map("user_id") @db.Uuid
+  createdAt        DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  recommendation   CommunityRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([recommendationId, userId])
+  @@index([recommendationId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("recommendation_endorsements")
+  @@schema("community")
+}
+
+model CommunityRecommendation {
+  id            String                 @id @default(uuid()) @db.Uuid
+  authorId      String                 @map("author_id") @db.Uuid
+  placementType SpotlightPlacementType @map("placement_type")
+  entityId      String?                @map("entity_id") @db.Uuid
+  topId         String?                @map("top_id") @db.Uuid
+  pairKey       String?                @map("pair_key")
+  pairSlug      String?                @map("pair_slug")
+  reviewId      String?                @map("review_id") @db.Uuid
+  message       String?
+  locale        String                 @default("ru")
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  author        User                   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  review        Review?                @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+  placements    SpotlightPlacement[]
+  endorsements  RecommendationEndorsement[]
+
+  @@index([authorId, createdAt(sort: Desc)])
+  @@index([entityId, createdAt(sort: Desc)])
+  @@index([locale, createdAt(sort: Desc)])
+  @@map("recommendations")
+  @@schema("community")
 }
 
 enum TopVisibility {
@@ -629,6 +855,7 @@ model Top {
   slug          String            @unique
   title         String
   description   String?
+  locale        String            @default("ru")
   authorId      String            @map("author_id") @db.Uuid
   categoryId    String?           @map("category_id") @db.Uuid
   forkedFromId  String?           @map("forked_from_id") @db.Uuid
@@ -650,6 +877,7 @@ model Top {
   @@index([forkedFromId])
   @@index([visibility])
   @@index([rankMode])
+  @@index([locale, createdAt])
   @@map("tops")
   @@schema("tops")
 }

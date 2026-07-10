@@ -6,6 +6,7 @@ import {
   fetchActiveBattlesServer,
   fetchSuggestedBattlesServer
 } from "../../features/discovery/api/server-discovery-api";
+import { resolveServerContentLocale } from "../../features/i18n/server-content-locale";
 import { getFallbackBattlePairsFromClient } from "../../features/discovery/lib/client-battle-fallback";
 
 export const metadata: Metadata = {
@@ -14,9 +15,10 @@ export const metadata: Metadata = {
 };
 
 export default async function BattlesPage() {
+  const contentLocale = await resolveServerContentLocale();
   const [activeResponse, suggestedResponse] = await Promise.all([
-    fetchActiveBattlesServer(12),
-    fetchSuggestedBattlesServer(12)
+    fetchActiveBattlesServer(12, contentLocale),
+    fetchSuggestedBattlesServer(12, contentLocale)
   ]);
 
   const initialActivePairs = activeResponse?.items ?? [];

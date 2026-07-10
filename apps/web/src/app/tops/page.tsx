@@ -7,6 +7,7 @@ import {
   fetchTopCategoriesServer,
   parseTopListSort
 } from "../../features/tops/api/server-tops-api";
+import { resolveServerContentLocale } from "../../features/i18n/server-content-locale";
 
 export const metadata: Metadata = {
   description: "User-curated ranked lists on Opinia.",
@@ -21,8 +22,9 @@ export default async function UserTopsHubPage({ searchParams }: UserTopsHubPageP
   const resolvedSearchParams = await searchParams;
   const sort = parseTopListSort(resolvedSearchParams.sort);
   const searchQuery = resolvedSearchParams.q?.trim() ?? "";
+  const contentLocale = await resolveServerContentLocale();
   const [response, categoriesResponse] = await Promise.all([
-    fetchRecentTopsServer(20, sort, searchQuery || undefined),
+    fetchRecentTopsServer(20, sort, searchQuery || undefined, contentLocale),
     fetchTopCategoriesServer()
   ]);
 
@@ -31,6 +33,7 @@ export default async function UserTopsHubPage({ searchParams }: UserTopsHubPageP
       <Suspense fallback={null}>
         <TopsHubView
           categories={categoriesResponse?.items ?? []}
+          initialContentLocale={contentLocale}
           initialItems={response?.items}
           initialSearchQuery={searchQuery}
           initialSort={sort}

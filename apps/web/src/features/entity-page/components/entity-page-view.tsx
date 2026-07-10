@@ -72,9 +72,12 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   const pairActionsRef = useRef<{ suggestUnlink: (relatedEntityId: string) => void } | null>(null);
   const [unlinkingEntityId, setUnlinkingEntityId] = useState<string | null>(null);
 
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const contentLocale = showAllReviews ? "all" : locale;
+
   const entityPageQuery = useQuery({
-    queryFn: () => getEntityPage(entityId, accessToken),
-    queryKey: ["entity-page", entityId, accessToken ?? null],
+    queryFn: () => getEntityPage(entityId, accessToken, contentLocale),
+    queryKey: ["entity-page", entityId, accessToken ?? null, contentLocale],
     placeholderData: keepPreviousData
   });
 
@@ -86,13 +89,14 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
 
   const myReviewQuery = useQuery({
     enabled: Boolean(accessToken),
-    queryFn: () => getMyReview(entityId, accessToken ?? ""),
-    queryKey: ["entity-page", "my-review", entityId, accessToken]
+    queryFn: () => getMyReview(entityId, accessToken ?? "", locale),
+    queryKey: ["entity-page", "my-review", entityId, accessToken, locale]
   });
 
   const entityTopsQuery = useQuery({
-    queryFn: () => fetchEntityTops(entityId),
-    queryKey: ["entity-tops", entityId]
+    queryFn: () => fetchEntityTops(entityId, contentLocale),
+    queryKey: ["entity-tops", entityId, contentLocale],
+    placeholderData: keepPreviousData
   });
 
   const entitySystemTopsQuery = useQuery({
@@ -151,7 +155,7 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
         throw new Error("Missing auth token");
       }
 
-      return upsertMyReview(entityId, text, accessToken);
+      return upsertMyReview(entityId, text, accessToken, locale);
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 401) {
@@ -171,6 +175,7 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
       }
 
       void queryClient.invalidateQueries({ queryKey: ["entity-page", entityId] });
+      void queryClient.invalidateQueries({ queryKey: ["contribute-queues"] });
     }
   });
 
@@ -253,8 +258,7 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
     ? t("web.entity.reviewUpdate")
     : t("web.entity.reviewSubmit");
 
-  function handleRatingSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function handleRatingSelect(score: number) {
     setRatingStatusMessage(null);
     setRatingErrorMessage(null);
 
@@ -263,12 +267,13 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
       return;
     }
 
-    if (!selectedScore) {
-      setRatingErrorMessage(t("web.entity.chooseScore"));
+    setSelectedScore(score);
+
+    if (myRatingQuery.data?.score === score) {
       return;
     }
 
-    rateMutation.mutate(selectedScore);
+    rateMutation.mutate(score);
   }
 
   function handleReviewSubmit(event: FormEvent<HTMLFormElement>) {
@@ -357,10 +362,15 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
           <ReviewsList
             accessToken={accessToken}
             canInteract={canInteract}
+            contentLocale={contentLocale}
             entityId={entityId}
             panelHeight={syncedReviewsPanelHeight}
             reviews={pageData.reviews}
             reviewsCount={pageData.meta.reviewsCount}
+            showAllReviews={showAllReviews}
+            onToggleShowAll={() => {
+              setShowAllReviews((current) => !current);
+            }}
           />
         </div>
 
@@ -369,10 +379,9 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
           className={`${styles.asideColumn} ${styles.asideForms}`}
           aria-label={t("web.entity.asideAriaLabel")}
         >
-          <form
+          <section
             id="entity-rate-form"
             className={`panel-card form-stack ${styles.constrainedPanel}`}
-            onSubmit={handleRatingSubmit}
           >
             <div className="section-heading">
               <p className="result-type">{t("web.entity.rateTitle")}</p>
@@ -389,8 +398,9 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
                   }
                   disabled={!canInteract || !isAuthSessionLoaded || rateMutation.isPending}
                   aria-pressed={selectedScore === score}
+                  aria-busy={rateMutation.isPending && selectedScore === score}
                   onClick={() => {
-                    setSelectedScore(score);
+                    handleRatingSelect(score);
                   }}
                 >
                   {score}
@@ -398,17 +408,13 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
               ))}
             </div>
 
-            <button
-              type="submit"
-              className="primary-button primary-button-stable-label"
-              disabled={!canInteract || !selectedScore || rateMutation.isPending}
-              aria-busy={rateMutation.isPending}
-            >
-              {rateMutation.isPending ? t("web.entity.savingRating") : t("web.entity.rateSubmit")}
-            </button>
-
-            <FormFeedback errorMessage={ratingErrorMessage} statusMessage={ratingStatusMessage} />
-          </form>
+            <FormFeedback
+              errorMessage={ratingErrorMessage}
+              statusMessage={
+                rateMutation.isPending ? t("web.entity.savingRating") : ratingStatusMessage
+              }
+            />
+          </section>
 
           <form
             id="entity-my-review"
@@ -625,17 +631,23 @@ function TrustSummary({ compact = false, trust }: { compact?: boolean; trust: Tr
 function ReviewsList({
   accessToken,
   canInteract,
+  contentLocale,
   entityId,
+  onToggleShowAll,
   panelHeight,
   reviews: initialReviews,
-  reviewsCount
+  reviewsCount,
+  showAllReviews
 }: {
   accessToken: string | undefined;
   canInteract: boolean;
+  contentLocale: "ru" | "en" | "all";
   entityId: string;
+  onToggleShowAll: () => void;
   panelHeight: number | undefined;
   reviews: Review[];
   reviewsCount: number;
+  showAllReviews: boolean;
 }) {
   const t = useTranslation();
   const { resolvedLocale: locale } = useLocale();
@@ -658,7 +670,7 @@ function ReviewsList({
       return;
     }
 
-    setReviews((current) => mergeReviewListsPreservingOrder(current, initialReviews));
+    setReviews(initialReviews);
   }, [initialReviews, entityId]);
 
   const voteMutation = useMutation({
@@ -694,7 +706,7 @@ function ReviewsList({
       );
 
       queryClient.setQueryData<EntityPageResponse>(
-        ["entity-page", entityId, accessToken ?? null],
+        ["entity-page", entityId, accessToken ?? null, contentLocale],
         (current) => {
           if (!current) {
             return current;
@@ -740,9 +752,20 @@ function ReviewsList({
     >
       <div className={`section-heading section-heading-row ${styles.reviewsPanelHeader}`}>
         <p className="result-type" id="reviews-heading">
-          {t("web.entity.reviewsEyebrow")}
+          {showAllReviews
+            ? t("web.entity.reviewsEyebrow")
+            : t("web.entity.reviewsLocaleTitle", {
+                locale: locale === "ru" ? t("locale.ru") : t("locale.en")
+              })}
         </p>
         <div className={styles.reviewsPanelMeta}>
+          <button type="button" className="button-secondary" onClick={onToggleShowAll}>
+            {showAllReviews
+              ? t("web.locale.showLocaleOnly", {
+                  locale: locale === "ru" ? t("locale.ru") : t("locale.en")
+                })
+              : t("web.locale.showAllLanguages")}
+          </button>
           <label className={styles.reviewSortLabel}>
             {t("reviews.sort.label")}
             <select
@@ -821,6 +844,11 @@ function ReviewsList({
                       </button>
                     </div>
                     <div className="review-meta">
+                      {showAllReviews ? (
+                        <span className="review-locale-badge">
+                          {review.locale === "ru" ? t("locale.ru") : t("locale.en")}
+                        </span>
+                      ) : null}
                       {isOwnReview ? (
                         <span className="review-you-label">{t("reviews.author.you")}</span>
                       ) : null}
@@ -849,26 +877,6 @@ function applyOptimisticReviewVote(review: Review, willLike: boolean): Review {
     likedByCurrentUser: willLike,
     likesCount: Math.max(0, review.likesCount + (willLike ? 1 : -1))
   };
-}
-
-function mergeReviewListsPreservingOrder(current: Review[], incoming: Review[]): Review[] {
-  if (current.length === 0) {
-    return incoming;
-  }
-
-  const incomingById = new Map(incoming.map((review) => [review.id, review]));
-  const currentIds = new Set(current.map((review) => review.id));
-  const merged = current
-    .map((review) => incomingById.get(review.id))
-    .filter((review): review is Review => review !== undefined);
-
-  for (const review of incoming) {
-    if (!currentIds.has(review.id)) {
-      merged.push(review);
-    }
-  }
-
-  return merged;
 }
 
 function EntityPageSkeleton() {

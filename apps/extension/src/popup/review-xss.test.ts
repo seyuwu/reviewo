@@ -15,6 +15,7 @@ const popupReview: ExtensionReview = {
   isOwnReview: false,
   likedByCurrentUser: false,
   likesCount: 0,
+  locale: "en",
   text: maliciousReviewText,
   updatedAt: "2026-06-27T00:00:00.000Z"
 };
@@ -24,10 +25,12 @@ describe("review HTML renderers", () => {
     const markup = renderEntityReviewsSectionMarkup(
       t,
       {
+        contentLocale: "en",
         displayMode: "full",
         isAuthenticated: false,
         reviews: [popupReview],
         reviewsLimit: 10,
+        showAllReviews: false,
         sort: "likes"
       },
       ""

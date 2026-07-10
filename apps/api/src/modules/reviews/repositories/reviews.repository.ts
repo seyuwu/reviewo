@@ -2,10 +2,15 @@ import { Injectable } from "@nestjs/common";
 import type { Prisma, Review, ReviewVisibility, ReviewVote } from "#prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
+import {
+  buildReviewWhere,
+  type ReviewListFilter
+} from "../lib/review-locale-filter.js";
 
 export interface UpsertReviewInput {
   authorId: string;
   entityId: string;
+  locale: string;
   text: string;
 }
 
@@ -15,6 +20,8 @@ export type ReviewWithVotes = Review & {
     votes: number;
   };
 };
+
+export type { ReviewListFilter };
 
 @Injectable()
 export class ReviewsRepository {
@@ -29,13 +36,18 @@ export class ReviewsRepository {
     });
   }
 
-  async findUserReview(entityId: string, authorId: string): Promise<ReviewWithVotes | null> {
+  async findUserReview(
+    entityId: string,
+    authorId: string,
+    locale: string
+  ): Promise<ReviewWithVotes | null> {
     return this.prismaService.review.findUnique({
       include: getReviewInclude(authorId),
       where: {
-        authorId_entityId: {
+        authorId_entityId_locale: {
           authorId,
-          entityId
+          entityId,
+          locale
         }
       }
     });
@@ -44,7 +56,8 @@ export class ReviewsRepository {
   async listByEntity(
     entityId: string,
     currentUserId?: string,
-    limit = 50
+    limit = 50,
+    filter: ReviewListFilter = {}
   ): Promise<ReviewWithVotes[]> {
     return this.prismaService.review.findMany({
       include: getReviewInclude(currentUserId),
@@ -59,19 +72,13 @@ export class ReviewsRepository {
         }
       ],
       take: limit,
-      where: {
-        entityId,
-        visibility: "ACTIVE"
-      }
+      where: buildReviewWhere(entityId, filter)
     });
   }
 
-  async countByEntity(entityId: string): Promise<number> {
+  async countByEntity(entityId: string, filter: ReviewListFilter = {}): Promise<number> {
     return this.prismaService.review.count({
-      where: {
-        entityId,
-        visibility: "ACTIVE"
-      }
+      where: buildReviewWhere(entityId, filter)
     });
   }
 
@@ -80,6 +87,7 @@ export class ReviewsRepository {
       create: {
         authorId: input.authorId,
         entityId: input.entityId,
+        locale: input.locale,
         text: input.text
       },
       include: getReviewInclude(input.authorId),
@@ -87,9 +95,10 @@ export class ReviewsRepository {
         text: input.text
       },
       where: {
-        authorId_entityId: {
+        authorId_entityId_locale: {
           authorId: input.authorId,
-          entityId: input.entityId
+          entityId: input.entityId,
+          locale: input.locale
         }
       }
     });

@@ -19,6 +19,7 @@ import { MAX_REVIEW_TEXT_LENGTH } from "../../shared/review-limits.js";
 export type CardReviewSort = "likes" | "newest";
 
 export interface CardCommunityReviewsState {
+  contentLocale: "en" | "ru";
   currentUserId?: string;
   displayMode: PopupReviewDisplayMode;
   entityId: string;
@@ -27,7 +28,12 @@ export interface CardCommunityReviewsState {
   myReviewText: string;
   reviews: CardEntityReview[];
   reviewsLimit: number;
+  showAllReviews: boolean;
   sort: CardReviewSort;
+}
+
+export interface CardCommunityReviewsActions {
+  onToggleShowAll?: () => void | Promise<void>;
 }
 
 function escapeHtmlText(value: string): string {
@@ -218,18 +224,33 @@ export function renderCardCommunityReviewsMarkup(
   const activeIndex = clampReviewCarouselIndex(initialIndex, limitedReviews.length);
   const reviewsMarkup = renderReviewAtIndexMarkup(t, limitedReviews, activeIndex, state);
   const carouselActionsMarkup = renderReviewCarouselActionsMarkup(t, state, activeIndex, limitedReviews.length);
+  const reviewsTitle = state.showAllReviews
+    ? t("reviews.community.title")
+    : t("web.entity.reviewsLocaleTitle", {
+        locale: state.contentLocale === "ru" ? t("locale.ru") : t("locale.en")
+      });
+  const showAllLabel = state.showAllReviews
+    ? t("web.locale.showLocaleOnly", {
+        locale: state.contentLocale === "ru" ? t("locale.ru") : t("locale.en")
+      })
+    : t("web.locale.showAllLanguages");
 
   return `
     <section class="reviewo-reviews-panel">
       <div class="reviewo-reviews-panel-header">
-        <p class="reviewo-rate-label">${escapeHtmlText(t("reviews.community.title"))}</p>
-        <label class="reviewo-review-sort-label">
+        <p class="reviewo-rate-label">${escapeHtmlText(reviewsTitle)}</p>
+        <div class="reviewo-reviews-panel-meta">
+          <button type="button" class="reviewo-locale-toggle-button" data-show-all-reviews>
+            ${escapeHtmlText(showAllLabel)}
+          </button>
+          <label class="reviewo-review-sort-label">
           ${escapeHtmlText(t("reviews.sort.label"))}
           <select data-review-sort>
             <option value="likes"${state.sort === "likes" ? " selected" : ""}>${escapeHtmlText(t("reviews.sort.mostHelpful"))}</option>
             <option value="newest"${state.sort === "newest" ? " selected" : ""}>${escapeHtmlText(t("reviews.sort.newest"))}</option>
           </select>
         </label>
+        </div>
       </div>
       ${
         errorMessage
@@ -258,6 +279,7 @@ export function bindCardCommunityReviews(
   t: TranslateFn,
   getState: () => CardCommunityReviewsState,
   onStateChange: (nextState: CardCommunityReviewsState) => void,
+  actions: CardCommunityReviewsActions = {},
   carouselIndex?: CardCommunityReviewsCarouselIndex
 ): void {
   let isWritingReview = false;
@@ -502,7 +524,11 @@ export function bindCardCommunityReviews(
     });
     updateReviewEditorStatus(t("reviews.save.saving"));
 
-    const result = await upsertMyEntityReview(state.entityId, text);
+    const result = await upsertMyEntityReview(
+      state.entityId,
+      text,
+      state.contentLocale
+    );
     pendingReviewSave = false;
 
     if (!result.review) {
@@ -600,6 +626,10 @@ export function bindCardCommunityReviews(
       }
     });
   };
+
+  container.querySelector<HTMLButtonElement>("[data-show-all-reviews]")?.addEventListener("click", () => {
+    void actions.onToggleShowAll?.();
+  });
 
   container.querySelector<HTMLSelectElement>("[data-review-sort]")?.addEventListener("change", (event) => {
     const value = (event.target as HTMLSelectElement).value;

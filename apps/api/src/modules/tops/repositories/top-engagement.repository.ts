@@ -22,7 +22,7 @@ export class TopEngagementRepository {
     return like !== null;
   }
 
-  async toggleLike(topId: string, userId: string): Promise<{ liked: boolean }> {
+  async toggleLike(topId: string, userId: string): Promise<{ likeId?: string; liked: boolean }> {
     const existing = await this.prismaService.topLike.findUnique({
       where: {
         topId_userId: {
@@ -45,14 +45,14 @@ export class TopEngagementRepository {
       return { liked: false };
     }
 
-    await this.prismaService.topLike.create({
+    const created = await this.prismaService.topLike.create({
       data: {
         topId,
         userId
       }
     });
 
-    return { liked: true };
+    return { likeId: created.id, liked: true };
   }
 
   async countLikes(topId: string): Promise<number> {

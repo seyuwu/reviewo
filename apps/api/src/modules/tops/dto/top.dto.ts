@@ -53,6 +53,7 @@ export class TopDto {
   items!: TopItemDto[];
   likedByCurrentUser!: boolean;
   likesCount!: number;
+  locale!: string;
   rankMode!: TopRankMode;
   slug!: string;
   systemSortKey!: TopSystemSortKey | null;
@@ -95,6 +96,7 @@ export class TopListItemDto {
   id!: string;
   itemCount!: number;
   likesCount!: number;
+  locale!: string;
   slug!: string;
   title!: string;
   updatedAt!: string;

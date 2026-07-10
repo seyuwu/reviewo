@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useId, useState } from "react";
+import { FormEvent, useEffect, useId, useRef, useState } from "react";
 
 import { EntitySearchResultsPanel } from "../../home-search/components/entity-search-results-panel";
 import { useEntitySearch } from "../../home-search/hooks/use-entity-search";
@@ -9,6 +9,7 @@ import { useTranslation } from "../../i18n/locale-provider";
 export function CompactSearchBar() {
   const t = useTranslation();
   const inputId = useId();
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
   const {
     data: searchData,
@@ -24,13 +25,36 @@ export function CompactSearchBar() {
     event.preventDefault();
   }
 
+  useEffect(() => {
+    function focusSearchInput() {
+      inputRef.current?.focus({ preventScroll: true });
+    }
+
+    focusSearchInput();
+
+    function handleHashChange() {
+      focusSearchInput();
+
+      if (window.location.hash === "#home-search") {
+        document.getElementById("home-search")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    window.addEventListener("hashchange", handleHashChange);
+
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, []);
+
   return (
-    <div className="discovery-compact-search-wrap">
+    <div className="discovery-compact-search-wrap" id="home-search">
       <form className="discovery-compact-search" role="search" onSubmit={handleSubmit}>
         <label className="sr-only" htmlFor={inputId}>
           {t("web.homeFeed.compactSearchLabel")}
         </label>
         <input
+          ref={inputRef}
           id={inputId}
           autoComplete="off"
           maxLength={200}

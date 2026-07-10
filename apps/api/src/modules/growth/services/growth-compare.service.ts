@@ -1,5 +1,7 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
-import { buildPairKey, parseCompareSlug } from "@reviewo/shared";
+import { buildPairKey, normalizeContentLocaleFilter, parseCompareSlug } from "@reviewo/shared";
+
+import { DomainEventBus } from "../../../common/domain-events/domain-event-bus.js";
 
 import {
   ApiRateLimiterService,
@@ -24,7 +26,9 @@ import type {
   GrowthCompareSideDto
 } from "../dto/growth.dto.js";
 import { BattleVoteRepository } from "../repositories/battle-vote.repository.js";
+import { resolveBattleLocale } from "../lib/resolve-battle-locale.js";
 import { createBattleVoteRateLimitRules } from "../rate-limiting/battle-rate-limit-rules.js";
+import { createBattleVoteCastEvent } from "../../community/events/battle-vote-cast.event.js";
 
 @Injectable()
 export class GrowthCompareService {
@@ -37,7 +41,8 @@ export class GrowthCompareService {
     private readonly reviewsPort: ReviewsPort,
     private readonly reputationDisplayService: ReputationDisplayService,
     private readonly battleVoteRepository: BattleVoteRepository,
-    private readonly apiRateLimiterService: ApiRateLimiterService
+    private readonly apiRateLimiterService: ApiRateLimiterService,
+    private readonly domainEventBus: DomainEventBus
   ) {}
 
   async getCompare(pairSlug: string): Promise<GrowthCompareResponseDto> {
@@ -77,13 +82,18 @@ export class GrowthCompareService {
   async getBattle(
     pairSlug: string,
     voterHeader?: string,
-    request?: RequestLike
+    request?: RequestLike,
+    localeInput?: string
   ): Promise<GrowthBattleResponseDto> {
     const resolved = await this.resolvePairEntities(pairSlug);
     const pairKey = buildPairKey(resolved.left.id, resolved.right.id);
     const voterKey = resolveVoterKey(voterHeader, request);
-    const existingVote = await this.battleVoteRepository.findVote(pairKey, voterKey);
-    const voteCounts = await this.battleVoteRepository.countVotesByEntity(pairKey);
+    const localeFilter = normalizeContentLocaleFilter(localeInput);
+    const voteLocale = localeFilter === "all" ? null : localeFilter;
+    const existingVote = voteLocale
+      ? await this.battleVoteRepository.findVote(pairKey, voterKey, voteLocale)
+      : null;
+    const voteCounts = await this.battleVoteRepository.countVotesByEntity(pairKey, localeFilter);
     const leftCount = voteCounts.get(resolved.left.id) ?? 0;
     const rightCount = voteCounts.get(resolved.right.id) ?? 0;
     const totalVotes = leftCount + rightCount;
@@ -108,12 +118,14 @@ export class GrowthCompareService {
     entityId: string,
     voterHeader: string | undefined,
     request: RequestLike,
-    userId?: string
+    userId?: string,
+    localeInput?: string
   ): Promise<GrowthBattleVoteResponseDto> {
     await this.apiRateLimiterService.assertWithinLimits(createBattleVoteRateLimitRules(request));
 
     const resolved = await this.resolvePairEntities(pairSlug);
     const pairKey = buildPairKey(resolved.left.id, resolved.right.id);
+    const locale = resolveBattleLocale(localeInput);
 
     if (entityId !== resolved.left.id && entityId !== resolved.right.id) {
       throw createAppException({
@@ -124,32 +136,48 @@ export class GrowthCompareService {
     }
 
     const voterKey = resolveVoterKey(voterHeader, request);
-    const existingVote = await this.battleVoteRepository.findVote(pairKey, voterKey);
+    const existingVote = await this.battleVoteRepository.findVote(pairKey, voterKey, locale);
+    let battleVoteId: string;
 
     if (existingVote) {
       if (existingVote.entityId === entityId) {
         return {
-          battle: await this.getBattle(pairSlug, voterHeader, request)
+          battle: await this.getBattle(pairSlug, voterHeader, request, locale)
         };
       }
 
-      await this.battleVoteRepository.updateVote({
+      const updatedVote = await this.battleVoteRepository.updateVote({
         entityId,
+        locale,
         pairKey,
         ...(userId ? { userId } : {}),
         voterKey
       });
+      battleVoteId = updatedVote.id;
     } else {
-      await this.battleVoteRepository.createVote({
+      const createdVote = await this.battleVoteRepository.createVote({
         entityId,
+        locale,
         pairKey,
         ...(userId ? { userId } : {}),
         voterKey
       });
+      battleVoteId = createdVote.id;
+    }
+
+    if (userId) {
+      await this.domainEventBus.publish(
+        createBattleVoteCastEvent({
+          battleVoteId,
+          entityId,
+          pairKey,
+          userId
+        })
+      );
     }
 
     return {
-      battle: await this.getBattle(pairSlug, voterHeader, request)
+      battle: await this.getBattle(pairSlug, voterHeader, request, locale)
     };
   }
 

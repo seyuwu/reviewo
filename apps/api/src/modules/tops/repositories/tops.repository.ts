@@ -7,11 +7,13 @@ import {
   normalizeTopListSort,
   type TopListSort
 } from "../constants/top-list-sort.js";
+import { buildTopLocaleWhere, type TopListLocaleFilter } from "../lib/top-locale-filter.js";
 
 export interface CreateTopRecordInput {
   authorId: string;
   categoryId?: string | null;
   description?: string | null;
+  locale?: string;
   rankMode?: TopRankMode;
   slug: string;
   systemSortKey?: TopSystemSortKey | null;
@@ -118,6 +120,7 @@ export class TopsRepository {
         authorId: input.authorId,
         categoryId: input.categoryId ?? null,
         description: input.description ?? null,
+        locale: input.locale ?? "ru",
         rankMode: input.rankMode ?? "MANUAL",
         slug: input.slug,
         systemSortKey: input.systemSortKey ?? null,
@@ -172,6 +175,7 @@ export class TopsRepository {
           categoryId: input.sourceTop.categoryId,
           description: input.sourceTop.description,
           forkedFromId: input.sourceTop.id,
+          locale: input.sourceTop.locale,
           rankMode: "HYBRID",
           slug: input.slug,
           systemSortKey: "RELIABILITY",
@@ -200,8 +204,11 @@ export class TopsRepository {
   async listForks(params: {
     cursor?: string;
     limit: number;
+    localeFilter?: TopListLocaleFilter;
     sourceTopId: string;
   }): Promise<{ items: TopListRow[]; nextCursor: string | null }> {
+    const localeWhere = buildTopLocaleWhere(params.localeFilter);
+
     const rows = await this.prismaService.top.findMany({
       include: topListInclude,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -209,6 +216,7 @@ export class TopsRepository {
       where: {
         forkedFromId: params.sourceTopId,
         visibility: "ACTIVE",
+        ...localeWhere,
         ...(params.cursor
           ? {
               OR: [
@@ -307,14 +315,17 @@ export class TopsRepository {
     categoryId?: string;
     cursor?: string;
     limit: number;
+    localeFilter?: TopListLocaleFilter;
     searchQuery?: string;
     sort?: TopListSort | string | null;
   }): Promise<{ items: TopListRow[]; nextCursor: string | null }> {
     const sort = normalizeTopListSort(params.sort);
+    const localeWhere = buildTopLocaleWhere(params.localeFilter);
 
     if (sort === "random") {
       return this.listPublishedRandom({
         limit: params.limit,
+        ...(params.localeFilter ? { localeFilter: params.localeFilter } : {}),
         ...(params.categoryId ? { categoryId: params.categoryId } : {}),
         ...(params.searchQuery ? { searchQuery: params.searchQuery } : {})
       });
@@ -329,6 +340,7 @@ export class TopsRepository {
       take: params.limit + 1,
       where: {
         visibility: "ACTIVE",
+        ...localeWhere,
         ...(params.categoryId ? { categoryId: params.categoryId } : {}),
         ...(params.searchQuery
           ? {
@@ -383,6 +395,7 @@ export class TopsRepository {
   async listRecent(params: {
     cursor?: string;
     limit: number;
+    localeFilter?: TopListLocaleFilter;
     searchQuery?: string;
     sort?: TopListSort | string | null;
   }): Promise<{ items: TopListRow[]; nextCursor: string | null }> {
@@ -392,15 +405,18 @@ export class TopsRepository {
   async listPublishedRandom(params: {
     categoryId?: string;
     limit: number;
+    localeFilter?: TopListLocaleFilter;
     searchQuery?: string;
   }): Promise<{ items: TopListRow[]; nextCursor: string | null }> {
     const searchPattern = params.searchQuery ? `%${params.searchQuery}%` : null;
+    const locale = params.localeFilter?.locale;
     const idRows = await this.prismaService.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT t.id
       FROM tops.tops t
       WHERE t.visibility = 'ACTIVE'::tops.top_visibility
       ${params.categoryId ? Prisma.sql`AND t.category_id = ${params.categoryId}::uuid` : Prisma.empty}
       ${searchPattern ? Prisma.sql`AND t.title ILIKE ${searchPattern}` : Prisma.empty}
+      ${locale && locale !== "all" ? Prisma.sql`AND t.locale = ${locale}` : Prisma.empty}
       ORDER BY RANDOM()
       LIMIT ${params.limit}
     `);
@@ -433,7 +449,10 @@ export class TopsRepository {
     authorId: string;
     cursor?: string;
     limit: number;
+    localeFilter?: TopListLocaleFilter;
   }): Promise<{ items: TopListRow[]; nextCursor: string | null }> {
+    const localeWhere = buildTopLocaleWhere(params.localeFilter);
+
     const rows = await this.prismaService.top.findMany({
       include: topListInclude,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -441,6 +460,7 @@ export class TopsRepository {
       where: {
         authorId: params.authorId,
         visibility: "ACTIVE",
+        ...localeWhere,
         ...(params.cursor
           ? {
               OR: [
@@ -487,19 +507,24 @@ export class TopsRepository {
     categoryId: string;
     cursor?: string;
     limit: number;
+    localeFilter?: TopListLocaleFilter;
     searchQuery?: string;
     sort?: TopListSort | string | null;
   }): Promise<{ items: TopListRow[]; nextCursor: string | null }> {
     return this.listPublished({
       categoryId: params.categoryId,
       limit: params.limit,
+      ...(params.localeFilter ? { localeFilter: params.localeFilter } : {}),
       ...(params.searchQuery ? { searchQuery: params.searchQuery } : {}),
       ...(params.cursor ? { cursor: params.cursor } : {}),
       ...(params.sort !== undefined ? { sort: params.sort } : {})
     });
   }
 
-  async listAppearancesForEntity(entityId: string): Promise<
+  async listAppearancesForEntity(
+    entityId: string,
+    localeFilter?: TopListLocaleFilter
+  ): Promise<
     Array<{
       position: number;
       slug: string;
@@ -507,6 +532,8 @@ export class TopsRepository {
       topId: string;
     }>
   > {
+    const localeWhere = buildTopLocaleWhere(localeFilter);
+
     const rows = await this.prismaService.topItem.findMany({
       include: {
         top: {
@@ -526,7 +553,8 @@ export class TopsRepository {
       where: {
         entityId,
         top: {
-          visibility: "ACTIVE"
+          visibility: "ACTIVE",
+          ...localeWhere
         }
       }
     });

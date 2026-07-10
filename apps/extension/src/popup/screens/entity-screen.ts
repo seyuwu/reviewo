@@ -8,7 +8,9 @@ import { resolveMyEntityRatingScore } from "../../content/rating-card/resolve-my
 import {
   bindEntityReviewsSection,
   loadEntityReviewsSectionState,
-  renderEntityReviewsSectionMarkup
+  renderEntityReviewsSectionMarkup,
+  setEntityReviewsShowAll,
+  readEntityReviewsShowAll
 } from "../entity-reviews-section.js";
 import { rateEntityViewModel } from "../services/rate-entity-view-model.js";
 import { renderPopupRatePanel } from "../popup-rate-panel.js";
@@ -18,7 +20,8 @@ import {
   renderChatDrawerSectionMarkup
 } from "../components/chat-drawer.js";
 import { sendExtensionMessage } from "../services/popup-messaging.js";
-import { buildEntityPageUrl, escapeHtml } from "../view-helpers.js";
+import { buildEntityPageUrl, buildGlobalTopsUrl, buildLocaleAwareBattlesUrl, buildLocaleAwareEntityTopsUrl, buildLocaleAwareUserTopsUrl, escapeHtml } from "../view-helpers.js";
+import { resolveExtensionContentLocale } from "../../shared/content-locale.js";
 import type { EntityViewModel } from "../types.js";
 
 export interface EntityScreenActions {
@@ -44,6 +47,7 @@ export async function renderEntityScreen(
   const isAuthenticated = Boolean(session?.accessToken);
   const currentUserId = session?.userId;
   const preferences = await readExtensionPreferences();
+  const contentLocale = resolveExtensionContentLocale(preferences.locale);
   const myRatingScore = await resolveEntityMyRatingScore(entity, isAuthenticated);
   const ratePanelMarkup = renderPopupRatePanel(t, {
     isAuthenticated,
@@ -60,7 +64,13 @@ export async function renderEntityScreen(
   const entityPagePath =
     entity.entityPagePath ?? (entity.entityId ? `/entities/${entity.entityId}` : null);
   const openPageMarkup = entityPagePath
-    ? `<a class="primary-button link-button" href="${escapeHtml(buildEntityPageUrl(entityPagePath))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("entity.openPage"))}</a>`
+    ? `<div class="entity-page-actions">
+        <a class="primary-button link-button" href="${escapeHtml(buildEntityPageUrl(entityPagePath))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("entity.openPage"))}</a>
+        ${entity.entityId ? `<a class="text-link-button" href="${escapeHtml(buildLocaleAwareEntityTopsUrl(entity.entityId, contentLocale))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("web.userTops.entitySectionTitle"))}</a>` : ""}
+        <a class="text-link-button" href="${escapeHtml(buildLocaleAwareUserTopsUrl(contentLocale))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("web.userTops.hubTitle"))}</a>
+        <a class="text-link-button" href="${escapeHtml(buildLocaleAwareBattlesUrl(contentLocale))}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("web.nav.battles"))}</a>
+        <a class="text-link-button" href="${escapeHtml(buildGlobalTopsUrl())}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("web.nav.globalTops"))}</a>
+      </div>`
     : "";
   const breadcrumbMarkup = renderEntityBreadcrumb(entity, t);
   const rateSectionMarkup = `
@@ -108,6 +118,7 @@ export async function renderEntityScreen(
       isAuthenticated,
       session?.accessToken ?? null,
       currentUserId,
+      preferences,
       t,
       actions
     );
@@ -166,7 +177,9 @@ async function mountEntityReviewsSection(
   const loaded = await loadEntityReviewsSectionState(entityId, isAuthenticated, currentUserId, {
     displayMode: preferences.popupReviewDisplayMode,
     hideMyReviewWhenSaved: false,
-    reviewsLimit: preferences.popupReviewsLimit
+    localePreference: preferences.locale,
+    reviewsLimit: preferences.popupReviewsLimit,
+    showAllReviews: readEntityReviewsShowAll(entityId)
   });
 
   if (!loaded.state) {
@@ -180,7 +193,13 @@ async function mountEntityReviewsSection(
     hideMyReviewWhenSaved: false
   });
   bindEntityReviewsSection(t, host, entityId, loaded.state, loaded.myReviewText ?? "", {
-    hideMyReviewWhenSaved: false
+    hideMyReviewWhenSaved: false,
+    localePreference: preferences.locale
+  }, {
+    onToggleShowAll: async () => {
+      setEntityReviewsShowAll(entityId, !readEntityReviewsShowAll(entityId));
+      await mountEntityReviewsSection(host, entityId, isAuthenticated, currentUserId, preferences, t);
+    }
   });
 }
 
@@ -329,6 +348,7 @@ function mountEntityChatSection(
   isAuthenticated: boolean,
   accessToken: string | null,
   currentUserId: string | undefined,
+  preferences: Awaited<ReturnType<typeof readExtensionPreferences>>,
   t: TranslateFn,
   actions: EntityScreenActions
 ): void {
@@ -349,6 +369,7 @@ function mountEntityChatSection(
       currentUserId,
       entityId,
       entityTitle,
+      initialChatLocale: resolveExtensionContentLocale(preferences.locale),
       isAuthenticated
     },
     {

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { DomainEventsModule } from "../../common/domain-events/domain-events.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { EntitiesModule } from "../entities/entities.module.js";
 import { RatingsModule } from "../ratings/ratings.module.js";
@@ -19,7 +20,7 @@ import { UserTopRankService } from "./services/user-top-rank.service.js";
 @Module({
   controllers: [TopsController],
   exports: [TOPS_PORT, SystemTopsService, TopCompositionService, TopsService],
-  imports: [AuthModule, EntitiesModule, RatingsModule, UsersModule],
+  imports: [AuthModule, DomainEventsModule, EntitiesModule, RatingsModule, UsersModule],
   providers: [
     SystemTopsRepository,
     SystemTopsService,

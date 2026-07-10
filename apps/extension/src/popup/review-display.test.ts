@@ -15,6 +15,7 @@ const sampleReview = (overrides: Partial<ExtensionReview>): ExtensionReview => (
   isOwnReview: true,
   likedByCurrentUser: false,
   likesCount: 0,
+  locale: "en",
   text: "My review",
   updatedAt: "2026-06-27T00:00:00.000Z",
   ...overrides

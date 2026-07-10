@@ -45,7 +45,13 @@ function createSecurityHeaders() {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
   const apiOrigin = resolveOrigin(apiBaseUrl);
   const websocketOrigin = resolveWebSocketOrigin(apiBaseUrl);
-  const connectSources = ["'self'", apiOrigin, websocketOrigin].filter(Boolean);
+  const connectSources = [
+    "'self'",
+    apiOrigin,
+    websocketOrigin,
+    "https://www.google-analytics.com",
+    "https://region1.google-analytics.com"
+  ].filter(Boolean);
   const contentSecurityPolicy = [
     "default-src 'self'",
     "base-uri 'self'",
@@ -53,7 +59,7 @@ function createSecurityHeaders() {
     "form-action 'self'",
     "img-src 'self' data: https:",
     "object-src 'none'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
     "style-src 'self' 'unsafe-inline'",
     `connect-src ${connectSources.join(" ")}`
   ].join("; ");

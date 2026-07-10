@@ -8,6 +8,7 @@ import type {
   RandomBattleDto
 } from "../dto/discovery.dto.js";
 import {
+  DiscoveryBattlesQueryDto,
   DiscoveryLimitQueryDto,
   DiscoveryRatingsRisingQueryDto,
   DiscoveryRatingsTopQueryDto
@@ -20,13 +21,13 @@ export class DiscoveryController {
   constructor(private readonly discoveryService: DiscoveryService) {}
 
   @Get("growth/battles/active")
-  async getActiveBattles(@Query() query: DiscoveryLimitQueryDto): Promise<BattlePairListDto> {
-    return this.discoveryService.getActiveBattles(assertDiscoveryLimit(query.limit, 12));
+  async getActiveBattles(@Query() query: DiscoveryBattlesQueryDto): Promise<BattlePairListDto> {
+    return this.discoveryService.getActiveBattles(assertDiscoveryLimit(query.limit, 12), query.locale);
   }
 
   @Get("growth/battles/suggested")
-  async getSuggestedBattles(@Query() query: DiscoveryLimitQueryDto): Promise<BattlePairListDto> {
-    return this.discoveryService.getSuggestedBattles(assertDiscoveryLimit(query.limit, 12));
+  async getSuggestedBattles(@Query() query: DiscoveryBattlesQueryDto): Promise<BattlePairListDto> {
+    return this.discoveryService.getSuggestedBattles(assertDiscoveryLimit(query.limit, 12), query.locale);
   }
 
   @Get("discovery/ratings/top")
@@ -44,12 +45,15 @@ export class DiscoveryController {
 
   @Get("discovery/discussions/feed")
   async getDiscussionFeed(@Query() query: DiscoveryLimitQueryDto): Promise<DiscussionFeedDto> {
-    return this.discoveryService.getDiscussionFeed(assertDiscoveryLimit(query.limit, 6));
+    return this.discoveryService.getDiscussionFeed(
+      assertDiscoveryLimit(query.limit, 6),
+      query.locale
+    );
   }
 
   @Get("discovery/battles/random")
-  async getRandomBattle(): Promise<RandomBattleDto> {
-    return this.discoveryService.getRandomBattle();
+  async getRandomBattle(@Query() query: DiscoveryBattlesQueryDto): Promise<RandomBattleDto> {
+    return this.discoveryService.getRandomBattle(query.locale);
   }
 
   @Get("discovery/stats")

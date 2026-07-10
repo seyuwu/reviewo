@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import type { ContentLocaleParam } from "@reviewo/shared";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 
@@ -6,10 +7,11 @@ import { PrismaService } from "../../../database/prisma.service.js";
 export class BattleVoteRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
-  async findVote(pairKey: string, voterKey: string) {
+  async findVote(pairKey: string, voterKey: string, locale: string) {
     return this.prismaService.battleVote.findUnique({
       where: {
-        pairKey_voterKey: {
+        pairKey_voterKey_locale: {
+          locale,
           pairKey,
           voterKey
         }
@@ -19,6 +21,7 @@ export class BattleVoteRepository {
 
   async createVote(input: {
     entityId: string;
+    locale: string;
     pairKey: string;
     userId?: string | null;
     voterKey: string;
@@ -26,6 +29,7 @@ export class BattleVoteRepository {
     return this.prismaService.battleVote.create({
       data: {
         entityId: input.entityId,
+        locale: input.locale,
         pairKey: input.pairKey,
         userId: input.userId ?? null,
         voterKey: input.voterKey
@@ -35,6 +39,7 @@ export class BattleVoteRepository {
 
   async updateVote(input: {
     entityId: string;
+    locale: string;
     pairKey: string;
     userId?: string | null;
     voterKey: string;
@@ -45,7 +50,8 @@ export class BattleVoteRepository {
         ...(input.userId ? { userId: input.userId } : {})
       },
       where: {
-        pairKey_voterKey: {
+        pairKey_voterKey_locale: {
+          locale: input.locale,
           pairKey: input.pairKey,
           voterKey: input.voterKey
         }
@@ -53,14 +59,15 @@ export class BattleVoteRepository {
     });
   }
 
-  async countVotesByEntity(pairKey: string): Promise<Map<string, number>> {
+  async countVotesByEntity(pairKey: string, locale?: ContentLocaleParam): Promise<Map<string, number>> {
     const rows = await this.prismaService.battleVote.groupBy({
       by: ["entityId"],
       _count: {
         entityId: true
       },
       where: {
-        pairKey
+        pairKey,
+        ...(locale && locale !== "all" ? { locale } : {})
       }
     });
 

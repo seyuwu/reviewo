@@ -1,4 +1,5 @@
 import { apiRequest } from "../../../lib/api/api-client";
+import { appendContentLocaleToPath, type ContentLocaleParam } from "../../i18n/content-locale";
 import { getOrCreateVoterId } from "../../growth/lib/voter-id";
 import type { TopListSort } from "../lib/top-list-sort";
 import type {
@@ -30,7 +31,8 @@ export function fetchRecentTops(
   limit = 20,
   cursor?: string,
   sort: TopListSort = "recent",
-  searchQuery?: string
+  searchQuery?: string,
+  locale?: ContentLocaleParam
 ): Promise<TopListResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
 
@@ -48,7 +50,11 @@ export function fetchRecentTops(
     params.set("q", trimmedQuery);
   }
 
-  return apiRequest<TopListResponse>(`/tops?${params.toString()}`);
+  const path = locale
+    ? appendContentLocaleToPath(`/tops?${params.toString()}`, locale)
+    : `/tops?${params.toString()}`;
+
+  return apiRequest<TopListResponse>(path);
 }
 
 export function fetchTopBySlug(slug: string, accessToken?: string): Promise<Top> {
@@ -57,8 +63,15 @@ export function fetchTopBySlug(slug: string, accessToken?: string): Promise<Top>
   });
 }
 
-export function fetchEntityTops(entityId: string): Promise<EntityTopsResponse> {
-  return apiRequest<EntityTopsResponse>(`/entities/${entityId}/tops`);
+export function fetchEntityTops(
+  entityId: string,
+  locale?: ContentLocaleParam
+): Promise<EntityTopsResponse> {
+  const path = locale
+    ? appendContentLocaleToPath(`/entities/${entityId}/tops`, locale)
+    : `/entities/${entityId}/tops`;
+
+  return apiRequest<EntityTopsResponse>(path);
 }
 
 export function fetchEntitySystemTops(entityId: string): Promise<EntitySystemTopsResponse> {
@@ -93,7 +106,8 @@ export function fetchTopsByCategory(
   limit = 20,
   cursor?: string,
   sort: TopListSort = "recent",
-  searchQuery?: string
+  searchQuery?: string,
+  locale?: ContentLocaleParam
 ): Promise<TopListResponse> {
   const params = new URLSearchParams({
     limit: String(limit)
@@ -113,13 +127,17 @@ export function fetchTopsByCategory(
     params.set("q", trimmedQuery);
   }
 
-  return apiRequest<TopListResponse>(`/tops/category/${encodeURIComponent(slug)}?${params.toString()}`);
+  const basePath = `/tops/category/${encodeURIComponent(slug)}?${params.toString()}`;
+  const path = locale ? appendContentLocaleToPath(basePath, locale) : basePath;
+
+  return apiRequest<TopListResponse>(path);
 }
 
 export function fetchTopsByAuthor(
   userId: string,
   limit = 20,
-  cursor?: string
+  cursor?: string,
+  locale?: ContentLocaleParam
 ): Promise<TopListResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
 
@@ -127,11 +145,21 @@ export function fetchTopsByAuthor(
     params.set("cursor", cursor);
   }
 
-  return apiRequest<TopListResponse>(`/users/${userId}/tops?${params.toString()}`);
+  const path = locale
+    ? appendContentLocaleToPath(`/users/${userId}/tops?${params.toString()}`, locale)
+    : `/users/${userId}/tops?${params.toString()}`;
+
+  return apiRequest<TopListResponse>(path);
 }
 
-export function createTop(input: CreateTopInput, accessToken: string): Promise<Top> {
-  return apiRequest<Top>("/tops", {
+export function createTop(
+  input: CreateTopInput,
+  accessToken: string,
+  locale?: ContentLocaleParam
+): Promise<Top> {
+  const path = locale ? appendContentLocaleToPath("/tops", locale) : "/tops";
+
+  return apiRequest<Top>(path, {
     body: input,
     headers: authHeaders(accessToken),
     method: "POST"
@@ -175,7 +203,8 @@ export function forkTop(topId: string, accessToken: string): Promise<Top> {
 export function fetchTopForks(
   topId: string,
   limit = 20,
-  cursor?: string
+  cursor?: string,
+  locale?: ContentLocaleParam
 ): Promise<TopListResponse> {
   const params = new URLSearchParams({ limit: String(limit) });
 
@@ -183,7 +212,11 @@ export function fetchTopForks(
     params.set("cursor", cursor);
   }
 
-  return apiRequest<TopListResponse>(`/tops/${topId}/forks?${params.toString()}`);
+  const path = locale
+    ? appendContentLocaleToPath(`/tops/${topId}/forks?${params.toString()}`, locale)
+    : `/tops/${topId}/forks?${params.toString()}`;
+
+  return apiRequest<TopListResponse>(path);
 }
 
 export function toggleTopLike(topId: string, accessToken: string): Promise<TopLikeResponse> {

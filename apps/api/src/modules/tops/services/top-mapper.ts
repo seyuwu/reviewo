@@ -77,6 +77,7 @@ export async function toTopDto(context: TopMapperContext): Promise<TopDto> {
     items: items.map(stripStoredPosition),
     likedByCurrentUser: context.likedByCurrentUser ?? false,
     likesCount: context.top._count.likes,
+    locale: context.top.locale,
     rankMode: context.top.rankMode,
     slug: context.top.slug,
     systemSortKey: context.top.systemSortKey,
@@ -97,6 +98,7 @@ export function toEmptyTopDto(input: {
     | "createdAt"
     | "description"
     | "id"
+    | "locale"
     | "rankMode"
     | "slug"
     | "systemSortKey"
@@ -119,6 +121,7 @@ export function toEmptyTopDto(input: {
     items: [],
     likedByCurrentUser: false,
     likesCount: 0,
+    locale: input.top.locale,
     rankMode: input.top.rankMode,
     slug: input.top.slug,
     systemSortKey: input.top.systemSortKey,
@@ -144,6 +147,7 @@ export function toTopListItemDto(
     id: top.id,
     itemCount: activeItemCount ?? top._count.items,
     likesCount: top._count.likes,
+    locale: top.locale,
     slug: top.slug,
     title: top.title,
     updatedAt: top.updatedAt.toISOString(),

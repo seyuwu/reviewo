@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "../../i18n/locale-provider";
+import { useLocale } from "../../i18n/locale-provider";
+import { ContentLocaleToggle } from "../../i18n/content-locale-toggle";
 import { fetchRecentTops, fetchTopsByCategory } from "../api/tops-api";
+import type { ContentLocaleParam } from "../../i18n/content-locale";
 import { parseTopListSort, topListSortToQueryValue, type TopListSort } from "../lib/top-list-sort";
 import type { TopCategory, TopListItem } from "../types/tops";
 import { TopCategoryFilter } from "./top-category-filter";
@@ -15,6 +18,7 @@ import { TopsList } from "./tops-list";
 interface TopsHubViewProps {
   activeCategorySlug?: string | null;
   categories?: TopCategory[] | undefined;
+  initialContentLocale?: ContentLocaleParam | undefined;
   initialItems?: TopListItem[] | undefined;
   initialSearchQuery?: string | undefined;
   initialSort?: TopListSort | undefined;
@@ -23,11 +27,13 @@ interface TopsHubViewProps {
 export function TopsHubView({
   activeCategorySlug = null,
   categories = [],
+  initialContentLocale,
   initialItems,
   initialSearchQuery = "",
   initialSort = "recent"
 }: TopsHubViewProps) {
   const t = useTranslation();
+  const { resolvedLocale } = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -36,6 +42,7 @@ export function TopsHubView({
   const urlShuffle = searchParams.get("shuffle") ?? "";
   const hasInitialData =
     initialItems !== undefined &&
+    initialContentLocale !== undefined &&
     urlSort === initialSort &&
     urlQuery === initialSearchQuery.trim() &&
     !urlShuffle;
@@ -47,7 +54,17 @@ export function TopsHubView({
     hasInitialData ? urlQuery : null
   );
   const [loadedShuffle, setLoadedShuffle] = useState<string | null>(hasInitialData ? "" : null);
+  const [loadedContentLocale, setLoadedContentLocale] = useState<ContentLocaleParam | null>(
+    hasInitialData ? initialContentLocale ?? null : null
+  );
   const [isLoading, setIsLoading] = useState(!hasInitialData);
+  const [showAllTops, setShowAllTops] = useState(false);
+  const contentLocale = showAllTops ? "all" : resolvedLocale;
+  const loadedContentLocaleRef = useRef(loadedContentLocale);
+
+  useEffect(() => {
+    loadedContentLocaleRef.current = loadedContentLocale;
+  }, [loadedContentLocale]);
 
   useEffect(() => {
     setSort(urlSort);
@@ -85,22 +102,23 @@ export function TopsHubView({
   useEffect(() => {
     if (
       hasInitialData &&
+      contentLocale === initialContentLocale &&
       loadedSort === urlSort &&
       loadedQuery === urlQuery &&
-      loadedShuffle === urlShuffle
+      loadedShuffle === urlShuffle &&
+      loadedContentLocaleRef.current === contentLocale
     ) {
       setItems(initialItems ?? []);
       return;
     }
 
     let cancelled = false;
-    setIsLoading(
-      loadedSort !== urlSort || loadedQuery !== urlQuery || loadedShuffle !== urlShuffle
-    );
+    const shouldShowLoading = items.length === 0;
+    setIsLoading(shouldShowLoading);
 
     const fetchItems = activeCategorySlug
-      ? fetchTopsByCategory(activeCategorySlug, 20, undefined, urlSort, urlQuery || undefined)
-      : fetchRecentTops(20, undefined, urlSort, urlQuery || undefined);
+      ? fetchTopsByCategory(activeCategorySlug, 20, undefined, urlSort, urlQuery || undefined, contentLocale)
+      : fetchRecentTops(20, undefined, urlSort, urlQuery || undefined, contentLocale);
 
     void fetchItems
       .then((response) => {
@@ -109,14 +127,11 @@ export function TopsHubView({
           setLoadedSort(urlSort);
           setLoadedQuery(urlQuery);
           setLoadedShuffle(urlShuffle);
+          setLoadedContentLocale(contentLocale);
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setLoadedSort(urlSort);
-          setLoadedQuery(urlQuery);
-          setLoadedShuffle(urlShuffle);
-        }
+        // Keep the previous snapshot on transient failures.
       })
       .finally(() => {
         if (!cancelled) {
@@ -129,11 +144,10 @@ export function TopsHubView({
     };
   }, [
     activeCategorySlug,
+    contentLocale,
     hasInitialData,
+    initialContentLocale,
     initialItems,
-    loadedQuery,
-    loadedShuffle,
-    loadedSort,
     urlQuery,
     urlShuffle,
     urlSort
@@ -207,6 +221,13 @@ export function TopsHubView({
         <div className="tops-hub-controls">
           <TopCategoryFilter activeSlug={activeCategorySlug} categories={categories} />
           <div className="tops-hub-sort-row">
+            <ContentLocaleToggle
+              locale={resolvedLocale}
+              showAll={showAllTops}
+              onToggle={() => {
+                setShowAllTops((current) => !current);
+              }}
+            />
             <TopSortTabs
               activeSort={sort}
               ariaLabel={t("web.userTops.sortLabel")}
@@ -219,7 +240,13 @@ export function TopsHubView({
           {isLoading ? (
             <p className="muted-copy">{t("chat.loading")}</p>
           ) : (
-            <TopsList emptyMessage={emptyMessage} items={items} showCategory={!activeCategorySlug} showEngagement />
+            <TopsList
+              emptyMessage={emptyMessage}
+              items={items}
+              showCategory={!activeCategorySlug}
+              showEngagement
+              showLocaleBadge={contentLocale === "all"}
+            />
           )}
         </div>
       </section>

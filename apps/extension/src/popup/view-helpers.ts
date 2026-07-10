@@ -1,4 +1,10 @@
 import { extensionConfig } from "../shared/config.js";
+import type { ContentLocaleParam } from "@reviewo/shared";
+import {
+  buildBattlesUrl,
+  buildEntityTopsUrl,
+  buildUserTopsUrl
+} from "../shared/web-urls.js";
 import type { ExtensionStoredAuthSession } from "../shared/types/auth.js";
 import type { ExtensionResolveResponse } from "../shared/types/resolve.js";
 import type { SearchEntityResult } from "./services/search-entities.js";
@@ -7,6 +13,22 @@ import { deriveTitleFromCanonicalUrl } from "../content/rating-card/title-from-u
 
 export function buildEntityPageUrl(entityPagePath: string): string {
   return new URL(entityPagePath, extensionConfig.webBaseUrl).toString();
+}
+
+export function buildGlobalTopsUrl(): string {
+  return new URL("/top", extensionConfig.webBaseUrl).toString();
+}
+
+export function buildLocaleAwareUserTopsUrl(locale?: ContentLocaleParam): string {
+  return buildUserTopsUrl(locale);
+}
+
+export function buildLocaleAwareBattlesUrl(locale?: ContentLocaleParam): string {
+  return buildBattlesUrl(locale);
+}
+
+export function buildLocaleAwareEntityTopsUrl(entityId: string, locale?: ContentLocaleParam): string {
+  return buildEntityTopsUrl(entityId, locale);
 }
 
 export function entityViewFromResolve(

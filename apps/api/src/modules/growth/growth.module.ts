@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { DomainEventsModule } from "../../common/domain-events/domain-events.module.js";
 import { RateLimitingModule } from "../../common/rate-limiting/rate-limiting.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { EntitiesModule } from "../entities/entities.module.js";
@@ -15,6 +16,7 @@ import { GrowthCompareService } from "./services/growth-compare.service.js";
   controllers: [GrowthController],
   imports: [
     AuthModule,
+    DomainEventsModule,
     EntitiesModule,
     RateLimitingModule,
     RatingsModule,

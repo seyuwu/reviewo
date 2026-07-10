@@ -507,6 +507,32 @@ export const RATING_CARD_STYLES = `
   margin-bottom: 8px;
 }
 
+.reviewo-reviews-panel-meta {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.reviewo-locale-toggle-button {
+  background: transparent;
+  border: 0;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.reviewo-card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
 .reviewo-reviews-panel-header .reviewo-rate-label {
   margin: 0;
 }

@@ -1,7 +1,10 @@
+import type { ContentLocaleParam } from "@reviewo/shared";
+
 import {
   createAuthenticatedApiRequestMessage,
   ExtensionMessageType
 } from "../../shared/messages.js";
+import { appendPathContentLocale } from "../../shared/content-locale.js";
 import { sendExtensionMessage } from "../extension-messaging.js";
 
 export interface MyEntityReview {
@@ -9,9 +12,15 @@ export interface MyEntityReview {
   updatedAt: string;
 }
 
-export async function fetchMyEntityReview(entityId: string): Promise<MyEntityReview | null> {
+export async function fetchMyEntityReview(
+  entityId: string,
+  locale: ContentLocaleParam
+): Promise<MyEntityReview | null> {
   const response = await sendExtensionMessage(
-    createAuthenticatedApiRequestMessage(`/reviews/entities/${entityId}/my-review`, "GET")
+    createAuthenticatedApiRequestMessage(
+      appendPathContentLocale(`/reviews/entities/${entityId}/my-review`, locale),
+      "GET"
+    )
   );
 
   if (response?.type !== ExtensionMessageType.AuthenticatedApiResult) {

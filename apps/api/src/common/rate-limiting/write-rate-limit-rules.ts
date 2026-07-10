@@ -182,6 +182,62 @@ export function createTopViewRateLimitRules(request: RequestLike): RateLimitRule
   ];
 }
 
+export function createSpotlightEndorseRateLimitRules(
+  userId: string,
+  request: RequestLike
+): RateLimitRule[] {
+  return [
+    {
+      key: userId,
+      limit: 60,
+      message: "Too many recommendation endorsements from this account",
+      namespace: "spotlight:endorse:user",
+      windowSeconds: 60 * 60
+    },
+    {
+      key: resolveRequestIp(request),
+      limit: 180,
+      message: "Too many recommendation endorsements from this network",
+      namespace: "spotlight:endorse:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
+export function createSpotlightSpendRateLimitRules(
+  userId: string,
+  request: RequestLike
+): RateLimitRule[] {
+  return [
+    {
+      key: userId,
+      limit: 20,
+      message: "Too many spotlight spends from this account",
+      namespace: "spotlight:spend:user",
+      windowSeconds: 60 * 60
+    },
+    {
+      key: resolveRequestIp(request),
+      limit: 60,
+      message: "Too many spotlight spends from this network",
+      namespace: "spotlight:spend:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
+export function createSpotlightEventRateLimitRules(request: RequestLike): RateLimitRule[] {
+  return [
+    {
+      key: resolveRequestIp(request),
+      limit: 600,
+      message: "Too many spotlight events from this network",
+      namespace: "spotlight:event:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
 export function createPresenceHeartbeatRateLimitRules(
   userId: string,
   request: RequestLike

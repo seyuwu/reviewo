@@ -83,7 +83,7 @@ export function EntityHeroBar({
               label={t("web.entity.confidence")}
               value={formatReliabilityPercent(pageData.trust.confidence)}
             />
-            <EntityStat label={t("web.entity.reviewsCount")} value={String(pageData.meta.reviewsCount)} />
+            <EntityStat label={t("web.entity.reviewsCount")} value={String(pageData.meta.reviewsCountGlobal)} />
           </div>
         </div>
       </div>
@@ -100,6 +100,9 @@ export function EntityHeroBar({
             {t("contributions.relatedPresencesTitle")}
           </button>
         ) : null}
+        <Link className={styles.anchorLink} href="/top">
+          {t("web.nav.globalTops")}
+        </Link>
         <button
           type="button"
           className={styles.anchorLink}

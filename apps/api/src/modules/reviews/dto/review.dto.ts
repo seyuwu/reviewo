@@ -7,6 +7,7 @@ export class ReviewDto {
   isOwnReview!: boolean;
   likedByCurrentUser!: boolean;
   likesCount!: number;
+  locale!: string;
   text!: string;
   updatedAt!: string;
   visibility!: ReviewVisibility;

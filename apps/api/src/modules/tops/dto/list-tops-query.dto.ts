@@ -25,4 +25,9 @@ export class ListTopsQueryDto {
   @MinLength(1)
   @MaxLength(200)
   q?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["ru", "en", "all"])
+  locale?: "ru" | "en" | "all";
 }

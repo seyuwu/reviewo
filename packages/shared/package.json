@@ -19,7 +19,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
-    "test": "tsc -p tsconfig.json && tsc -p tsconfig.test.json && node --test dist-test/entity-chat-messages.test.js dist-test/compare-slug.test.js",
+    "test": "tsc -p tsconfig.json && tsc -p tsconfig.test.json && node --test dist-test/entity-chat-messages.test.js dist-test/compare-slug.test.js dist-test/content-locale.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

@@ -5,6 +5,7 @@ export interface ExtensionReview {
   isOwnReview: boolean;
   likedByCurrentUser: boolean;
   likesCount: number;
+  locale: string;
   text: string;
   updatedAt: string;
 }

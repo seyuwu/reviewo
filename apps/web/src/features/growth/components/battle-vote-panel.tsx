@@ -3,7 +3,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { useTranslation } from "../../i18n/locale-provider";
+import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { fetchGrowthBattle, submitGrowthBattleVote } from "../api/growth-api";
 import { formatScoreOneDecimal, formatStarRating } from "../lib/format-growth-stats";
 import { buildBattleShareUrl } from "../lib/share-urls";
@@ -18,20 +18,21 @@ interface BattleVotePanelProps {
 
 export function BattleVotePanel({ initialBattle, pairSlug }: BattleVotePanelProps) {
   const t = useTranslation();
+  const { resolvedLocale } = useLocale();
   const [battle, setBattle] = useState(initialBattle);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const shareUrl = buildBattleShareUrl(pairSlug);
 
   useEffect(() => {
-    void fetchGrowthBattle(pairSlug)
+    void fetchGrowthBattle(pairSlug, resolvedLocale)
       .then(setBattle)
       .catch(() => {
         // Keep SSR payload when refresh fails.
       });
-  }, [pairSlug]);
+  }, [pairSlug, resolvedLocale]);
 
   const voteMutation = useMutation({
-    mutationFn: (entityId: string) => submitGrowthBattleVote(pairSlug, entityId),
+    mutationFn: (entityId: string) => submitGrowthBattleVote(pairSlug, entityId, resolvedLocale),
     onError: () => {
       setErrorMessage(t("growth.battle.error"));
     },

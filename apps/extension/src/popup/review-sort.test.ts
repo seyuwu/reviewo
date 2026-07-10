@@ -12,6 +12,7 @@ const reviews: ExtensionReview[] = [
     isOwnReview: false,
     likedByCurrentUser: false,
     likesCount: 2,
+    locale: "en",
     text: "Older popular",
     updatedAt: "2026-06-20T00:00:00.000Z"
   },
@@ -22,6 +23,7 @@ const reviews: ExtensionReview[] = [
     isOwnReview: false,
     likedByCurrentUser: false,
     likesCount: 5,
+    locale: "en",
     text: "Top liked",
     updatedAt: "2026-06-25T00:00:00.000Z"
   },
@@ -32,6 +34,7 @@ const reviews: ExtensionReview[] = [
     isOwnReview: false,
     likedByCurrentUser: false,
     likesCount: 1,
+    locale: "en",
     text: "Newest",
     updatedAt: "2026-06-27T00:00:00.000Z"
   }

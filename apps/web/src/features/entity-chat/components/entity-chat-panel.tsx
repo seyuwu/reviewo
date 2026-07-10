@@ -5,7 +5,6 @@ import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } 
 import type { EntityChatLocale } from "@reviewo/shared";
 import {
   appendEntityChatMessageNewest,
-  DEFAULT_ENTITY_CHAT_LOCALE,
   ENTITY_CHAT_CLIENT_INITIAL_LIMIT,
   ENTITY_CHAT_CLIENT_OLDER_LIMIT,
   mergeEntityChatMessagesNewest,
@@ -14,7 +13,7 @@ import {
   trimEntityChatMessagesNewest
 } from "@reviewo/shared";
 
-import { useTranslation } from "../../i18n/locale-provider";
+import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import {
   fetchEntityChatMessages,
   fetchEntityChatOnlineCount,
@@ -67,6 +66,7 @@ export function EntityChatPanel({
   scrollIntoViewOnMount = false
 }: EntityChatPanelProps) {
   const t = useTranslation();
+  const { resolvedLocale } = useLocale();
   const isSidebar = placement === "sidebar";
   const [expanded, setExpanded] = useState(isSidebar || initialExpanded);
   const [isClosing, setIsClosing] = useState(false);
@@ -79,7 +79,7 @@ export function EntityChatPanel({
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [draft, setDraft] = useState("");
-  const [chatLocale, setChatLocale] = useState<EntityChatLocale>(DEFAULT_ENTITY_CHAT_LOCALE);
+  const [chatLocale, setChatLocale] = useState<EntityChatLocale>(resolvedLocale);
 
   const connectionRef = useRef<EntityChatSocketConnection | null>(null);
   const handlersRef = useRef<EntityChatSocketHandlers>({});
@@ -394,10 +394,10 @@ export function EntityChatPanel({
     setNextCursor(null);
     setHasLoadedMessages(false);
     setSendError(null);
-    setChatLocale(DEFAULT_ENTITY_CHAT_LOCALE);
+    setChatLocale(resolvedLocale);
     disconnectSocket();
     stopOnlinePolling();
-  }, [disconnectSocket, entityId, stopOnlinePolling]);
+  }, [disconnectSocket, entityId, resolvedLocale, stopOnlinePolling]);
 
   const isChatLive = expanded || isSidebar;
 

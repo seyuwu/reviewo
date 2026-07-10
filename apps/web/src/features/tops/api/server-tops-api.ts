@@ -1,5 +1,7 @@
+import { appendContentLocaleToPath } from "../../i18n/content-locale";
 import { serverApiRequest } from "../../../lib/api/server-api-client";
 import { parseTopListSort, type TopListSort } from "../lib/top-list-sort";
+import type { ContentLocaleParam } from "../../i18n/content-locale";
 import type { SystemTopCatalogResponse, SystemTopDetail, Top, TopCategoryListResponse, TopListResponse } from "../types/tops";
 
 async function safeServerRequest<T>(path: string): Promise<T | null> {
@@ -13,7 +15,8 @@ async function safeServerRequest<T>(path: string): Promise<T | null> {
 export function fetchRecentTopsServer(
   limit = 20,
   sort: TopListSort = "recent",
-  searchQuery?: string
+  searchQuery?: string,
+  locale?: ContentLocaleParam
 ): Promise<TopListResponse | null> {
   const params = new URLSearchParams({ limit: String(limit) });
 
@@ -27,7 +30,11 @@ export function fetchRecentTopsServer(
     params.set("q", trimmedQuery);
   }
 
-  return safeServerRequest<TopListResponse>(`/tops?${params.toString()}`);
+  const path = locale
+    ? appendContentLocaleToPath(`/tops?${params.toString()}`, locale)
+    : `/tops?${params.toString()}`;
+
+  return safeServerRequest<TopListResponse>(path);
 }
 
 export function fetchTopBySlugServer(slug: string): Promise<Top | null> {
@@ -50,7 +57,8 @@ export function fetchTopsByCategoryServer(
   slug: string,
   limit = 20,
   sort: TopListSort = "recent",
-  searchQuery?: string
+  searchQuery?: string,
+  locale?: ContentLocaleParam
 ): Promise<TopListResponse | null> {
   const params = new URLSearchParams({ limit: String(limit) });
 
@@ -64,9 +72,10 @@ export function fetchTopsByCategoryServer(
     params.set("q", trimmedQuery);
   }
 
-  return safeServerRequest<TopListResponse>(
-    `/tops/category/${encodeURIComponent(slug)}?${params.toString()}`
-  );
+  const basePath = `/tops/category/${encodeURIComponent(slug)}?${params.toString()}`;
+  const path = locale ? appendContentLocaleToPath(basePath, locale) : basePath;
+
+  return safeServerRequest<TopListResponse>(path);
 }
 
 export { parseTopListSort } from "../lib/top-list-sort";

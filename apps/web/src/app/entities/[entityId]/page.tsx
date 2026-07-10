@@ -28,9 +28,9 @@ export async function generateMetadata({ params }: EntityPageRouteProps): Promis
       alternates: {
         canonical: pageUrl
       },
-      description: `${pageData.entity.title}: ${pageData.rating.avgScore.toFixed(1)}/5, ${trustPercent}% trust, ${pageData.meta.reviewsCount} reviews on Opinia.`,
+      description: `${pageData.entity.title}: ${pageData.rating.avgScore.toFixed(1)}/5, ${trustPercent}% trust, ${pageData.meta.reviewsCountGlobal} reviews on Opinia.`,
       openGraph: {
-        description: `${pageData.rating.avgScore.toFixed(1)}/5 · ${trustPercent}% trust · ${pageData.meta.reviewsCount} reviews`,
+        description: `${pageData.rating.avgScore.toFixed(1)}/5 · ${trustPercent}% trust · ${pageData.meta.reviewsCountGlobal} reviews`,
         images: [{ url: ogImage }],
         title: pageData.entity.title,
         type: "website",

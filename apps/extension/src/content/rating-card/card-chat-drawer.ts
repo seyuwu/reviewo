@@ -52,6 +52,7 @@ export interface CardChatDrawerOptions {
   accessToken: string | null;
   entityId: string;
   entityTitle: string;
+  initialChatLocale?: EntityChatLocale;
   isAuthenticated: boolean;
 }
 
@@ -149,8 +150,12 @@ export function bindCardChatDrawer(
     return;
   }
 
-  let cache = getChatCache(entityId, localeByEntity.get(entityId) ?? DEFAULT_ENTITY_CHAT_LOCALE);
-  let chatLocale = localeByEntity.get(entityId) ?? DEFAULT_ENTITY_CHAT_LOCALE;
+  let cache = getChatCache(
+    entityId,
+    localeByEntity.get(entityId) ?? options.initialChatLocale ?? DEFAULT_ENTITY_CHAT_LOCALE
+  );
+  let chatLocale =
+    localeByEntity.get(entityId) ?? options.initialChatLocale ?? DEFAULT_ENTITY_CHAT_LOCALE;
   let connection = cache.connection;
   let messages = cache.messages;
   let nextCursor = cache.nextCursor;

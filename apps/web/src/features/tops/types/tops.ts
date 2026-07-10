@@ -65,6 +65,7 @@ export interface Top {
   items: TopItem[];
   likedByCurrentUser: boolean;
   likesCount: number;
+  locale: string;
   rankMode: "HYBRID" | "MANUAL" | "SYSTEM";
   slug: string;
   systemSortKey: "POPULARITY" | "RATING" | "RELIABILITY" | "TRENDING" | null;
@@ -107,6 +108,7 @@ export interface TopListItem {
   id: string;
   itemCount: number;
   likesCount: number;
+  locale: string;
   slug: string;
   title: string;
   updatedAt: string;

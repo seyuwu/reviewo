@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { ComparePageView } from "../../../features/growth/components/compare-page-view";
+import { resolveServerContentLocale } from "../../../features/i18n/server-content-locale";
+import { appendContentLocaleToPath } from "../../../features/i18n/content-locale";
 import { serverApiRequest } from "../../../lib/api/server-api-client";
 import { publicEnv } from "../../../lib/config/public-env";
 import type { GrowthBattleResponse, GrowthCompareResponse } from "../../../features/growth/types/growth";
@@ -46,8 +48,9 @@ export default async function ComparePage({ params }: ComparePageProps) {
     const compare = await serverApiRequest<GrowthCompareResponse>(
       `/growth/compare/${encodeURIComponent(pairSlug)}`
     );
+    const contentLocale = await resolveServerContentLocale();
     const battle = await serverApiRequest<GrowthBattleResponse>(
-      `/growth/battle/${encodeURIComponent(pairSlug)}`
+      appendContentLocaleToPath(`/growth/battle/${encodeURIComponent(pairSlug)}`, contentLocale)
     );
 
     return (

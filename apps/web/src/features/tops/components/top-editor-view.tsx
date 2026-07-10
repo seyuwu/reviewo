@@ -7,7 +7,7 @@ import { FormFeedback } from "../../../components/form-feedback";
 import { ApiError } from "../../../lib/api/api-error";
 import { readApiErrorMessage } from "../../../lib/api/read-api-error";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
-import { useTranslation } from "../../i18n/locale-provider";
+import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { createTop, fetchTopCategories, replaceTopItems, updateTop } from "../api/tops-api";
 import {
   isValidTopSlug,
@@ -29,6 +29,7 @@ interface TopEditorViewProps {
 export function TopEditorView({ mode, initialTop }: TopEditorViewProps) {
   const router = useRouter();
   const t = useTranslation();
+  const { resolvedLocale } = useLocale();
   const { authSession } = useAuthSession();
   const [title, setTitle] = useState(initialTop?.title ?? "");
   const [description, setDescription] = useState(initialTop?.description ?? "");
@@ -304,7 +305,8 @@ export function TopEditorView({ mode, initialTop }: TopEditorViewProps) {
                   title: title.trim(),
                   ...rankPayload
                 },
-                authSession.accessToken
+                authSession.accessToken,
+                resolvedLocale
               );
 
         topId = top.id;

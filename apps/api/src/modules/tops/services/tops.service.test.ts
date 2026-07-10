@@ -32,7 +32,8 @@ function createTopsService(topsRepository: Partial<TopsRepository>): TopsService
     {} as TopEngagementRepository,
     topsRepository as TopsRepository,
     {} as UserTopRankService,
-    {} as UsersRepository
+    {} as UsersRepository,
+    { publish: async () => undefined } as never
   );
 }
 
