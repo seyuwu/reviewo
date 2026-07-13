@@ -121,18 +121,52 @@ model Entity {
   canonicalUrl String?          @unique @map("canonical_url")
   parentId     String?          @map("parent_id") @db.Uuid
   createdBy    String?          @map("created_by") @db.Uuid
+  ownerUserId  String?          @unique @map("owner_user_id") @db.Uuid
   createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
   parent       Entity?          @relation("EntityTree", fields: [parentId], references: [id], onDelete: SetNull)
   children     Entity[]         @relation("EntityTree")
   clusterMember EntityClusterMember?
   media        EntityMedia[]
+  attributes   EntityAttribute[]
+  qualityConfirmations EntityQualityConfirmation[]
 
   @@index([type])
   @@index([parentId])
   @@index([createdBy])
+  @@index([ownerUserId])
   @@index([visibility])
   @@map("entities")
+  @@schema("entities")
+}
+
+model EntityAttribute {
+  entityId  String   @map("entity_id") @db.Uuid
+  key       String   @db.VarChar(64)
+  value     String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  entity    Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@id([entityId, key])
+  @@index([key, value])
+  @@map("entity_attributes")
+  @@schema("entities")
+}
+
+model EntityQualityConfirmation {
+  id           String   @id @default(uuid()) @db.Uuid
+  entityId     String   @map("entity_id") @db.Uuid
+  qualityKey   String   @map("quality_key") @db.VarChar(64)
+  confirmerKey String   @map("confirmer_key") @db.VarChar(128)
+  voterUserId  String?  @map("voter_user_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  entity       Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, qualityKey, confirmerKey])
+  @@index([entityId])
+  @@index([confirmerKey])
+  @@map("entity_quality_confirmations")
   @@schema("entities")
 }
 

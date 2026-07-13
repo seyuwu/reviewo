@@ -24,6 +24,7 @@ import { UrlNormalizationService } from "./services/url-normalization.service.js
   controllers: [EntitiesController, TrustCheckController],
   exports: [
     ENTITIES_PORT,
+    EntitiesRepository,
     EntitiesService,
     EntityClusterService,
     EntityMediaEnrichmentService,

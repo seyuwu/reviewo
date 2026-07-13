@@ -178,7 +178,7 @@ export function MinimalAuthPanel({
   );
 }
 
-function readAuthErrorMessage(
+export function readAuthErrorMessage(
   error: unknown,
   authMode: AuthMode,
   t: ReturnType<typeof useTranslation>

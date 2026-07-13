@@ -1,0 +1,88 @@
+.field {
+  gap: 0.35rem;
+}
+
+.idValue {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: copy;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+  width: fit-content;
+}
+
+.idValue strong {
+  border-bottom: 1px dashed rgb(23 23 23 / 22%);
+  color: var(--color-primary);
+  font-size: 0.95rem;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.idValue:hover strong,
+.idValue:focus-visible strong {
+  border-bottom-color: var(--color-primary);
+  color: #000;
+}
+
+.idValue:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 0.25rem;
+}
+
+.copyButton {
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-card-border);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.28rem 0.55rem;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+  width: fit-content;
+}
+
+.copyButton:hover,
+.copyButton:focus-visible {
+  background: var(--color-card);
+  border-color: rgb(23 23 23 / 16%);
+  color: var(--color-primary);
+}
+
+.copyButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.missingValue {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.fillButton {
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-card-border);
+  border-radius: 999px;
+  color: var(--color-primary);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.fillButton:hover,
+.fillButton:focus-visible {
+  background: var(--color-card);
+  border-color: rgb(23 23 23 / 16%);
+}

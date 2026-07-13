@@ -11,6 +11,7 @@ import { AuthModule } from "./modules/auth/auth.module.js";
 import { ChatModule } from "./modules/chat/chat.module.js";
 import { CommunityModule } from "./modules/community/community.module.js";
 import { ContributionsModule } from "./modules/contributions/contributions.module.js";
+import { DotaModule } from "./modules/dota/dota.module.js";
 import { DiscoveryModule } from "./modules/discovery/discovery.module.js";
 import { EntityPageModule } from "./modules/entity-page/entity-page.module.js";
 import { EntitiesModule } from "./modules/entities/entities.module.js";
@@ -53,6 +54,7 @@ import { RedisModule } from "./redis/redis.module.js";
     ChatModule,
     CommunityModule,
     DiscoveryModule,
+    DotaModule,
     GrowthModule
   ],
   providers: [AppLogger, GlobalExceptionFilter]

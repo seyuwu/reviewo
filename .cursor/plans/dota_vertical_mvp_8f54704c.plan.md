@@ -4,43 +4,43 @@ overview: "Сначала документация (RFC + product doc + lean GTM
 todos:
   - id: docs-rfc
     content: "Написать RFC 0015: Person Entities & Quality Confirmations"
-    status: pending
+    status: completed
   - id: docs-product
-    content: "Написать docs/product/dota-vertical.md (flows, copy для чата/ЛС, метрики, этапы)"
-    status: pending
+    content: Написать docs/product/dota-vertical.md (flows, copy для чата/ЛС, метрики, этапы)
+    status: completed
   - id: docs-gtm
     content: "В dota-vertical.md — lean GTM: позиционирование, скрипты для чата/ЛС, цели на 2–4 недели"
-    status: pending
+    status: completed
   - id: docs-index
     content: Обновить docs/README.md — добавить ссылки на новые доки
-    status: pending
+    status: completed
   - id: schema-migration
     content: "Миграция: owner_user_id, entity_attributes, entity_quality_confirmations"
-    status: pending
+    status: completed
   - id: api-dota-module
     content: "Dota API module: create/update profile, confirm, aggregates, rate limits"
-    status: pending
+    status: completed
   - id: api-slug-endpoint
     content: Публичный GET /entities/slug/:slug для web resolve
-    status: pending
+    status: completed
   - id: web-dota-routes
     content: "Web: /dota, /dota/create, /dota/[slug], /dota/[slug]/confirm"
-    status: pending
+    status: completed
   - id: web-share-flow
-    content: "0/3 прогресс + два copy-to-clipboard: полная ссылка (профиль) и короткая (/confirm)"
-    status: pending
+    content: "0/3 прогресс + три copy: профиль, /confirm, Dota ID + /dota/id/..."
+    status: completed
   - id: web-og
     content: OG/preview для Dota-профилей (критично для ЛС Discord — превью ссылки)
-    status: pending
+    status: completed
   - id: i18n-dota
     content: "i18n ключи: quality labels, landing, share templates (чат + Discord)"
-    status: pending
+    status: completed
   - id: analytics-lite
     content: "Минимальный трекинг: 4–5 событий в product doc + таблица ручного учёта на старте"
-    status: pending
+    status: completed
   - id: tests-smoke
     content: Unit/integration тесты + секция в smoke checklist
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -201,7 +201,9 @@ erDiagram
 **`entities.entity_attributes`** (новая):
 - `entity_id`, `key`, `value` (text/json string)
 - unique `(entity_id, key)`
-- Ключи для Dota MVP: `vertical`, `mmr`, `roles`, `server`, `language`, `has_mic`, `play_intent`
+- Ключи для Dota MVP: `vertical`, `dota_account_id`, `mmr`, `roles`, `server`, `language`, `has_mic`, `play_intent`
+- **`dota_account_id`** — Dota Friend ID / Account ID (цифры из клиента); unique среди `vertical=dota`; для поиска в игре
+- **`mmr`** — self-reported, подпись «указано игроком»; без OpenDota/Steam в MVP
 
 **`entities.entity_quality_confirmations`** (новая):
 - `entity_id`, `quality_key`, `confirmer_key` (hash cookie/IP), `voter_user_id` nullable
@@ -220,6 +222,33 @@ erDiagram
 | Self-confirm запрещён | confirmer_key ≠ owner fingerprint; logged-in voter ≠ owner |
 | Прогресс 0/3 | count distinct `confirmer_key` per entity (не count flags) |
 | Vertical isolation | `vertical=dota` attribute обязателен для `/dota/*` routes |
+| 1 Dota ID на профиль | unique `(dota_account_id)` where vertical=dota; второй юзер не может занять чужие цифры |
+| Dota ID без верификации | бейдж «не подтверждён» до Steam OAuth (стадия 1.5); в MVP — честность + confirm от тиммейтов |
+
+### Идентификация в Dota (как находят профиль)
+
+В игре люди не шарят slug — они знают **цифры** (Dota Account ID / Friend ID в профиле клиента). Два канала discoverability:
+
+| Способ | Когда | MVP |
+|--------|-------|-----|
+| **Ссылка** | Discord ЛС, party chat | Основной — copy-to-clipboard |
+| **Цифры** | «Какой у тебя ID?» после катки | `/dota/id/{accountId}` → редирект на профиль |
+| **Поиск на лендинге** | Кто-то скинул ID в чат | Поле «введи Dota ID» на `/dota` |
+
+**Что пишет игрок сам (MVP):**
+- **Dota Account ID** — обязательно при создании; подсказка «где найти в клиенте» + валидация формата (только цифры, 8–10 знаков)
+- **MMR, роли, сервер** — вручную; явно помечать «указано игроком», не «с OpenDota»
+- **Ник в Dota** — опционально в title/slug; ник меняется, на него не опираться для поиска
+
+**Что НЕ делаем в MVP:**
+- Автоподтягивание MMR/ранга из API — стадия 1.5 (Steam OAuth + OpenDota)
+- Поиск по MMR/ролям — стадия 3, когда есть плотность
+
+**Copy для чата с цифрами:**
+- «мой dota id 123456789, профиль: reviewo.ru/dota/id/123456789»
+- Третья кнопка copy: **ID + короткая ссылка** — для тех, кто привык искать по цифрам
+
+**Риск имперсонации:** без Steam любой может занять чужой ID → unique constraint + жалобы позже; долгосрочно Steam login = verified badge.
 
 ---
 
@@ -233,6 +262,7 @@ erDiagram
 | GET | `/dota/profiles/me` | JWT | Свой профиль + прогресс |
 | PATCH | `/dota/profiles/me` | JWT | Обновить атрибуты |
 | GET | `/dota/profiles/:slug` | public | Публичный профиль + агрегаты флагов |
+| GET | `/dota/profiles/by-id/:accountId` | public | Resolve по Dota Account ID → slug/profile |
 | POST | `/dota/profiles/:slug/confirm` | public | Отправить выбранные quality keys |
 | GET | `/entities/slug/:slug` | public | **Общий** slug lookup (нужен web redirect) |
 
@@ -263,9 +293,10 @@ erDiagram
 
 | Route | Компонент | Назначение |
 |-------|-----------|------------|
-| `/dota` | landing | «Создай профиль, собери подтверждения» |
-| `/dota/create` | wizard | MMR, роли, сервер, мик — после auth |
-| `/dota/[slug]` | profile | Публичный профиль + флаги + прогресс (для owner) |
+| `/dota` | landing | «Создай профиль» + **поиск по Dota ID** |
+| `/dota/create` | wizard | Dota ID, MMR, роли, сервер, мик — после auth |
+| `/dota/id/[accountId]` | redirect | Короткий вход по цифрам → `/dota/[slug]` |
+| `/dota/[slug]` | profile | Публичный профиль + **Dota ID крупно** + copy |
 | `/dota/[slug]/confirm` | confirm | Галочки без регистрации + CTA «создай свой» |
 
 Фича-папка: `apps/web/src/features/dota/`
@@ -279,10 +310,11 @@ erDiagram
 Репутация: недостаточно данных (0/3)
 [ Скопировать ссылку ]  ← готовый текст для Discord ЛС и Dota-чата
 [ Скопировать ссылку на confirm ]  ← короче, для «подтверди тут»
-□ MMR ✓  □ Роли ✓  □ 3 подтверждения
+[ Скопировать Dota ID ]  ← «id 123456789 — reviewo.ru/dota/id/123456789»
+□ Dota ID ✓  □ MMR ✓  □ Роли ✓  □ 3 подтверждения
 ```
 
-Два варианта copy в clipboard: **полный** (профиль) и **короткий** (только confirm) — под разные каналы.
+Три варианта copy в clipboard: **профиль**, **confirm**, **по цифрам** — под разные каналы.
 
 **Confirm page** (`/dota/[slug]/confirm`):
 - Список quality toggles (one tap each)
@@ -290,7 +322,7 @@ erDiagram
 - Footer: «Хочешь такой же профиль?» → `/dota/create`
 
 **Profile page** (`/dota/[slug]`):
-- Hero: nickname, MMR, roles
+- Hero: nickname, **Dota ID** (copy), MMR «указано игроком», roles
 - Quality bars: `✅ Не токсик — 3 подтверждения`
 - Owner видит прогресс и share CTA
 - OG metadata: MMR + top 3 qualities (новый route или адаптация [`og/entity`](apps/web/src/app/og/entity/[entityId]/route.tsx))
@@ -309,7 +341,7 @@ erDiagram
 | LFG «ищу игру» | Стадия 2 | Нужен после ~30 профилей и хотя бы 5 органических share |
 | Red flags | После green flags | Сначала позитив |
 | Текстовые отзывы | После confirmations | Больше friction |
-| Steam OAuth | Стадия 1.5 | Интеграция, не блокер |
+| Steam OAuth + OpenDota | Стадия 1.5 | Верификация Dota ID, авто-MMR; до этого — ручной ввод |
 | Email уведомления | После MVP | Нет email infra |
 | Ежедневные кредиты | После LFG | Нет use case |
 | `dota.opinia.ru` subdomain | Не нужно | `/dota` достаточно |

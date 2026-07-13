@@ -68,6 +68,17 @@ See [mvp-e2e-flow.md](./mvp-e2e-flow.md).
 15. On entity page, suggest a description correction → two other users approve → field updates.
 16. Duplicate suggestions block → propose merge → admin applies via «Применить».
 
+## Dota vertical manual smoke
+
+1. Open `/dota` → landing with create CTA and Dota ID search.
+2. Sign in → `/dota/create` → create profile with Dota ID, MMR, roles.
+3. After create → `/dota/:slug?created=1` shows 0/3 progress and three copy buttons.
+4. Open `/dota/:slug/confirm` in incognito → select qualities → submit without sign-in.
+5. Owner profile shows updated confirmation counts and progress.
+6. Open `/dota/id/:accountId` → redirects to `/dota/:slug`.
+7. Open shared link preview in Discord/Telegram → OG image renders for `/og/dota/:slug`.
+8. Self-confirm as owner → API returns forbidden.
+
 ## API manual smoke (curl-friendly)
 
 - `GET /health`
@@ -78,6 +89,8 @@ See [mvp-e2e-flow.md](./mvp-e2e-flow.md).
 - `POST /tops/:id/like` + `POST /tops/:id/view` + `GET/POST /tops/:id/comments`
 - `GET /entities/:id/tops`
 - `GET /tops/system` + `GET /tops/system/:slug` + `GET /entities/:id/system-tops`
+- `POST /dota/profiles` + `GET /dota/profiles/:slug` + `POST /dota/profiles/:slug/confirm`
+- `GET /dota/profiles/by-id/:accountId` + `GET /entities/slug/:slug`
 - `pnpm system-tops:refresh` (materialize snapshots)
 - `GET /tops/categories` + `GET /tops/category/:slug`
 - `POST /tops` requires `categoryId`

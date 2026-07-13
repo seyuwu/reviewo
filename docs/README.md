@@ -7,6 +7,7 @@ This directory is the long-term home for project documentation. Content is being
 | Path | Description |
 | ---- | ----------- |
 | [product/web-discovery-and-battles.md](./product/web-discovery-and-battles.md) | Главная лента, битвы, discovery API, лимиты на странице, поведение активных/случайных битв |
+| [product/dota-vertical.md](./product/dota-vertical.md) | Dota vertical: репутация игроков, confirmations, lean GTM, маршруты `/dota/*` |
 | [development-workflow.md](./development-workflow.md) | Локальная разработка → GitHub → production (Opinia в Chrome Web Store и на VPS) |
 | [deployment/mvp-deploy.md](./deployment/mvp-deploy.md) | MVP production deployment notes (Stage 32) |
 | [deployment/selectel-vds-guide.md](./deployment/selectel-vds-guide.md) | Пошаговый деплой на VDS Selectel (рядом с другим Docker-проектом) |
@@ -19,6 +20,7 @@ This directory is the long-term home for project documentation. Content is being
 | [11-rfc/0010-user-tops-and-system-tops.md](./11-rfc/0010-user-tops-and-system-tops.md) | RFC 0010: User Tops & System Tops — Top as first-class object |
 | [11-rfc/0013-contribution-attention-economy.md](./11-rfc/0013-contribution-attention-economy.md) | RFC 0013: Contribution & Attention Economy — activity events, levels, `/contribute`, future spotlight economy |
 | [11-rfc/0014-community-recommendations.md](./11-rfc/0014-community-recommendations.md) | RFC 0014: Community Recommendations — recommendation vs placement, enriched `/spotlight` feed, endorsements |
+| [11-rfc/0015-person-entities-and-quality-confirmations.md](./11-rfc/0015-person-entities-and-quality-confirmations.md) | RFC 0015: Person entities, quality confirmations, Dota vertical API |
 
 ## RFCs
 
@@ -34,6 +36,7 @@ Request for Comments documents propose architectural changes before implementati
 | [0012](./11-rfc/0012-entity-presence-clusters.md) | Entity Presence Clusters | **Implemented** |
 | [0013](./11-rfc/0013-contribution-attention-economy.md) | Contribution & Attention Economy | **Proposed** (Phase 1: activity events, levels, `/contribute`) |
 | [0014](./11-rfc/0014-community-recommendations.md) | Community Recommendations | **Proposed** (Phase 1: enriched feed, UX flip) |
+| [0015](./11-rfc/0015-person-entities-and-quality-confirmations.md) | Person Entities & Quality Confirmations | **Confirmed** (Dota vertical MVP) |
 
 Planned RFC slots (from `Структура.md`): rating system, trust system, extension UI, mobile app, AI summary, recommendation, extension parser, extension cache, extension API, extension settings, extension sync.
 

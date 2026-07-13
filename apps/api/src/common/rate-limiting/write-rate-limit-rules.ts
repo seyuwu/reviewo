@@ -38,6 +38,18 @@ export function createTrustCheckRateLimitRules(request: RequestLike): RateLimitR
   ];
 }
 
+export function createDotaConfirmationRateLimitRules(request: RequestLike): RateLimitRule[] {
+  return [
+    {
+      key: resolveRequestIp(request),
+      limit: 10,
+      message: "Too many confirmation attempts from this network",
+      namespace: "dota:confirm:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
 export function createReviewWriteRateLimitRules(
   userId: string,
   request: RequestLike

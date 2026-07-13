@@ -1,0 +1,122 @@
+.header {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.35rem;
+}
+
+.title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.lead {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.form {
+  margin-top: 0.15rem;
+}
+
+.roleChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.roleChip {
+  align-items: center;
+  background: var(--color-card);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.75rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.95rem;
+  font-weight: 700;
+  justify-content: center;
+  min-width: 2.6rem;
+  padding: 0.55rem 0.7rem;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+  user-select: none;
+}
+
+.roleChip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.roleChip:has(input:checked) {
+  background: var(--color-primary-soft);
+  border-color: rgb(23 23 23 / 18%);
+  color: var(--color-primary);
+}
+
+.checkboxRow {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  font-size: 0.9rem;
+  font-weight: 700;
+  gap: 0.55rem;
+}
+
+.skipLink {
+  background: transparent;
+  border: 0;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  justify-self: start;
+  margin-top: 0.15rem;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  width: fit-content;
+}
+
+.skipLink:hover {
+  color: var(--color-text);
+}
+
+.fieldHighlight {
+  animation: dota-id-highlight 1.2s ease;
+  border-radius: 0.95rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.formError {
+  color: var(--color-error);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 0;
+}
+
+@keyframes dota-id-highlight {
+  0% {
+    background: rgb(120 120 120 / 22%);
+    box-shadow: 0 0 0 2px rgb(120 120 120 / 28%);
+  }
+
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}

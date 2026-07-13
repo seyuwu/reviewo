@@ -53,6 +53,11 @@ export class EntitiesController {
     return this.entitiesService.searchEntities(query.query);
   }
 
+  @Get("slug/:slug")
+  async getEntityBySlug(@Param("slug") slug: string): Promise<EntityDto> {
+    return this.entitiesService.getEntityBySlug(slug);
+  }
+
   @Get(":id")
   async getEntityById(
     @Param("id", new ParseUUIDPipe({ version: "4" })) id: string

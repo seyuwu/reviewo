@@ -42,6 +42,26 @@ export {
   type EntityChatMessageLike
 } from "./entity-chat-messages.js";
 
+export {
+  DOTA_ACCOUNT_ID_PATTERN,
+  DOTA_ATTRIBUTE_KEYS,
+  DOTA_CONFIRMATION_MILESTONE,
+  DOTA_FLAG_LIMIT_PER_SIDE,
+  DOTA_GREEN_FLAG_KEYS,
+  DOTA_QUALITY_KEYS,
+  DOTA_RED_FLAG_KEYS,
+  DOTA_VERTICAL,
+  isDotaConfirmationKey,
+  isDotaGreenFlagKey,
+  isDotaQualityKey,
+  isDotaRedFlagKey,
+  isValidDotaAccountId,
+  type DotaConfirmationKey,
+  type DotaGreenFlagKey,
+  type DotaQualityKey,
+  type DotaRedFlagKey
+} from "./dota-vertical.js";
+
 export function resolveReliabilityLevel(score: number): ReliabilityLevel {
   if (score >= 0.95) {
     return "very_high";

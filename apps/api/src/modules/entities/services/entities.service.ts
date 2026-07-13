@@ -414,6 +414,20 @@ export class EntitiesService implements EntitiesPort {
     return entity;
   }
 
+  async getEntityBySlug(slug: string): Promise<EntityDto> {
+    const entity = await this.findEntityBySlug(slug);
+
+    if (!entity) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Entity was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    return entity;
+  }
+
   async listChildEntities(parentId: string, limit: number): Promise<EntityDto[]> {
     const parent = await this.entitiesRepository.findById(parentId);
 

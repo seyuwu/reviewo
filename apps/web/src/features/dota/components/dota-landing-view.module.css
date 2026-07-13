@@ -1,0 +1,68 @@
+.hero {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+}
+
+.eyebrow {
+  color: var(--muted-copy-color, #6b7280);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.title {
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.05;
+  margin: 0;
+}
+
+.lead {
+  color: var(--muted-copy-color, #6b7280);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.searchForm {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.searchLabel {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.searchRow {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr auto;
+}
+
+.searchInput {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  color: inherit;
+  font: inherit;
+  padding: 0.85rem 1rem;
+}
+
+@media (max-width: 640px) {
+  .searchRow {
+    grid-template-columns: 1fr;
+  }
+}

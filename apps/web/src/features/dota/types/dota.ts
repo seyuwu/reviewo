@@ -1,0 +1,34 @@
+export interface DotaProfileProgress {
+  current: number;
+  target: number;
+}
+
+export interface DotaProfile {
+  dotaAccountId: string;
+  entityId: string;
+  hasMic: boolean | null;
+  isOwner: boolean;
+  language: string | null;
+  mmr: string | null;
+  playIntent: string | null;
+  progress: DotaProfileProgress;
+  qualities: Record<string, number>;
+  roles: string[];
+  server: string | null;
+  slug: string;
+  title: string;
+}
+
+export interface CreateDotaProfileInput {
+  dotaAccountId?: string;
+  hasMic?: boolean;
+  language?: string;
+  mmr?: string;
+  playIntent?: "fun" | "ranked" | "tournament";
+  roles?: string[];
+  server?: string;
+  slug?: string;
+  title?: string;
+}
+
+export type DotaShareKind = "profile" | "confirm" | "id";

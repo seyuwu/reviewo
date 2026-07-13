@@ -16,6 +16,7 @@ function createEntity(overrides: Partial<{
   description: string | null;
   id: string;
   logoUrl: string | null;
+  ownerUserId: string | null;
   parentId: string | null;
   slug: string;
   title: string;
@@ -30,6 +31,7 @@ function createEntity(overrides: Partial<{
     description: null,
     id: overrides.id ?? "entity-id",
     logoUrl: null,
+    ownerUserId: null,
     parentId: null,
     slug: overrides.slug ?? "entity-slug",
     title: overrides.title ?? "Entity",

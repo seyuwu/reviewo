@@ -10,6 +10,7 @@ export interface CreateEntityRecordInput {
   canonicalUrl?: string;
   createdBy: string | null;
   description?: string;
+  ownerUserId?: string;
   parentId?: string;
   slug: string;
   title: string;
@@ -40,6 +41,10 @@ export class EntitiesRepository {
       data.parentId = input.parentId;
     }
 
+    if (input.ownerUserId) {
+      data.ownerUserId = input.ownerUserId;
+    }
+
     return this.prismaService.entity.create({
       data
     });
@@ -65,6 +70,15 @@ export class EntitiesRepository {
     return this.prismaService.entity.findUnique({
       where: {
         slug
+      }
+    });
+  }
+
+  async findByOwnerUserId(ownerUserId: string): Promise<Entity | null> {
+    return this.prismaService.entity.findFirst({
+      where: {
+        ownerUserId,
+        type: "person"
       }
     });
   }
