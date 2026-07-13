@@ -10,6 +10,7 @@
     "build": "corepack pnpm -r --if-present build",
     "db:migrate": "corepack pnpm --filter @reviewo/api db:migrate",
     "db:seed": "corepack pnpm --filter @reviewo/api db:seed",
+    "seed:ai-tools": "corepack pnpm --filter @reviewo/api seed:ai-tools",
     "dev": "corepack pnpm -r --if-present dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

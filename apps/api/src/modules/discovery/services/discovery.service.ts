@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
 import { buildCompareSlug, normalizeContentLocaleFilter } from "@reviewo/shared";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
@@ -19,10 +19,16 @@ import type {
   DiscoveryStatsDto,
   RandomBattleDto
 } from "../dto/discovery.dto.js";
+import {
+  getCuratedBattlePairDefinitions,
+  type CuratedBattlePairDefinition
+} from "../data/curated-battle-pairs.registry.js";
 import { DiscoveryRepository } from "../repositories/discovery.repository.js";
 
 @Injectable()
 export class DiscoveryService {
+  private readonly logger = new Logger(DiscoveryService.name);
+
   constructor(
     private readonly discoveryRepository: DiscoveryRepository,
     private readonly battleVoteRepository: BattleVoteRepository,
@@ -74,18 +80,23 @@ export class DiscoveryService {
 
   async getSuggestedBattles(limit = 12, localeInput?: string): Promise<BattlePairListDto> {
     const locale = normalizeContentLocaleFilter(localeInput);
-    const poolSize = Math.max(limit * 2, 12);
-    const [rootEntities, childEntities] = await Promise.all([
-      this.discoveryRepository.listTopRootEntitiesByVotes(poolSize),
-      this.discoveryRepository.listTopChildEntitiesByVotes(poolSize)
-    ]);
     const items: BattlePairListItemDto[] = [];
     const seenPairSlugs = new Set<string>();
 
-    await this.appendEntityPairs(items, rootEntities, limit, seenPairSlugs, locale);
+    await this.appendCuratedBattlePairs(items, limit, seenPairSlugs, locale);
 
     if (items.length < limit) {
-      await this.appendEntityPairs(items, childEntities, limit, seenPairSlugs, locale);
+      const poolSize = Math.max((limit - items.length) * 2, 12);
+      const [rootEntities, childEntities] = await Promise.all([
+        this.discoveryRepository.listTopRootEntitiesByVotes(poolSize),
+        this.discoveryRepository.listTopChildEntitiesByVotes(poolSize)
+      ]);
+
+      await this.appendEntityPairs(items, rootEntities, limit, seenPairSlugs, locale);
+
+      if (items.length < limit) {
+        await this.appendEntityPairs(items, childEntities, limit, seenPairSlugs, locale);
+      }
     }
 
     return { items: items.slice(0, limit) };
@@ -171,6 +182,12 @@ export class DiscoveryService {
 
   async getRandomBattle(localeInput?: string): Promise<RandomBattleDto> {
     const locale = normalizeContentLocaleFilter(localeInput);
+    const curatedItem = await this.pickRandomCuratedBattle(locale);
+
+    if (curatedItem) {
+      return { item: curatedItem };
+    }
+
     const [rootEntities, childEntities] = await Promise.all([
       this.discoveryRepository.listTopRootEntitiesByVotes(20),
       this.discoveryRepository.listTopChildEntitiesByVotes(20)
@@ -188,6 +205,82 @@ export class DiscoveryService {
     }
 
     return { item: null };
+  }
+
+  private async appendCuratedBattlePairs(
+    items: BattlePairListItemDto[],
+    limit: number,
+    seenPairSlugs: Set<string>,
+    locale: ReturnType<typeof normalizeContentLocaleFilter>
+  ): Promise<void> {
+    for (const battle of getCuratedBattlePairDefinitions()) {
+      if (items.length >= limit) {
+        return;
+      }
+
+      const item = await this.composeCuratedBattlePair(battle, seenPairSlugs, locale);
+
+      if (item) {
+        items.push(item);
+      }
+    }
+  }
+
+  private async composeCuratedBattlePair(
+    battle: CuratedBattlePairDefinition,
+    seenPairSlugs: Set<string>,
+    locale: ReturnType<typeof normalizeContentLocaleFilter>
+  ): Promise<BattlePairListItemDto | null> {
+    const [leftEntity, rightEntity] = await Promise.all([
+      this.entitiesPort.findEntityBySlug(battle.leftSlug),
+      this.entitiesPort.findEntityBySlug(battle.rightSlug)
+    ]);
+
+    if (!leftEntity || !rightEntity) {
+      this.logger.warn(
+        `Skipping curated battle ${battle.leftKey} vs ${battle.rightKey}: one or both entities are missing from the database.`
+      );
+
+      return null;
+    }
+
+    if (leftEntity.visibility !== "ACTIVE" || rightEntity.visibility !== "ACTIVE") {
+      return null;
+    }
+
+    return this.composeBattlePairFromEntityDtos(leftEntity, rightEntity, true, seenPairSlugs, locale);
+  }
+
+  private async pickRandomCuratedBattle(
+    locale: ReturnType<typeof normalizeContentLocaleFilter>
+  ): Promise<BattlePairListItemDto | null> {
+    const curatedBattles = getCuratedBattlePairDefinitions();
+
+    if (curatedBattles.length === 0) {
+      return null;
+    }
+
+    const seenPairSlugs = new Set<string>();
+    const composedItems: BattlePairListItemDto[] = [];
+
+    for (const battle of curatedBattles) {
+      const item = await this.composeCuratedBattlePair(battle, seenPairSlugs, locale);
+
+      if (item) {
+        composedItems.push(item);
+      }
+    }
+
+    if (composedItems.length === 0) {
+      return null;
+    }
+
+    const unbattledItems = composedItems.filter((item) => item.totalVotes === 0);
+    const candidatePool = unbattledItems.length > 0 ? unbattledItems : composedItems;
+
+    shuffleInPlace(candidatePool);
+
+    return candidatePool[0] ?? null;
   }
 
   private async pickRandomBattleFromEntities(
@@ -281,6 +374,16 @@ export class DiscoveryService {
       return null;
     }
 
+    return this.composeBattlePairFromEntityDtos(leftEntity, rightEntity, isSuggested, seenPairSlugs, locale);
+  }
+
+  private async composeBattlePairFromEntityDtos(
+    leftEntity: EntityDto,
+    rightEntity: EntityDto,
+    isSuggested: boolean,
+    seenPairSlugs: Set<string>,
+    locale: ReturnType<typeof normalizeContentLocaleFilter>
+  ): Promise<BattlePairListItemDto | null> {
     const pairSlug = buildCompareSlug(leftEntity.slug, rightEntity.slug);
 
     if (seenPairSlugs.has(pairSlug)) {

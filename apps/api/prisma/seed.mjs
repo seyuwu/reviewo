@@ -1,7 +1,8 @@
-import { PrismaClient, UserRole } from "../dist/generated/prisma/client.js";
+import { createSeedPrismaClient } from "./seeds/create-prisma-client.mjs";
+import { UserRole } from "../dist/generated/prisma/client.js";
 import { TOP_CATEGORIES } from "./top-categories.registry.mjs";
 
-const prisma = new PrismaClient();
+const prisma = createSeedPrismaClient();
 
 async function seedTopCategories() {
   for (const category of TOP_CATEGORIES) {

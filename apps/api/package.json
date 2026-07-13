@@ -14,6 +14,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "node prisma/seed.mjs",
+    "seed:ai-tools": "node prisma/seeds/seed-ai-tools-vertical.mjs",
     "dev": "node scripts/dev-watch.mjs",
     "lint": "eslint .",
     "reputation:backfill": "corepack pnpm build && node dist/scripts/reputation-backfill.js",

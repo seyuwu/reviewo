@@ -1,0 +1,326 @@
+{
+  "vertical": "ai-tools",
+  "siteUrl": "https://opinia.ru",
+  "entities": [
+    {
+      "key": "chatgpt",
+      "title": "ChatGPT",
+      "slug": "chatgpt",
+      "type": "website",
+      "websiteUrl": "https://chatgpt.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=chatgpt.com&sz=128",
+      "description": "OpenAI conversational assistant for writing, coding, research, and everyday tasks.",
+      "categories": ["ai-chat", "ai-assistant"]
+    },
+    {
+      "key": "claude",
+      "title": "Claude",
+      "slug": "claude",
+      "type": "website",
+      "websiteUrl": "https://claude.ai/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=claude.ai&sz=128",
+      "description": "Anthropic AI assistant focused on helpful, safe, and long-context conversations.",
+      "categories": ["ai-chat", "ai-assistant"]
+    },
+    {
+      "key": "gemini",
+      "title": "Gemini",
+      "slug": "gemini",
+      "type": "website",
+      "websiteUrl": "https://gemini.google.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=gemini.google.com&sz=128",
+      "description": "Google multimodal AI assistant integrated with Search and Google Workspace.",
+      "categories": ["ai-chat", "ai-search", "ai-assistant"]
+    },
+    {
+      "key": "perplexity",
+      "title": "Perplexity",
+      "slug": "perplexity",
+      "type": "website",
+      "websiteUrl": "https://www.perplexity.ai/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=perplexity.ai&sz=128",
+      "description": "AI search engine that answers questions with cited sources and follow-up threads.",
+      "categories": ["ai-search", "ai-chat"]
+    },
+    {
+      "key": "grok",
+      "title": "Grok",
+      "slug": "grok",
+      "type": "website",
+      "websiteUrl": "https://grok.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=grok.com&sz=128",
+      "description": "xAI assistant with real-time information and a conversational personality.",
+      "categories": ["ai-chat", "ai-assistant"]
+    },
+    {
+      "key": "mistral",
+      "title": "Le Chat",
+      "slug": "mistral",
+      "type": "website",
+      "websiteUrl": "https://chat.mistral.ai/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=mistral.ai&sz=128",
+      "description": "Mistral AI chat assistant powered by open and frontier-class language models.",
+      "categories": ["ai-chat", "ai-assistant"]
+    },
+    {
+      "key": "meta-ai",
+      "title": "Meta AI",
+      "slug": "meta-ai",
+      "type": "website",
+      "websiteUrl": "https://www.meta.ai/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=meta.ai&sz=128",
+      "description": "Meta assistant available across WhatsApp, Instagram, Facebook, and the web.",
+      "categories": ["ai-chat", "ai-assistant"]
+    },
+    {
+      "key": "hugging-chat",
+      "title": "Hugging Chat",
+      "slug": "hugging-chat",
+      "type": "website",
+      "websiteUrl": "https://huggingface.co/chat/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=huggingface.co&sz=128",
+      "description": "Open chat interface from Hugging Face with multiple community and frontier models.",
+      "categories": ["ai-chat", "ai-assistant"]
+    },
+    {
+      "key": "character-ai",
+      "title": "Character.AI",
+      "slug": "character-ai",
+      "type": "website",
+      "websiteUrl": "https://character.ai/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=character.ai&sz=128",
+      "description": "Platform for chatting with customizable AI characters and personas.",
+      "categories": ["ai-chat", "ai-assistant"]
+    },
+    {
+      "key": "deepseek",
+      "title": "DeepSeek",
+      "slug": "deepseek",
+      "type": "website",
+      "websiteUrl": "https://chat.deepseek.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=deepseek.com&sz=128",
+      "description": "DeepSeek chat and reasoning models for coding, math, and general assistance.",
+      "categories": ["ai-chat", "ai-coding", "ai-assistant"]
+    },
+    {
+      "key": "cursor",
+      "title": "Cursor",
+      "slug": "cursor",
+      "type": "website",
+      "websiteUrl": "https://cursor.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=cursor.com&sz=128",
+      "description": "AI-native code editor with agents, autocomplete, and codebase-aware chat.",
+      "categories": ["ai-coding", "ai-assistant"]
+    },
+    {
+      "key": "windsurf",
+      "title": "Windsurf",
+      "slug": "windsurf",
+      "type": "website",
+      "websiteUrl": "https://windsurf.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=windsurf.com&sz=128",
+      "description": "AI IDE from Codeium with Cascade agent flows and deep editor integration.",
+      "categories": ["ai-coding", "ai-assistant"]
+    },
+    {
+      "key": "github-copilot",
+      "title": "GitHub Copilot",
+      "slug": "github-copilot",
+      "type": "product",
+      "websiteUrl": "https://github.com/features/copilot",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=github.com&sz=128",
+      "description": "GitHub and Microsoft AI pair programmer for IDE and pull request workflows.",
+      "categories": ["ai-coding", "ai-assistant"]
+    },
+    {
+      "key": "replit",
+      "title": "Replit",
+      "slug": "replit",
+      "type": "website",
+      "websiteUrl": "https://replit.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=replit.com&sz=128",
+      "description": "Browser-based dev environment with Replit Agent for building and deploying apps.",
+      "categories": ["ai-coding", "ai-assistant"]
+    },
+    {
+      "key": "bolt",
+      "title": "Bolt",
+      "slug": "bolt",
+      "type": "website",
+      "websiteUrl": "https://bolt.new/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=bolt.new&sz=128",
+      "description": "StackBlitz AI app builder that generates full-stack projects in the browser.",
+      "categories": ["ai-coding", "ai-assistant"]
+    },
+    {
+      "key": "lovable",
+      "title": "Lovable",
+      "slug": "lovable",
+      "type": "website",
+      "websiteUrl": "https://lovable.dev/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=lovable.dev&sz=128",
+      "description": "AI product builder for generating and iterating on full-stack web applications.",
+      "categories": ["ai-coding", "ai-assistant"]
+    },
+    {
+      "key": "v0",
+      "title": "v0",
+      "slug": "v0",
+      "type": "website",
+      "websiteUrl": "https://v0.dev/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=v0.dev&sz=128",
+      "description": "Vercel generative UI tool for React and Next.js component prototypes.",
+      "categories": ["ai-coding", "ai-assistant"]
+    },
+    {
+      "key": "midjourney",
+      "title": "Midjourney",
+      "slug": "midjourney",
+      "type": "website",
+      "websiteUrl": "https://www.midjourney.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=midjourney.com&sz=128",
+      "description": "Popular AI image generator known for stylized and artistic visual outputs.",
+      "categories": ["ai-image"]
+    },
+    {
+      "key": "flux",
+      "title": "Flux",
+      "slug": "flux",
+      "type": "website",
+      "websiteUrl": "https://blackforestlabs.ai/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=blackforestlabs.ai&sz=128",
+      "description": "Black Forest Labs image models used across many creative AI workflows.",
+      "categories": ["ai-image"]
+    },
+    {
+      "key": "dalle",
+      "title": "DALL-E",
+      "slug": "dalle",
+      "type": "product",
+      "websiteUrl": "https://openai.com/dall-e-3",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=openai.com&sz=128",
+      "description": "OpenAI text-to-image model integrated into ChatGPT and developer APIs.",
+      "categories": ["ai-image"]
+    },
+    {
+      "key": "leonardo-ai",
+      "title": "Leonardo AI",
+      "slug": "leonardo-ai",
+      "type": "website",
+      "websiteUrl": "https://leonardo.ai/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=leonardo.ai&sz=128",
+      "description": "Creative platform for AI image generation, editing, and asset pipelines.",
+      "categories": ["ai-image"]
+    },
+    {
+      "key": "runway",
+      "title": "Runway",
+      "slug": "runway",
+      "type": "website",
+      "websiteUrl": "https://runwayml.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=runwayml.com&sz=128",
+      "description": "AI video creation suite with Gen models for generation and editing.",
+      "categories": ["ai-video"]
+    },
+    {
+      "key": "sora",
+      "title": "Sora",
+      "slug": "sora",
+      "type": "product",
+      "websiteUrl": "https://openai.com/sora",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=openai.com&sz=128",
+      "description": "OpenAI text-to-video model for cinematic clip generation.",
+      "categories": ["ai-video"]
+    },
+    {
+      "key": "elevenlabs",
+      "title": "ElevenLabs",
+      "slug": "elevenlabs",
+      "type": "website",
+      "websiteUrl": "https://elevenlabs.io/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=elevenlabs.io&sz=128",
+      "description": "AI voice synthesis platform for speech, dubbing, and audio workflows.",
+      "categories": ["ai-audio"]
+    },
+    {
+      "key": "suno",
+      "title": "Suno",
+      "slug": "suno",
+      "type": "website",
+      "websiteUrl": "https://suno.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=suno.com&sz=128",
+      "description": "AI music generator for songs, vocals, and short-form audio creation.",
+      "categories": ["ai-audio"]
+    },
+    {
+      "key": "notebooklm",
+      "title": "NotebookLM",
+      "slug": "notebooklm",
+      "type": "website",
+      "websiteUrl": "https://notebooklm.google.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=notebooklm.google.com&sz=128",
+      "description": "Google research assistant that grounds answers in your uploaded documents.",
+      "categories": ["ai-assistant", "ai-search"]
+    },
+    {
+      "key": "notion-ai",
+      "title": "Notion AI",
+      "slug": "notion-ai",
+      "type": "product",
+      "websiteUrl": "https://www.notion.so/product/ai",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=notion.so&sz=128",
+      "description": "AI writing, summarization, and workspace automation inside Notion.",
+      "categories": ["ai-assistant", "ai-writing"]
+    },
+    {
+      "key": "jasper",
+      "title": "Jasper",
+      "slug": "jasper",
+      "type": "website",
+      "websiteUrl": "https://www.jasper.ai/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=jasper.ai&sz=128",
+      "description": "Marketing-focused AI copilot for brand content and campaign workflows.",
+      "categories": ["ai-writing", "ai-assistant"]
+    },
+    {
+      "key": "grammarly",
+      "title": "Grammarly",
+      "slug": "grammarly",
+      "type": "website",
+      "websiteUrl": "https://www.grammarly.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=grammarly.com&sz=128",
+      "description": "AI writing assistant for grammar, clarity, tone, and generative edits.",
+      "categories": ["ai-writing", "ai-assistant"]
+    },
+    {
+      "key": "google",
+      "title": "Google",
+      "slug": "google",
+      "type": "website",
+      "websiteUrl": "https://www.google.com/",
+      "logoUrl": "https://www.google.com/s2/favicons?domain=google.com&sz=128",
+      "description": "Google Search — the baseline reference for AI search and discovery comparisons.",
+      "categories": ["ai-search"]
+    }
+  ],
+  "curatedBattles": [
+    { "leftKey": "claude", "rightKey": "chatgpt", "sortOrder": 1 },
+    { "leftKey": "cursor", "rightKey": "windsurf", "sortOrder": 2 },
+    { "leftKey": "bolt", "rightKey": "lovable", "sortOrder": 3 },
+    { "leftKey": "perplexity", "rightKey": "google", "sortOrder": 4 },
+    { "leftKey": "midjourney", "rightKey": "flux", "sortOrder": 5 },
+    { "leftKey": "gemini", "rightKey": "chatgpt", "sortOrder": 6 },
+    { "leftKey": "v0", "rightKey": "bolt", "sortOrder": 7 },
+    { "leftKey": "runway", "rightKey": "sora", "sortOrder": 8 },
+    { "leftKey": "elevenlabs", "rightKey": "suno", "sortOrder": 9 },
+    { "leftKey": "github-copilot", "rightKey": "cursor", "sortOrder": 10 },
+    { "leftKey": "deepseek", "rightKey": "chatgpt", "sortOrder": 11 },
+    { "leftKey": "replit", "rightKey": "lovable", "sortOrder": 12 },
+    { "leftKey": "grok", "rightKey": "chatgpt", "sortOrder": 13 },
+    { "leftKey": "notebooklm", "rightKey": "perplexity", "sortOrder": 14 },
+    { "leftKey": "midjourney", "rightKey": "dalle", "sortOrder": 15 },
+    { "leftKey": "mistral", "rightKey": "claude", "sortOrder": 16 },
+    { "leftKey": "character-ai", "rightKey": "chatgpt", "sortOrder": 17 },
+    { "leftKey": "meta-ai", "rightKey": "gemini", "sortOrder": 18 }
+  ]
+}
