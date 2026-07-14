@@ -57,7 +57,12 @@ export function HomeQuickNav() {
             </span>
           </a>
         ) : (
-          <Link key={link.href} className="home-quick-nav-card" href={link.href}>
+          <Link
+            key={link.href}
+            className="home-quick-nav-card"
+            data-analytics={link.href === "/games" ? "home_quick_games" : undefined}
+            href={link.href}
+          >
             <span className={`home-quick-nav-icon ${link.iconClass}`} aria-hidden="true">
               <OpiniaIcon name={link.icon} />
             </span>

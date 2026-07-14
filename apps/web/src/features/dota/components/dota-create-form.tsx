@@ -11,6 +11,7 @@ import type { AuthResponse } from "../../auth/types/auth";
 import { useTranslation } from "../../i18n/locale-provider";
 import { createDotaProfile, fetchMyDotaProfile, updateMyDotaProfile } from "../api/dota-api";
 import { trackDotaEvent } from "../lib/analytics";
+import { trackAnalyticsCta } from "../../analytics/components/product-analytics-listener";
 import {
   isDotaProfileAlreadyExistsError,
   resolveDotaFormError
@@ -272,6 +273,7 @@ export function DotaCreateForm() {
       }
 
       trackDotaEvent("dota_profile_created", { slug: profile.slug });
+      trackAnalyticsCta("dota_create_submit");
       router.push(`/dota/${profile.slug}?created=1`, { scroll: false });
     } catch (submitError) {
       if (pendingAuthResponse) {
@@ -485,7 +487,18 @@ export function DotaCreateForm() {
             </section>
           ) : null}
 
-          <button className="primary-button" disabled={isSubmitting} type="submit">
+          <button
+            className="primary-button"
+            data-analytics={
+              authSession
+                ? undefined
+                : authMode === "register"
+                  ? "auth_register_submit"
+                  : "auth_login_submit"
+            }
+            disabled={isSubmitting}
+            type="submit"
+          >
             {submitLabel}
           </button>
 

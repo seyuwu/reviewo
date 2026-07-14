@@ -1129,3 +1129,44 @@ model GamePartyChatMessage {
   @@map("game_party_chat_messages")
   @@schema("social")
 }
+
+/// Aggregated product analytics (no raw event stream — counters only).
+model AnalyticsDailyCounter {
+  day   DateTime @db.Date
+  key   String   @db.VarChar(64)
+  value BigInt   @default(0)
+
+  @@id([day, key])
+  @@map("analytics_daily_counters")
+  @@schema("community")
+}
+
+model AnalyticsDailyCta {
+  day    DateTime @db.Date
+  ctaKey String   @map("cta_key") @db.VarChar(96)
+  clicks BigInt   @default(0)
+
+  @@id([day, ctaKey])
+  @@map("analytics_daily_ctas")
+  @@schema("community")
+}
+
+model AnalyticsDailyVisitor {
+  day         DateTime @db.Date
+  visitorHash String   @map("visitor_hash") @db.VarChar(64)
+
+  @@id([day, visitorHash])
+  @@map("analytics_daily_visitors")
+  @@schema("community")
+}
+
+model AnalyticsDailyPathTime {
+  day         DateTime @db.Date
+  pathKey     String   @map("path_key") @db.VarChar(96)
+  timeMsSum   BigInt   @default(0) @map("time_ms_sum")
+  sampleCount BigInt   @default(0) @map("sample_count")
+
+  @@id([day, pathKey])
+  @@map("analytics_daily_path_times")
+  @@schema("community")
+}

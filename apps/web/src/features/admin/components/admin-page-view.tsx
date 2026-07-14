@@ -143,6 +143,9 @@ export function AdminPageView() {
         <p className="eyebrow">{t("admin.eyebrow")}</p>
         <h1>{t("admin.title")}</h1>
         <p className="hero-copy">{t("admin.subtitle")}</p>
+        <Link className="button-secondary" href="/admin/analytics">
+          {t("web.admin.analytics.openPanel")}
+        </Link>
         <Link className="button-secondary" href="/admin/economy">
           {t("web.admin.economy.openPanel")}
         </Link>

@@ -24,6 +24,7 @@ import { ReputationModule } from "./modules/reputation/reputation.module.js";
 import { ReviewsModule } from "./modules/reviews/reviews.module.js";
 import { SearchModule } from "./modules/search/search.module.js";
 import { SocialModule } from "./modules/social/social.module.js";
+import { AnalyticsModule } from "./modules/analytics/analytics.module.js";
 import { TopsModule } from "./modules/tops/tops.module.js";
 import { TrustModule } from "./modules/trust/trust.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
@@ -57,6 +58,7 @@ import { RedisModule } from "./redis/redis.module.js";
     DiscoveryModule,
     DotaModule,
     SocialModule,
+    AnalyticsModule,
     GrowthModule
   ],
   providers: [AppLogger, GlobalExceptionFilter]

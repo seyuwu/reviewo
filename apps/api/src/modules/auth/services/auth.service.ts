@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { User } from "#prisma/client";
 
@@ -7,6 +7,7 @@ import { createAppException } from "../../../common/exceptions/app.exception.js"
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import type { EnvironmentVariables } from "../../../config/environment.validation.js";
 import { PrismaService } from "../../../database/prisma.service.js";
+import { ProductAnalyticsService } from "../../analytics/services/product-analytics.service.js";
 import { UsersService } from "../../users/services/users.service.js";
 import { AuthRepository } from "../repositories/auth.repository.js";
 import { AuthResponseDto } from "../dto/auth-response.dto.js";
@@ -25,7 +26,8 @@ export class AuthService {
     private readonly jwtTokenService: JwtTokenService,
     private readonly passwordHasherService: PasswordHasherService,
     private readonly prismaService: PrismaService,
-    private readonly usersService: UsersService
+    private readonly usersService: UsersService,
+    @Optional() private readonly productAnalyticsService?: ProductAnalyticsService
   ) {}
 
   async register(input: RegisterDto): Promise<AuthResponseDto> {
@@ -61,6 +63,8 @@ export class AuthService {
 
         return createdUser;
       });
+
+      void this.productAnalyticsService?.recordRegistration().catch(() => undefined);
 
       return this.createAuthResponse(user);
     } catch (error) {

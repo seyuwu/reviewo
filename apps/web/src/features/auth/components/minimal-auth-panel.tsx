@@ -155,7 +155,12 @@ export function MinimalAuthPanel({
               />
             </label>
 
-            <button type="submit" className="primary-button" disabled={isSubmittingAuth}>
+            <button
+              type="submit"
+              className="primary-button"
+              data-analytics={authMode === "register" ? "auth_register_submit" : "auth_login_submit"}
+              disabled={isSubmittingAuth}
+            >
               {isSubmittingAuth
                 ? t("auth.signingIn")
                 : authMode === "register"

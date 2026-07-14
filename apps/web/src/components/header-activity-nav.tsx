@@ -26,6 +26,7 @@ export function HeaderActivityNav() {
         <Link
           key={link.href}
           className={navLinkClass(pathname, link.href, link.tone)}
+          data-analytics={link.href === "/games" ? "header_games" : undefined}
           href={link.href}
         >
           <span className={`app-chrome-nav-icon app-chrome-nav-icon--${link.tone}`}>

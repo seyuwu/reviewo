@@ -2,6 +2,7 @@ import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 
 import { AdminGuard } from "../../auth/guards/admin.guard.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
+import { ProductAnalyticsService } from "../../analytics/services/product-analytics.service.js";
 import type {
   AdminContributorsResponseDto,
   EconomyOverviewDto,
@@ -45,5 +46,17 @@ export class AdminCommunityController {
       Number.isFinite(parsedLimit) ? parsedLimit : 50,
       cursor
     );
+  }
+}
+
+@Controller("admin/analytics")
+@UseGuards(JwtAuthGuard, AdminGuard)
+export class AdminAnalyticsController {
+  constructor(private readonly productAnalyticsService: ProductAnalyticsService) {}
+
+  @Get("overview")
+  getOverview(@Query("days") days?: string) {
+    const parsed = days ? Number.parseInt(days, 10) : 7;
+    return this.productAnalyticsService.getOverview(Number.isFinite(parsed) ? parsed : 7);
   }
 }

@@ -26,7 +26,11 @@ export function HomeBottomCta() {
         <span>{t("web.homeFeed.bottomCtaSubtitle")}</span>
       </p>
       <div className="home-bottom-cta-actions">
-        <Link className="home-bottom-cta-primary" href="/entities/new">
+        <Link
+          className="home-bottom-cta-primary"
+          data-analytics="home_create_entity"
+          href="/entities/new"
+        >
           {t("web.entityCreate.createEntity")}
         </Link>
         {showExtensionCta ? (

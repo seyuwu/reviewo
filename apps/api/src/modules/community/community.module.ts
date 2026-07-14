@@ -2,11 +2,12 @@ import { Module } from "@nestjs/common";
 
 import { DomainEventsModule } from "../../common/domain-events/domain-events.module.js";
 import { RateLimitingModule } from "../../common/rate-limiting/rate-limiting.module.js";
+import { AnalyticsModule } from "../analytics/analytics.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { EntitiesModule } from "../entities/entities.module.js";
 import { RecommendationModule } from "../recommendation/recommendation.module.js";
 import { UsersModule } from "../users/users.module.js";
-import { AdminCommunityController } from "./controllers/admin-community.controller.js";
+import { AdminAnalyticsController, AdminCommunityController } from "./controllers/admin-community.controller.js";
 import { CommunityController } from "./controllers/community.controller.js";
 import { SpotlightController } from "./controllers/spotlight.controller.js";
 import { ActivityEventHandlers } from "./handlers/activity-event-handlers.js";
@@ -33,8 +34,16 @@ import { SpotlightAnalyticsService } from "./services/spotlight-analytics.servic
 import { SpotlightTrackingService } from "./services/spotlight-tracking.service.js";
 
 @Module({
-  controllers: [AdminCommunityController, CommunityController, SpotlightController],
-  imports: [AuthModule, DomainEventsModule, EntitiesModule, RateLimitingModule, RecommendationModule, UsersModule],
+  controllers: [AdminAnalyticsController, AdminCommunityController, CommunityController, SpotlightController],
+  imports: [
+    AnalyticsModule,
+    AuthModule,
+    DomainEventsModule,
+    EntitiesModule,
+    RateLimitingModule,
+    RecommendationModule,
+    UsersModule
+  ],
   providers: [
     ActivityEventsRepository,
     ActivityEventsService,

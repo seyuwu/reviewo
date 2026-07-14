@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactNode, useState } from "react";
 
 import { LocaleProvider } from "../features/i18n/locale-provider";
+import { ProductAnalyticsListener } from "../features/analytics/components/product-analytics-listener";
 
 interface AppProvidersProps {
   children: ReactNode;
@@ -25,7 +26,10 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <LocaleProvider>{children}</LocaleProvider>
+      <LocaleProvider>
+        <ProductAnalyticsListener />
+        {children}
+      </LocaleProvider>
     </QueryClientProvider>
   );
 }

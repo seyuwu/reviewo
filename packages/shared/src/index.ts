@@ -91,18 +91,16 @@ export function resolveReliabilityLevel(score: number): ReliabilityLevel {
   return "low";
 }
 
-export function resolveManipulationRiskLevel(risk: number): ReliabilityLevel {
-  if (risk >= 0.75) {
-    return "low";
-  }
-
-  if (risk >= 0.5) {
-    return "medium";
-  }
-
-  if (risk >= 0.25) {
-    return "high";
-  }
-
-  return "very_high";
-}
+export {
+  ANALYTICS_COUNTER_KEYS,
+  ANALYTICS_CTA_KEYS,
+  ANALYTICS_PATH_KEYS,
+  bucketAnalyticsPath,
+  funnelStepForPath,
+  isAnalyticsCounterKey,
+  isAnalyticsCtaKey,
+  isAnalyticsPathKey,
+  type AnalyticsCounterKey,
+  type AnalyticsCtaKey,
+  type AnalyticsPathKey
+} from "./product-analytics.js";

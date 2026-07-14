@@ -8,6 +8,7 @@ import { useTranslation } from "../../i18n/locale-provider";
 import { fetchFriendInviteToken } from "../../social/api/social-api";
 import { buildDotaShareText, copyDotaShareText } from "../lib/share";
 import { trackDotaEvent } from "../lib/analytics";
+import { trackAnalyticsCta } from "../../analytics/components/product-analytics-listener";
 import type { DotaProfile, DotaShareKind } from "../types/dota";
 import styles from "./dota-share-modal.module.css";
 
@@ -106,6 +107,13 @@ export function DotaShareModal({ isOpen, onClose, profile }: DotaShareModalProps
 
     setCopiedKind(kind);
     trackDotaEvent("dota_share_copied", { kind, slug: profile.slug });
+
+    if (kind === "friend") {
+      trackAnalyticsCta("dota_share_friend");
+    } else if (kind === "profile") {
+      trackAnalyticsCta("dota_share_profile");
+    }
+
     window.setTimeout(() => setCopiedKind(null), 2200);
   }
 

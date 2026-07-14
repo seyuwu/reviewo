@@ -37,7 +37,12 @@ export function GamesHubView() {
           <p className={styles.eyebrow}>{t("games.hub.eyebrow")}</p>
           <h1 className={styles.title}>{t("games.hub.title")}</h1>
           <p className={styles.lead}>{t("games.hub.lead")}</p>
-          <Link aria-busy={myDotaProfile.isLoading} className="button-primary" href={myDotaProfile.href}>
+          <Link
+            aria-busy={myDotaProfile.isLoading}
+            className="button-primary"
+            data-analytics="games_hero_profile"
+            href={myDotaProfile.href}
+          >
             {myDotaProfile.isLoading
               ? t("common.loadingEllipsis")
               : myDotaProfile.hasProfile
@@ -63,10 +68,15 @@ export function GamesHubView() {
           <strong>{t("games.hub.searchSoon")}</strong>
         </div>
         <div className={styles.communityActions}>
-          <Link className="button-primary" href={myDotaProfile.href}>
+          <Link className="button-primary" data-analytics="games_hero_profile" href={myDotaProfile.href}>
             {myDotaProfile.hasProfile ? t("games.hub.openProfile") : t("games.hub.createProfile")}
           </Link>
-          <button className="button-secondary" onClick={handleInvite} type="button">
+          <button
+            className="button-secondary"
+            data-analytics="games_invite_friends"
+            onClick={handleInvite}
+            type="button"
+          >
             {inviteCopied ? t("games.hub.inviteCopied") : t("games.hub.inviteCta")}
           </button>
         </div>
@@ -76,6 +86,7 @@ export function GamesHubView() {
         {liveGames.map((game) => (
           <Link
             className={styles.card}
+            data-analytics="games_open_dota"
             href={game.hubPath ?? "/games"}
             key={game.id}
           >
@@ -114,7 +125,11 @@ export function GamesHubView() {
           <p>{t("games.hub.suggestionsLead")}</p>
         </div>
         <div className={styles.suggestionsActions}>
-          <a className="button-primary" href={`mailto:${CONTACT_EMAIL}`}>
+          <a
+            className="button-primary"
+            data-analytics="games_suggestions_mail"
+            href={`mailto:${CONTACT_EMAIL}`}
+          >
             {t("games.hub.suggestionsCta")}
           </a>
           <a className={styles.suggestionsEmail} href={`mailto:${CONTACT_EMAIL}`}>

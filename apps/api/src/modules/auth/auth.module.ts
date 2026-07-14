@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { UsersModule } from "../users/users.module.js";
+import { AnalyticsModule } from "../analytics/analytics.module.js";
 import { AuthController } from "./controllers/auth.controller.js";
 import { AdminGuard } from "./guards/admin.guard.js";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard.js";
@@ -13,7 +14,7 @@ import { PasswordHasherService } from "./services/password-hasher.service.js";
 @Module({
   controllers: [AuthController],
   exports: [AdminGuard, JwtAuthGuard, JwtTokenService, OptionalJwtAuthGuard],
-  imports: [UsersModule],
+  imports: [UsersModule, AnalyticsModule],
   providers: [
     AdminGuard,
     AuthRepository,

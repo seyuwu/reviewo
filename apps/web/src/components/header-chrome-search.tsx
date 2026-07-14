@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef } from "react";
 
 import { useTranslation } from "../features/i18n/locale-provider";
+import { trackAnalyticsCta } from "../features/analytics/components/product-analytics-listener";
 import { OpiniaIcon } from "./opinia-icon";
 
 export function HeaderChromeSearch() {
@@ -28,6 +29,7 @@ export function HeaderChromeSearch() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    trackAnalyticsCta("header_search");
     const query = inputRef.current?.value.trim();
 
     if (query) {
