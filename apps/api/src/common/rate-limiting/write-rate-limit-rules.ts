@@ -42,9 +42,31 @@ export function createDotaConfirmationRateLimitRules(request: RequestLike): Rate
   return [
     {
       key: resolveRequestIp(request),
-      limit: 10,
+      limit: 120,
       message: "Too many confirmation attempts from this network",
       namespace: "dota:confirm:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
+export function createSocialWriteRateLimitRules(
+  userId: string,
+  request: RequestLike
+): RateLimitRule[] {
+  return [
+    {
+      key: userId,
+      limit: 60,
+      message: "Too many social actions from this account",
+      namespace: "social:write:user",
+      windowSeconds: 60 * 60
+    },
+    {
+      key: resolveRequestIp(request),
+      limit: 120,
+      message: "Too many social actions from this network",
+      namespace: "social:write:ip",
       windowSeconds: 60 * 60
     }
   ];

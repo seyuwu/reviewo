@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { OpiniaIcon } from "../../../components/opinia-icon";
 import { EntityAvatar } from "../../entities/components/entity-avatar";
 import { formatScoreOneDecimal, formatStarRating } from "../../growth/lib/format-growth-stats";
 import { formatEntityHeroTitle } from "../../growth/lib/format-entity-display-name";
@@ -16,19 +17,25 @@ interface EntityHeroBarProps {
   returnQuery: string;
   showRelatedPresencesNav?: boolean;
   showUserTopsNav?: boolean;
+  userTopsCount?: number;
 }
 
 export function EntityHeroBar({
   pageData,
   returnQuery,
   showRelatedPresencesNav = false,
-  showUserTopsNav = false
+  showUserTopsNav = false,
+  userTopsCount = 0
 }: EntityHeroBarProps) {
   const t = useTranslation();
   const parentHref = pageData.parent ? buildEntityHref(pageData.parent.id, returnQuery) : null;
   const hostname = formatHostname(pageData.entity.canonicalUrl);
   const displayTitle = formatEntityHeroTitle(pageData.entity);
   const description = pageData.entity.description?.trim() ?? "";
+  const confidencePercent = Math.round(pageData.trust.confidence * 100);
+  const manipulationRiskPercent = Math.round((pageData.trust.manipulationRisk ?? 0) * 100);
+  const riskTone =
+    manipulationRiskPercent >= 35 ? styles.riskHigh : manipulationRiskPercent >= 15 ? styles.riskMedium : styles.riskLow;
 
   return (
     <header className={`entity-hero ${styles.hero}`}>
@@ -70,39 +77,74 @@ export function EntityHeroBar({
 
         <div className={styles.metricsColumn} aria-label={t("web.entity.statsAriaLabel")}>
           <div className={styles.scoreBlock}>
-            <p className={styles.stars} aria-hidden="true">
+            <strong className={styles.scoreValue}>{formatScoreOneDecimal(pageData.rating.avgScore)}</strong>
+            <span className={styles.scoreOutOf}>/ 5</span>
+            <p className={styles.stars} aria-label={formatStarRating(pageData.rating.avgScore)}>
               {formatStarRating(pageData.rating.avgScore)}
             </p>
-            <strong className={styles.scoreValue}>{formatScoreOneDecimal(pageData.rating.avgScore)}/5</strong>
           </div>
+          <p className={styles.scoreCaption}>{t("web.entity.average")}</p>
+          <div className={styles.trustSummary}>
+            <div className={styles.trustHeading}>
+              <span>{t("rating.dataReliability.label")}</span>
+              <strong>{confidencePercent}%</strong>
+            </div>
+            <div className={styles.trustTrack} aria-hidden="true">
+              <span style={{ width: `${confidencePercent}%` }} />
+            </div>
+            <div className={`${styles.riskRow} ${riskTone ?? ""}`}>
+              <span className={styles.riskDot} aria-hidden="true" />
+              <span>{t("rating.manipulationRisk.label")}</span>
+              <strong>{manipulationRiskPercent}%</strong>
+            </div>
+          </div>
+        </div>
 
-          <div className={`entity-stat-grid ${styles.statGrid}`}>
-            <EntityStat label={t("web.entity.average")} value={formatScore(pageData.rating.avgScore)} />
-            <EntityStat label={t("web.entity.votes")} value={String(pageData.rating.votesCount)} />
-            <EntityStat
-              label={t("web.entity.confidence")}
-              value={formatReliabilityPercent(pageData.trust.confidence)}
-            />
-            <EntityStat label={t("web.entity.reviewsCount")} value={String(pageData.meta.reviewsCountGlobal)} />
-          </div>
+        <div className={styles.artwork} aria-hidden="true">
+          <span className={styles.artworkGlow} />
+          <EntityAvatar
+            canonicalUrl={pageData.entity.canonicalUrl}
+            className={styles.artworkAvatar}
+            entityId={pageData.entity.id}
+            logoUrl={pageData.entity.logoUrl}
+            size="lg"
+            title={pageData.entity.title}
+          />
         </div>
       </div>
 
+      <div className={styles.statStrip}>
+        <EntityStat icon="sparkle" label={t("web.entity.average")} value={formatScore(pageData.rating.avgScore)} />
+        <EntityStat icon="objects" label={t("web.entity.votes")} value={String(pageData.rating.votesCount)} />
+        <EntityStat
+          icon="spotlight"
+          label={t("web.entity.confidence")}
+          value={formatReliabilityPercent(pageData.trust.confidence)}
+        />
+        <EntityStat
+          icon="message"
+          label={t("web.entity.reviewsCount")}
+          value={String(pageData.meta.reviewsCountGlobal)}
+        />
+        <EntityStat icon="trophy" label={t("web.nav.globalTops")} value={String(userTopsCount)} />
+        <EntityStat
+          icon="battle"
+          label={t("contributions.relatedPresencesTitle")}
+          value={String(pageData.relatedPresences.length)}
+        />
+      </div>
+
       <nav className={styles.anchorLinks} aria-label={t("web.entity.heroLinksAriaLabel")}>
-        {showRelatedPresencesNav ? (
-          <button
-            type="button"
-            className={styles.anchorLink}
-            onClick={() => {
-              navigateToEntitySection("entity-related-presences");
-            }}
-          >
-            {t("contributions.relatedPresencesTitle")}
-          </button>
-        ) : null}
-        <Link className={styles.anchorLink} href="/top">
-          {t("web.nav.globalTops")}
-        </Link>
+        <button
+          type="button"
+          className={`${styles.anchorLink} ${styles.anchorPrimary}`}
+          onClick={() => {
+            navigateToEntitySection("entity-rate-form");
+          }}
+        >
+          <OpiniaIcon name="sparkle" />
+          {t("growth.hero.rate")}
+        </button>
         <button
           type="button"
           className={styles.anchorLink}
@@ -110,6 +152,7 @@ export function EntityHeroBar({
             navigateToEntitySection("entity-live-chat");
           }}
         >
+          <OpiniaIcon name="message" />
           {t("growth.hero.discuss")}
         </button>
         <button
@@ -119,6 +162,7 @@ export function EntityHeroBar({
             navigateToEntitySection("entity-compare");
           }}
         >
+          <OpiniaIcon name="battle" />
           {t("growth.hero.compare")}
         </button>
         {showUserTopsNav ? (
@@ -129,7 +173,25 @@ export function EntityHeroBar({
               navigateToEntitySection("entity-user-tops");
             }}
           >
+            <OpiniaIcon name="trophy" />
             {t("web.userTops.heroLink")}
+          </button>
+        ) : (
+          <Link className={styles.anchorLink} href="/top">
+            <OpiniaIcon name="trophy" />
+            {t("web.nav.globalTops")}
+          </Link>
+        )}
+        {showRelatedPresencesNav ? (
+          <button
+            type="button"
+            className={styles.anchorLink}
+            onClick={() => {
+              navigateToEntitySection("entity-related-presences");
+            }}
+          >
+            <OpiniaIcon name="objects" />
+            {t("contributions.relatedPresencesTitle")}
           </button>
         ) : null}
         <button
@@ -139,25 +201,28 @@ export function EntityHeroBar({
             navigateToEntitySection("entity-page-footer");
           }}
         >
+          <OpiniaIcon name="spotlight" />
           {t("growth.share.button")}
-        </button>
-        <button
-          type="button"
-          className={styles.anchorLink}
-          onClick={() => {
-            navigateToEntitySection("entity-rate-form");
-          }}
-        >
-          {t("growth.hero.rate")}
         </button>
       </nav>
     </header>
   );
 }
 
-function EntityStat({ label, value }: { label: string; value: string }) {
+function EntityStat({
+  icon,
+  label,
+  value
+}: {
+  icon: "battle" | "message" | "objects" | "sparkle" | "spotlight" | "trophy";
+  label: string;
+  value: string;
+}) {
   return (
-    <div className="entity-stat-card">
+    <div className={styles.statCard}>
+      <span className={styles.statIcon} aria-hidden="true">
+        <OpiniaIcon name={icon} />
+      </span>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>

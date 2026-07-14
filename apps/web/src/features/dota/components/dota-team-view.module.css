@@ -1,0 +1,297 @@
+.page {
+  display: grid;
+  gap: 1rem;
+  margin: 0 auto;
+  max-width: 56rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  width: 100%;
+}
+
+.header {
+  background:
+    radial-gradient(circle at 88% 10%, rgb(139 92 246 / 12%), transparent 22rem),
+    linear-gradient(135deg, #fff, #f8f2ff);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.55rem;
+  padding: 1.25rem;
+}
+
+.eyebrow {
+  color: var(--color-accent-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.lead,
+.searchSoon,
+.canonicalHint {
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.searchSoon {
+  background: rgb(243 232 255 / 55%);
+  border: 1px solid rgb(139 92 246 / 18%);
+  border-radius: var(--radius-card);
+  padding: 0.75rem 0.9rem;
+}
+
+.slots {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.slot {
+  background: var(--color-card);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.35rem;
+  min-height: 8.5rem;
+  padding: 0.85rem;
+}
+
+.slotEmpty {
+  background: linear-gradient(180deg, #fff, #fafafa);
+  border-style: dashed;
+}
+
+.slotRole {
+  color: var(--color-accent-strong);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.slot strong {
+  font-size: 0.95rem;
+}
+
+.slot strong a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.slotMeta {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.invitePanel {
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+}
+
+.invitePanel h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.friendList {
+  display: grid;
+  gap: 0.45rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.friendList li {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.inviteEmpty {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+
+.inviteEmpty p {
+  margin: 0;
+}
+
+.createForm {
+  background: var(--color-card);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.75rem;
+  margin: 0 auto;
+  max-width: 32rem;
+  padding: 1.25rem;
+  width: 100%;
+}
+
+.createForm h2 {
+  margin: 0;
+}
+
+.createForm p {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.createNameHint {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.renameForm {
+  align-items: end;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr auto;
+}
+
+.renameForm .field-label {
+  margin: 0;
+}
+
+.kindFieldset {
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.75rem;
+}
+
+.kindFieldset legend {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0 0.25rem;
+}
+
+.kindOption {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.55rem;
+}
+
+.kindOption span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.kindOption strong {
+  font-size: 0.9rem;
+}
+
+.kindOption em {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-style: normal;
+}
+
+.chatPanel {
+  background: var(--color-card);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+}
+
+.chatPanel h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.chatHint,
+.chatEmpty {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.chatMessages {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.chatMessage {
+  background: rgb(248 250 252 / 90%);
+  border-radius: var(--radius-card);
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.chatMessage strong {
+  font-size: 0.78rem;
+}
+
+.chatMessage span {
+  font-size: 0.88rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chatForm {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr auto;
+}
+
+.chatForm input {
+  box-sizing: border-box;
+  height: 2.75rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.chatForm button {
+  align-self: center;
+  height: 2.75rem;
+  margin: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .slots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .slots {
+    grid-template-columns: 1fr;
+  }
+}

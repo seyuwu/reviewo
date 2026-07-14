@@ -65,7 +65,7 @@ export function SearchPageView() {
 
   return (
     <div className="home-hub">
-      <section className="home-hub-card" aria-labelledby="search-page-heading">
+      <section className="home-hub-card search-page-card" aria-labelledby="search-page-heading">
         <header className="home-hub-header">
           <h1 id="search-page-heading">{t("web.searchPage.title")}</h1>
           <p className="home-hub-subtitle">{t("web.searchPage.subtitle")}</p>

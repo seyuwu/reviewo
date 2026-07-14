@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards
 } from "@nestjs/common";
@@ -22,6 +23,8 @@ import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.
 import { ConfirmDotaQualitiesDto } from "../dto/confirm-dota-qualities.dto.js";
 import { CreateDotaProfileDto } from "../dto/create-dota-profile.dto.js";
 import { DotaProfileResponseDto } from "../dto/dota-profile-response.dto.js";
+import type { DotaProfileSearchResponseDto } from "../dto/dota-profile-search-response.dto.js";
+import { SearchDotaProfilesQueryDto } from "../dto/search-dota-profiles-query.dto.js";
 import { UpdateDotaProfileDto } from "../dto/update-dota-profile.dto.js";
 import { DotaProfileService } from "../services/dota-profile.service.js";
 
@@ -56,6 +59,13 @@ export class DotaController {
     return this.dotaProfileService.updateMyProfile(input, currentUser);
   }
 
+  @Get("search")
+  async searchProfiles(
+    @Query() query: SearchDotaProfilesQueryDto
+  ): Promise<DotaProfileSearchResponseDto> {
+    return this.dotaProfileService.searchProfiles(query.query);
+  }
+
   @Get("by-id/:accountId")
   @UseGuards(OptionalJwtAuthGuard)
   async getProfileByAccountId(
@@ -63,6 +73,15 @@ export class DotaController {
     @CurrentUser() currentUser?: AuthenticatedUser
   ): Promise<DotaProfileResponseDto> {
     return this.dotaProfileService.getPublicProfileByAccountId(accountId, currentUser?.id);
+  }
+
+  @Get("by-username/:username")
+  @UseGuards(OptionalJwtAuthGuard)
+  async getProfileByUsername(
+    @Param("username") username: string,
+    @CurrentUser() currentUser?: AuthenticatedUser
+  ): Promise<DotaProfileResponseDto> {
+    return this.dotaProfileService.getPublicProfileByUsername(username, currentUser?.id);
   }
 
   @Get(":slug")

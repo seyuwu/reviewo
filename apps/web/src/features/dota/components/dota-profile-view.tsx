@@ -7,32 +7,58 @@ import { useEffect, useRef, useState } from "react";
 import { FormFeedback } from "../../../components/form-feedback";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { useTranslation } from "../../i18n/locale-provider";
+import { redeemFriendInvite } from "../../social/api/social-api";
 import { fetchDotaProfileBySlug } from "../api/dota-api";
 import { useDotaProfileConfirmations } from "../hooks/use-dota-profile-confirmations";
+import {
+  consumePendingFriendInvite,
+  peekPendingFriendInvite,
+  stashPendingFriendInvite
+} from "../lib/friend-invite-storage";
 import { formatDotaMmr, formatDotaRoles } from "../lib/labels";
 import type { DotaProfile } from "../types/dota";
+import { DotaFriendshipActions } from "./dota-friendship-actions";
 import { DotaIdCopyField } from "./dota-id-copy-field";
 import { DotaProfileFlags } from "./dota-profile-flags";
 import { DotaProfileQualities } from "./dota-profile-qualities";
 import { DotaSharePanel } from "./dota-share-panel";
+import { DotaTeamOwnerActions } from "./dota-team-owner-actions";
 import styles from "./dota-profile-view.module.css";
 
 interface DotaProfileViewProps {
   profile: DotaProfile;
 }
 
+function lookLikeFriendInviteToken(value: string | null): value is string {
+  if (!value || value === "1") {
+    return false;
+  }
+
+  const parts = value.split(".");
+  return parts.length === 3 && parts.every((part) => part.length > 0);
+}
+
 export function DotaProfileView({ profile: initialProfile }: DotaProfileViewProps) {
   const t = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { authSession } = useAuthSession();
+  const { authSession, isAuthSessionLoaded } = useAuthSession();
   const [profile, setProfile] = useState(initialProfile);
   const [shouldAutoOpenShare, setShouldAutoOpenShare] = useState(false);
+  const [friendInviteMessage, setFriendInviteMessage] = useState<string | null>(null);
+  const [friendInviteError, setFriendInviteError] = useState<string | null>(null);
   const sharePanelRef = useRef<HTMLElement>(null);
+  const friendInviteHandledRef = useRef(false);
   const justCreated = searchParams.get("created") === "1";
+  const friendInviteTokenFromUrl = searchParams.get("friendInvite");
+  const urlInviteToken = lookLikeFriendInviteToken(friendInviteTokenFromUrl)
+    ? friendInviteTokenFromUrl
+    : null;
   const showSharePanel =
     (profile.isOwner || justCreated) && profile.progress.current < profile.progress.target;
-  const confirmations = useDotaProfileConfirmations(profile);
+  const confirmations = useDotaProfileConfirmations(profile, {
+    onProfileUpdated: setProfile
+  });
 
   useEffect(() => {
     setProfile(initialProfile);
@@ -79,11 +105,93 @@ export function DotaProfileView({ profile: initialProfile }: DotaProfileViewProp
     };
   }, [initialProfile.slug, justCreated, router]);
 
+  useEffect(() => {
+    if (!isAuthSessionLoaded || friendInviteHandledRef.current) {
+      return;
+    }
+
+    const pending = peekPendingFriendInvite();
+    const pendingForProfile = pending?.slug === initialProfile.slug ? pending : null;
+    const inviteToken = urlInviteToken ?? pendingForProfile?.token ?? null;
+
+    if (!inviteToken) {
+      if (friendInviteTokenFromUrl === "1") {
+        setFriendInviteError(t("dota.friends.inviteInvalid"));
+        router.replace(`/dota/${initialProfile.slug}`, { scroll: false });
+      }
+      return;
+    }
+
+    if (!authSession?.accessToken) {
+      stashPendingFriendInvite({ slug: initialProfile.slug, token: inviteToken });
+      setFriendInviteMessage(t("dota.friends.inviteSignIn"));
+      return;
+    }
+
+    consumePendingFriendInvite(initialProfile.slug);
+
+    if (initialProfile.isOwner || profile.friendshipStatus === "self") {
+      friendInviteHandledRef.current = true;
+      setFriendInviteMessage(t("dota.friends.inviteSelf"));
+      router.replace(`/dota/${initialProfile.slug}`, { scroll: false });
+      return;
+    }
+
+    if (profile.friendshipStatus === "friends") {
+      friendInviteHandledRef.current = true;
+      router.replace(`/dota/${initialProfile.slug}`, { scroll: false });
+      return;
+    }
+
+    friendInviteHandledRef.current = true;
+    let cancelled = false;
+
+    void redeemFriendInvite(inviteToken, authSession.accessToken)
+      .then(async () => {
+        if (cancelled) {
+          return;
+        }
+
+        const refreshed = await fetchDotaProfileBySlug(
+          initialProfile.slug,
+          authSession.accessToken
+        );
+        setProfile(refreshed);
+        setFriendInviteMessage(t("dota.friends.inviteRedeemed"));
+        setFriendInviteError(null);
+        router.replace(`/dota/${initialProfile.slug}`, { scroll: false });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          friendInviteHandledRef.current = false;
+          setFriendInviteError(t("dota.friends.inviteInvalid"));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authSession?.accessToken,
+    friendInviteTokenFromUrl,
+    initialProfile.isOwner,
+    initialProfile.slug,
+    isAuthSessionLoaded,
+    profile.friendshipStatus,
+    router,
+    t,
+    urlInviteToken
+  ]);
+
   return (
     <section className={`creation-card ${styles.page}`}>
       <header className={styles.header}>
         <p className="eyebrow">{t("dota.profile.eyebrow")}</p>
         <h1>{profile.title}</h1>
+        <DotaFriendshipActions onProfileUpdated={setProfile} profile={profile} />
+        {profile.isOwner ? <DotaTeamOwnerActions /> : null}
+        {friendInviteMessage ? <p className={styles.ownerHint}>{friendInviteMessage}</p> : null}
+        {friendInviteError ? <FormFeedback errorMessage={friendInviteError} /> : null}
       </header>
 
       <div className={`profile-fields ${styles.metaGrid}`}>

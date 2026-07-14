@@ -1,19 +1,71 @@
 .entityPageShell {
-  --entity-aside-gap: 1.5rem;
-  --entity-aside-width: 22rem;
-  --entity-page-gutter: 1.35rem;
+  --entity-aside-gap: clamp(0.75rem, 1.5vw, 1.25rem);
+  --entity-aside-width: clamp(19rem, 24vw, 24rem);
+  --entity-page-gutter: 0;
   box-sizing: border-box;
   padding-inline: var(--entity-page-gutter);
   width: 100%;
 }
 
+.entityPageShell :global(.panel-card) {
+  background: rgb(255 255 255 / 94%);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+}
+
 .entityPageShell :global(.entity-page-toolbar-prominent) {
-  margin: 0 0 1rem;
+  margin: 0 0 0.55rem;
   width: 100%;
 }
 
+.entityPageShell :global(.entity-back-button) {
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  min-height: 0;
+  padding: 0.3rem 0;
+}
+
+.entityPageShell :global(.entity-back-button:hover) {
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.entityPageShell :global(#entity-user-tops .discovery-rank-list) {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.entityPageShell :global(#entity-user-tops .discovery-rank-list > li) {
+  min-width: 0;
+}
+
+.entityPageShell :global(#entity-user-tops .discovery-rank-item) {
+  align-items: center;
+  background:
+    radial-gradient(circle at 100% 0%, rgb(236 72 153 / 10%), transparent 55%),
+    linear-gradient(145deg, #fff, #faf7ff);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.9rem;
+  min-height: 6rem;
+  padding: 0.8rem;
+}
+
+.entityPageShell :global(#entity-user-tops .discovery-rank-position) {
+  align-items: center;
+  background: linear-gradient(145deg, #f5b700, #fb7185);
+  border: 0;
+  border-radius: 0.65rem;
+  color: #fff;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
 .entityPageShell :global(.entity-hero) {
-  padding-inline: 1rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
 }
 
 .pageGrid {
@@ -37,11 +89,44 @@
   scroll-margin-top: 1.5rem;
 }
 
+.lowerGrid {
+  align-items: start;
+  display: grid;
+  gap: var(--entity-aside-gap);
+  grid-template-columns: minmax(0, 1fr) minmax(19rem, var(--entity-aside-width));
+}
+
+.lowerMain,
+.lowerAside {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.lowerAside {
+  position: sticky;
+  top: 1rem;
+}
+
 .mainColumn {
   display: grid;
   gap: 1rem;
   grid-column: 1;
   min-width: 0;
+}
+
+.summaryColumn {
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 24rem;
+}
+
+.summaryPanel {
+  min-height: 100%;
+}
+
+.summaryPanel {
+  align-content: start;
 }
 
 .asideColumn {
@@ -118,6 +203,10 @@
   width: 100%;
 }
 
+.ratingBar > span {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-rose));
+}
+
 .reviewList {
   max-width: 100%;
   min-width: 0;
@@ -126,8 +215,8 @@
 }
 
 .reviewsPanel {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  gap: 0.85rem;
   min-height: 0;
 }
 
@@ -161,11 +250,9 @@
 }
 
 .reviewsPanelBody {
-  flex: 1 1 auto;
   margin: 0 -0.15rem;
   min-height: 12rem;
   overflow-x: hidden;
-  overflow-y: auto;
   padding: 0.15rem 0.15rem 0;
 }
 
@@ -175,10 +262,73 @@
 }
 
 .reviewCard {
+  background:
+    radial-gradient(circle at 100% 0%, rgb(139 92 246 / 8%), transparent 45%),
+    #fff;
+  border-color: var(--color-card-border);
+  border-radius: 0.95rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 9.5rem;
+  padding: 0.85rem;
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
   width: 100%;
+}
+
+.reviewList {
+  display: grid !important;
+  gap: 0.65rem !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reviewCardTop {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.reviewQuote {
+  align-items: center;
+  background: var(--color-accent-soft);
+  border-radius: 0.55rem;
+  color: var(--color-accent-strong);
+  display: inline-flex;
+  font-size: 1.2rem;
+  font-weight: 900;
+  height: 1.8rem;
+  justify-content: center;
+  line-height: 1;
+  width: 1.8rem;
+}
+
+.reviewAccent {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-rose));
+  border-radius: 999px;
+  height: 0.25rem;
+  width: 2.5rem;
+}
+
+.reviewCard :global(.review-card-footer) {
+  border-top: 1px solid var(--color-card-border);
+  margin-top: auto;
+  padding-top: 0.65rem;
+}
+
+.reviewCard :global(.review-vote-button) {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.reviewCard :global(.review-vote-button svg) {
+  height: 0.8rem;
+  width: 0.8rem;
+}
+
+.reviewUnlikeIcon {
+  transform: rotate(180deg);
 }
 
 .reviewTextWrap {
@@ -238,6 +388,11 @@
     grid-column: 1;
   }
 
+  .summaryColumn {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
   .asideChat {
     height: auto !important;
     max-height: 18rem !important;
@@ -247,13 +402,25 @@
     position: static;
   }
 
-  .reviewsPanel {
-    height: auto !important;
-    max-height: none !important;
+  .lowerGrid {
+    grid-template-columns: 1fr;
   }
 
-  .reviewsPanelBody {
-    max-height: 24rem;
-    min-height: 10rem;
+  .lowerAside {
+    position: static;
+  }
+}
+
+@media (max-width: 680px) {
+  .summaryColumn {
+    grid-template-columns: 1fr;
+  }
+
+  .reviewList {
+    grid-template-columns: 1fr;
+  }
+
+  .entityPageShell :global(#entity-user-tops .discovery-rank-list) {
+    grid-template-columns: 1fr;
   }
 }

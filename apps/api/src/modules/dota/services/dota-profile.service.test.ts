@@ -6,6 +6,7 @@ import type { RequestLike } from "../../../common/rate-limiting/api-rate-limiter
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import type { EntitiesRepository } from "../../entities/repositories/entities.repository.js";
 import type { UsersRepository } from "../../users/repositories/users.repository.js";
+import type { FriendshipsService } from "../../social/services/friendships.service.js";
 import type { EntityAttributesRepository } from "../repositories/entity-attributes.repository.js";
 import type { EntityQualityConfirmationsRepository } from "../repositories/entity-quality-confirmations.repository.js";
 import { DotaProfileService } from "./dota-profile.service.js";
@@ -94,10 +95,29 @@ function createService(overrides?: {
     })
   } as unknown as UsersRepository;
 
+  const friendshipsService = {
+    getStatusBetween: async (viewerUserId?: string, otherUserId?: string | null) => {
+      if (!otherUserId) {
+        return null;
+      }
+
+      if (!viewerUserId) {
+        return "none";
+      }
+
+      if (viewerUserId === otherUserId) {
+        return "self";
+      }
+
+      return "none";
+    }
+  } as unknown as FriendshipsService;
+
   return new DotaProfileService(
     entitiesRepository,
     entityAttributesRepository,
     entityQualityConfirmationsRepository,
+    friendshipsService,
     usersRepository
   );
 }

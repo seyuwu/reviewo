@@ -1,0 +1,26 @@
+.wrap {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: start;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.hint,
+.error {
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.hint {
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--color-error);
+  font-weight: 600;
+}

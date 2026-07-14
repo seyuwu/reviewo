@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import { PrismaService } from "../../../database/prisma.service.js";
-import { DOTA_ATTRIBUTE_KEYS } from "@reviewo/shared";
+import { DOTA_ATTRIBUTE_KEYS, DOTA_VERTICAL } from "@reviewo/shared";
 
 @Injectable()
 export class EntityAttributesRepository {
@@ -58,6 +58,95 @@ export class EntityAttributesRepository {
     });
 
     return row?.entityId ?? null;
+  }
+
+  async searchDotaProfiles(
+    query: string,
+    ownerUserIds: string[],
+    limit = 8
+  ): Promise<
+    Array<{
+      attributes: Array<{ key: string; value: string }>;
+      id: string;
+      ownerUserId: string | null;
+      slug: string;
+      title: string;
+    }>
+  > {
+    const normalized = query.trim();
+
+    if (!normalized) {
+      return [];
+    }
+
+    const slugPattern = normalized.toLowerCase().replace(/\s+/g, "-");
+
+    return this.prismaService.entity.findMany({
+      include: {
+        attributes: {
+          select: {
+            key: true,
+            value: true
+          },
+          where: {
+            key: {
+              in: [
+                DOTA_ATTRIBUTE_KEYS.dotaAccountId,
+                DOTA_ATTRIBUTE_KEYS.mmr,
+                DOTA_ATTRIBUTE_KEYS.vertical
+              ]
+            }
+          }
+        }
+      },
+      orderBy: {
+        updatedAt: "desc"
+      },
+      take: limit,
+      where: {
+        attributes: {
+          some: {
+            key: DOTA_ATTRIBUTE_KEYS.vertical,
+            value: DOTA_VERTICAL
+          }
+        },
+        OR: [
+          {
+            title: {
+              contains: normalized,
+              mode: "insensitive"
+            }
+          },
+          {
+            slug: {
+              contains: slugPattern,
+              mode: "insensitive"
+            }
+          },
+          {
+            attributes: {
+              some: {
+                key: DOTA_ATTRIBUTE_KEYS.dotaAccountId,
+                value: {
+                  contains: normalized
+                }
+              }
+            }
+          },
+          ...(ownerUserIds.length > 0
+            ? [
+                {
+                  ownerUserId: {
+                    in: ownerUserIds
+                  }
+                }
+              ]
+            : [])
+        ],
+        type: "person",
+        visibility: "ACTIVE"
+      }
+    });
   }
 
   isUniqueConstraintError(error: unknown): boolean {

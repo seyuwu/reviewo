@@ -6,10 +6,13 @@ export interface DotaProfileProgress {
 export interface DotaProfile {
   dotaAccountId: string;
   entityId: string;
+  friendshipRequestId: string | null;
+  friendshipStatus: "none" | "outgoing" | "incoming" | "friends" | "self" | null;
   hasMic: boolean | null;
   isOwner: boolean;
   language: string | null;
   mmr: string | null;
+  ownerUserId: string | null;
   playIntent: string | null;
   progress: DotaProfileProgress;
   qualities: Record<string, number>;
@@ -31,4 +34,4 @@ export interface CreateDotaProfileInput {
   title?: string;
 }
 
-export type DotaShareKind = "profile" | "confirm" | "id";
+export type DotaShareKind = "profile" | "confirm" | "id" | "friend";

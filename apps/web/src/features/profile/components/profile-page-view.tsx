@@ -16,10 +16,9 @@ import {
   updateCurrentUserProfile
 } from "../api/profile";
 import type { CurrentUserProfile } from "../types/profile";
+import { ProfileDashboardSummary } from "./profile-dashboard-summary";
 import { ProfileUserTopsSection } from "./profile-user-tops-section";
 import { ProfileAdminLink } from "./profile-editor-stats-section";
-import { ProfileContributionSection } from "./profile-contribution-section";
-import { ProfileTrustSection } from "./profile-trust-section";
 
 type ProfileFlowState = "loading" | "guest" | "authenticated";
 
@@ -71,14 +70,31 @@ export function ProfilePageView() {
       ) : (
         <div key="authenticated" className="profile-page profile-page-authenticated ui-fade-in">
           <div className="profile-panel-centered">
-            <div className="panel-card profile-panel">
-              {profileQuery.isLoading ? <ProfilePanelSkeleton /> : null}
-              {profileQuery.isError ? (
+            {profileQuery.isLoading ? (
+              <div className="panel-card profile-panel">
+                <ProfilePanelSkeleton />
+              </div>
+            ) : null}
+            {profileQuery.isError ? (
+              <div className="panel-card profile-panel">
                 <ProfileStateMessage message={t("web.profile.loadError")} />
-              ) : null}
-              {profileQuery.data ? (
+              </div>
+            ) : null}
+            {profileQuery.data ? (
+              <>
+                <ProfileDashboardSummary
+                  accessToken={accessToken ?? ""}
+                  profile={profileQuery.data}
+                />
+                <ProfileAdminLink isAdmin={profileQuery.data.role === "ADMIN"} />
+                <ProfileUserTopsSection userId={profileQuery.data.id} />
+                <div className="panel-card profile-panel profile-settings-panel" id="profile-settings">
+                  <header className="panel-header">
+                    <h2>{t("web.profile.dashboard.settingsTitle")}</h2>
+                  </header>
                 <ProfileDetails
                   accessToken={accessToken ?? ""}
+                  showIdentity={false}
                   profile={profileQuery.data}
                   onProfileUpdated={(profile) => {
                     updateAuthSession({
@@ -90,14 +106,7 @@ export function ProfilePageView() {
                   onSignOut={signOut}
                   t={t}
                 />
-              ) : null}
-            </div>
-            {profileQuery.data ? (
-              <>
-                <ProfileAdminLink isAdmin={profileQuery.data.role === "ADMIN"} />
-                <ProfileTrustSection accessToken={accessToken ?? ""} userId={profileQuery.data.id} />
-                <ProfileContributionSection accessToken={accessToken ?? ""} />
-                <ProfileUserTopsSection userId={profileQuery.data.id} />
+                </div>
               </>
             ) : null}
           </div>
@@ -147,12 +156,14 @@ function ProfileDetails({
   onProfileUpdated,
   profile,
   onSignOut,
+  showIdentity = true,
   t
 }: {
   accessToken: string;
   onProfileUpdated: (profile: CurrentUserProfile) => void;
   profile: CurrentUserProfile;
   onSignOut: () => void;
+  showIdentity?: boolean;
   t: TranslateFn;
 }) {
   const [displayName, setDisplayName] = useState(profile.displayName);
@@ -260,14 +271,18 @@ function ProfileDetails({
 
   return (
     <div className="profile-details ui-fade-in">
-      <div className="profile-avatar" aria-hidden="true">
-        {getInitials(displayName)}
-      </div>
-      <div>
-        <p className="result-type">{t("web.profile.currentUser")}</p>
-        <h2>{displayName.trim() || profile.displayName}</h2>
-        <p className="muted-copy">{email || t("web.profile.noEmail")}</p>
-      </div>
+      {showIdentity ? (
+        <>
+          <div className="profile-avatar" aria-hidden="true">
+            {getInitials(displayName)}
+          </div>
+          <div>
+            <p className="result-type">{t("web.profile.currentUser")}</p>
+            <h2>{displayName.trim() || profile.displayName}</h2>
+            <p className="muted-copy">{email || t("web.profile.noEmail")}</p>
+          </div>
+        </>
+      ) : null}
 
       <form className="profile-edit-form form-stack" onSubmit={handleProfileSubmit}>
         <div className="section-heading">

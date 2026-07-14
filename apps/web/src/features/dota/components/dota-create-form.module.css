@@ -1,12 +1,26 @@
+.page {
+  display: grid;
+  gap: 0;
+  width: 100%;
+}
+
+.card {
+  background:
+    radial-gradient(circle at 92% 3%, rgb(139 92 246 / 8%), transparent 20rem),
+    var(--color-surface);
+  margin-inline: auto;
+  max-width: 76rem;
+}
+
 .header {
   display: grid;
-  gap: 0.2rem;
-  margin-bottom: 0.35rem;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
 }
 
 .title {
-  font-size: 1.15rem;
-  font-weight: 700;
+  font-size: clamp(1.5rem, 2.5vw, 2.1rem);
+  font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
@@ -20,12 +34,30 @@
 }
 
 .section {
+  align-content: start;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
   display: grid;
   gap: 0.75rem;
+  padding: 1rem;
 }
 
 .form {
+  align-items: start;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 0.15rem;
+}
+
+.form > :global(.signed-in-box) {
+  align-self: stretch;
+}
+
+.form > :global(.primary-button),
+.form > .formError {
+  grid-column: 1 / -1;
 }
 
 .roleChips {
@@ -61,9 +93,9 @@
 }
 
 .roleChip:has(input:checked) {
-  background: var(--color-primary-soft);
-  border-color: rgb(23 23 23 / 18%);
-  color: var(--color-primary);
+  background: var(--color-accent-soft);
+  border-color: rgb(139 92 246 / 35%);
+  color: var(--color-accent-strong);
 }
 
 .checkboxRow {
@@ -118,5 +150,16 @@
   100% {
     background: transparent;
     box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (max-width: 760px) {
+  .form {
+    grid-template-columns: 1fr;
+  }
+
+  .form > :global(.primary-button),
+  .form > .formError {
+    grid-column: auto;
   }
 }

@@ -1,0 +1,493 @@
+.dashboard {
+  display: grid;
+  gap: 0.9rem;
+  width: 100%;
+}
+
+.hero {
+  background:
+    radial-gradient(circle at 86% 22%, rgb(236 72 153 / 12%), transparent 24%),
+    radial-gradient(circle at 72% 75%, rgb(139 92 246 / 14%), transparent 30%),
+    linear-gradient(135deg, #fff 0%, #fdfaff 52%, #f8f2ff 100%);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 32%);
+  min-height: 18rem;
+  overflow: hidden;
+  padding: clamp(1.25rem, 2.5vw, 2rem);
+  position: relative;
+}
+
+.heroIdentity {
+  align-items: flex-start;
+  display: flex;
+  gap: 1.15rem;
+  min-width: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.avatar {
+  align-items: center;
+  background: linear-gradient(145deg, #7c3aed, #a855f7);
+  border: 4px solid rgb(255 255 255 / 88%);
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgb(124 58 237 / 24%);
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 2.1rem;
+  font-weight: 800;
+  height: 6.5rem;
+  justify-content: center;
+  width: 6.5rem;
+}
+
+.heroCopy {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 34rem;
+  min-width: 0;
+}
+
+.badge {
+  background: var(--color-accent-soft);
+  border-radius: 999px;
+  color: var(--color-accent-strong);
+  font-size: 0.7rem;
+  font-weight: 800;
+  justify-self: start;
+  padding: 0.28rem 0.55rem;
+}
+
+.heroCopy h1 {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: 0.15rem 0 0;
+  max-width: none;
+}
+
+.heroCopy > p {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.heroTrust {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+  max-width: 25rem;
+}
+
+.heroTrustLabel {
+  align-items: center;
+  display: flex;
+  font-size: 0.78rem;
+  justify-content: space-between;
+}
+
+.heroTrustLabel span {
+  color: var(--color-accent-strong);
+  font-weight: 800;
+}
+
+.heroTrust small {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
+.progressTrack {
+  background: #ececf3;
+  border-radius: 999px;
+  height: 0.38rem;
+  overflow: hidden;
+}
+
+.progressTrack > span {
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-rose));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 0.2rem;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.heroArtwork {
+  min-height: 13rem;
+  position: relative;
+}
+
+.heroOrb {
+  background: radial-gradient(circle, rgb(255 255 255 / 94%), rgb(233 213 255 / 72%) 46%, transparent 68%);
+  height: 17rem;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 17rem;
+}
+
+.heroShield {
+  align-items: center;
+  background: linear-gradient(145deg, #a855f7, #7c3aed);
+  border: 0.55rem solid rgb(255 255 255 / 70%);
+  border-radius: 42% 42% 48% 48% / 30% 30% 62% 62%;
+  box-shadow:
+    0 22px 45px rgb(124 58 237 / 30%),
+    inset 0 0 0 2px rgb(255 255 255 / 42%);
+  color: #fff;
+  display: inline-flex;
+  height: 8.5rem;
+  justify-content: center;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 7.5rem;
+}
+
+.heroShield svg {
+  height: 3rem;
+  width: 3rem;
+}
+
+.heroSparkleOne,
+.heroSparkleTwo {
+  color: #f59e0b;
+  position: absolute;
+}
+
+.heroSparkleOne {
+  left: 13%;
+  top: 18%;
+}
+
+.heroSparkleTwo {
+  bottom: 20%;
+  right: 10%;
+}
+
+.heroSparkleOne svg,
+.heroSparkleTwo svg {
+  height: 1.15rem;
+  width: 1.15rem;
+}
+
+.stats {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.statCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  color: inherit;
+  display: grid;
+  gap: 0.25rem;
+  min-height: 7.25rem;
+  padding: 0.75rem;
+  position: relative;
+  text-decoration: none;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.statCard:hover {
+  border-color: rgb(139 92 246 / 34%);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.statIcon {
+  align-items: center;
+  background: var(--color-accent-soft);
+  border-radius: 0.55rem;
+  color: var(--color-accent-strong);
+  display: inline-flex;
+  height: 1.65rem;
+  justify-content: center;
+  width: 1.65rem;
+}
+
+.statIcon svg {
+  height: 0.9rem;
+  width: 0.9rem;
+}
+
+.statCard > span:nth-child(2) {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+}
+
+.statCard strong {
+  font-size: 1.15rem;
+}
+
+.statArrow {
+  color: var(--color-text-muted);
+  font-size: 1.1rem;
+  position: absolute;
+  right: 0.65rem;
+  top: 0.55rem;
+}
+
+.insights {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.insightCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.65rem;
+  min-height: 14rem;
+  padding: 1.1rem;
+}
+
+.insightEyebrow {
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.insightValue {
+  color: var(--color-accent-strong);
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.insightCard p,
+.insightCard small {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.insightCard a {
+  align-self: end;
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.levelIdentity {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+}
+
+.levelMark {
+  align-items: center;
+  background: linear-gradient(145deg, #7c3aed, #a855f7);
+  border-radius: 0.8rem;
+  color: #fff;
+  display: inline-flex;
+  height: 3.2rem;
+  justify-content: center;
+  width: 3.2rem;
+}
+
+.levelMark svg {
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.gradientAction {
+  align-items: center;
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-rose));
+  border-radius: 999px;
+  color: #fff !important;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 2.35rem;
+  padding: 0.55rem 1rem;
+}
+
+.games,
+.activity {
+  background: var(--color-surface);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  scroll-margin-top: 5rem;
+}
+
+.sectionHeader {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.sectionHeader h2 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.sectionHeader p {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  margin: 0.2rem 0 0;
+}
+
+.gameGrid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.gameCard {
+  align-items: center;
+  background: linear-gradient(180deg, #fff, #fafafa);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  color: inherit;
+  display: grid;
+  gap: 0.4rem;
+  justify-items: center;
+  min-height: 9rem;
+  padding: 0.85rem 0.65rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.dotaCard {
+  background: linear-gradient(145deg, rgb(239 68 68 / 8%), #fff 65%);
+  border-color: rgb(239 68 68 / 18%);
+}
+
+.gameLogo {
+  align-items: center;
+  background: #111827;
+  border-radius: 0.65rem;
+  color: #fff;
+  display: inline-flex;
+  font-size: 1rem;
+  font-weight: 900;
+  height: 2.7rem;
+  justify-content: center;
+  width: 2.7rem;
+}
+
+.dotaCard .gameLogo {
+  background: linear-gradient(145deg, #dc2626, #7f1d1d);
+}
+
+.gameCard strong {
+  font-size: 0.78rem;
+}
+
+.gameCard > span:last-child {
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+}
+
+.activityGrid {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.activityRow {
+  align-items: center;
+  background: var(--color-primary-soft);
+  border-radius: 0.7rem;
+  display: grid;
+  font-size: 0.75rem;
+  gap: 0.55rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0.55rem 0.7rem;
+}
+
+.activityIcon {
+  color: var(--color-accent-strong);
+  display: inline-flex;
+}
+
+.activityIcon svg {
+  height: 0.9rem;
+  width: 0.9rem;
+}
+
+@media (max-width: 1100px) {
+  .stats {
+    grid-auto-columns: minmax(8.5rem, 1fr);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+
+  .insights {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .creditsCard {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .heroArtwork {
+    display: none;
+  }
+
+  .avatar {
+    font-size: 1.4rem;
+    height: 4.5rem;
+    width: 4.5rem;
+  }
+
+  .insights,
+  .activityGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .creditsCard {
+    grid-column: auto;
+  }
+
+  .gameGrid {
+    grid-auto-columns: minmax(9rem, 70vw);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .heroIdentity {
+    display: grid;
+  }
+
+  .sectionHeader {
+    align-items: flex-start;
+    display: grid;
+  }
+}

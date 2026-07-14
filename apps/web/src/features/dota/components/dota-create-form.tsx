@@ -7,6 +7,7 @@ import { ApiError } from "../../../lib/api/api-error";
 import { login, register } from "../../auth/api/authenticate";
 import { readAuthErrorMessage } from "../../auth/components/minimal-auth-panel";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
+import type { AuthResponse } from "../../auth/types/auth";
 import { useTranslation } from "../../i18n/locale-provider";
 import { createDotaProfile, fetchMyDotaProfile, updateMyDotaProfile } from "../api/dota-api";
 import { trackDotaEvent } from "../lib/analytics";
@@ -21,6 +22,7 @@ import {
   resolveDotaMmrMode
 } from "../lib/labels";
 import type { DotaProfile } from "../types/dota";
+import { DotaCreateIdleReel } from "./dota-create-idle-reel";
 import { DotaMmrField } from "./dota-mmr-field";
 import styles from "./dota-create-form.module.css";
 
@@ -206,6 +208,7 @@ export function DotaCreateForm() {
 
     let isAuthPhase = !authSession?.accessToken;
     let accessToken = authSession?.accessToken;
+    let pendingAuthResponse: AuthResponse | null = null;
 
     try {
       if (!accessToken) {
@@ -221,7 +224,7 @@ export function DotaCreateForm() {
                 password
               });
 
-        storeAuthSession(authResponse);
+        pendingAuthResponse = authResponse;
         accessToken = authResponse.accessToken;
         isAuthPhase = false;
       }
@@ -255,15 +258,26 @@ export function DotaCreateForm() {
       const profile = await createDotaProfile(
         {
           ...(trimmedDotaAccountId ? { dotaAccountId: trimmedDotaAccountId } : {}),
+          hasMic,
           mmr,
-          roles
+          playIntent,
+          roles,
+          server
         },
         accessToken
       );
 
+      if (pendingAuthResponse) {
+        storeAuthSession(pendingAuthResponse);
+      }
+
       trackDotaEvent("dota_profile_created", { slug: profile.slug });
       router.push(`/dota/${profile.slug}?created=1`, { scroll: false });
     } catch (submitError) {
+      if (pendingAuthResponse) {
+        storeAuthSession(pendingAuthResponse);
+      }
+
       if (isAuthPhase) {
         setError(readAuthErrorMessage(submitError, authMode, t));
       } else if (isDotaProfileAlreadyExistsError(submitError) && accessToken) {
@@ -301,182 +315,186 @@ export function DotaCreateForm() {
         : t("dota.create.submitLogin");
 
   return (
-    <section className="creation-card">
-      <header className={styles.header}>
-        <h1 className={styles.title}>{isEditMode ? t("dota.create.editTitle") : t("dota.create.title")}</h1>
-        {isEditMode ? <p className={styles.lead}>{t("dota.create.editLead")}</p> : null}
-      </header>
+    <div className={styles.page}>
+      <section className={`creation-card ${styles.card}`}>
+        <header className={styles.header}>
+          <h1 className={styles.title}>{isEditMode ? t("dota.create.editTitle") : t("dota.create.title")}</h1>
+          {isEditMode ? <p className={styles.lead}>{t("dota.create.editLead")}</p> : null}
+        </header>
 
-      <form className={`form-stack ${styles.form}`} onSubmit={handleSubmit}>
-        {authSession ? (
-          <div className="signed-in-box">
-            <p>{t("auth.signedInLabel")}</p>
-            <strong>{authSession.displayName}</strong>
-            <span>{authSession.email}</span>
-            <button className="secondary-button" onClick={signOut} type="button">
-              {t("auth.useAnotherAccount")}
-            </button>
-          </div>
-        ) : (
-          <section className={styles.section}>
-            <div className="segmented-control" aria-label={t("auth.mode.ariaLabel")}>
-              <button
-                aria-pressed={authMode === "register"}
-                onClick={() => handleAuthModeChange("register")}
-                type="button"
-              >
-                {t("auth.mode.register")}
-              </button>
-              <button
-                aria-pressed={authMode === "login"}
-                onClick={() => handleAuthModeChange("login")}
-                type="button"
-              >
-                {t("auth.mode.login")}
+        <form className={`form-stack ${styles.form}`} onSubmit={handleSubmit}>
+          {authSession ? (
+            <div className="signed-in-box">
+              <p>{t("auth.signedInLabel")}</p>
+              <strong>{authSession.displayName}</strong>
+              <span>{authSession.email}</span>
+              <button className="secondary-button" onClick={signOut} type="button">
+                {t("auth.useAnotherAccount")}
               </button>
             </div>
+          ) : (
+            <section className={styles.section}>
+              <div className="segmented-control" aria-label={t("auth.mode.ariaLabel")}>
+                <button
+                  aria-pressed={authMode === "register"}
+                  onClick={() => handleAuthModeChange("register")}
+                  type="button"
+                >
+                  {t("auth.mode.register")}
+                </button>
+                <button
+                  aria-pressed={authMode === "login"}
+                  onClick={() => handleAuthModeChange("login")}
+                  type="button"
+                >
+                  {t("auth.mode.login")}
+                </button>
+              </div>
 
-            <div
-              aria-hidden={authMode !== "register"}
-              className={`auth-display-name-slot${authMode === "register" ? " is-visible" : ""}`}
+              <div
+                aria-hidden={authMode !== "register"}
+                className={`auth-display-name-slot${authMode === "register" ? " is-visible" : ""}`}
+              >
+                <div className="auth-display-name-slot__inner">
+                  <label className="field-label">
+                    {t("auth.field.displayName")}
+                    <input
+                      autoComplete="name"
+                      maxLength={100}
+                      minLength={1}
+                      onChange={(event) => setDisplayName(event.target.value)}
+                      required={authMode === "register"}
+                      tabIndex={authMode === "register" ? 0 : -1}
+                      value={displayName}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <label className="field-label">
+                {t("auth.field.email")}
+                <input
+                  autoComplete="email"
+                  maxLength={320}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  type="email"
+                  value={email}
+                />
+              </label>
+
+              <label className="field-label">
+                {t("auth.field.password")}
+                <input
+                  autoComplete={authMode === "register" ? "new-password" : "current-password"}
+                  maxLength={128}
+                  minLength={8}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  type="password"
+                  value={password}
+                />
+              </label>
+            </section>
+          )}
+
+          <section className={styles.section}>
+            <label
+              className={`field-label${highlightDotaId ? ` ${styles.fieldHighlight}` : ""}`}
+              ref={dotaIdFieldRef}
             >
-              <div className="auth-display-name-slot__inner">
-                <label className="field-label">
-                  {t("auth.field.displayName")}
-                  <input
-                    autoComplete="name"
-                    maxLength={100}
-                    minLength={1}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                    required={authMode === "register"}
-                    tabIndex={authMode === "register" ? 0 : -1}
-                    value={displayName}
-                  />
-                </label>
+              {t("dota.create.dotaAccountId")}
+              <input
+                inputMode="numeric"
+                onChange={(event) => setDotaAccountId(event.target.value.replace(/\D/g, ""))}
+                pattern="[0-9]{8,10}"
+                placeholder="123456789"
+                value={dotaAccountId}
+              />
+              {!isEditMode ? (
+                <button
+                  className={styles.skipLink}
+                  onClick={() => setDotaAccountId("")}
+                  type="button"
+                >
+                  {t("dota.create.dotaAccountIdLater")}
+                </button>
+              ) : null}
+            </label>
+
+            <div className="field-label">
+              {t("dota.create.roles")}
+              <div className={styles.roleChips}>
+                {ROLE_OPTIONS.map((role) => (
+                  <label className={styles.roleChip} key={role}>
+                    <input
+                      checked={roles.includes(role)}
+                      onChange={() => toggleRole(role)}
+                      type="checkbox"
+                    />
+                    <span>{role}</span>
+                  </label>
+                ))}
               </div>
             </div>
 
-            <label className="field-label">
-              {t("auth.field.email")}
-              <input
-                autoComplete="email"
-                maxLength={320}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                type="email"
-                value={email}
+            <div className="field-label">
+              {t("dota.create.mmr")}
+              <DotaMmrField
+                key={existingProfile?.slug ?? "create"}
+                mmrFrom={mmrFrom}
+                mmrTo={mmrTo}
+                onChange={handleMmrChange}
               />
-            </label>
-
-            <label className="field-label">
-              {t("auth.field.password")}
-              <input
-                autoComplete={authMode === "register" ? "new-password" : "current-password"}
-                maxLength={128}
-                minLength={8}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                type="password"
-                value={password}
-              />
-            </label>
-          </section>
-        )}
-
-        <section className={styles.section}>
-          <label
-            className={`field-label${highlightDotaId ? ` ${styles.fieldHighlight}` : ""}`}
-            ref={dotaIdFieldRef}
-          >
-            {t("dota.create.dotaAccountId")}
-            <input
-              inputMode="numeric"
-              onChange={(event) => setDotaAccountId(event.target.value.replace(/\D/g, ""))}
-              pattern="[0-9]{8,10}"
-              placeholder="123456789"
-              value={dotaAccountId}
-            />
-            {!isEditMode ? (
-              <button
-                className={styles.skipLink}
-                onClick={() => setDotaAccountId("")}
-                type="button"
-              >
-                {t("dota.create.dotaAccountIdLater")}
-              </button>
-            ) : null}
-          </label>
-
-          <div className="field-label">
-            {t("dota.create.roles")}
-            <div className={styles.roleChips}>
-              {ROLE_OPTIONS.map((role) => (
-                <label className={styles.roleChip} key={role}>
-                  <input
-                    checked={roles.includes(role)}
-                    onChange={() => toggleRole(role)}
-                    type="checkbox"
-                  />
-                  <span>{role}</span>
-                </label>
-              ))}
             </div>
-          </div>
-
-          <div className="field-label">
-            {t("dota.create.mmr")}
-            <DotaMmrField
-              key={existingProfile?.slug ?? "create"}
-              mmrFrom={mmrFrom}
-              mmrTo={mmrTo}
-              onChange={handleMmrChange}
-            />
-          </div>
-        </section>
-
-        {isEditMode ? (
-          <section className={styles.section}>
-            <label className="field-label">
-              {t("dota.create.server")}
-              <select onChange={(event) => setServer(event.target.value as typeof server)} value={server}>
-                {SERVER_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className={styles.checkboxRow}>
-              <input
-                checked={hasMic}
-                onChange={(event) => setHasMic(event.target.checked)}
-                type="checkbox"
-              />
-              <span>{t("dota.create.hasMic")}</span>
-            </label>
-
-            <label className="field-label">
-              {t("dota.create.playIntent")}
-              <select
-                onChange={(event) => setPlayIntent(event.target.value as PlayIntent)}
-                value={playIntent}
-              >
-                <option value="fun">{t("dota.create.playIntent.fun")}</option>
-                <option value="ranked">{t("dota.create.playIntent.ranked")}</option>
-                <option value="tournament">{t("dota.create.playIntent.tournament")}</option>
-              </select>
-            </label>
           </section>
-        ) : null}
 
-        <button className="primary-button" disabled={isSubmitting} type="submit">
-          {submitLabel}
-        </button>
+          {isEditMode ? (
+            <section className={styles.section}>
+              <label className="field-label">
+                {t("dota.create.server")}
+                <select onChange={(event) => setServer(event.target.value as typeof server)} value={server}>
+                  {SERVER_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-        {bottomError ? <p className={styles.formError}>{bottomError}</p> : null}
-      </form>
-    </section>
+              <label className={styles.checkboxRow}>
+                <input
+                  checked={hasMic}
+                  onChange={(event) => setHasMic(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>{t("dota.create.hasMic")}</span>
+              </label>
+
+              <label className="field-label">
+                {t("dota.create.playIntent")}
+                <select
+                  onChange={(event) => setPlayIntent(event.target.value as PlayIntent)}
+                  value={playIntent}
+                >
+                  <option value="fun">{t("dota.create.playIntent.fun")}</option>
+                  <option value="ranked">{t("dota.create.playIntent.ranked")}</option>
+                  <option value="tournament">{t("dota.create.playIntent.tournament")}</option>
+                </select>
+              </label>
+            </section>
+          ) : null}
+
+          <button className="primary-button" disabled={isSubmitting} type="submit">
+            {submitLabel}
+          </button>
+
+          {bottomError ? <p className={styles.formError}>{bottomError}</p> : null}
+        </form>
+      </section>
+
+      {!isEditMode ? <DotaCreateIdleReel /> : null}
+    </div>
   );
 }
 

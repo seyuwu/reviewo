@@ -67,6 +67,51 @@ export class UsersRepository {
     });
   }
 
+  async findByUsernameInsensitive(username: string): Promise<User | null> {
+    const normalized = username.trim();
+
+    if (!normalized) {
+      return null;
+    }
+
+    return this.prismaService.user.findFirst({
+      where: {
+        username: {
+          equals: normalized,
+          mode: "insensitive"
+        }
+      }
+    });
+  }
+
+  async searchByUsernameOrDisplayName(query: string, limit = 10): Promise<User[]> {
+    const normalized = query.trim();
+
+    if (!normalized) {
+      return [];
+    }
+
+    return this.prismaService.user.findMany({
+      take: limit,
+      where: {
+        OR: [
+          {
+            username: {
+              contains: normalized,
+              mode: "insensitive"
+            }
+          },
+          {
+            displayName: {
+              contains: normalized,
+              mode: "insensitive"
+            }
+          }
+        ]
+      }
+    });
+  }
+
   async updateProfile(
     id: string,
     input: UpdateUserProfileInput,

@@ -1,4 +1,5 @@
 import type { TranslateFn } from "@reviewo/i18n";
+import { DOTA_FLAG_LIMIT_PER_SIDE } from "@reviewo/shared";
 
 import { isApiError, readApiErrorMessage } from "../../../lib/api/read-api-error";
 
@@ -18,7 +19,7 @@ export function resolveDotaConfirmError(error: unknown, t: TranslateFn): string 
   const apiMessage = readApiErrorMessage(error.body);
 
   if (apiMessage?.toLowerCase().includes("green and")) {
-    return t("dota.flags.limitGeneric");
+    return t("dota.flags.limitGeneric", { limit: String(DOTA_FLAG_LIMIT_PER_SIDE) });
   }
 
   if (apiMessage) {

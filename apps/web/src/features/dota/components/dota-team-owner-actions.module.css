@@ -1,0 +1,33 @@
+.wrap {
+  display: grid;
+  gap: 0.55rem;
+  justify-items: start;
+  margin-top: 0.35rem;
+}
+
+.invites {
+  display: grid;
+  gap: 0.4rem;
+  width: min(100%, 28rem);
+}
+
+.invites p {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.invites ul {
+  display: grid;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.invites li {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}

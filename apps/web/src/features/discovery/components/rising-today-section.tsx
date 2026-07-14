@@ -9,10 +9,12 @@ import { EntityRankList } from "./entity-rank-list";
 import { FeedSection } from "./feed-section";
 
 interface RisingTodaySectionProps {
+  embedded?: boolean;
   initialItems?: DiscoveryEntityRankItem[] | undefined;
+  maxItems?: number;
 }
 
-export function RisingTodaySection({ initialItems }: RisingTodaySectionProps) {
+export function RisingTodaySection({ embedded = false, initialItems, maxItems }: RisingTodaySectionProps) {
   const t = useTranslation();
   const hasInitialData = initialItems !== undefined;
   const [items, setItems] = useState<DiscoveryEntityRankItem[]>(initialItems ?? []);
@@ -49,6 +51,7 @@ export function RisingTodaySection({ initialItems }: RisingTodaySectionProps) {
 
   return (
     <FeedSection
+      embedded={embedded}
       heading={t("web.homeFeed.sectionRising")}
       headingId="home-feed-rising"
       viewAllHref="/top"
@@ -56,7 +59,7 @@ export function RisingTodaySection({ initialItems }: RisingTodaySectionProps) {
       {isLoading ? (
         <p className="muted-copy">{t("chat.loading")}</p>
       ) : items.length > 0 ? (
-        <EntityRankList items={items} showRecentVotes />
+        <EntityRankList items={maxItems ? items.slice(0, maxItems) : items} showRecentVotes />
       ) : (
         <p className="muted-copy">{t("web.homeFeed.quiet")}</p>
       )}

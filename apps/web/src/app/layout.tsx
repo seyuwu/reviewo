@@ -19,7 +19,7 @@ interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html data-scroll-behavior="smooth" lang="en" suppressHydrationWarning>
       <body>
         <GoogleAnalytics />
         <AppProviders>

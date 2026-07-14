@@ -7,6 +7,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { BackToSearchLink } from "../../../components/back-to-search-link";
 import { FormFeedback } from "../../../components/form-feedback";
+import { OpiniaIcon } from "../../../components/opinia-icon";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { EntityChatPanel } from "../../entity-chat/components/entity-chat-panel";
 import { EntityCompareChips } from "../../growth/components/entity-compare-chips";
@@ -36,7 +37,7 @@ import {
   unlikeReview,
   upsertMyReview
 } from "../api/entity-page";
-import type { EntityPageResponse, RatingAggregate, Review, TrustConfidence } from "../types/entity-page";
+import type { EntityPageResponse, RatingAggregate, Review } from "../types/entity-page";
 import { sortEntityReviews, type EntityReviewSort } from "../lib/sort-entity-reviews";
 import styles from "./entity-page.module.css";
 import { ReviewTextContent } from "./review-text-content";
@@ -65,9 +66,7 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   const [reviewErrorMessage, setReviewErrorMessage] = useState<string | null>(null);
   const [shareAnchor, setShareAnchor] = useState<PopoverAnchor | null>(null);
   const [syncedChatHeight, setSyncedChatHeight] = useState<number | undefined>(undefined);
-  const [syncedReviewsPanelHeight, setSyncedReviewsPanelHeight] = useState<number | undefined>(undefined);
   const leftTopStackRef = useRef<HTMLDivElement>(null);
-  const asideFormsRef = useRef<HTMLDivElement>(null);
   const hasHydratedReviewRef = useRef(false);
   const pairActionsRef = useRef<{ suggestUnlink: (relatedEntityId: string) => void } | null>(null);
   const [unlinkingEntityId, setUnlinkingEntityId] = useState<string | null>(null);
@@ -220,35 +219,6 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
     };
   }, [entityId, entityPageQuery.data, entityPageQuery.isSuccess]);
 
-  useEffect(() => {
-    const node = asideFormsRef.current;
-
-    if (!node) {
-      return;
-    }
-
-    const syncReviewsPanelHeight = (): void => {
-      setSyncedReviewsPanelHeight(Math.round(node.getBoundingClientRect().height));
-    };
-
-    syncReviewsPanelHeight();
-
-    const observer = new ResizeObserver(syncReviewsPanelHeight);
-    observer.observe(node);
-    window.addEventListener("resize", syncReviewsPanelHeight);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", syncReviewsPanelHeight);
-    };
-  }, [
-    entityId,
-    entityPageQuery.data,
-    entityPageQuery.isSuccess,
-    myReviewQuery.data?.text,
-    reviewText
-  ]);
-
   const pageData = entityPageQuery.data;
   const canInteract = Boolean(accessToken);
   const trimmedReviewText = reviewText.trim();
@@ -327,12 +297,12 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
             returnQuery={returnQuery}
             showRelatedPresencesNav={(pageData.relatedPresences ?? []).length > 0}
             showUserTopsNav={mergedEntityTops.length > 0}
+            userTopsCount={mergedEntityTops.length}
           />
         </div>
 
-        <div className={styles.mainColumn} ref={leftTopStackRef}>
+        <div className={`${styles.mainColumn} ${styles.summaryColumn}`} ref={leftTopStackRef}>
           <RatingSummary rating={pageData.rating} />
-          <TrustSummary compact trust={pageData.trust} />
         </div>
 
         <div
@@ -364,7 +334,6 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
             canInteract={canInteract}
             contentLocale={contentLocale}
             entityId={entityId}
-            panelHeight={syncedReviewsPanelHeight}
             reviews={pageData.reviews}
             reviewsCount={pageData.meta.reviewsCount}
             showAllReviews={showAllReviews}
@@ -375,7 +344,6 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
         </div>
 
         <div
-          ref={asideFormsRef}
           className={`${styles.asideColumn} ${styles.asideForms}`}
           aria-label={t("web.entity.asideAriaLabel")}
         >
@@ -475,74 +443,72 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
           </form>
         </div>
 
-        <div className={styles.pageGridFull}>
-          <EntityRelatedPresencesSection
-            canUnlink={canInteract}
-            currentEntityId={entityId}
-            items={pageData.relatedPresences ?? []}
-            unlinkingEntityId={unlinkingEntityId}
-            onUnlink={(relatedEntityId) => {
-              setUnlinkingEntityId(relatedEntityId);
-              pairActionsRef.current?.suggestUnlink(relatedEntityId);
-              window.setTimeout(() => {
-                setUnlinkingEntityId((current) =>
-                  current === relatedEntityId ? null : current
-                );
-              }, 1200);
-            }}
-          />
-        </div>
-
-        <section className={`panel-card ${styles.pageGridFull}`} id="entity-compare">
-          <EntityCompareChips entityId={entityId} entitySlug={pageData.entity.slug} />
-        </section>
-
-        <div className={styles.pageGridFull}>
-          <EntityContributionsSection
-            accessToken={accessToken}
-            canInteract={canInteract}
-            currentUserId={authSession?.userId}
-            isAdmin={isAdmin}
-            entity={pageData.entity}
-            onRegisterPairActions={(actions) => {
-              pairActionsRef.current = actions;
-            }}
-          />
-        </div>
-
-        <div className={styles.pageGridFull}>
-          <EntityTopsSection items={mergedEntityTops} />
-        </div>
-
-        <section
-          className={`panel-card ${styles.pageGridFull} ${styles.mainFooter}`}
-          id="entity-page-footer"
-          aria-labelledby="entity-page-footer-heading"
-        >
-          <div className="section-heading">
-            <p className="result-type">{t("web.entity.footerEyebrow")}</p>
-            <h2 id="entity-page-footer-heading">{t("web.entity.footerTitle")}</h2>
-          </div>
-          <div className={styles.footerActions}>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={(event) => {
-                setShareAnchor(serializePopoverAnchor(capturePopoverAnchor(event.nativeEvent)));
+        <div className={`${styles.pageGridFull} ${styles.lowerGrid}`}>
+          <div className={styles.lowerMain}>
+            <EntityRelatedPresencesSection
+              canUnlink={canInteract}
+              currentEntityId={entityId}
+              items={pageData.relatedPresences ?? []}
+              unlinkingEntityId={unlinkingEntityId}
+              onUnlink={(relatedEntityId) => {
+                setUnlinkingEntityId(relatedEntityId);
+                pairActionsRef.current?.suggestUnlink(relatedEntityId);
+                window.setTimeout(() => {
+                  setUnlinkingEntityId((current) =>
+                    current === relatedEntityId ? null : current
+                  );
+                }, 1200);
               }}
-            >
-              {t("growth.share.button")}
-            </button>
-            <EmbedCodeModalTrigger
-              className="secondary-button"
-              entityId={entityId}
-              entityTitle={pageData.entity.title}
             />
-          </div>
-        </section>
 
-        <div className={styles.pageGridFull}>
-          <ExtensionEntityCta className={styles.constrainedPanel} />
+            <EntityContributionsSection
+              accessToken={accessToken}
+              canInteract={canInteract}
+              currentUserId={authSession?.userId}
+              isAdmin={isAdmin}
+              entity={pageData.entity}
+              onRegisterPairActions={(actions) => {
+                pairActionsRef.current = actions;
+              }}
+            />
+
+            <EntityTopsSection items={mergedEntityTops} />
+          </div>
+
+          <aside className={styles.lowerAside}>
+            <section className="panel-card" id="entity-compare">
+              <EntityCompareChips entityId={entityId} entitySlug={pageData.entity.slug} />
+            </section>
+
+            <section
+              className={`panel-card ${styles.mainFooter}`}
+              id="entity-page-footer"
+              aria-labelledby="entity-page-footer-heading"
+            >
+              <div className="section-heading">
+                <p className="result-type">{t("web.entity.footerEyebrow")}</p>
+                <h2 id="entity-page-footer-heading">{t("web.entity.footerTitle")}</h2>
+              </div>
+              <div className={styles.footerActions}>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={(event) => {
+                    setShareAnchor(serializePopoverAnchor(capturePopoverAnchor(event.nativeEvent)));
+                  }}
+                >
+                  {t("growth.share.button")}
+                </button>
+                <EmbedCodeModalTrigger
+                  className="secondary-button"
+                  entityId={entityId}
+                  entityTitle={pageData.entity.title}
+                />
+              </div>
+            </section>
+
+            <ExtensionEntityCta className={styles.constrainedPanel} />
+          </aside>
         </div>
       </div>
     </section>
@@ -557,7 +523,10 @@ function RatingSummary({ rating }: { rating: RatingAggregate }) {
   );
 
   return (
-    <section className={`panel-card entity-section ${styles.constrainedPanel}`} aria-labelledby="rating-summary-heading">
+    <section
+      className={`panel-card entity-section ${styles.constrainedPanel} ${styles.summaryPanel}`}
+      aria-labelledby="rating-summary-heading"
+    >
       <div className="section-heading">
         <p className="result-type">{t("web.entity.ratingEyebrow")}</p>
         <h2 id="rating-summary-heading">
@@ -588,53 +557,12 @@ function RatingSummary({ rating }: { rating: RatingAggregate }) {
   );
 }
 
-function TrustSummary({ compact = false, trust }: { compact?: boolean; trust: TrustConfidence }) {
-  const t = useTranslation();
-  const reliabilityLabel = formatRatingReliability(t, trust);
-  const manipulationRiskLabel = formatManipulationRiskLabel(t, trust.manipulationRisk);
-
-  if (compact) {
-    return (
-      <section
-        className={`panel-card entity-section entity-trust-compact ${styles.constrainedPanel}`}
-        aria-labelledby="trust-summary-heading"
-      >
-        <div className="section-heading section-heading-row">
-          <h2 id="trust-summary-heading">{reliabilityLabel}</h2>
-          {manipulationRiskLabel ? <span className="muted-copy">{manipulationRiskLabel}</span> : null}
-        </div>
-        <div className="trust-meter trust-meter-compact" aria-hidden="true">
-          <span style={{ width: `${Math.round(trust.confidence * 100)}%` }} />
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className={`panel-card entity-section ${styles.constrainedPanel}`} aria-labelledby="trust-summary-heading">
-      <div className="section-heading">
-        <p className="result-type">{t("web.entity.confidenceEyebrow")}</p>
-        <h2 id="trust-summary-heading">{reliabilityLabel}</h2>
-      </div>
-      <p className="muted-copy">
-        {t("rating.dataReliability.label")}: {formatReliabilityPercent(trust.dataReliability ?? trust.confidence)}
-        {manipulationRiskLabel ? ` · ${manipulationRiskLabel}` : ""}
-      </p>
-      <p className="muted-copy">{t("web.entity.confidenceHint")}</p>
-      <div className="trust-meter" aria-hidden="true">
-        <span style={{ width: `${Math.round(trust.confidence * 100)}%` }} />
-      </div>
-    </section>
-  );
-}
-
 function ReviewsList({
   accessToken,
   canInteract,
   contentLocale,
   entityId,
   onToggleShowAll,
-  panelHeight,
   reviews: initialReviews,
   reviewsCount,
   showAllReviews
@@ -644,7 +572,6 @@ function ReviewsList({
   contentLocale: "ru" | "en" | "all";
   entityId: string;
   onToggleShowAll: () => void;
-  panelHeight: number | undefined;
   reviews: Review[];
   reviewsCount: number;
   showAllReviews: boolean;
@@ -748,7 +675,6 @@ function ReviewsList({
     <section
       className={`panel-card entity-section ${styles.constrainedPanel} ${styles.reviewsPanel}`}
       aria-labelledby="reviews-heading"
-      style={panelHeight ? { height: panelHeight, maxHeight: panelHeight } : undefined}
     >
       <div className={`section-heading section-heading-row ${styles.reviewsPanelHeader}`}>
         <p className="result-type" id="reviews-heading">
@@ -798,6 +724,10 @@ function ReviewsList({
                   className={`review-card ${styles.reviewCard}${isOwnReview ? " is-own-review" : ""}`}
                   key={review.id}
                 >
+                  <div className={styles.reviewCardTop} aria-hidden="true">
+                    <span className={styles.reviewQuote}>“</span>
+                    <span className={styles.reviewAccent} />
+                  </div>
                   <ReviewTextContent text={review.text} />
                   <div className="review-card-footer">
                     <div
@@ -825,7 +755,8 @@ function ReviewsList({
                           handleToggleLike(review);
                         }}
                       >
-                        👍 {review.likesCount}
+                        <OpiniaIcon name="thumb" />
+                        <span>{review.likesCount}</span>
                       </button>
                       <button
                         type="button"
@@ -840,7 +771,7 @@ function ReviewsList({
                           handleToggleLike(review);
                         }}
                       >
-                        👎
+                        <OpiniaIcon className={styles.reviewUnlikeIcon ?? ""} name="thumb" />
                       </button>
                     </div>
                     <div className="review-meta">
@@ -939,30 +870,6 @@ function formatScore(score: number): string {
   return score.toFixed(2);
 }
 
-function formatReliabilityPercent(confidence: number): string {
-  return `${Math.round(confidence * 100)}%`;
-}
-
-function formatRatingReliability(
-  t: ReturnType<typeof useTranslation>,
-  trust: TrustConfidence
-): string {
-  return t("rating.confidence", {
-    percent: Math.round(trust.confidence * 100)
-  });
-}
-
-function formatManipulationRiskLabel(
-  t: ReturnType<typeof useTranslation>,
-  manipulationRisk?: number
-): string | null {
-  if (manipulationRisk === undefined) {
-    return null;
-  }
-
-  return `${t("rating.manipulationRisk.label")}: ${Math.round(manipulationRisk * 100)}%`;
-}
-
 function formatDate(value: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, {
     day: "2-digit",
@@ -976,16 +883,6 @@ function getDistributionCount(
   score: (typeof RATING_SCORES)[number]
 ): number {
   return rating.distribution[String(score) as keyof typeof rating.distribution];
-}
-
-function buildEntityHref(entityId: string, returnQuery: string): string {
-  const path = `/entities/${entityId}`;
-
-  if (!returnQuery) {
-    return path;
-  }
-
-  return `${path}?q=${encodeURIComponent(returnQuery)}`;
 }
 
 function readApiErrorMessage(error: unknown): string | null {

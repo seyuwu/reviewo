@@ -62,6 +62,19 @@ export {
   type DotaRedFlagKey
 } from "./dota-vertical.js";
 
+export {
+  DOTA_PARTY_SIZE,
+  DOTA_PARTY_VERTICAL,
+  DOTA_TEMP_PARTY_TTL_HOURS,
+  generateDotaPartyName,
+  type DotaFriendshipStatus,
+  type FriendshipStatusValue,
+  type GamePartyKind,
+  type GamePartyMemberRole,
+  type GamePartyVisibility,
+  type PartyInviteStatusValue
+} from "./game-party.js";
+
 export function resolveReliabilityLevel(score: number): ReliabilityLevel {
   if (score >= 0.95) {
     return "very_high";

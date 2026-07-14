@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["auth", "chat", "community", "contributions", "entities", "growth", "ratings", "reviews", "tops", "users", "reputation"]
+  schemas  = ["auth", "chat", "community", "contributions", "entities", "growth", "ratings", "reviews", "social", "tops", "users", "reputation"]
 }
 
 model User {
@@ -33,6 +33,13 @@ model User {
   spotlightPlacementEvents SpotlightPlacementEvent[]
   communityRecommendations CommunityRecommendation[]
   recommendationEndorsements RecommendationEndorsement[]
+  friendshipsRequested   UserFriendship[] @relation("FriendshipRequester")
+  friendshipsReceived    UserFriendship[] @relation("FriendshipAddressee")
+  ownedGameParties       GameParty[]      @relation("GamePartyOwner")
+  gamePartyMemberships   GamePartyMember[]
+  gamePartyInvitesSent   GamePartyInvite[] @relation("GamePartyInviter")
+  gamePartyInvitesReceived GamePartyInvite[] @relation("GamePartyInvitee")
+  gamePartyChatMessages  GamePartyChatMessage[]
 
   @@map("users")
   @@schema("users")
@@ -987,4 +994,138 @@ model SystemTopSnapshot {
   @@index([definitionSlug, computedAt(sort: Desc)])
   @@map("system_top_snapshots")
   @@schema("tops")
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  BLOCKED
+
+  @@map("friendship_status")
+  @@schema("social")
+}
+
+enum GamePartyKind {
+  TEAM
+  PARTY
+
+  @@map("game_party_kind")
+  @@schema("social")
+}
+
+enum GamePartyVisibility {
+  PUBLIC
+  PRIVATE
+
+  @@map("game_party_visibility")
+  @@schema("social")
+}
+
+enum GamePartyMemberRole {
+  OWNER
+  MEMBER
+
+  @@map("game_party_member_role")
+  @@schema("social")
+}
+
+enum GamePartyInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+
+  @@map("game_party_invite_status")
+  @@schema("social")
+}
+
+model UserFriendship {
+  id          String           @id @default(uuid()) @db.Uuid
+  requesterId String           @map("requester_id") @db.Uuid
+  addresseeId String           @map("addressee_id") @db.Uuid
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  requester   User             @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee   User             @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([requesterId, status])
+  @@index([addresseeId, status])
+  @@map("user_friendships")
+  @@schema("social")
+}
+
+model GameParty {
+  id            String              @id @default(uuid()) @db.Uuid
+  vertical      String              @db.VarChar(32)
+  name          String              @db.VarChar(80)
+  slug          String              @db.VarChar(120)
+  ownerUserId   String              @map("owner_user_id") @db.Uuid
+  kind          GamePartyKind       @default(TEAM)
+  visibility    GamePartyVisibility @default(PUBLIC)
+  maxMembers    Int                 @default(5) @map("max_members")
+  expiresAt     DateTime?           @map("expires_at") @db.Timestamptz(6)
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  owner         User                @relation("GamePartyOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  members       GamePartyMember[]
+  invites       GamePartyInvite[]
+  chatMessages  GamePartyChatMessage[]
+
+  @@unique([vertical, slug])
+  @@index([ownerUserId])
+  @@index([vertical, createdAt(sort: Desc)])
+  @@index([vertical, kind, expiresAt])
+  @@map("game_parties")
+  @@schema("social")
+}
+
+model GamePartyMember {
+  id        String              @id @default(uuid()) @db.Uuid
+  partyId   String              @map("party_id") @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  role      GamePartyMemberRole @default(MEMBER)
+  joinedAt  DateTime            @default(now()) @map("joined_at") @db.Timestamptz(6)
+  party     GameParty           @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([partyId, userId])
+  @@index([userId])
+  @@map("game_party_members")
+  @@schema("social")
+}
+
+model GamePartyInvite {
+  id            String                @id @default(uuid()) @db.Uuid
+  partyId       String                @map("party_id") @db.Uuid
+  inviterUserId String                @map("inviter_user_id") @db.Uuid
+  inviteeUserId String                @map("invitee_user_id") @db.Uuid
+  status        GamePartyInviteStatus @default(PENDING)
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  party         GameParty             @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  inviter       User                  @relation("GamePartyInviter", fields: [inviterUserId], references: [id], onDelete: Cascade)
+  invitee       User                  @relation("GamePartyInvitee", fields: [inviteeUserId], references: [id], onDelete: Cascade)
+
+  @@index([partyId, status])
+  @@index([inviteeUserId, status])
+  @@index([inviterUserId])
+  @@map("game_party_invites")
+  @@schema("social")
+}
+
+model GamePartyChatMessage {
+  id        String    @id @default(uuid()) @db.Uuid
+  partyId   String    @map("party_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  message   String
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  party     GameParty @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([partyId, createdAt(sort: Desc)])
+  @@map("game_party_chat_messages")
+  @@schema("social")
 }

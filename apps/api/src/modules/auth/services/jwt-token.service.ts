@@ -15,9 +15,23 @@ interface JwtAccessTokenPayload {
   sub: string;
 }
 
+interface FriendInviteTokenPayload {
+  exp: number;
+  iat: number;
+  purpose: "friend_invite";
+  sub: string;
+}
+
 export interface VerifiedAccessToken {
   userId: string;
 }
+
+export interface VerifiedFriendInviteToken {
+  inviterUserId: string;
+}
+
+/** Friend-invite share links remain valid for 30 days. */
+const FRIEND_INVITE_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 @Injectable()
 export class JwtTokenService {
@@ -34,6 +48,25 @@ export class JwtTokenService {
       exp: nowSeconds + ttlSeconds,
       iat: nowSeconds,
       sub: userId
+    };
+    const encodedHeader = encodeJson(header);
+    const encodedPayload = encodeJson(payload);
+    const signature = this.sign(`${encodedHeader}.${encodedPayload}`);
+
+    return `${encodedHeader}.${encodedPayload}.${signature}`;
+  }
+
+  signFriendInviteToken(inviterUserId: string): string {
+    const nowSeconds = getCurrentUnixSeconds();
+    const header: JwtHeader = {
+      alg: "HS256",
+      typ: "JWT"
+    };
+    const payload: FriendInviteTokenPayload = {
+      exp: nowSeconds + FRIEND_INVITE_TTL_SECONDS,
+      iat: nowSeconds,
+      purpose: "friend_invite",
+      sub: inviterUserId
     };
     const encodedHeader = encodeJson(header);
     const encodedPayload = encodeJson(payload);
@@ -68,12 +101,57 @@ export class JwtTokenService {
       return null;
     }
 
+    // Access tokens must not carry an invite purpose claim.
+    if (
+      typeof payload === "object" &&
+      payload !== null &&
+      "purpose" in payload &&
+      (payload as { purpose?: unknown }).purpose !== undefined
+    ) {
+      return null;
+    }
+
     if (payload.exp <= getCurrentUnixSeconds()) {
       return null;
     }
 
     return {
       userId: payload.sub
+    };
+  }
+
+  verifyFriendInviteToken(token: string): VerifiedFriendInviteToken | null {
+    const parts = token.split(".");
+
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    const [encodedHeader, encodedPayload, encodedSignature] = parts;
+
+    if (!encodedHeader || !encodedPayload || !encodedSignature) {
+      return null;
+    }
+
+    const expectedSignature = this.sign(`${encodedHeader}.${encodedPayload}`);
+
+    if (!safeEqual(encodedSignature, expectedSignature)) {
+      return null;
+    }
+
+    const header = decodeJson(encodedHeader);
+    const payload = decodeJson(encodedPayload);
+
+    if (!isJwtHeader(header) || !isFriendInviteTokenPayload(payload)) {
+      return null;
+    }
+
+    if (payload.exp <= getCurrentUnixSeconds()) {
+      return null;
+    }
+
+    return {
+      inviterUserId: payload.sub
     };
   }
 
@@ -117,9 +195,26 @@ function isJwtAccessTokenPayload(value: unknown): value is JwtAccessTokenPayload
     return false;
   }
 
-  const candidate = value as Partial<JwtAccessTokenPayload>;
+  const candidate = value as Partial<JwtAccessTokenPayload> & { purpose?: unknown };
 
   return (
+    typeof candidate.exp === "number" &&
+    typeof candidate.iat === "number" &&
+    typeof candidate.sub === "string" &&
+    candidate.sub.length > 0 &&
+    candidate.purpose === undefined
+  );
+}
+
+function isFriendInviteTokenPayload(value: unknown): value is FriendInviteTokenPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<FriendInviteTokenPayload>;
+
+  return (
+    candidate.purpose === "friend_invite" &&
     typeof candidate.exp === "number" &&
     typeof candidate.iat === "number" &&
     typeof candidate.sub === "string" &&

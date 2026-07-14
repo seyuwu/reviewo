@@ -68,7 +68,9 @@ export function DotaProfileFlagPanel({
       <div className={styles.header}>
         <div className={styles.headerMain}>
           <h2>{t(titleKey)}</h2>
-          {canConfirm ? <p>{t(hintKey)}</p> : null}
+          {canConfirm ? (
+            <p>{t(hintKey, { limit: String(DOTA_FLAG_LIMIT_PER_SIDE) })}</p>
+          ) : null}
         </div>
         {canConfirm ? (
           <span className={styles.selectedBadge}>

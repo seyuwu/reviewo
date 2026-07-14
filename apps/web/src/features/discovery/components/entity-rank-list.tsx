@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { EntityAvatar } from "../../entities/components/entity-avatar";
 import { formatEntityDisplayName } from "../../growth/lib/format-entity-display-name";
 import { useTranslation } from "../../i18n/locale-provider";
 import type { DiscoveryEntityRankItem } from "../types/discovery";
@@ -37,9 +38,19 @@ export function EntityRankList({
             <Link className="discovery-rank-item" href={`/entities/${item.entityId}`}>
               <span className="discovery-rank-item-main">
                 <span className="discovery-rank-position">{index + 1}</span>
+                <EntityAvatar
+                  canonicalUrl={item.canonicalUrl}
+                  entityId={item.entityId}
+                  logoUrl={item.logoUrl}
+                  size="sm"
+                  title={label}
+                />
                 <span>
                   <strong>{label}</strong>
                   <span className="muted-copy discovery-rank-score">
+                    <span aria-hidden="true" className="discovery-rank-star">
+                      ★
+                    </span>{" "}
                     {item.avgScore.toFixed(1)} · {t("search.canonical.ratings", { count: item.votesCount })}
                   </span>
                 </span>

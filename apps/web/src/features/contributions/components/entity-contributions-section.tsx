@@ -505,40 +505,42 @@ export function EntityContributionsSection({
         <h2 id="entity-contributions-heading">{t("contributions.sectionTitle")}</h2>
       </div>
 
-      {fields.map((field) => {
-        const provenance = provenanceByField.get(field.fieldKey);
+      <div className={styles.fieldGrid}>
+        {fields.map((field) => {
+          const provenance = provenanceByField.get(field.fieldKey);
 
-        return (
-          <div className={styles.fieldRow} key={field.fieldKey}>
-            <span className={styles.fieldLabel}>{t(field.labelKey)}</span>
-            <div className={styles.fieldBody}>
-              <div className={styles.fieldMain}>
-                {field.fieldKey === "logoUrl" ? (
-                  renderLogoPreview(entity.logoUrl)
-                ) : (
-                  <p className={styles.fieldValue}>{renderFieldValue(field)}</p>
-                )}
-                {provenance?.source === "community" ? (
-                  <FieldProvenanceBadge
-                    label={t("contributions.provenance.communityShort")}
-                    votersCount={provenance.votersCount}
-                  />
-                ) : null}
+          return (
+            <div className={styles.fieldRow} key={field.fieldKey}>
+              <span className={styles.fieldLabel}>{t(field.labelKey)}</span>
+              <div className={styles.fieldBody}>
+                <div className={styles.fieldMain}>
+                  {field.fieldKey === "logoUrl" ? (
+                    renderLogoPreview(entity.logoUrl)
+                  ) : (
+                    <p className={styles.fieldValue}>{renderFieldValue(field)}</p>
+                  )}
+                  {provenance?.source === "community" ? (
+                    <FieldProvenanceBadge
+                      label={t("contributions.provenance.communityShort")}
+                      votersCount={provenance.votersCount}
+                    />
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  className={`secondary-button ${styles.suggestButton}`}
+                  disabled={!canInteract || createMutation.isPending}
+                  onClick={() => {
+                    openCorrectionModal(field);
+                  }}
+                >
+                  {t("contributions.suggestCorrection")}
+                </button>
               </div>
-              <button
-                type="button"
-                className={`secondary-button ${styles.suggestButton}`}
-                disabled={!canInteract || createMutation.isPending}
-                onClick={() => {
-                  openCorrectionModal(field);
-                }}
-              >
-                {t("contributions.suggestCorrection")}
-              </button>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
 
       <div>
         <h3 className="result-type">{t("contributions.pendingTitle")}</h3>
@@ -608,34 +610,36 @@ export function EntityContributionsSection({
         </div>
       ) : null}
 
-      <div>
-        <h3 className="result-type">{t("contributions.manualLinkTitle")}</h3>
-        <p className="muted-copy">{t("contributions.manualLinkHint")}</p>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={!canInteract || createMutation.isPending}
-          onClick={() => {
-            setLinkModalOpen(true);
-          }}
-        >
-          {t("contributions.manualLinkCta")}
-        </button>
-      </div>
+      <div className={styles.communityActions}>
+        <div className={styles.communityActionCard}>
+          <h3 className="result-type">{t("contributions.manualLinkTitle")}</h3>
+          <p className="muted-copy">{t("contributions.manualLinkHint")}</p>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!canInteract || createMutation.isPending}
+            onClick={() => {
+              setLinkModalOpen(true);
+            }}
+          >
+            {t("contributions.manualLinkCta")}
+          </button>
+        </div>
 
-      <div>
-        <h3 className="result-type">{t("contributions.manualMergeTitle")}</h3>
-        <p className="muted-copy">{t("contributions.manualMergeHint")}</p>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={!canInteract || createMutation.isPending}
-          onClick={() => {
-            setMergeModalOpen(true);
-          }}
-        >
-          {t("contributions.manualMergeCta")}
-        </button>
+        <div className={styles.communityActionCard}>
+          <h3 className="result-type">{t("contributions.manualMergeTitle")}</h3>
+          <p className="muted-copy">{t("contributions.manualMergeHint")}</p>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!canInteract || createMutation.isPending}
+            onClick={() => {
+              setMergeModalOpen(true);
+            }}
+          >
+            {t("contributions.manualMergeCta")}
+          </button>
+        </div>
       </div>
 
       <FormFeedback errorMessage={errorMessage} statusMessage={statusMessage} />

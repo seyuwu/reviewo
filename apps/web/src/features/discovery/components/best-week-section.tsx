@@ -9,10 +9,12 @@ import { EntityRankList } from "./entity-rank-list";
 import { FeedSection } from "./feed-section";
 
 interface BestWeekSectionProps {
+  embedded?: boolean;
   initialItems?: DiscoveryEntityRankItem[] | undefined;
+  maxItems?: number;
 }
 
-export function BestWeekSection({ initialItems }: BestWeekSectionProps) {
+export function BestWeekSection({ embedded = false, initialItems, maxItems }: BestWeekSectionProps) {
   const t = useTranslation();
   const hasInitialData = initialItems !== undefined;
   const [items, setItems] = useState<DiscoveryEntityRankItem[]>(initialItems ?? []);
@@ -49,14 +51,15 @@ export function BestWeekSection({ initialItems }: BestWeekSectionProps) {
 
   return (
     <FeedSection
-      heading={t("web.homeFeed.sectionBestWeek")}
+      embedded={embedded}
+      heading={embedded ? t("web.homeFeed.sectionTopObjects") : t("web.homeFeed.sectionBestWeek")}
       headingId="home-feed-best-week"
       viewAllHref="/top"
     >
       {isLoading ? (
         <p className="muted-copy">{t("chat.loading")}</p>
       ) : items.length > 0 ? (
-        <EntityRankList items={items} showRecentVotes />
+        <EntityRankList items={maxItems ? items.slice(0, maxItems) : items} showRecentVotes />
       ) : (
         <p className="muted-copy">{t("web.homeFeed.quiet")}</p>
       )}

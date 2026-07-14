@@ -80,7 +80,7 @@ export function formatDotaMmr(mmr: string | null): string {
   }
 
   if (mmr.includes("-")) {
-    const [from, to] = mmr.split("-");
+    const [from = "", to = ""] = mmr.split("-");
 
     return `${from.trim()} – ${to.trim()}`;
   }
@@ -94,7 +94,7 @@ export function parseDotaMmrRange(mmr: string | null): { from: string; to: strin
   }
 
   if (mmr.includes("-")) {
-    const [from, to] = mmr.split("-");
+    const [from = "", to = ""] = mmr.split("-");
 
     return { from: from.trim(), to: to.trim() };
   }

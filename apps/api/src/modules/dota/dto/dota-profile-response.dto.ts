@@ -6,10 +6,13 @@ export class DotaProfileProgressDto {
 export class DotaProfileResponseDto {
   dotaAccountId!: string;
   entityId!: string;
+  friendshipRequestId!: string | null;
+  friendshipStatus!: "none" | "outgoing" | "incoming" | "friends" | "self" | null;
   hasMic!: boolean | null;
   isOwner!: boolean;
   language!: string | null;
   mmr!: string | null;
+  ownerUserId!: string | null;
   playIntent!: string | null;
   progress!: DotaProfileProgressDto;
   qualities!: Record<string, number>;

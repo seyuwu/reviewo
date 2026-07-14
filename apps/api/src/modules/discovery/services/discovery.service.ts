@@ -133,7 +133,9 @@ export class DiscoveryService {
     return {
       items: rows.map((row) => ({
         avgScore: row.avgScore,
+        canonicalUrl: row.canonicalUrl,
         entityId: row.entityId,
+        logoUrl: row.logoUrl,
         recentVotes: Number(row.recentVotes),
         reliability: null,
         slug: row.slug,
@@ -148,8 +150,12 @@ export class DiscoveryService {
     const activeNow = await this.entityChatService.getActiveNow(safeLimit, localeInput);
 
     if (activeNow.items.length > 0) {
+      const entities = await Promise.all(
+        activeNow.items.map((item) => this.entitiesPort.findEntityById(item.entityId))
+      );
+
       return {
-        items: activeNow.items.map((item) => mapActiveNowToFeedItem(item)),
+        items: activeNow.items.map((item, index) => mapActiveNowToFeedItem(item, entities[index])),
         mode: "live"
       };
     }
@@ -157,8 +163,12 @@ export class DiscoveryService {
     const recent = await this.entityChatService.getRecentDiscussions(safeLimit, localeInput);
 
     if (recent.items.length > 0) {
+      const entities = await Promise.all(
+        recent.items.map((item) => this.entitiesPort.findEntityById(item.entityId))
+      );
+
       return {
-        items: recent.items.map((item) => mapActiveNowToFeedItem(item)),
+        items: recent.items.map((item, index) => mapActiveNowToFeedItem(item, entities[index])),
         mode: "recent"
       };
     }
@@ -168,7 +178,9 @@ export class DiscoveryService {
     return {
       items: popular.map((row) => ({
         avgScore: row.avgScore,
+        entityCanonicalUrl: row.canonicalUrl,
         entityId: row.entityId,
+        entityLogoUrl: row.logoUrl,
         entitySlug: row.slug,
         entityTitle: row.title,
         messageCount: 0,
@@ -425,13 +437,17 @@ function buildBattlePairListItem(
 
   return {
     isSuggested,
+    leftCanonicalUrl: leftEntity.canonicalUrl,
     leftEntityId: leftEntity.id,
     leftLabel: leftEntity.title,
+    leftLogoUrl: leftEntity.logoUrl,
     leftPercent,
     leftSlug: leftEntity.slug,
     pairSlug: buildCompareSlug(leftEntity.slug, rightEntity.slug),
+    rightCanonicalUrl: rightEntity.canonicalUrl,
     rightEntityId: rightEntity.id,
     rightLabel: rightEntity.title,
+    rightLogoUrl: rightEntity.logoUrl,
     rightPercent,
     rightSlug: rightEntity.slug,
     totalVotes
@@ -471,13 +487,23 @@ export function normalizeTopRatingsSort(
 }
 
 function mapRankRow(
-  row: { avgScore: number; entityId: string; slug: string; title: string; votesCount: number },
+  row: {
+    avgScore: number;
+    canonicalUrl: string | null;
+    entityId: string;
+    logoUrl: string | null;
+    slug: string;
+    title: string;
+    votesCount: number;
+  },
   recentVotes: number,
   reliability: number | null
 ): DiscoveryEntityRankItemDto {
   return {
     avgScore: row.avgScore,
+    canonicalUrl: row.canonicalUrl,
     entityId: row.entityId,
+    logoUrl: row.logoUrl,
     recentVotes,
     reliability,
     slug: row.slug,
@@ -493,10 +519,12 @@ function mapActiveNowToFeedItem(item: {
   messageCount: number;
   onlineCount: number;
   previewMessage: string | null;
-}): DiscussionFeedItemDto {
+}, entity: EntityDto | null | undefined): DiscussionFeedItemDto {
   return {
     avgScore: null,
+    entityCanonicalUrl: entity?.canonicalUrl ?? null,
     entityId: item.entityId,
+    entityLogoUrl: entity?.logoUrl ?? null,
     entitySlug: item.entitySlug,
     entityTitle: item.entityTitle,
     messageCount: item.messageCount,

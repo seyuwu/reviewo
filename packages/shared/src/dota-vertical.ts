@@ -70,7 +70,7 @@ export type DotaGreenFlagKey = (typeof DOTA_GREEN_FLAG_KEYS)[number];
 export type DotaRedFlagKey = (typeof DOTA_RED_FLAG_KEYS)[number];
 export type DotaConfirmationKey = DotaQualityKey | DotaGreenFlagKey | DotaRedFlagKey;
 
-export const DOTA_FLAG_LIMIT_PER_SIDE = 5;
+export const DOTA_FLAG_LIMIT_PER_SIDE = 12;
 export const DOTA_CONFIRMATION_MILESTONE = 3;
 export const DOTA_ACCOUNT_ID_PATTERN = /^\d{8,10}$/;
 

@@ -1,21 +1,27 @@
 .page {
+  background:
+    radial-gradient(circle at 90% 5%, rgb(139 92 246 / 8%), transparent 16rem),
+    var(--color-surface);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
   display: grid;
   gap: 1rem;
-  max-width: 640px;
+  max-width: 52rem;
   margin: 0 auto;
-  padding: 2rem 0 3rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
 }
 
 .eyebrow {
-  color: var(--muted-copy-color, #6b7280);
-  font-size: 0.875rem;
-  font-weight: 600;
+  color: var(--color-accent-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .lead {
-  color: var(--muted-copy-color, #6b7280);
+  color: var(--color-text-muted);
   line-height: 1.6;
   margin: 0;
 }
@@ -32,16 +38,16 @@
 
 .option {
   align-items: center;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.75rem;
   display: flex;
   gap: 0.75rem;
   padding: 0.9rem 1rem;
 }
 
 .footer {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--color-card-border);
   display: grid;
   gap: 0.75rem;
   margin-top: 1rem;
@@ -49,6 +55,6 @@
 }
 
 .footer p {
-  color: var(--muted-copy-color, #6b7280);
+  color: var(--color-text-muted);
   margin: 0;
 }

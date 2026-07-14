@@ -20,10 +20,12 @@ import { UsersRepository } from "../../users/repositories/users.repository.js";
 import type { ConfirmDotaQualitiesDto } from "../dto/confirm-dota-qualities.dto.js";
 import type { CreateDotaProfileDto } from "../dto/create-dota-profile.dto.js";
 import type { DotaProfileResponseDto } from "../dto/dota-profile-response.dto.js";
+import type { DotaProfileSearchResponseDto } from "../dto/dota-profile-search-response.dto.js";
 import type { UpdateDotaProfileDto } from "../dto/update-dota-profile.dto.js";
 import { buildConfirmerKey } from "../lib/confirmer-key.js";
 import { EntityAttributesRepository } from "../repositories/entity-attributes.repository.js";
 import { EntityQualityConfirmationsRepository } from "../repositories/entity-quality-confirmations.repository.js";
+import { FriendshipsService } from "../../social/services/friendships.service.js";
 
 interface DotaAttributeInput {
   dotaAccountId?: string;
@@ -41,6 +43,7 @@ export class DotaProfileService {
     private readonly entitiesRepository: EntitiesRepository,
     private readonly entityAttributesRepository: EntityAttributesRepository,
     private readonly entityQualityConfirmationsRepository: EntityQualityConfirmationsRepository,
+    private readonly friendshipsService: FriendshipsService,
     private readonly usersRepository: UsersRepository
   ) {}
 
@@ -103,7 +106,8 @@ export class DotaProfileService {
     }
 
     return this.buildProfileResponse(entity, await this.entityAttributesRepository.findByEntityId(entity.id), {
-      isOwner: true
+      isOwner: true,
+      viewerUserId: currentUser.id
     });
   }
 
@@ -111,7 +115,10 @@ export class DotaProfileService {
     const entity = await this.requireOwnedProfile(currentUser.id);
     const attributes = await this.entityAttributesRepository.findByEntityId(entity.id);
 
-    return this.buildProfileResponse(entity, attributes, { isOwner: true });
+    return this.buildProfileResponse(entity, attributes, {
+      isOwner: true,
+      viewerUserId: currentUser.id
+    });
   }
 
   async updateMyProfile(
@@ -157,7 +164,8 @@ export class DotaProfileService {
     }
 
     return this.buildProfileResponse(updatedEntity, { ...currentAttributes, ...nextAttributes }, {
-      isOwner: true
+      isOwner: true,
+      viewerUserId: currentUser.id
     });
   }
 
@@ -166,7 +174,8 @@ export class DotaProfileService {
     const attributes = await this.entityAttributesRepository.findByEntityId(entity.id);
 
     return this.buildProfileResponse(entity, attributes, {
-      isOwner: viewerUserId === entity.ownerUserId
+      isOwner: viewerUserId === entity.ownerUserId,
+      ...(viewerUserId ? { viewerUserId } : {})
     });
   }
 
@@ -198,8 +207,90 @@ export class DotaProfileService {
     const attributes = await this.entityAttributesRepository.findByEntityId(entity.id);
 
     return this.buildProfileResponse(entity, attributes, {
-      isOwner: viewerUserId === entity.ownerUserId
+      isOwner: viewerUserId === entity.ownerUserId,
+      ...(viewerUserId ? { viewerUserId } : {})
     });
+  }
+
+  async getPublicProfileByUsername(
+    username: string,
+    viewerUserId?: string
+  ): Promise<DotaProfileResponseDto> {
+    const user = await this.usersRepository.findByUsernameInsensitive(username);
+
+    if (!user) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Dota profile was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    const entity = await this.entitiesRepository.findByOwnerUserId(user.id);
+
+    if (!entity || entity.visibility !== "ACTIVE") {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Dota profile was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    await this.assertDotaVertical(entity.id);
+    const attributes = await this.entityAttributesRepository.findByEntityId(entity.id);
+
+    return this.buildProfileResponse(entity, attributes, {
+      isOwner: viewerUserId === entity.ownerUserId,
+      ...(viewerUserId ? { viewerUserId } : {})
+    });
+  }
+
+  async searchProfiles(query: string): Promise<DotaProfileSearchResponseDto> {
+    const normalizedQuery = query.trim();
+    const matchingUsers = await this.usersRepository.searchByUsernameOrDisplayName(
+      normalizedQuery,
+      12
+    );
+    const entities = await this.entityAttributesRepository.searchDotaProfiles(
+      normalizedQuery,
+      matchingUsers.map((user) => user.id),
+      8
+    );
+    const usersById = new Map(matchingUsers.map((user) => [user.id, user]));
+    const missingOwnerIds = [
+      ...new Set(
+        entities
+          .map((entity) => entity.ownerUserId)
+          .filter((ownerUserId): ownerUserId is string => Boolean(ownerUserId))
+          .filter((ownerUserId) => !usersById.has(ownerUserId))
+      )
+    ];
+
+    if (missingOwnerIds.length > 0) {
+      const owners = await this.usersRepository.findByIds(missingOwnerIds);
+      for (const owner of owners) {
+        usersById.set(owner.id, owner);
+      }
+    }
+
+    return {
+      query: normalizedQuery,
+      results: entities.map((entity) => {
+        const attributeMap = Object.fromEntries(
+          entity.attributes.map((attribute) => [attribute.key, attribute.value])
+        );
+        const owner = entity.ownerUserId ? usersById.get(entity.ownerUserId) : undefined;
+
+        return {
+          dotaAccountId: attributeMap[DOTA_ATTRIBUTE_KEYS.dotaAccountId] ?? "",
+          entityId: entity.id,
+          mmr: attributeMap[DOTA_ATTRIBUTE_KEYS.mmr] ?? null,
+          slug: entity.slug,
+          title: entity.title,
+          username: owner?.username ?? null
+        };
+      })
+    };
   }
 
   async confirmQualities(
@@ -228,7 +319,7 @@ export class DotaProfileService {
       });
     }
 
-    const confirmerKey = buildConfirmerKey(input.visitorId, request);
+    const confirmerKey = buildConfirmerKey(input.visitorId, request, currentUser?.id);
     const existingKeys = await this.entityQualityConfirmationsRepository.listConfirmerQualityKeys(
       entity.id,
       confirmerKey
@@ -255,7 +346,8 @@ export class DotaProfileService {
     const attributes = await this.entityAttributesRepository.findByEntityId(entity.id);
 
     return this.buildProfileResponse(entity, attributes, {
-      isOwner: currentUser?.id === entity.ownerUserId
+      isOwner: currentUser?.id === entity.ownerUserId,
+      ...(currentUser?.id ? { viewerUserId: currentUser.id } : {})
     });
   }
 
@@ -285,7 +377,7 @@ export class DotaProfileService {
       });
     }
 
-    const confirmerKey = buildConfirmerKey(input.visitorId, request);
+    const confirmerKey = buildConfirmerKey(input.visitorId, request, currentUser?.id);
 
     await Promise.all(
       qualityKeys.map((qualityKey) =>
@@ -300,7 +392,8 @@ export class DotaProfileService {
     const attributes = await this.entityAttributesRepository.findByEntityId(entity.id);
 
     return this.buildProfileResponse(entity, attributes, {
-      isOwner: currentUser?.id === entity.ownerUserId
+      isOwner: currentUser?.id === entity.ownerUserId,
+      ...(currentUser?.id ? { viewerUserId: currentUser.id } : {})
     });
   }
 
@@ -413,20 +506,24 @@ export class DotaProfileService {
   private async buildProfileResponse(
     entity: Entity,
     attributes: Record<string, string>,
-    options: { isOwner: boolean }
+    options: { isOwner: boolean; viewerUserId?: string }
   ): Promise<DotaProfileResponseDto> {
-    const [qualities, distinctConfirmers] = await Promise.all([
+    const [qualities, distinctConfirmers, friendship] = await Promise.all([
       this.entityQualityConfirmationsRepository.countByQualityKey(entity.id),
-      this.entityQualityConfirmationsRepository.countDistinctConfirmers(entity.id)
+      this.entityQualityConfirmationsRepository.countDistinctConfirmers(entity.id),
+      this.friendshipsService.getStatusDetails(options.viewerUserId, entity.ownerUserId)
     ]);
 
     return {
       dotaAccountId: attributes[DOTA_ATTRIBUTE_KEYS.dotaAccountId] ?? "",
       entityId: entity.id,
+      friendshipRequestId: friendship.requestId,
+      friendshipStatus: friendship.status,
       hasMic: parseOptionalBoolean(attributes[DOTA_ATTRIBUTE_KEYS.hasMic]),
       isOwner: options.isOwner,
       language: attributes[DOTA_ATTRIBUTE_KEYS.language] ?? null,
       mmr: attributes[DOTA_ATTRIBUTE_KEYS.mmr] ?? null,
+      ownerUserId: entity.ownerUserId,
       playIntent: attributes[DOTA_ATTRIBUTE_KEYS.playIntent] ?? null,
       progress: {
         current: distinctConfirmers,

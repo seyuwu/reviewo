@@ -15,7 +15,9 @@ export interface ActiveBattlePairRow {
 
 export interface TopEntityRow {
   avgScore: number;
+  canonicalUrl: string | null;
   entityId: string;
+  logoUrl: string | null;
   reliability?: number;
   slug: string;
   title: string;
@@ -24,7 +26,9 @@ export interface TopEntityRow {
 
 export interface RisingEntityRow {
   avgScore: number;
+  canonicalUrl: string | null;
   entityId: string;
+  logoUrl: string | null;
   recentVotes: bigint;
   slug: string;
   title: string;
@@ -59,6 +63,8 @@ export class DiscoveryRepository {
     return this.prismaService.$queryRaw<RisingEntityRow[]>`
       SELECT
         e.id AS "entityId",
+        e.canonical_url AS "canonicalUrl",
+        e.logo_url AS "logoUrl",
         e.slug AS "slug",
         e.title AS "title",
         COALESCE(ra.votes_count, 0)::int AS "votesCount",
@@ -69,7 +75,7 @@ export class DiscoveryRepository {
       LEFT JOIN ratings.rating_aggregates ra ON ra.entity_id = e.id
       WHERE r.created_at >= ${windowStart}
         AND e.visibility = 'ACTIVE'::entities.entity_visibility
-      GROUP BY e.id, e.slug, e.title, ra.votes_count, ra.avg_score
+      GROUP BY e.id, e.canonical_url, e.logo_url, e.slug, e.title, ra.votes_count, ra.avg_score
       HAVING COUNT(r.id) >= 1
       ORDER BY COUNT(r.id) DESC, COALESCE(ra.avg_score, 0) DESC
       LIMIT ${safeLimit}
@@ -82,6 +88,8 @@ export class DiscoveryRepository {
     return this.prismaService.$queryRaw<TopEntityRow[]>`
       SELECT
         e.id AS "entityId",
+        e.canonical_url AS "canonicalUrl",
+        e.logo_url AS "logoUrl",
         e.slug AS "slug",
         e.title AS "title",
         ra.votes_count::int AS "votesCount",
@@ -101,6 +109,8 @@ export class DiscoveryRepository {
     return this.prismaService.$queryRaw<TopEntityRow[]>`
       SELECT
         e.id AS "entityId",
+        e.canonical_url AS "canonicalUrl",
+        e.logo_url AS "logoUrl",
         e.slug AS "slug",
         e.title AS "title",
         ra.votes_count::int AS "votesCount",
@@ -120,6 +130,8 @@ export class DiscoveryRepository {
     return this.prismaService.$queryRaw<TopEntityRow[]>`
       SELECT
         e.id AS "entityId",
+        e.canonical_url AS "canonicalUrl",
+        e.logo_url AS "logoUrl",
         e.slug AS "slug",
         e.title AS "title",
         ra.votes_count::int AS "votesCount",
@@ -153,6 +165,8 @@ export class DiscoveryRepository {
     return this.prismaService.$queryRaw<TopEntityRow[]>`
       SELECT
         e.id AS "entityId",
+        e.canonical_url AS "canonicalUrl",
+        e.logo_url AS "logoUrl",
         e.slug AS "slug",
         e.title AS "title",
         ra.votes_count::int AS "votesCount",
@@ -177,6 +191,8 @@ export class DiscoveryRepository {
     return this.prismaService.$queryRaw<TopEntityRow[]>`
       SELECT
         e.id AS "entityId",
+        e.canonical_url AS "canonicalUrl",
+        e.logo_url AS "logoUrl",
         e.slug AS "slug",
         e.title AS "title",
         ra.votes_count::int AS "votesCount",

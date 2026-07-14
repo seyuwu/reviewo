@@ -23,6 +23,7 @@ import { RecommendationModule } from "./modules/recommendation/recommendation.mo
 import { ReputationModule } from "./modules/reputation/reputation.module.js";
 import { ReviewsModule } from "./modules/reviews/reviews.module.js";
 import { SearchModule } from "./modules/search/search.module.js";
+import { SocialModule } from "./modules/social/social.module.js";
 import { TopsModule } from "./modules/tops/tops.module.js";
 import { TrustModule } from "./modules/trust/trust.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
@@ -55,6 +56,7 @@ import { RedisModule } from "./redis/redis.module.js";
     CommunityModule,
     DiscoveryModule,
     DotaModule,
+    SocialModule,
     GrowthModule
   ],
   providers: [AppLogger, GlobalExceptionFilter]

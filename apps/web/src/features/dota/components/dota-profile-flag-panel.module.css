@@ -121,20 +121,17 @@
   transition:
     background-color 160ms ease,
     border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    box-shadow 160ms ease;
 }
 
 .green .flagButton:hover:not(:disabled):not(.flagButtonSelected) {
   background: rgb(255 255 255 / 92%);
   border-color: rgb(22 163 74 / 28%);
-  transform: translateY(-1px);
 }
 
 .red .flagButton:hover:not(:disabled):not(.flagButtonSelected) {
   background: rgb(255 255 255 / 92%);
   border-color: rgb(220 38 38 / 26%);
-  transform: translateY(-1px);
 }
 
 .green .flagButtonSelected,

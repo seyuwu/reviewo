@@ -6,15 +6,17 @@ import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { formatScoreOneDecimal, formatStarRating } from "../../growth/lib/format-growth-stats";
 import type { TranslateFn } from "@reviewo/i18n";
 import { FeedSection } from "../../discovery/components/feed-section";
+import { EntityAvatar } from "../../entities/components/entity-avatar";
 import { fetchSpotlightFeed } from "../api/spotlight-api";
 import type { SpotlightPlacement } from "../types/spotlight";
 import { SpotlightPlacementLink } from "./spotlight-placement-link";
 
 interface SpotlightHomeSectionProps {
   initialItems?: SpotlightPlacement[] | undefined;
+  layout?: "list" | "showcase";
 }
 
-export function SpotlightHomeSection({ initialItems }: SpotlightHomeSectionProps) {
+export function SpotlightHomeSection({ initialItems, layout = "list" }: SpotlightHomeSectionProps) {
   const t = useTranslation();
   const { resolvedLocale } = useLocale();
   const hasInitialData = initialItems !== undefined;
@@ -54,14 +56,30 @@ export function SpotlightHomeSection({ initialItems }: SpotlightHomeSectionProps
       headingId="home-spotlight-heading"
       viewAllHref="/spotlight"
     >
-      <p className="muted-copy spotlight-home-caption">{t("web.spotlight.homeSectionCaption")}</p>
+      {layout === "list" ? (
+        <p className="muted-copy spotlight-home-caption">{t("web.spotlight.homeSectionCaption")}</p>
+      ) : null}
       {isLoading ? (
         <p className="muted-copy">{t("chat.loading")}</p>
       ) : (
-        <ul className="spotlight-home-list">
+        <ul className={layout === "showcase" ? "spotlight-home-list spotlight-home-list--showcase" : "spotlight-home-list"}>
           {items.map((item) => (
             <li key={item.placementId}>
-              <SpotlightPlacementLink className="spotlight-home-card" href={item.href} placementId={item.placementId}>
+              <SpotlightPlacementLink
+                className={layout === "showcase" ? "spotlight-home-card spotlight-home-card--showcase" : "spotlight-home-card"}
+                href={item.href}
+                placementId={item.placementId}
+              >
+                {layout === "showcase" ? (
+                  <EntityAvatar
+                    canonicalUrl={item.entityCanonicalUrl ?? null}
+                    className="spotlight-home-logo"
+                    entityId={item.entityId ?? item.placementId}
+                    logoUrl={item.entityLogoUrl ?? null}
+                    size="lg"
+                    title={item.title}
+                  />
+                ) : null}
                 <span className="spotlight-home-type">{formatPlacementType(item.placementType, t)}</span>
                 <strong>{item.title}</strong>
                 {item.recommendation?.entityRating && item.recommendation.entityRating.votesCount > 0 ? (

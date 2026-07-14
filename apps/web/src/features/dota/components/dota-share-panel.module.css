@@ -1,9 +1,9 @@
 .callout {
-  background: linear-gradient(145deg, rgb(254 249 231 / 98%), rgb(254 243 199 / 72%));
-  border: 2px solid rgb(212 175 55 / 42%);
+  background: linear-gradient(145deg, rgb(243 232 255 / 90%), rgb(252 231 243 / 68%));
+  border: 1px solid rgb(139 92 246 / 28%);
   border-radius: 1.15rem;
   box-shadow:
-    0 18px 40px rgb(212 175 55 / 12%),
+    0 18px 40px rgb(139 92 246 / 12%),
     inset 0 1px 0 rgb(255 255 255 / 80%);
   display: grid;
   gap: 1rem;
@@ -20,7 +20,7 @@
 
 .progressBadge {
   align-items: baseline;
-  background: rgb(23 23 23 / 92%);
+  background: linear-gradient(145deg, #7c3aed, #ec4899);
   border-radius: 1rem;
   color: #fff;
   display: inline-flex;
@@ -51,7 +51,7 @@
 }
 
 .kicker {
-  color: rgb(120 53 15 / 78%);
+  color: var(--color-accent-strong);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -77,14 +77,14 @@
 
 .progressBar {
   background: rgb(255 255 255 / 72%);
-  border: 1px solid rgb(212 175 55 / 22%);
+  border: 1px solid rgb(139 92 246 / 22%);
   border-radius: 999px;
   height: 0.85rem;
   overflow: hidden;
 }
 
 .progressBar span {
-  background: linear-gradient(90deg, #ca8a04, #16a34a);
+  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-rose));
   display: block;
   height: 100%;
   min-width: 0;

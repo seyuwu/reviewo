@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import {
   DOTA_FLAG_LIMIT_PER_SIDE,
@@ -23,6 +22,7 @@ import type { DotaProfile } from "../types/dota";
 
 interface UseDotaProfileConfirmationsOptions {
   canConfirmOverride?: boolean;
+  onProfileUpdated?: (profile: DotaProfile) => void;
 }
 
 export function useDotaProfileConfirmations(
@@ -30,34 +30,43 @@ export function useDotaProfileConfirmations(
   options: UseDotaProfileConfirmationsOptions = {}
 ) {
   const t = useTranslation();
-  const router = useRouter();
   const { authSession } = useAuthSession();
   const [confirmedKeys, setConfirmedKeys] = useState<string[]>([]);
   const [pendingKeys, setPendingKeys] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const confirmedKeysRef = useRef<string[]>([]);
+  const pendingKeysRef = useRef<string[]>([]);
+  const onProfileUpdatedRef = useRef(options.onProfileUpdated);
 
   const canConfirm = options.canConfirmOverride ?? !profile.isOwner;
+
+  useEffect(() => {
+    onProfileUpdatedRef.current = options.onProfileUpdated;
+  }, [options.onProfileUpdated]);
 
   useEffect(() => {
     if (!canConfirm) {
       return;
     }
 
-    setConfirmedKeys(getStoredConfirmedKeys(profile.slug));
+    const storedKeys = getStoredConfirmedKeys(profile.slug);
+    confirmedKeysRef.current = storedKeys;
+    setConfirmedKeys(storedKeys);
   }, [canConfirm, profile.slug]);
 
   function updateConfirmedKeys(nextKeys: string[]) {
+    confirmedKeysRef.current = nextKeys;
     setConfirmedKeys(nextKeys);
     setStoredConfirmedKeys(profile.slug, nextKeys);
   }
 
-  function getLimitError(key: string): string | null {
-    if (confirmedKeys.includes(key)) {
+  function getLimitError(key: string, currentKeys: string[]): string | null {
+    if (currentKeys.includes(key)) {
       return null;
     }
 
     if (isDotaGreenFlagKey(key)) {
-      const greenCount = confirmedKeys.filter(isDotaGreenFlagKey).length;
+      const greenCount = currentKeys.filter(isDotaGreenFlagKey).length;
 
       if (greenCount >= DOTA_FLAG_LIMIT_PER_SIDE) {
         return t("dota.flags.greenLimit", { limit: String(DOTA_FLAG_LIMIT_PER_SIDE) });
@@ -65,7 +74,7 @@ export function useDotaProfileConfirmations(
     }
 
     if (isDotaRedFlagKey(key)) {
-      const redCount = confirmedKeys.filter(isDotaRedFlagKey).length;
+      const redCount = currentKeys.filter(isDotaRedFlagKey).length;
 
       if (redCount >= DOTA_FLAG_LIMIT_PER_SIDE) {
         return t("dota.flags.redLimit", { limit: String(DOTA_FLAG_LIMIT_PER_SIDE) });
@@ -76,11 +85,12 @@ export function useDotaProfileConfirmations(
   }
 
   async function toggleKey(key: string) {
-    if (!canConfirm || pendingKeys.includes(key)) {
+    if (!canConfirm || pendingKeysRef.current.includes(key)) {
       return;
     }
 
-    const limitError = getLimitError(key);
+    const currentKeys = confirmedKeysRef.current;
+    const limitError = getLimitError(key, currentKeys);
 
     if (limitError) {
       setError(limitError);
@@ -88,26 +98,36 @@ export function useDotaProfileConfirmations(
     }
 
     const visitorId = getOrCreateDotaVisitorId();
-    const isConfirmed = confirmedKeys.includes(key);
+    const isConfirmed = currentKeys.includes(key);
+    const nextPending = [...pendingKeysRef.current, key];
 
     setError(null);
-    setPendingKeys((current) => [...current, key]);
+    pendingKeysRef.current = nextPending;
+    setPendingKeys(nextPending);
 
     try {
-      if (isConfirmed) {
-        await revokeDotaQuality(profile.slug, [key], visitorId, authSession?.accessToken);
-        updateConfirmedKeys(confirmedKeys.filter((value) => value !== key));
-      } else {
-        await confirmDotaQualities(profile.slug, [key], visitorId, authSession?.accessToken);
-        updateConfirmedKeys([...new Set([...confirmedKeys, key])]);
+      const nextProfile = isConfirmed
+        ? await revokeDotaQuality(profile.slug, [key], visitorId, authSession?.accessToken)
+        : await confirmDotaQualities(profile.slug, [key], visitorId, authSession?.accessToken);
+
+      const latestKeys = confirmedKeysRef.current;
+      const nextKeys = isConfirmed
+        ? latestKeys.filter((value) => value !== key)
+        : [...new Set([...latestKeys, key])];
+
+      updateConfirmedKeys(nextKeys);
+
+      if (!isConfirmed) {
         trackDotaEvent("dota_confirmation_submitted", { slug: profile.slug });
       }
 
-      router.refresh();
+      onProfileUpdatedRef.current?.(nextProfile);
     } catch (submitError) {
       setError(resolveDotaConfirmError(submitError, t));
     } finally {
-      setPendingKeys((current) => current.filter((value) => value !== key));
+      const clearedPending = pendingKeysRef.current.filter((value) => value !== key);
+      pendingKeysRef.current = clearedPending;
+      setPendingKeys(clearedPending);
     }
   }
 

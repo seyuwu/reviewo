@@ -1,30 +1,48 @@
 .hero {
+  background:
+    radial-gradient(circle at 82% 22%, rgb(239 68 68 / 12%), transparent 25%),
+    radial-gradient(circle at 68% 80%, rgb(139 92 246 / 12%), transparent 28%),
+    linear-gradient(135deg, #fff, #faf7ff);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
   display: grid;
-  gap: 1.25rem;
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 2rem 0 3rem;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 32%);
+  min-height: 28rem;
+  overflow: visible;
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+  width: 100%;
+}
+
+.heroCopy {
+  align-content: center;
+  display: grid;
+  gap: 0.85rem;
 }
 
 .eyebrow {
-  color: var(--muted-copy-color, #6b7280);
-  font-size: 0.875rem;
-  font-weight: 600;
+  color: var(--color-accent-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+  margin: 0;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .title {
-  font-size: clamp(2rem, 5vw, 3rem);
+  font-size: clamp(2rem, 4vw, 3.5rem);
   line-height: 1.05;
   margin: 0;
+  max-width: 15ch;
 }
 
 .lead {
-  color: var(--muted-copy-color, #6b7280);
-  font-size: 1.05rem;
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
   line-height: 1.6;
   margin: 0;
+  max-width: 42rem;
 }
 
 .actions {
@@ -33,17 +51,25 @@
   gap: 0.75rem;
 }
 
+.searchWrap {
+  margin-top: 0.55rem;
+  max-width: 36rem;
+  position: relative;
+  z-index: 2;
+}
+
 .searchForm {
+  background: rgb(255 255 255 / 82%);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
   display: grid;
-  gap: 0.75rem;
-  margin-top: 1rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 0.55rem;
+  padding: 0.75rem;
 }
 
 .searchLabel {
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .searchRow {
@@ -53,15 +79,137 @@
 }
 
 .searchInput {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.7rem;
   color: inherit;
   font: inherit;
-  padding: 0.85rem 1rem;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
+}
+
+.searchInput:focus-visible {
+  border-color: var(--color-accent);
+  outline: 2px solid rgb(139 92 246 / 20%);
+  outline-offset: 1px;
+}
+
+.searchOutput {
+  background: var(--color-surface);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-hover);
+  display: grid;
+  gap: 0.75rem;
+  left: 0;
+  max-height: min(24rem, 60vh);
+  overflow-y: auto;
+  padding: 0.75rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 12;
+}
+
+.searchOutputFetching .searchHitList {
+  opacity: 0.72;
+  transition: opacity 200ms ease;
+}
+
+.searchStatus {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: flex;
+  font-size: 0.9rem;
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.searchStatusError {
+  color: var(--color-error);
+}
+
+.searchHitList {
+  margin: 0;
+}
+
+.searchHitAvatar {
+  align-items: center;
+  background: linear-gradient(145deg, #ef4444, #7f1d1d);
+  border-radius: 0.65rem;
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+  font-weight: 800;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+
+.artwork {
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  position: relative;
+}
+
+.artwork::before {
+  background: radial-gradient(circle, rgb(255 255 255 / 95%), rgb(254 226 226 / 72%) 45%, transparent 70%);
+  content: "";
+  height: 22rem;
+  position: absolute;
+  width: 22rem;
+}
+
+.dotaMark {
+  align-items: center;
+  background: linear-gradient(145deg, #ef4444, #7f1d1d);
+  border: 0.65rem solid rgb(255 255 255 / 75%);
+  border-radius: 2rem;
+  box-shadow: 0 24px 45px rgb(127 29 29 / 25%);
+  color: #fff;
+  display: inline-flex;
+  font-size: 4rem;
+  font-weight: 900;
+  height: 10rem;
+  justify-content: center;
+  position: relative;
+  transform: rotate(-5deg);
+  width: 10rem;
+}
+
+.confirmBadge {
+  align-items: center;
+  background: linear-gradient(145deg, #8b5cf6, #ec4899);
+  border: 4px solid #fff;
+  border-radius: 999px;
+  bottom: 22%;
+  box-shadow: var(--shadow-card-hover);
+  color: #fff;
+  display: inline-flex;
+  height: 3rem;
+  justify-content: center;
+  position: absolute;
+  right: 20%;
+  width: 3rem;
+}
+
+.confirmBadge svg {
+  height: 1.1rem;
+  width: 1.1rem;
 }
 
 @media (max-width: 640px) {
+  .hero {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .artwork {
+    display: none;
+  }
+
   .searchRow {
     grid-template-columns: 1fr;
   }

@@ -2,6 +2,7 @@
 
 import { DOTA_GREEN_FLAG_KEYS, DOTA_RED_FLAG_KEYS } from "@reviewo/shared";
 
+import { useDotaProfileConfirmations } from "../hooks/use-dota-profile-confirmations";
 import type { DotaProfile } from "../types/dota";
 import { DotaProfileFlagPanel } from "./dota-profile-flag-panel";
 import styles from "./dota-profile-flags.module.css";

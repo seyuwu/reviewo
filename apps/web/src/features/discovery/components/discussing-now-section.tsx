@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { EntityAvatar } from "../../entities/components/entity-avatar";
 import { formatEntityDisplayName } from "../../growth/lib/format-entity-display-name";
 import { fetchDiscussionFeed } from "../api/discovery-api";
 import type { DiscussionFeedMode, DiscussionFeedResponse } from "../types/discovery";
@@ -10,10 +11,12 @@ import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import { FeedSection } from "./feed-section";
 
 interface DiscussingNowSectionProps {
+  embedded?: boolean;
   initialFeed?: DiscussionFeedResponse | undefined;
+  maxItems?: number;
 }
 
-export function DiscussingNowSection({ initialFeed }: DiscussingNowSectionProps) {
+export function DiscussingNowSection({ embedded = false, initialFeed, maxItems }: DiscussingNowSectionProps) {
   const t = useTranslation();
   const { resolvedLocale } = useLocale();
   const hasInitialData = initialFeed !== undefined;
@@ -46,14 +49,15 @@ export function DiscussingNowSection({ initialFeed }: DiscussingNowSectionProps)
   }, [resolvedLocale]);
 
   const heading = resolveDiscussionHeading(t, feed.mode);
+  const visibleItems = maxItems ? feed.items.slice(0, maxItems) : feed.items;
 
   return (
-    <FeedSection heading={heading} headingId="home-feed-discussing">
+    <FeedSection embedded={embedded} heading={heading} headingId="home-feed-discussing">
       {isLoading && feed.items.length === 0 ? (
         <p className="muted-copy">{t("chat.loading")}</p>
       ) : (
         <ul className="growth-trending-list">
-          {feed.items.map((item) => {
+          {visibleItems.map((item) => {
             const label = formatEntityDisplayName({
               canonicalUrl: null,
               slug: item.entitySlug,
@@ -63,6 +67,13 @@ export function DiscussingNowSection({ initialFeed }: DiscussingNowSectionProps)
             return (
               <li key={item.entityId}>
                 <Link className="growth-trending-item" href={`/entities/${item.entityId}`}>
+                  <EntityAvatar
+                    canonicalUrl={item.entityCanonicalUrl}
+                    entityId={item.entityId}
+                    logoUrl={item.entityLogoUrl}
+                    size="sm"
+                    title={label}
+                  />
                   <span className="growth-trending-item-main">
                     <strong>{label}</strong>
                     <span className="muted-copy">{resolveDiscussionSubtitle(t, feed.mode, item)}</span>
