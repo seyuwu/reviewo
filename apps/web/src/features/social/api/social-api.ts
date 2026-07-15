@@ -111,10 +111,14 @@ export function fetchMyParties(accessToken: string): Promise<MyPartiesResponse> 
 export function inviteFriendToParty(
   slug: string,
   userId: string,
-  accessToken: string
+  accessToken: string,
+  positionRole?: "1" | "2" | "3" | "4" | "5"
 ): Promise<GamePartyInvite> {
   return apiRequest<GamePartyInvite>(`/social/parties/${encodeURIComponent(slug)}/invites`, {
-    body: { userId },
+    body: {
+      userId,
+      ...(positionRole ? { positionRole } : {})
+    },
     headers: authHeaders(accessToken),
     method: "POST"
   });
@@ -137,10 +141,84 @@ export function declinePartyInvite(inviteId: string, accessToken: string): Promi
   );
 }
 
+export function updatePartyMemberPosition(
+  slug: string,
+  positionRole: "1" | "2" | "3" | "4" | "5" | null,
+  accessToken: string
+): Promise<GameParty> {
+  return apiRequest<GameParty>(
+    `/social/parties/${encodeURIComponent(slug)}/members/me/position`,
+    {
+      body: { positionRole },
+      headers: authHeaders(accessToken),
+      method: "PATCH"
+    }
+  );
+}
+
 export function leaveGameParty(slug: string, accessToken: string): Promise<{ ok: true }> {
   return apiRequest<{ ok: true }>(`/social/parties/${encodeURIComponent(slug)}/members/me`, {
     headers: authHeaders(accessToken),
     method: "DELETE"
+  });
+}
+
+export function disbandGameParty(slug: string, accessToken: string): Promise<{ ok: true }> {
+  return apiRequest<{ ok: true }>(`/social/parties/${encodeURIComponent(slug)}`, {
+    headers: authHeaders(accessToken),
+    method: "DELETE"
+  });
+}
+
+export function kickGamePartyMember(
+  slug: string,
+  userId: string,
+  accessToken: string
+): Promise<GameParty> {
+  return apiRequest<GameParty>(
+    `/social/parties/${encodeURIComponent(slug)}/members/${encodeURIComponent(userId)}`,
+    {
+      headers: authHeaders(accessToken),
+      method: "DELETE"
+    }
+  );
+}
+
+export function stackWithPlayer(
+  targetSlug: string,
+  accessToken: string,
+  partySlug?: string,
+  positionRole?: "1" | "2" | "3" | "4" | "5"
+): Promise<{ invite: GamePartyInvite; party: GameParty }> {
+  return apiRequest<{ invite: GamePartyInvite; party: GameParty }>("/social/parties/stack", {
+    body: {
+      targetSlug,
+      ...(partySlug ? { partySlug } : {}),
+      ...(positionRole ? { positionRole } : {})
+    },
+    headers: authHeaders(accessToken),
+    method: "POST"
+  });
+}
+
+export function createPartyJoinToken(
+  slug: string,
+  accessToken: string
+): Promise<{ token: string }> {
+  return apiRequest<{ token: string }>(
+    `/social/parties/${encodeURIComponent(slug)}/join-token`,
+    {
+      headers: authHeaders(accessToken),
+      method: "POST"
+    }
+  );
+}
+
+export function joinPartyByToken(token: string, accessToken: string): Promise<GameParty> {
+  return apiRequest<GameParty>("/social/parties/join", {
+    body: { token },
+    headers: authHeaders(accessToken),
+    method: "POST"
   });
 }
 

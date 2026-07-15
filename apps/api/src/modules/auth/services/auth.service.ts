@@ -12,7 +12,9 @@ import { UsersService } from "../../users/services/users.service.js";
 import { AuthRepository } from "../repositories/auth.repository.js";
 import { AuthResponseDto } from "../dto/auth-response.dto.js";
 import { ChangePasswordDto } from "../dto/change-password.dto.js";
+import { ClaimEmailDto } from "../dto/claim-email.dto.js";
 import { LoginDto } from "../dto/login.dto.js";
+import { RecoverAccountResponseDto } from "../dto/recover-account-response.dto.js";
 import { RegisterDto } from "../dto/register.dto.js";
 import { UpdateCurrentUserDto } from "../dto/update-current-user.dto.js";
 import { JwtTokenService } from "./jwt-token.service.js";
@@ -76,6 +78,32 @@ export class AuthService {
     }
   }
 
+  async createGuestAccount(displayName: string): Promise<{
+    auth: AuthResponseDto;
+    recoveryToken: string;
+    recoveryUrl: string;
+    user: AuthenticatedUser;
+  }> {
+    const recoveryToken = this.authRepository.createRecoveryTokenPlaintext();
+    const recoveryTokenHash = this.authRepository.hashRecoveryToken(recoveryToken);
+
+    const user = await this.prismaService.$transaction(async (transaction) => {
+      const createdUser = await this.usersService.createGuestUserProfile({ displayName }, transaction);
+      await this.authRepository.createGuestIdentity(createdUser.id, transaction);
+      await this.authRepository.createRecoveryToken(createdUser.id, recoveryTokenHash, transaction);
+      return createdUser;
+    });
+
+    void this.productAnalyticsService?.recordRegistration().catch(() => undefined);
+
+    return {
+      auth: this.createAuthResponse(user),
+      recoveryToken,
+      recoveryUrl: this.buildRecoveryUrl(recoveryToken),
+      user
+    };
+  }
+
   async login(input: LoginDto): Promise<AuthResponseDto> {
     const email = this.usersService.normalizeEmail(input.email);
     const identity = await this.authRepository.findEmailIdentity(email);
@@ -94,6 +122,85 @@ export class AuthService {
     }
 
     return this.createAuthResponse(toAuthenticatedUser(identity.user));
+  }
+
+  async recoverAccount(token: string): Promise<RecoverAccountResponseDto> {
+    const tokenHash = this.authRepository.hashRecoveryToken(token);
+    const existing = await this.authRepository.findActiveRecoveryTokenByHash(tokenHash);
+
+    if (!existing || existing.user.status !== "active") {
+      throw createInvalidRecoveryTokenException();
+    }
+
+    const nextRecoveryToken = this.authRepository.createRecoveryTokenPlaintext();
+    const nextRecoveryTokenHash = this.authRepository.hashRecoveryToken(nextRecoveryToken);
+
+    await this.prismaService.$transaction(async (transaction) => {
+      await this.authRepository.consumeRecoveryToken(existing.id, transaction);
+      await this.authRepository.createRecoveryToken(existing.userId, nextRecoveryTokenHash, transaction);
+    });
+
+    const auth = this.createAuthResponse(toAuthenticatedUser(existing.user));
+
+    return {
+      ...auth,
+      recoveryToken: nextRecoveryToken,
+      recoveryUrl: this.buildRecoveryUrl(nextRecoveryToken)
+    };
+  }
+
+  async claimEmail(currentUser: AuthenticatedUser, input: ClaimEmailDto): Promise<AuthenticatedUser> {
+    if (currentUser.email) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "Account already has an email",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
+
+    const email = this.usersService.normalizeEmail(input.email);
+    const existingIdentity = await this.authRepository.findEmailIdentity(email);
+
+    if (existingIdentity) {
+      throw createEmailAlreadyExistsException();
+    }
+
+    await this.usersService.ensureEmailAvailable(email);
+
+    const passwordHash = await this.passwordHasherService.hash(input.password);
+
+    try {
+      return await this.prismaService.$transaction(async (transaction) => {
+        const updatedUser = await this.usersService.updateUserProfile(
+          currentUser.id,
+          {
+            displayName: currentUser.displayName,
+            email,
+            username: currentUser.username
+          },
+          transaction
+        );
+
+        await this.authRepository.createEmailIdentity(
+          {
+            email,
+            passwordHash,
+            userId: currentUser.id
+          },
+          transaction
+        );
+
+        await this.authRepository.consumeActiveRecoveryTokensForUser(currentUser.id, transaction);
+
+        return updatedUser;
+      });
+    } catch (error) {
+      if (this.authRepository.isUniqueConstraintError(error)) {
+        throw createEmailAlreadyExistsException();
+      }
+
+      throw error;
+    }
   }
 
   createCurrentUserResponse(user: AuthenticatedUser): AuthenticatedUser {
@@ -160,6 +267,13 @@ export class AuthService {
     }
   }
 
+  async updateCurrentUserAvatar(
+    currentUser: AuthenticatedUser,
+    imageDataUrl: string
+  ): Promise<AuthenticatedUser> {
+    return this.usersService.updateUserAvatar(currentUser.id, imageDataUrl);
+  }
+
   async changeCurrentUserPassword(
     currentUser: AuthenticatedUser,
     input: ChangePasswordDto
@@ -191,7 +305,13 @@ export class AuthService {
     });
   }
 
-  private createAuthResponse(user: AuthenticatedUser): AuthResponseDto {
+  buildRecoveryUrl(token: string): string {
+    const origins = this.configService.get("CORS_ALLOWED_ORIGINS", { infer: true });
+    const base = origins[0]?.replace(/\/$/, "") ?? "http://localhost:3001";
+    return `${base}/recover/${token}`;
+  }
+
+  createAuthResponse(user: AuthenticatedUser): AuthResponseDto {
     return {
       accessToken: this.jwtTokenService.signAccessToken(user.id),
       expiresIn: this.configService.get("JWT_ACCESS_TOKEN_TTL_SECONDS", { infer: true }),
@@ -203,6 +323,7 @@ export class AuthService {
 
 function toAuthenticatedUser(user: User): AuthenticatedUser {
   return {
+    avatarUrl: user.avatarUrl,
     displayName: user.displayName,
     email: user.email,
     id: user.id,
@@ -241,5 +362,13 @@ function createPasswordReuseException(): Error {
     code: AppErrorCode.BadRequest,
     message: "New password must be different from the current password",
     statusCode: HttpStatus.BAD_REQUEST
+  });
+}
+
+function createInvalidRecoveryTokenException(): Error {
+  return createAppException({
+    code: AppErrorCode.Unauthorized,
+    message: "Invalid or expired recovery link",
+    statusCode: HttpStatus.UNAUTHORIZED
   });
 }

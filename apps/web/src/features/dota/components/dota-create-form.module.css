@@ -1,15 +1,69 @@
 .page {
   display: grid;
   gap: 0;
+  isolation: isolate;
+  position: relative;
   width: 100%;
 }
 
-.card {
+.pageWithArt {
+  align-content: center;
+  justify-items: center;
+  min-height: min(52rem, calc(100vh - 6rem));
+  padding-block: clamp(0.75rem, 2vw, 1.5rem);
+}
+
+.backdrop {
+  border-radius: var(--radius-card-lg);
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.backdropArt {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 38%;
+  width: 100%;
+}
+
+.backdropVeil {
   background:
-    radial-gradient(circle at 92% 3%, rgb(139 92 246 / 8%), transparent 20rem),
-    var(--color-surface);
+    linear-gradient(180deg, rgb(6 10 18 / 42%) 0%, rgb(6 10 18 / 58%) 42%, rgb(6 10 18 / 78%) 100%),
+    radial-gradient(ellipse at 50% 18%, rgb(109 74 255 / 18%), transparent 48%);
+  inset: 0;
+  position: absolute;
+}
+
+.card {
+  backdrop-filter: blur(18px);
+  background:
+    radial-gradient(circle at 92% 3%, rgb(109 74 255 / 14%), transparent 20rem),
+    var(--games-glass, rgb(18 22 32 / 78%));
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
   margin-inline: auto;
   max-width: 76rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.pageWithArt .card {
+  align-self: center;
+  background:
+    radial-gradient(circle at 92% 3%, rgb(109 74 255 / 16%), transparent 18rem),
+    rgb(12 16 28 / 82%);
+  border-color: rgb(147 130 255 / 22%);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 40%);
+  height: fit-content;
+  max-width: 28rem;
+  width: min(100%, 28rem);
 }
 
 .header {
@@ -18,12 +72,23 @@
   margin-bottom: 0.65rem;
 }
 
+.pageWithArt .header {
+  justify-items: center;
+  text-align: center;
+  width: 100%;
+}
+
 .title {
   font-size: clamp(1.5rem, 2.5vw, 2.1rem);
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
+}
+
+.pageWithArt .title {
+  text-align: center;
+  width: 100%;
 }
 
 .lead {
@@ -41,29 +106,45 @@
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
+  width: 100%;
 }
 
 .form {
-  align-items: start;
+  align-items: stretch;
   display: grid;
   gap: 0.8rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   margin-top: 0.15rem;
+  width: 100%;
+}
+
+.page:not(.pageWithArt) .form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .form > :global(.signed-in-box) {
   align-self: stretch;
 }
 
+.page:not(.pageWithArt) .form > :global(.signed-in-box),
+.page:not(.pageWithArt) .form > :global(.primary-button),
+.page:not(.pageWithArt) .form > .formError {
+  grid-column: 1 / -1;
+}
+
 .form > :global(.primary-button),
 .form > .formError {
-  grid-column: 1 / -1;
+  width: 100%;
 }
 
 .roleChips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+.pageWithArt .roleChips {
+  justify-content: center;
 }
 
 .roleChip {
@@ -123,6 +204,11 @@
   width: fit-content;
 }
 
+.pageWithArt .skipLink {
+  justify-self: center;
+  text-align: center;
+}
+
 .skipLink:hover {
   color: var(--color-text);
 }
@@ -154,12 +240,17 @@
 }
 
 @media (max-width: 760px) {
-  .form {
-    grid-template-columns: 1fr;
+  .pageWithArt {
+    min-height: min(40rem, calc(100vh - 5rem));
   }
 
-  .form > :global(.primary-button),
-  .form > .formError {
+  .page:not(.pageWithArt) .form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .page:not(.pageWithArt) .form > :global(.signed-in-box),
+  .page:not(.pageWithArt) .form > :global(.primary-button),
+  .page:not(.pageWithArt) .form > .formError {
     grid-column: auto;
   }
 }

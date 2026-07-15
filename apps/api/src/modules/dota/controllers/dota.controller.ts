@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -12,9 +14,12 @@ import {
 } from "@nestjs/common";
 
 import { CurrentUser } from "../../../common/decorators/current-user.decorator.js";
+import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
+import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import {
   ApiRateLimiterService,
+  resolveRequestIp,
   type RequestLike
 } from "../../../common/rate-limiting/api-rate-limiter.service.js";
 import { createDotaConfirmationRateLimitRules } from "../../../common/rate-limiting/write-rate-limit-rules.js";
@@ -23,8 +28,12 @@ import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.
 import { ConfirmDotaQualitiesDto } from "../dto/confirm-dota-qualities.dto.js";
 import { CreateDotaProfileDto } from "../dto/create-dota-profile.dto.js";
 import { DotaProfileResponseDto } from "../dto/dota-profile-response.dto.js";
+import type { DotaLfgListResponseDto } from "../dto/dota-lfg-response.dto.js";
 import type { DotaProfileSearchResponseDto } from "../dto/dota-profile-search-response.dto.js";
+import { GuestDotaProfileCreateResponseDto } from "../dto/guest-dota-profile-create-response.dto.js";
+import { ListDotaLfgQueryDto } from "../dto/list-dota-lfg-query.dto.js";
 import { SearchDotaProfilesQueryDto } from "../dto/search-dota-profiles-query.dto.js";
+import { SetDotaLfgLookingDto } from "../dto/set-dota-lfg-looking.dto.js";
 import { UpdateDotaProfileDto } from "../dto/update-dota-profile.dto.js";
 import { DotaProfileService } from "../services/dota-profile.service.js";
 
@@ -34,6 +43,53 @@ export class DotaController {
     private readonly apiRateLimiterService: ApiRateLimiterService,
     private readonly dotaProfileService: DotaProfileService
   ) {}
+
+  @Post("guest")
+  async createGuestProfile(
+    @Body() input: CreateDotaProfileDto,
+    @Req() request: RequestLike,
+    @Headers("authorization") authorization?: string
+  ): Promise<GuestDotaProfileCreateResponseDto> {
+    if (authorization?.trim()) {
+      throw createAppException({
+        code: AppErrorCode.BadRequest,
+        message: "Already signed in — use POST /dota/profiles instead",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    await this.apiRateLimiterService.assertWithinLimits([
+      {
+        key: resolveRequestIp(request),
+        limit: 10,
+        message: "Too many guest profile attempts from this network",
+        namespace: "dota:guest-create:ip",
+        windowSeconds: 60 * 60
+      }
+    ]);
+
+    return this.dotaProfileService.createGuestProfile(input);
+  }
+
+  @Get("lfg")
+  async listLookingPlayers(@Query() query: ListDotaLfgQueryDto): Promise<DotaLfgListResponseDto> {
+    return this.dotaProfileService.listLookingPlayers({
+      ...(query.roles ? { roles: query.roles } : {}),
+      ...(query.server ? { server: query.server } : {})
+    });
+  }
+
+  @Post("lfg/looking")
+  @UseGuards(JwtAuthGuard)
+  async setLooking(
+    @Body() input: SetDotaLfgLookingDto,
+    @CurrentUser() currentUser: AuthenticatedUser
+  ): Promise<DotaProfileResponseDto> {
+    return this.dotaProfileService.setLooking(input.looking, currentUser, {
+      ...(input.recruitedRoles !== undefined ? { recruitedRoles: input.recruitedRoles } : {}),
+      ...(input.partySlug ? { partySlug: input.partySlug } : {})
+    });
+  }
 
   @Post()
   @UseGuards(JwtAuthGuard)

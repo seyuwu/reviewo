@@ -2,6 +2,8 @@ export type FriendshipStatus = "none" | "outgoing" | "incoming" | "friends" | "s
 
 export type GamePartyKind = "TEAM" | "PARTY";
 
+export type DotaPositionRole = "1" | "2" | "3" | "4" | "5";
+
 export interface FriendUser {
   displayName: string;
   dotaSlug: string | null;
@@ -27,21 +29,35 @@ export interface FriendshipRequestsResponse {
 
 export interface GamePartyMember {
   displayName: string;
+  dotaAccountId?: string | null;
   dotaSlug: string | null;
   mmr: string | null;
+  positionRole: DotaPositionRole | null;
   role: "OWNER" | "MEMBER";
   userId: string;
 }
 
+export interface GamePartyInviteFlag {
+  count: number;
+  key: string;
+}
+
 export interface GamePartyInvite {
   createdAt: string;
+  direction?: "incoming" | "outgoing";
   expiresAt: string | null;
+  greenFlags?: GamePartyInviteFlag[];
   id: string;
   inviteeDisplayName: string;
+  inviteeDotaSlug?: string | null;
+  inviteeMmr?: string | null;
   inviteeUserId: string;
+  inviteKind?: "INVITE" | "APPLICATION";
   kind: GamePartyKind;
   partyName: string;
   partySlug: string;
+  positionRole?: DotaPositionRole | null;
+  redFlags?: GamePartyInviteFlag[];
   status: "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED";
 }
 
@@ -64,6 +80,10 @@ export interface GameParty {
 
 export interface MyPartiesResponse {
   invites: GamePartyInvite[];
+  outgoingInvites: GamePartyInvite[];
+  /** All active temporary parties (newest first). */
+  parties: GameParty[];
+  /** Most recently joined temporary party. */
   party: GameParty | null;
   team: GameParty | null;
 }

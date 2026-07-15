@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { FormFeedback } from "../../../components/form-feedback";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
+import { resolveInviteDecisionError } from "../../games/lib/resolve-stack-invite-error";
 import { useTranslation } from "../../i18n/locale-provider";
 import {
   acceptPartyInvite,
@@ -15,9 +18,11 @@ import styles from "./dota-team-owner-actions.module.css";
 
 export function DotaTeamOwnerActions() {
   const t = useTranslation();
+  const router = useRouter();
   const { authSession } = useAuthSession();
   const [data, setData] = useState<MyPartiesResponse | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authSession?.accessToken) {
@@ -49,10 +54,14 @@ export function DotaTeamOwnerActions() {
     }
 
     setPendingId(invite.id);
+    setError(null);
 
     try {
       const joined = await acceptPartyInvite(invite.id, authSession.accessToken);
       setData((current) => mergeJoinedParty(current, joined, invite.id));
+      router.push(`/dota/teams/${joined.slug}`);
+    } catch (acceptError) {
+      setError(resolveInviteDecisionError(acceptError, t));
     } finally {
       setPendingId(null);
     }
@@ -64,21 +73,34 @@ export function DotaTeamOwnerActions() {
     }
 
     setPendingId(invite.id);
+    setError(null);
 
     try {
       await declinePartyInvite(invite.id, authSession.accessToken);
       setData({
         invites: (data?.invites ?? []).filter((item) => item.id !== invite.id),
+        outgoingInvites: data?.outgoingInvites ?? [],
+        parties: data?.parties ?? (data?.party ? [data.party] : []),
         party: data?.party ?? null,
         team: data?.team ?? null
       });
+    } catch (declineError) {
+      setError(resolveInviteDecisionError(declineError, t));
     } finally {
       setPendingId(null);
     }
   }
 
   const hasTeam = Boolean(data?.team);
-  const hasParty = Boolean(data?.party);
+  const partyList = data?.parties?.length
+    ? data.parties
+    : data?.party
+      ? [data.party]
+      : [];
+  const hasParty = partyList.length > 0;
+  const incomingInvites = (data?.invites ?? []).filter(
+    (invite) => invite.inviteKind !== "APPLICATION"
+  );
 
   return (
     <div className={styles.wrap}>
@@ -86,37 +108,40 @@ export function DotaTeamOwnerActions() {
         <Link className="button-secondary" href={`/dota/teams/${data.team.slug}`}>
           {t("dota.team.openMine", {
             current: String(data.team.memberCount),
-            max: String(data.team.maxMembers)
+            max: String(data.team.maxMembers),
+            name: data.team.name
           })}
         </Link>
       ) : null}
-      {data?.party ? (
-        <Link className="button-secondary" href={`/dota/teams/${data.party.slug}`}>
+      {partyList.map((party) => (
+        <Link className="button-secondary" href={`/dota/teams/${party.slug}`} key={party.id}>
           {t("dota.team.openMineParty", {
-            current: String(data.party.memberCount),
-            max: String(data.party.maxMembers)
+            current: String(party.memberCount),
+            max: String(party.maxMembers),
+            name: party.name
           })}
         </Link>
-      ) : null}
-      {!hasTeam || !hasParty ? (
-        <Link className="button-secondary" href="/dota/teams/create">
-          {!hasTeam && !hasParty
-            ? t("dota.team.createCta")
-            : !hasTeam
-              ? t("dota.team.createTeamOnlyCta")
-              : t("dota.team.createPartyCta")}
-        </Link>
-      ) : null}
+      ))}
+      <Link className="button-secondary" href="/dota/teams/create">
+        {!hasTeam && !hasParty
+          ? t("dota.team.createCta")
+          : !hasTeam
+            ? t("dota.team.createTeamOnlyCta")
+            : t("dota.team.createPartyCta")}
+      </Link>
 
-      {(data?.invites.length ?? 0) > 0 ? (
+      {error ? <FormFeedback errorMessage={error} /> : null}
+
+      {incomingInvites.length > 0 ? (
         <div className={styles.invites}>
           <p>{t("dota.team.incomingInvites")}</p>
           <ul>
-            {data?.invites.map((invite) => (
+            {incomingInvites.map((invite) => (
               <li key={invite.id}>
                 <span>
                   {invite.partyName}
                   {invite.kind === "PARTY" ? ` · ${t("dota.team.kindParty")}` : ""}
+                  {invite.positionRole ? ` · ${invite.positionRole}` : ""}
                 </span>
                 <button
                   className="button-primary"
@@ -151,15 +176,26 @@ function mergeJoinedParty(
   const invites = (current?.invites ?? []).filter((item) => item.id !== inviteId);
 
   if (joined.kind === "PARTY") {
+    const previousParties = current?.parties?.length
+      ? current.parties
+      : current?.party
+        ? [current.party]
+        : [];
+    const parties = [joined, ...previousParties.filter((party) => party.id !== joined.id)];
+
     return {
       invites,
-      party: joined,
+      outgoingInvites: current?.outgoingInvites ?? [],
+      parties,
+      party: parties[0] ?? null,
       team: current?.team ?? null
     };
   }
 
   return {
     invites,
+    outgoingInvites: current?.outgoingInvites ?? [],
+    parties: current?.parties ?? (current?.party ? [current.party] : []),
     party: current?.party ?? null,
     team: joined
   };

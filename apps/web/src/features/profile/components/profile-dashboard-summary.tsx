@@ -103,7 +103,12 @@ export function ProfileDashboardSummary({ accessToken, profile }: ProfileDashboa
       <section className={styles.hero}>
         <div className={styles.heroIdentity}>
           <span className={styles.avatar} aria-hidden="true">
-            {getInitials(profile.displayName)}
+            {profile.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img alt="" className={styles.avatarImage} src={profile.avatarUrl} />
+            ) : (
+              getInitials(profile.displayName)
+            )}
           </span>
           <div className={styles.heroCopy}>
             <span className={styles.badge}>{formatContributionLevel(level, t)}</span>

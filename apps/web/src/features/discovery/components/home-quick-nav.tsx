@@ -22,7 +22,7 @@ export function HomeQuickNav() {
   const extensionUrl = publicEnv.extensionInstallUrl;
 
   const links: QuickNavItem[] = [
-    { description: t("web.homeFeed.quickGames"), external: false, href: "/games", icon: "gamepad", iconClass: "home-quick-nav-icon--games", label: t("web.nav.gamesHub") },
+    { description: t("web.homeFeed.quickGames"), external: false, href: "/games/search", icon: "gamepad", iconClass: "home-quick-nav-icon--games", label: t("web.nav.gamesHub") },
     { description: t("web.homeFeed.quickBattles"), external: false, href: "/battles", icon: "battle", iconClass: "home-quick-nav-icon--battles", label: t("web.nav.battles") },
     { description: t("web.homeFeed.quickTops"), external: false, href: "/top", icon: "trophy", iconClass: "home-quick-nav-icon--tops", label: t("web.nav.tops") },
     { description: t("web.homeFeed.quickSpotlight"), external: false, href: "/spotlight", icon: "spotlight", iconClass: "home-quick-nav-icon--spotlight", label: t("web.nav.spotlight") },

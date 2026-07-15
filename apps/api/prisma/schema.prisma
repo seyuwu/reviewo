@@ -40,6 +40,7 @@ model User {
   gamePartyInvitesSent   GamePartyInvite[] @relation("GamePartyInviter")
   gamePartyInvitesReceived GamePartyInvite[] @relation("GamePartyInvitee")
   gamePartyChatMessages  GamePartyChatMessage[]
+  accountRecoveryTokens  AccountRecoveryToken[]
 
   @@map("users")
   @@schema("users")
@@ -66,6 +67,19 @@ model UserAuthIdentity {
   @@unique([provider, providerUserId])
   @@index([userId])
   @@map("user_auth_identities")
+  @@schema("auth")
+}
+
+model AccountRecoveryToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  consumedAt  DateTime? @map("consumed_at") @db.Timestamptz(6)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account_recovery_tokens")
   @@schema("auth")
 }
 
@@ -1040,6 +1054,14 @@ enum GamePartyInviteStatus {
   @@schema("social")
 }
 
+enum GamePartyInviteKind {
+  INVITE
+  APPLICATION
+
+  @@map("game_party_invite_kind")
+  @@schema("social")
+}
+
 model UserFriendship {
   id          String           @id @default(uuid()) @db.Uuid
   requesterId String           @map("requester_id") @db.Uuid
@@ -1083,13 +1105,15 @@ model GameParty {
 }
 
 model GamePartyMember {
-  id        String              @id @default(uuid()) @db.Uuid
-  partyId   String              @map("party_id") @db.Uuid
-  userId    String              @map("user_id") @db.Uuid
-  role      GamePartyMemberRole @default(MEMBER)
-  joinedAt  DateTime            @default(now()) @map("joined_at") @db.Timestamptz(6)
-  party     GameParty           @relation(fields: [partyId], references: [id], onDelete: Cascade)
-  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String              @id @default(uuid()) @db.Uuid
+  partyId      String              @map("party_id") @db.Uuid
+  userId       String              @map("user_id") @db.Uuid
+  role         GamePartyMemberRole @default(MEMBER)
+  /// Dota lane position 1-5; null until the member claims a slot.
+  positionRole String?             @map("position_role")
+  joinedAt     DateTime            @default(now()) @map("joined_at") @db.Timestamptz(6)
+  party        GameParty           @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([partyId, userId])
   @@index([userId])
@@ -1102,6 +1126,9 @@ model GamePartyInvite {
   partyId       String                @map("party_id") @db.Uuid
   inviterUserId String                @map("inviter_user_id") @db.Uuid
   inviteeUserId String                @map("invitee_user_id") @db.Uuid
+  kind          GamePartyInviteKind   @default(INVITE)
+  /// Lane position offered/requested with this invite.
+  positionRole  String?               @map("position_role")
   status        GamePartyInviteStatus @default(PENDING)
   createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)

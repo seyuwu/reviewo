@@ -24,8 +24,8 @@
 
 .idValue:hover strong,
 .idValue:focus-visible strong {
-  border-bottom-color: var(--color-primary);
-  color: #000;
+  border-bottom-color: var(--color-accent);
+  color: var(--color-text);
 }
 
 .idValue:focus-visible {

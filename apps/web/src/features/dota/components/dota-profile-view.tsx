@@ -17,10 +17,14 @@ import {
 } from "../lib/friend-invite-storage";
 import { formatDotaMmr, formatDotaRoles } from "../lib/labels";
 import type { DotaProfile } from "../types/dota";
+import { DotaClaimEmailBanner } from "./dota-claim-email-banner";
 import { DotaFriendshipActions } from "./dota-friendship-actions";
 import { DotaIdCopyField } from "./dota-id-copy-field";
+import { DotaPartyApplicationActions } from "./dota-party-application-actions";
+import { DotaProfileAvatarEditor } from "./dota-profile-avatar-editor";
 import { DotaProfileFlags } from "./dota-profile-flags";
 import { DotaProfileQualities } from "./dota-profile-qualities";
+import { DotaRecoveryNotice } from "./dota-recovery-notice";
 import { DotaSharePanel } from "./dota-share-panel";
 import { DotaTeamOwnerActions } from "./dota-team-owner-actions";
 import styles from "./dota-profile-view.module.css";
@@ -190,9 +194,16 @@ export function DotaProfileView({ profile: initialProfile }: DotaProfileViewProp
         <h1>{profile.title}</h1>
         <DotaFriendshipActions onProfileUpdated={setProfile} profile={profile} />
         {profile.isOwner ? <DotaTeamOwnerActions /> : null}
+        {!profile.isOwner ? (
+          <DotaPartyApplicationActions ownerUserId={profile.ownerUserId} />
+        ) : null}
+        {profile.isOwner ? <DotaProfileAvatarEditor displayName={profile.title} /> : null}
         {friendInviteMessage ? <p className={styles.ownerHint}>{friendInviteMessage}</p> : null}
         {friendInviteError ? <FormFeedback errorMessage={friendInviteError} /> : null}
       </header>
+
+      {profile.isOwner ? <DotaRecoveryNotice slug={profile.slug} /> : null}
+      {profile.isOwner ? <DotaClaimEmailBanner isOwner={profile.isOwner} /> : null}
 
       <div className={`profile-fields ${styles.metaGrid}`}>
         <DotaIdCopyField accountId={profile.dotaAccountId} showFillCta={profile.isOwner} />

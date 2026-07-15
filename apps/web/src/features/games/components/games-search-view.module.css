@@ -1,0 +1,1051 @@
+.page {
+  display: grid;
+  gap: 1.1rem;
+  width: 100%;
+}
+
+.header {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.title {
+  font-size: clamp(1.7rem, 2.8vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.lead {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 40rem;
+}
+
+.layout {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(16rem, 19rem) minmax(0, 1fr) minmax(16rem, 19rem);
+}
+
+.sidebar,
+.main {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.panel {
+  backdrop-filter: blur(18px);
+  background: var(--games-glass, rgb(18 22 32 / 72%));
+  border: 1px solid var(--color-card-border);
+  border-radius: 1.05rem;
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.05rem;
+}
+
+.panelHead {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
+  justify-content: space-between;
+}
+
+.panelTitle {
+  font-size: 0.92rem;
+  font-weight: 750;
+  margin: 0;
+}
+
+.panelEmpty {
+  color: var(--color-text-muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.countBadge {
+  align-items: center;
+  background: var(--color-accent);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  height: 1.35rem;
+  justify-content: center;
+  min-width: 1.35rem;
+  padding: 0 0.4rem;
+}
+
+.waitingInvite {
+  align-items: center;
+  display: grid;
+  gap: 0.65rem;
+  justify-items: center;
+  padding: 0.55rem 0.25rem 0.35rem;
+}
+
+.waitingDots {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.waitingDots span {
+  animation: invite-dot-pulse 1.1s ease-in-out infinite;
+  background: var(--color-accent);
+  border-radius: 999px;
+  height: 0.55rem;
+  opacity: 0.35;
+  width: 0.55rem;
+}
+
+.waitingDots span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.waitingDots span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+.waitingInviteText {
+  color: var(--color-text-muted);
+  font-size: 0.86rem;
+  line-height: 1.4;
+  margin: 0;
+  text-align: center;
+}
+
+@keyframes invite-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-0.18rem);
+  }
+}
+
+.controlBlock {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.controlHead {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.controlHint {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.recruitLine {
+  color: #bbf7d0;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.controlDivider {
+  background: var(--color-card-border);
+  height: 1px;
+  margin: 0.05rem 0;
+}
+
+.modeList {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.modeCard {
+  background: rgb(255 255 255 / 3.5%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.9rem;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.85rem 0.9rem;
+  text-align: left;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.modeCard strong {
+  font-size: 0.92rem;
+  font-weight: 750;
+}
+
+.modeCard span {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.modeCard:hover {
+  background: rgb(255 255 255 / 6%);
+  border-color: rgb(147 130 255 / 28%);
+}
+
+.modeCardActive {
+  background: rgb(109 74 255 / 14%);
+  border-color: rgb(109 74 255 / 55%);
+  box-shadow: 0 0 0 1px rgb(109 74 255 / 18%), 0 10px 28px rgb(93 63 211 / 18%);
+}
+
+.modeCard:disabled,
+.modeCardLocked {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.modeCard:disabled:hover,
+.modeCardLocked:hover {
+  background: rgb(255 255 255 / 3.5%);
+  border-color: var(--color-card-border);
+}
+
+.modeCardActive:disabled,
+.modeCardActive.modeCardLocked {
+  opacity: 0.85;
+}
+
+.modeCardActive:disabled:hover,
+.modeCardActive.modeCardLocked:hover {
+  background: rgb(109 74 255 / 14%);
+  border-color: rgb(109 74 255 / 55%);
+}
+
+.statusPill {
+  background: rgb(255 255 255 / 6%);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  padding: 0.28rem 0.55rem;
+}
+
+.statusPillOn {
+  background: var(--color-success-soft, rgb(74 222 128 / 14%));
+  color: var(--color-success, #4ade80);
+}
+
+.stepper {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.65rem;
+}
+
+.stepperBtn {
+  align-items: center;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.7rem;
+  color: inherit;
+  display: inline-flex;
+  font-size: 1.15rem;
+  font-weight: 700;
+  height: 2.35rem;
+  justify-content: center;
+  width: 2.35rem;
+}
+
+.stepperBtn:disabled {
+  opacity: 0.4;
+}
+
+.stepperValue {
+  font-size: 1.35rem;
+  font-weight: 800;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.radioList {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.radioListLocked {
+  opacity: 0.62;
+  pointer-events: none;
+}
+
+.radioItem {
+  align-items: center;
+  background: rgb(255 255 255 / 3%);
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  gap: 0.55rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.radioItem:has(input:checked) {
+  background: rgb(109 74 255 / 12%);
+  border-color: rgb(109 74 255 / 35%);
+}
+
+.radioItem input {
+  accent-color: var(--color-accent);
+}
+
+.radioItem span {
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.slots {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.slot {
+  align-items: center;
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0.55rem;
+  color: rgb(180 188 204 / 55%);
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  height: 1.85rem;
+  justify-content: center;
+  line-height: 1;
+  min-width: 1.85rem;
+  padding: 0 0.2rem;
+}
+
+.slotFilled {
+  background: rgb(109 74 255 / 28%);
+  border-color: rgb(167 139 250 / 55%);
+  color: #ede9fe;
+}
+
+.slotNeeded {
+  background: rgb(74 222 128 / 14%);
+  border-color: rgb(74 222 128 / 48%);
+  box-shadow: inset 0 0 0 1px rgb(74 222 128 / 12%);
+  color: #bbf7d0;
+}
+
+.slotIdle {
+  opacity: 0.45;
+}
+
+.slotsMeta {
+  color: var(--color-text-muted);
+  flex: 1 1 100%;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.35;
+  margin-top: 0.1rem;
+}
+
+.promoPanel {
+  background:
+    radial-gradient(circle at 90% 0%, rgb(109 74 255 / 28%), transparent 45%),
+    var(--games-glass-strong, rgb(22 26 38 / 88%));
+}
+
+.promoTitle {
+  font-size: 1rem;
+  font-weight: 750;
+  margin: 0;
+}
+
+.promoLead {
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.profileLink {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.profileLink:hover {
+  color: #c4b5fd;
+}
+
+.statusBar {
+  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.statsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+}
+
+.statusText {
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+  font-weight: 650;
+  margin: 0;
+}
+
+.refreshNote {
+  color: rgb(154 163 181 / 72%);
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.statusActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.list {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+}
+
+.card {
+  backdrop-filter: blur(16px);
+  background: var(--games-glass, rgb(18 22 32 / 72%));
+  border: 1px solid var(--color-card-border);
+  border-radius: 1.05rem;
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  list-style: none;
+  overflow: visible;
+  padding: 1rem 1.05rem;
+}
+
+.cardTop {
+  align-items: start;
+  display: grid;
+  gap: 0.7rem;
+  grid-column: 1 / -1;
+  grid-template-columns: auto 1fr auto;
+}
+
+.avatar,
+.inviteAvatar {
+  align-items: center;
+  background: linear-gradient(145deg, #6d4aff, #5d3fd3);
+  border-radius: 999px;
+  color: white;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  height: 2.55rem;
+  justify-content: center;
+  width: 2.55rem;
+}
+
+.inviteAvatar {
+  font-size: 0.82rem;
+  height: 2.15rem;
+  width: 2.15rem;
+}
+
+.cardIdentity {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.cardTitle {
+  color: inherit;
+  font-size: 1.05rem;
+  font-weight: 750;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardTitle:hover {
+  color: #c4b5fd;
+}
+
+.cardMmr {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.badge {
+  background: var(--color-accent-soft);
+  border-radius: 999px;
+  color: #c4b5fd;
+  font-size: 0.68rem;
+  font-weight: 750;
+  line-height: 1;
+  padding: 0.4rem 0.55rem;
+  white-space: nowrap;
+}
+
+.cardMeta {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  gap: 0.65rem 0.95rem;
+  grid-column: 1;
+}
+
+.flagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  grid-column: 1 / -1;
+}
+
+.flagGreen,
+.flagRed {
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 0.28rem 0.55rem;
+}
+
+.flagGreen {
+  background: rgb(74 222 128 / 14%);
+  color: #86efac;
+}
+
+.flagRed {
+  background: rgb(248 113 113 / 14%);
+  color: #fca5a5;
+}
+
+.roleChipPick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.roleChipBtn {
+  align-items: center;
+  appearance: none;
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.55rem;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  height: 2rem;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0 0.45rem;
+}
+
+.roleChipBtnActive {
+  background: rgb(109 74 255 / 22%);
+  border-color: rgb(109 74 255 / 55%);
+  color: #ddd6fe;
+}
+
+.roleChipBtnClaimed {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.rolesExpandBtn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: #c4b5fd;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.rolesExpandBtn:hover {
+  color: #ddd6fe;
+}
+
+.roleLegend {
+  color: var(--color-text-muted);
+  display: grid;
+  gap: 0.28rem;
+  list-style: none;
+  margin: 0.15rem 0 0;
+  padding: 0;
+}
+
+.roleLegend li {
+  align-items: baseline;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 1.1rem 1fr;
+  font-size: 0.8rem;
+}
+
+.roleLegend strong {
+  color: #ddd6fe;
+  font-weight: 750;
+}
+
+.recruitRoles {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.applyRoleRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
+}
+
+.applyRoleBtn {
+  min-width: 0;
+}
+
+.flagEmpty {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.inviteFlags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.inviteCopy a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.inviteCopy a:hover {
+  color: #c4b5fd;
+}
+
+.roleChips {
+  display: inline-flex;
+  gap: 0.28rem;
+}
+
+.roleChip {
+  align-items: center;
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.35rem;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 750;
+  height: 1.35rem;
+  justify-content: center;
+  width: 1.35rem;
+}
+
+.roleChipActive {
+  background: rgb(109 74 255 / 22%);
+  border-color: rgb(109 74 255 / 45%);
+  color: #ddd6fe;
+}
+
+.roleChipClaimed {
+  background: rgb(109 74 255 / 55%);
+  border-color: rgb(167 139 250 / 70%);
+  color: #fff;
+  box-shadow: 0 0 10px rgb(109 74 255 / 28%);
+}
+
+.roleChipLooking {
+  background: rgb(52 211 153 / 14%);
+  border-color: rgb(52 211 153 / 45%);
+  color: #a7f3d0;
+}
+
+.avatarLink {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.recruitCaptain {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  margin: 0.1rem 0 0;
+}
+
+.stackCta {
+  min-width: 8.5rem;
+  width: 100%;
+}
+
+.inviteWrap {
+  align-self: center;
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  z-index: 2;
+}
+
+.invitePopover {
+  background: rgb(18 22 32 / 96%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.85rem;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+  max-width: min(16rem, 78vw);
+  min-width: 11.5rem;
+  padding: 0.45rem;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+}
+
+.invitePopoverTitle {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0;
+  padding: 0.3rem 0.45rem 0.15rem;
+  text-transform: uppercase;
+}
+
+.invitePopoverOption {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0.55rem;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 650;
+  padding: 0.55rem 0.6rem;
+  text-align: left;
+}
+
+.invitePopoverOption:hover:not(:disabled) {
+  background: rgb(109 74 255 / 18%);
+}
+
+.invitePopoverOption:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.empty {
+  align-content: center;
+  backdrop-filter: blur(16px);
+  background: var(--games-glass, rgb(18 22 32 / 72%));
+  border: 1px solid var(--color-card-border);
+  border-radius: 1.15rem;
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  min-height: 18rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  text-align: center;
+}
+
+.emptyIcon {
+  align-items: center;
+  background: rgb(109 74 255 / 14%);
+  border: 1px solid rgb(109 74 255 / 28%);
+  border-radius: 1.1rem;
+  color: #c4b5fd;
+  display: inline-flex;
+  font-size: 1.6rem;
+  height: 3.4rem;
+  justify-content: center;
+  margin-bottom: 0.2rem;
+  width: 3.4rem;
+}
+
+.emptyTitle {
+  font-size: 1.2rem;
+  font-weight: 750;
+  margin: 0;
+}
+
+.emptyLead {
+  color: var(--color-text-muted);
+  margin: 0;
+  max-width: 28rem;
+}
+
+.emptyCta {
+  font-size: 1rem;
+  margin-top: 0.35rem;
+  min-height: 2.85rem;
+  min-width: min(100%, 14rem);
+  padding-inline: 1.4rem;
+}
+
+.inviteList {
+  display: grid;
+  gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.inviteItem {
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.55rem 0.6rem;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.inviteIncoming,
+.invitePending {
+  background: rgb(255 255 255 / 3.5%);
+}
+
+.inviteAccepted {
+  background: rgb(74 222 128 / 14%);
+  box-shadow: inset 0 0 0 1px rgb(74 222 128 / 35%);
+}
+
+.inviteDeclined {
+  background: rgb(248 113 113 / 14%);
+  box-shadow: inset 0 0 0 1px rgb(248 113 113 / 35%);
+}
+
+.inviteRow {
+  align-items: center;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto 1fr auto;
+}
+
+.inviteCopy {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.inviteCopy strong {
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inviteCopy span {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.inviteWant {
+  color: var(--color-success, #4ade80) !important;
+  font-weight: 650;
+}
+
+.inviteActions {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.acceptBtn,
+.declineBtn {
+  align-items: center;
+  border: 0;
+  border-radius: 0.65rem;
+  color: #fff;
+  display: inline-flex;
+  font-size: 0.95rem;
+  font-weight: 800;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.acceptBtn {
+  background: #22c55e;
+}
+
+.declineBtn {
+  background: #ef4444;
+}
+
+.acceptBtn:disabled,
+.declineBtn:disabled {
+  opacity: 0.5;
+}
+
+.howList {
+  color: var(--color-text-muted);
+  display: grid;
+  font-size: 0.86rem;
+  gap: 0.55rem;
+  line-height: 1.45;
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.tipPanel {
+  background:
+    radial-gradient(circle at 100% 0%, rgb(109 74 255 / 22%), transparent 55%),
+    var(--games-glass, rgb(18 22 32 / 72%));
+}
+
+.tipTitle {
+  font-size: 0.88rem;
+  font-weight: 750;
+  margin: 0;
+}
+
+.tipLead {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.feedback {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.error {
+  color: var(--color-error, #f87171);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.modalBackdrop {
+  align-items: center;
+  background: rgb(5 8 14 / 72%);
+  display: grid;
+  inset: 0;
+  justify-items: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 40;
+}
+
+.modal {
+  backdrop-filter: blur(18px);
+  background: var(--games-glass-strong, rgb(22 26 38 / 92%));
+  border: 1px solid var(--color-card-border);
+  border-radius: 1.05rem;
+  display: grid;
+  gap: 0.75rem;
+  max-width: 24rem;
+  padding: 1.25rem;
+  width: min(100%, 24rem);
+}
+
+.modalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
+  }
+
+  .layout > .sidebar:last-of-type {
+    display: grid;
+    gap: 1rem;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .layout > .sidebar:last-of-type {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    grid-template-columns: 1fr;
+  }
+
+  .cardMeta {
+    grid-column: 1;
+  }
+
+  .stackCta {
+    width: 100%;
+  }
+
+  .inviteWrap {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+  }
+
+  .invitePopover {
+    left: 0;
+    max-width: none;
+    right: 0;
+    width: 100%;
+  }
+
+  .cardTop {
+    grid-template-columns: auto 1fr;
+  }
+
+  .badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

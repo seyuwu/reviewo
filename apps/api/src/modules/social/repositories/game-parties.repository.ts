@@ -111,6 +111,7 @@ export class GamePartiesRepository {
         include: {
           party: true
         },
+        orderBy: { joinedAt: "desc" },
         where: {
           party: {
             kind: "PARTY",
@@ -126,6 +127,46 @@ export class GamePartiesRepository {
       include: {
         party: true
       },
+      orderBy: { joinedAt: "desc" },
+      where: {
+        party: {
+          kind: "TEAM",
+          vertical
+        },
+        userId
+      }
+    });
+  }
+
+  findActiveMembershipsForUserInVerticalByKind(
+    userId: string,
+    vertical: string,
+    kind: GamePartyKind
+  ): Promise<Array<GamePartyMember & { party: GameParty }>> {
+    if (kind === "PARTY") {
+      const now = new Date();
+
+      return this.prismaService.gamePartyMember.findMany({
+        include: {
+          party: true
+        },
+        orderBy: { joinedAt: "desc" },
+        where: {
+          party: {
+            kind: "PARTY",
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            vertical
+          },
+          userId
+        }
+      });
+    }
+
+    return this.prismaService.gamePartyMember.findMany({
+      include: {
+        party: true
+      },
+      orderBy: { joinedAt: "desc" },
       where: {
         party: {
           kind: "TEAM",
@@ -155,14 +196,18 @@ export class GamePartiesRepository {
 
   createInvite(input: {
     inviteeUserId: string;
+    inviteKind?: "INVITE" | "APPLICATION";
     inviterUserId: string;
     partyId: string;
+    positionRole?: string | null;
   }): Promise<GamePartyInvite> {
     return this.prismaService.gamePartyInvite.create({
       data: {
         inviteeUserId: input.inviteeUserId,
         inviterUserId: input.inviterUserId,
+        kind: input.inviteKind ?? "INVITE",
         partyId: input.partyId,
+        positionRole: input.positionRole ?? null,
         status: "PENDING"
       }
     });
@@ -194,6 +239,16 @@ export class GamePartiesRepository {
     });
   }
 
+  cancelPendingInvitesForParty(partyId: string): Promise<Prisma.BatchPayload> {
+    return this.prismaService.gamePartyInvite.updateMany({
+      data: { status: "CANCELLED" },
+      where: {
+        partyId,
+        status: "PENDING"
+      }
+    });
+  }
+
   addMember(partyId: string, userId: string): Promise<GamePartyMember> {
     return this.prismaService.gamePartyMember.create({
       data: {
@@ -205,14 +260,13 @@ export class GamePartiesRepository {
   }
 
   /**
-   * Atomically accept a pending invite if capacity remains and the user is not already a member.
-   * Returns null when the party is full (caller maps to a validation error).
+   * Atomically add a member if capacity remains.
+   * Returns the existing membership when already present, or null when the party is full.
    */
-  acceptInviteAtomically(input: {
-    inviteId: string;
+  addMemberAtomically(input: {
+    maxMembers: number;
     partyId: string;
     userId: string;
-    maxMembers: number;
   }): Promise<GamePartyMember | null> {
     return this.prismaService.$transaction(async (tx) => {
       await tx.$executeRaw`
@@ -235,6 +289,62 @@ export class GamePartiesRepository {
       });
 
       if (alreadyMember) {
+        return alreadyMember;
+      }
+
+      return tx.gamePartyMember.create({
+        data: {
+          partyId: input.partyId,
+          role: "MEMBER",
+          userId: input.userId
+        }
+      });
+    });
+  }
+
+  /**
+   * Atomically accept a pending invite if capacity remains and the user is not already a member.
+   * Returns null when the party is full (caller maps to a validation error).
+   */
+  acceptInviteAtomically(input: {
+    inviteId: string;
+    partyId: string;
+    userId: string;
+    maxMembers: number;
+    positionRole?: string | null;
+  }): Promise<GamePartyMember | null> {
+    return this.prismaService.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        SELECT id FROM social.game_parties WHERE id = ${input.partyId}::uuid FOR UPDATE
+      `;
+
+      const memberCount = await tx.gamePartyMember.count({
+        where: { partyId: input.partyId }
+      });
+
+      if (memberCount >= input.maxMembers) {
+        await tx.gamePartyInvite.update({
+          where: { id: input.inviteId },
+          data: { status: "CANCELLED" }
+        });
+        await tx.gamePartyInvite.updateMany({
+          data: { status: "CANCELLED" },
+          where: {
+            partyId: input.partyId,
+            status: "PENDING"
+          }
+        });
+        return null;
+      }
+
+      const alreadyMember = await tx.gamePartyMember.findFirst({
+        where: {
+          partyId: input.partyId,
+          userId: input.userId
+        }
+      });
+
+      if (alreadyMember) {
         await tx.gamePartyInvite.update({
           where: { id: input.inviteId },
           data: { status: "ACCEPTED" }
@@ -242,9 +352,29 @@ export class GamePartiesRepository {
         return alreadyMember;
       }
 
+      const positionRole = input.positionRole ?? null;
+
+      if (positionRole) {
+        const taken = await tx.gamePartyMember.findFirst({
+          where: {
+            partyId: input.partyId,
+            positionRole
+          }
+        });
+
+        if (taken) {
+          await tx.gamePartyInvite.update({
+            where: { id: input.inviteId },
+            data: { status: "CANCELLED" }
+          });
+          return null;
+        }
+      }
+
       const member = await tx.gamePartyMember.create({
         data: {
           partyId: input.partyId,
+          positionRole,
           role: "MEMBER",
           userId: input.userId
         }
@@ -254,6 +384,28 @@ export class GamePartiesRepository {
         where: { id: input.inviteId },
         data: { status: "ACCEPTED" }
       });
+
+      if (positionRole) {
+        await tx.gamePartyInvite.updateMany({
+          data: { status: "DECLINED" },
+          where: {
+            id: { not: input.inviteId },
+            partyId: input.partyId,
+            positionRole,
+            status: "PENDING"
+          }
+        });
+      }
+
+      if (memberCount + 1 >= input.maxMembers) {
+        await tx.gamePartyInvite.updateMany({
+          data: { status: "CANCELLED" },
+          where: {
+            partyId: input.partyId,
+            status: "PENDING"
+          }
+        });
+      }
 
       return member;
     });
@@ -268,13 +420,35 @@ export class GamePartiesRepository {
     });
   }
 
+  async updateMemberPositionRole(
+    partyId: string,
+    userId: string,
+    positionRole: string | null
+  ): Promise<void> {
+    await this.prismaService.gamePartyMember.update({
+      where: {
+        partyId_userId: {
+          partyId,
+          userId
+        }
+      },
+      data: {
+        positionRole
+      }
+    });
+  }
+
   listPendingInvitesForUser(userId: string): Promise<
     Array<
       GamePartyInvite & {
         party: {
+          _count: { members: number };
           expiresAt: Date | null;
+          id: string;
           kind: GamePartyKind;
+          maxMembers: number;
           name: string;
+          ownerUserId: string;
           slug: string;
         };
         invitee: {
@@ -294,9 +468,15 @@ export class GamePartiesRepository {
         },
         party: {
           select: {
+            _count: {
+              select: { members: true }
+            },
             expiresAt: true,
+            id: true,
             kind: true,
+            maxMembers: true,
             name: true,
+            ownerUserId: true,
             slug: true
           }
         }
@@ -309,10 +489,114 @@ export class GamePartiesRepository {
     });
   }
 
+  /**
+   * Pending stack invites sent by the user, plus recently resolved ones
+   * so the client can briefly show accepted/declined feedback.
+   */
+  listOutgoingInvitesForUser(
+    userId: string,
+    recentResolvedWithinMs = 20_000
+  ): Promise<
+    Array<
+      GamePartyInvite & {
+        party: {
+          expiresAt: Date | null;
+          id: string;
+          kind: GamePartyKind;
+          name: string;
+          ownerUserId: string;
+          slug: string;
+        };
+        invitee: {
+          displayName: string;
+          id: string;
+        };
+      }
+    >
+  > {
+    const recentSince = new Date(Date.now() - recentResolvedWithinMs);
+
+    return this.prismaService.gamePartyInvite.findMany({
+      include: {
+        invitee: {
+          select: {
+            displayName: true,
+            id: true
+          }
+        },
+        party: {
+          select: {
+            expiresAt: true,
+            id: true,
+            kind: true,
+            name: true,
+            ownerUserId: true,
+            slug: true
+          }
+        }
+      },
+      orderBy: { updatedAt: "desc" },
+      where: {
+        inviterUserId: userId,
+        OR: [
+          { status: "PENDING" },
+          {
+            status: { in: ["ACCEPTED", "DECLINED", "CANCELLED"] },
+            updatedAt: { gte: recentSince }
+          }
+        ]
+      }
+    });
+  }
+
   deleteParty(partyId: string): Promise<GameParty> {
     return this.prismaService.gameParty.delete({
       where: { id: partyId }
     });
+  }
+
+  /**
+   * Hard-delete temporary parties past TTL (members/invites/chat cascade).
+   * Returns deleted rows so callers can clear LFG for those owners.
+   */
+  async deleteExpiredParties(
+    now = new Date()
+  ): Promise<Array<{ id: string; ownerUserId: string; slug: string }>> {
+    const expired = await this.prismaService.gameParty.findMany({
+      select: {
+        id: true,
+        ownerUserId: true,
+        slug: true
+      },
+      where: {
+        expiresAt: { lte: now },
+        kind: "PARTY"
+      }
+    });
+
+    if (expired.length === 0) {
+      return [];
+    }
+
+    await this.prismaService.gameParty.deleteMany({
+      where: {
+        id: { in: expired.map((party) => party.id) }
+      }
+    });
+
+    return expired;
+  }
+
+  /** Drop terminal invite rows older than the cutoff (PENDING kept). */
+  async deleteStaleTerminalInvites(olderThan: Date): Promise<number> {
+    const result = await this.prismaService.gamePartyInvite.deleteMany({
+      where: {
+        status: { in: ["ACCEPTED", "DECLINED", "CANCELLED"] },
+        updatedAt: { lt: olderThan }
+      }
+    });
+
+    return result.count;
   }
 
   updatePartyName(partyId: string, name: string): Promise<GameParty> {

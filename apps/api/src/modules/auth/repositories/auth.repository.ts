@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import type { Prisma, User, UserAuthIdentity } from "#prisma/client";
+import type { AccountRecoveryToken, Prisma, User, UserAuthIdentity } from "#prisma/client";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 
@@ -12,6 +13,10 @@ export interface CreateEmailIdentityInput {
 }
 
 export type EmailIdentityWithUser = UserAuthIdentity & {
+  user: User;
+};
+
+export type RecoveryTokenWithUser = AccountRecoveryToken & {
   user: User;
 };
 
@@ -29,6 +34,20 @@ export class AuthRepository {
         provider: "email",
         providerUserId: input.email,
         userId: input.userId
+      }
+    });
+  }
+
+  async createGuestIdentity(
+    userId: string,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<UserAuthIdentity> {
+    return client.userAuthIdentity.create({
+      data: {
+        passwordHash: null,
+        provider: "guest",
+        providerUserId: randomUUID(),
+        userId
       }
     });
   }
@@ -56,6 +75,15 @@ export class AuthRepository {
     });
   }
 
+  async findGuestIdentityByUserId(userId: string): Promise<UserAuthIdentity | null> {
+    return this.prismaService.userAuthIdentity.findFirst({
+      where: {
+        provider: "guest",
+        userId
+      }
+    });
+  }
+
   async updateEmailIdentity(
     id: string,
     input: {
@@ -75,7 +103,69 @@ export class AuthRepository {
     });
   }
 
-  isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  createRecoveryTokenPlaintext(): string {
+    return randomBytes(32).toString("base64url");
+  }
+
+  hashRecoveryToken(token: string): string {
+    return createHash("sha256").update(token).digest("base64url");
+  }
+
+  async createRecoveryToken(
+    userId: string,
+    tokenHash: string,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<AccountRecoveryToken> {
+    return client.accountRecoveryToken.create({
+      data: {
+        tokenHash,
+        userId
+      }
+    });
+  }
+
+  async findActiveRecoveryTokenByHash(tokenHash: string): Promise<RecoveryTokenWithUser | null> {
+    return this.prismaService.accountRecoveryToken.findFirst({
+      include: {
+        user: true
+      },
+      where: {
+        consumedAt: null,
+        tokenHash
+      }
+    });
+  }
+
+  async consumeRecoveryToken(
+    id: string,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<AccountRecoveryToken> {
+    return client.accountRecoveryToken.update({
+      data: {
+        consumedAt: new Date()
+      },
+      where: {
+        id
+      }
+    });
+  }
+
+  async consumeActiveRecoveryTokensForUser(
+    userId: string,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<void> {
+    await client.accountRecoveryToken.updateMany({
+      data: {
+        consumedAt: new Date()
+      },
+      where: {
+        consumedAt: null,
+        userId
+      }
+    });
+  }
+
+  isUniqueConstraintError(error: unknown): boolean {
     return (
       typeof error === "object" &&
       error !== null &&

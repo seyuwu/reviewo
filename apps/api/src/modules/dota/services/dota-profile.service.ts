@@ -1,26 +1,35 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable, forwardRef } from "@nestjs/common";
 import type { Entity } from "#prisma/client";
 import {
   DOTA_ATTRIBUTE_KEYS,
   DOTA_CONFIRMATION_MILESTONE,
   DOTA_FLAG_LIMIT_PER_SIDE,
+  DOTA_LFG_TTL_SECONDS,
+  DOTA_PARTY_SIZE,
+  DOTA_PARTY_VERTICAL,
   DOTA_VERTICAL,
   isDotaConfirmationKey,
   isDotaGreenFlagKey,
-  isDotaRedFlagKey
+  isDotaPositionRole,
+  isDotaRedFlagKey,
+  type DotaPositionRole
 } from "@reviewo/shared";
 
 import type { RequestLike } from "../../../common/rate-limiting/api-rate-limiter.service.js";
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
+import { AuthService } from "../../auth/services/auth.service.js";
 import { EntitiesRepository } from "../../entities/repositories/entities.repository.js";
 import { createSlug } from "../../entities/services/entity-slug.js";
+import { GamePartiesRepository } from "../../social/repositories/game-parties.repository.js";
 import { UsersRepository } from "../../users/repositories/users.repository.js";
 import type { ConfirmDotaQualitiesDto } from "../dto/confirm-dota-qualities.dto.js";
 import type { CreateDotaProfileDto } from "../dto/create-dota-profile.dto.js";
 import type { DotaProfileResponseDto } from "../dto/dota-profile-response.dto.js";
 import type { DotaProfileSearchResponseDto } from "../dto/dota-profile-search-response.dto.js";
+import type { GuestDotaProfileCreateResponseDto } from "../dto/guest-dota-profile-create-response.dto.js";
+import type { DotaLfgListResponseDto } from "../dto/dota-lfg-response.dto.js";
 import type { UpdateDotaProfileDto } from "../dto/update-dota-profile.dto.js";
 import { buildConfirmerKey } from "../lib/confirmer-key.js";
 import { EntityAttributesRepository } from "../repositories/entity-attributes.repository.js";
@@ -40,12 +49,37 @@ interface DotaAttributeInput {
 @Injectable()
 export class DotaProfileService {
   constructor(
+    private readonly authService: AuthService,
     private readonly entitiesRepository: EntitiesRepository,
     private readonly entityAttributesRepository: EntityAttributesRepository,
     private readonly entityQualityConfirmationsRepository: EntityQualityConfirmationsRepository,
     private readonly friendshipsService: FriendshipsService,
+    @Inject(forwardRef(() => GamePartiesRepository))
+    private readonly gamePartiesRepository: GamePartiesRepository,
     private readonly usersRepository: UsersRepository
   ) {}
+
+  async createGuestProfile(input: CreateDotaProfileDto): Promise<GuestDotaProfileCreateResponseDto> {
+    const displayName = input.dotaAccountId
+      ? `Player ${input.dotaAccountId}`
+      : await this.resolveDefaultDotaPlayerName(input.title);
+
+    const guest = await this.authService.createGuestAccount(displayName);
+    const profile = await this.createProfile(
+      {
+        ...input,
+        title: input.title?.trim() || displayName
+      },
+      guest.user
+    );
+
+    return {
+      ...guest.auth,
+      profile,
+      recoveryToken: guest.recoveryToken,
+      recoveryUrl: guest.recoveryUrl
+    };
+  }
 
   async createProfile(
     input: CreateDotaProfileDto,
@@ -62,10 +96,9 @@ export class DotaProfileService {
     }
 
     const user = await this.usersRepository.findById(currentUser.id);
-    const title =
-      input.title?.trim() ||
-      user?.displayName ||
-      (input.dotaAccountId ? `Player ${input.dotaAccountId}` : "Dota player");
+    const title = input.dotaAccountId
+      ? input.title?.trim() || user?.displayName || `Player ${input.dotaAccountId}`
+      : await this.resolveDefaultDotaPlayerName(input.title?.trim() || user?.displayName);
     const baseSlug = input.slug ?? createSlug(user?.username ?? title);
     const slug = await this.createAvailableSlug(baseSlug);
 
@@ -116,6 +149,278 @@ export class DotaProfileService {
     const attributes = await this.entityAttributesRepository.findByEntityId(entity.id);
 
     return this.buildProfileResponse(entity, attributes, {
+      isOwner: true,
+      viewerUserId: currentUser.id
+    });
+  }
+
+  async listLookingPlayers(input: {
+    roles?: string[];
+    server?: string;
+  }): Promise<DotaLfgListResponseDto> {
+    const rows = await this.entityAttributesRepository.listLookingDotaProfiles(20);
+    const now = Date.now();
+
+    const candidates = rows
+      .map((row) => {
+        const attributes = Object.fromEntries(row.attributes.map((item) => [item.key, item.value]));
+        const lfgUntil = attributes[DOTA_ATTRIBUTE_KEYS.lfgUntil];
+        const lfgMs = lfgUntil ? Date.parse(lfgUntil) : Number.NaN;
+
+        if (!row.ownerUserId || !Number.isFinite(lfgMs) || lfgMs <= now) {
+          return null;
+        }
+
+        const roles = parseRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
+        const server = attributes[DOTA_ATTRIBUTE_KEYS.server] ?? null;
+
+        if (input.server && server !== input.server) {
+          return null;
+        }
+
+        if (input.roles && input.roles.length > 0 && !input.roles.some((role) => roles.includes(role))) {
+          return null;
+        }
+
+        return {
+          desiredSize: parseOptionalPositiveInt(attributes[DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]),
+          entityId: row.id,
+          memberCount: parseOptionalPositiveInt(attributes[DOTA_ATTRIBUTE_KEYS.lfgMemberCount]),
+          mmr: attributes[DOTA_ATTRIBUTE_KEYS.mmr] ?? null,
+          ownerUserId: row.ownerUserId,
+          partyKind: parsePartyKind(attributes[DOTA_ATTRIBUTE_KEYS.lfgPartyKind]),
+          partyName: attributes[DOTA_ATTRIBUTE_KEYS.lfgPartyName]?.trim() || null,
+          partySlug: attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || null,
+          recruitedRoles: parseRecruitedRoles(attributes[DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]),
+          roles,
+          server,
+          slug: row.slug,
+          title: row.title
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+
+    candidates.sort((left, right) => {
+      const leftOverlap = input.roles?.filter((role) => left.roles.includes(role)).length ?? 0;
+      const rightOverlap = input.roles?.filter((role) => right.roles.includes(role)).length ?? 0;
+
+      if (rightOverlap !== leftOverlap) {
+        return rightOverlap - leftOverlap;
+      }
+
+      return left.title.localeCompare(right.title);
+    });
+
+    const qualityByEntity =
+      await this.entityQualityConfirmationsRepository.countByQualityKeyForEntities(
+        candidates.map((candidate) => candidate.entityId)
+      );
+
+    const results = (
+      await Promise.all(
+        candidates.map(async (candidate) => {
+          const qualities = qualityByEntity[candidate.entityId] ?? {};
+          let recruitedRoles = candidate.recruitedRoles;
+          let desiredSize = candidate.desiredSize;
+          let memberCount = candidate.memberCount;
+          let claimedRoles: string[] = [];
+          let mmr = candidate.mmr;
+
+          if (candidate.partySlug) {
+            const party = await this.gamePartiesRepository.findByVerticalAndSlug(
+              DOTA_PARTY_VERTICAL,
+              candidate.partySlug
+            );
+            const partyExpired =
+              party != null &&
+              party.kind === "PARTY" &&
+              party.expiresAt !== null &&
+              party.expiresAt.getTime() <= now;
+
+            if (!party || partyExpired) {
+              await this.entityAttributesRepository.upsertMany(candidate.entityId, {
+                [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgUntil]: new Date(0).toISOString()
+              });
+
+              if (party && partyExpired) {
+                try {
+                  await this.gamePartiesRepository.deleteParty(party.id);
+                } catch {
+                  // Concurrent cleanup may already have removed it.
+                }
+              }
+
+              return null;
+            }
+
+            const claimed = new Set(
+              party.members
+                .map((member) => member.positionRole)
+                .filter((role): role is string => Boolean(role))
+            );
+            claimedRoles = [...claimed].filter(isDotaPositionRole).sort();
+            recruitedRoles = candidate.recruitedRoles.filter((role) => !claimed.has(role));
+            memberCount = party.members.length;
+            desiredSize = Math.min(party.maxMembers, memberCount + recruitedRoles.length);
+
+            const memberMmrs: Array<string | null> = [];
+
+            for (const member of party.members) {
+              const dotaEntity = await this.entitiesRepository.findByOwnerUserId(member.userId);
+              const attributes = dotaEntity
+                ? await this.entityAttributesRepository.findByEntityId(dotaEntity.id)
+                : {};
+              memberMmrs.push(attributes[DOTA_ATTRIBUTE_KEYS.mmr] ?? null);
+            }
+
+            mmr = averageDotaMmr(memberMmrs) ?? candidate.mmr;
+
+            if (recruitedRoles.length === 0 || memberCount >= party.maxMembers) {
+              await this.entityAttributesRepository.upsertMany(candidate.entityId, {
+                [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: "",
+                [DOTA_ATTRIBUTE_KEYS.lfgUntil]: new Date(0).toISOString()
+              });
+              return null;
+            }
+          }
+
+          return {
+            claimedRoles,
+            desiredSize,
+            greenFlags: pickTopFlags(qualities, isDotaGreenFlagKey),
+            memberCount,
+            mmr,
+            ownerUserId: candidate.ownerUserId,
+            partyKind: candidate.partyKind,
+            partyName: candidate.partyName,
+            partySlug: candidate.partySlug,
+            recruitedRoles,
+            redFlags: pickTopFlags(qualities, isDotaRedFlagKey),
+            roles: candidate.roles,
+            server: candidate.server,
+            slug: candidate.slug,
+            title: candidate.title
+          };
+        })
+      )
+    ).filter((row): row is NonNullable<typeof row> => row !== null);
+
+    return { results };
+  }
+
+  async setLooking(
+    looking: boolean,
+    currentUser: AuthenticatedUser,
+    options?: { partySlug?: string; recruitedRoles?: string[] }
+  ): Promise<DotaProfileResponseDto> {
+    const entity = await this.requireOwnedProfile(currentUser.id);
+    const partySlug = options?.partySlug?.trim() || "";
+
+    let recruitAttributes: Record<string, string> = {
+      [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: ""
+    };
+
+    if (looking && partySlug) {
+      const party = await this.gamePartiesRepository.findByVerticalAndSlug(
+        DOTA_PARTY_VERTICAL,
+        partySlug
+      );
+
+      if (!party || party.ownerUserId !== currentUser.id) {
+        throw createAppException({
+          code: AppErrorCode.Forbidden,
+          message: "Only the captain can search on behalf of this party",
+          statusCode: HttpStatus.FORBIDDEN
+        });
+      }
+
+      if (party.expiresAt && party.expiresAt.getTime() <= Date.now()) {
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Team was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+
+      const memberCount = party.members.length;
+      const maxMembers = party.maxMembers;
+      const claimed = new Set(
+        party.members
+          .map((member) => member.positionRole)
+          .filter((role): role is string => Boolean(role))
+      );
+      const recruitedRoles = [
+        ...new Set((options?.recruitedRoles ?? []).filter(isDotaPositionRole))
+      ].filter((role) => !claimed.has(role));
+
+      if (recruitedRoles.length === 0) {
+        throw createAppException({
+          code: AppErrorCode.ValidationError,
+          message: "Select at least one role to recruit",
+          statusCode: HttpStatus.BAD_REQUEST
+        });
+      }
+
+      if (memberCount >= maxMembers) {
+        throw createAppException({
+          code: AppErrorCode.ValidationError,
+          message: "This team is already full",
+          statusCode: HttpStatus.BAD_REQUEST
+        });
+      }
+
+      const desiredSize = Math.min(maxMembers, memberCount + recruitedRoles.length);
+
+      recruitAttributes = {
+        [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: String(desiredSize),
+        [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: String(maxMembers),
+        [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: String(memberCount),
+        [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: party.kind,
+        [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: party.name,
+        [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: party.slug,
+        [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: recruitedRoles.join(",")
+      };
+    } else if (looking && options?.recruitedRoles?.length) {
+      const recruitedRoles = [...new Set(options.recruitedRoles.filter(isDotaPositionRole))];
+      recruitAttributes = {
+        ...recruitAttributes,
+        [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: String(
+          Math.min(DOTA_PARTY_SIZE, Math.max(1, recruitedRoles.length))
+        ),
+        [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: recruitedRoles.join(",")
+      };
+    }
+
+    await this.entityAttributesRepository.upsertMany(entity.id, {
+      [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
+        ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
+        : new Date(0).toISOString(),
+      [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
+      ...recruitAttributes
+    });
+
+    const nextAttributes = await this.entityAttributesRepository.findByEntityId(entity.id);
+
+    return this.buildProfileResponse(entity, nextAttributes, {
       isOwner: true,
       viewerUserId: currentUser.id
     });
@@ -549,6 +854,20 @@ export class DotaProfileService {
 
     return `${baseSlug.slice(0, 111)}-${Date.now().toString(36)}`;
   }
+
+  private async resolveDefaultDotaPlayerName(candidate?: string | null): Promise<string> {
+    const trimmed = candidate?.trim() ?? "";
+
+    if (trimmed && !isBareDefaultDotaPlayerName(trimmed)) {
+      return trimmed;
+    }
+
+    return this.entitiesRepository.nextDefaultDotaPlayerTitle();
+  }
+}
+
+function isBareDefaultDotaPlayerName(value: string): boolean {
+  return /^dota player$/i.test(value.trim());
 }
 
 function parseRoles(value: string | undefined): string[] {
@@ -565,6 +884,21 @@ function parseRoles(value: string | undefined): string[] {
   }
 }
 
+function parseRecruitedRoles(value: string | undefined): DotaPositionRole[] {
+  if (!value?.trim()) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(isDotaPositionRole)
+    )
+  ];
+}
+
 function parseOptionalBoolean(value: string | undefined): boolean | null {
   if (value === "true") {
     return true;
@@ -575,4 +909,68 @@ function parseOptionalBoolean(value: string | undefined): boolean | null {
   }
 
   return null;
+}
+
+function parseOptionalPositiveInt(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parsePartyKind(value: string | undefined): "TEAM" | "PARTY" | null {
+  if (value === "TEAM" || value === "PARTY") {
+    return value;
+  }
+
+  return null;
+}
+
+function averageDotaMmr(values: Array<string | null | undefined>): string | null {
+  const numbers: number[] = [];
+
+  for (const value of values) {
+    if (!value?.trim()) {
+      continue;
+    }
+
+    if (value.includes("-")) {
+      const [fromRaw = "", toRaw = ""] = value.split("-");
+      const from = Number.parseInt(fromRaw.trim(), 10);
+      const to = Number.parseInt(toRaw.trim(), 10);
+
+      if (Number.isFinite(from) && Number.isFinite(to)) {
+        numbers.push((from + to) / 2);
+      }
+
+      continue;
+    }
+
+    const parsed = Number.parseInt(value.trim(), 10);
+
+    if (Number.isFinite(parsed)) {
+      numbers.push(parsed);
+    }
+  }
+
+  if (numbers.length === 0) {
+    return null;
+  }
+
+  return String(Math.round(numbers.reduce((sum, item) => sum + item, 0) / numbers.length));
+}
+
+const LFG_FLAG_LIMIT = 3;
+
+function pickTopFlags(
+  qualities: Record<string, number>,
+  matches: (key: string) => boolean
+): Array<{ count: number; key: string }> {
+  return Object.entries(qualities)
+    .filter(([key, count]) => matches(key) && count > 0)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, LFG_FLAG_LIMIT)
+    .map(([key, count]) => ({ count, key }));
 }

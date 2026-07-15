@@ -74,6 +74,23 @@ export function formatDotaRoles(roles: string[]): string {
   return roles.length > 0 ? roles.join(" / ") : "—";
 }
 
+export function getDotaPositionLabel(role: string, t: TranslateFn): string {
+  switch (role) {
+    case "1":
+      return t("dota.position.1" as never);
+    case "2":
+      return t("dota.position.2" as never);
+    case "3":
+      return t("dota.position.3" as never);
+    case "4":
+      return t("dota.position.4" as never);
+    case "5":
+      return t("dota.position.5" as never);
+    default:
+      return role;
+  }
+}
+
 export function formatDotaMmr(mmr: string | null): string {
   if (!mmr) {
     return "—";

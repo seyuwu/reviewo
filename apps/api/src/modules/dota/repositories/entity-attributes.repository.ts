@@ -149,6 +149,58 @@ export class EntityAttributesRepository {
     });
   }
 
+  async listLookingDotaProfiles(limit = 20): Promise<
+    Array<{
+      attributes: Array<{ key: string; value: string }>;
+      id: string;
+      ownerUserId: string | null;
+      slug: string;
+      title: string;
+      updatedAt: Date;
+    }>
+  > {
+    const nowIso = new Date().toISOString();
+
+    return this.prismaService.entity.findMany({
+      include: {
+        attributes: {
+          select: {
+            key: true,
+            value: true
+          }
+        }
+      },
+      orderBy: {
+        updatedAt: "desc"
+      },
+      take: Math.min(Math.max(limit, 1), 40),
+      where: {
+        AND: [
+          {
+            attributes: {
+              some: {
+                key: DOTA_ATTRIBUTE_KEYS.vertical,
+                value: DOTA_VERTICAL
+              }
+            }
+          },
+          {
+            attributes: {
+              some: {
+                key: DOTA_ATTRIBUTE_KEYS.lfgUntil,
+                value: {
+                  gt: nowIso
+                }
+              }
+            }
+          }
+        ],
+        type: "person",
+        visibility: "ACTIVE"
+      }
+    });
+  }
+
   isUniqueConstraintError(error: unknown): boolean {
     return (
       typeof error === "object" &&

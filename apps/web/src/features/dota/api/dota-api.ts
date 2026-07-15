@@ -15,6 +15,30 @@ export function createDotaProfile(
   });
 }
 
+export interface GuestDotaProfileCreateResponse {
+  accessToken: string;
+  expiresIn: number;
+  tokenType: "Bearer";
+  user: {
+    avatarUrl?: string | null;
+    displayName: string;
+    email: string | null;
+    id: string;
+  };
+  profile: DotaProfile;
+  recoveryToken: string;
+  recoveryUrl: string;
+}
+
+export function createGuestDotaProfile(
+  input: CreateDotaProfileInput
+): Promise<GuestDotaProfileCreateResponse> {
+  return apiRequest<GuestDotaProfileCreateResponse>("/dota/profiles/guest", {
+    body: input,
+    method: "POST"
+  });
+}
+
 export function fetchMyDotaProfile(accessToken: string): Promise<DotaProfile> {
   return apiRequest<DotaProfile>("/dota/profiles/me", {
     headers: {
@@ -82,6 +106,70 @@ export function searchDotaProfiles(query: string): Promise<DotaProfileSearchResp
   return apiRequest<DotaProfileSearchResponse>(
     `/dota/profiles/search?query=${encodeURIComponent(query)}`
   );
+}
+
+export interface DotaLfgFlag {
+  count: number;
+  key: string;
+}
+
+export interface DotaLfgHit {
+  claimedRoles?: string[];
+  desiredSize: number | null;
+  greenFlags: DotaLfgFlag[];
+  memberCount: number | null;
+  mmr: string | null;
+  ownerUserId: string;
+  partyKind: "TEAM" | "PARTY" | null;
+  partyName: string | null;
+  partySlug: string | null;
+  recruitedRoles: string[];
+  redFlags: DotaLfgFlag[];
+  roles: string[];
+  server: string | null;
+  slug: string;
+  title: string;
+}
+
+export interface DotaLfgListResponse {
+  results: DotaLfgHit[];
+}
+
+export function fetchDotaLfg(input?: {
+  roles?: string[];
+  server?: string;
+}): Promise<DotaLfgListResponse> {
+  const params = new URLSearchParams();
+
+  if (input?.server) {
+    params.set("server", input.server);
+  }
+
+  if (input?.roles && input.roles.length > 0) {
+    params.set("roles", input.roles.join(","));
+  }
+
+  const query = params.toString();
+
+  return apiRequest<DotaLfgListResponse>(`/dota/profiles/lfg${query ? `?${query}` : ""}`);
+}
+
+export function setDotaLfgLooking(
+  looking: boolean,
+  accessToken: string,
+  options?: { partySlug?: string; recruitedRoles?: string[] }
+): Promise<DotaProfile> {
+  return apiRequest<DotaProfile>("/dota/profiles/lfg/looking", {
+    body: {
+      looking,
+      ...(options?.recruitedRoles !== undefined ? { recruitedRoles: options.recruitedRoles } : {}),
+      ...(options?.partySlug ? { partySlug: options.partySlug } : {})
+    },
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    },
+    method: "POST"
+  });
 }
 
 export function searchDotaProfile(query: string, accessToken?: string): Promise<DotaProfile> {

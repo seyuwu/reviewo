@@ -1,0 +1,69 @@
+.wrap {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.title {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.list {
+  display: grid;
+  gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.copy span {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+.flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.flagGreen,
+.flagRed {
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.28rem 0.55rem;
+}
+
+.flagGreen {
+  background: rgb(74 222 128 / 14%);
+  color: #86efac;
+}
+
+.flagRed {
+  background: rgb(248 113 113 / 14%);
+  color: #fca5a5;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}

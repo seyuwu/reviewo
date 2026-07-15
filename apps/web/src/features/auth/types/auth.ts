@@ -1,4 +1,5 @@
 export interface CurrentUser {
+  avatarUrl: string | null;
   displayName: string;
   email: string | null;
   id: string;
@@ -22,6 +23,7 @@ export interface RegisterInput extends LoginInput {
 
 export interface StoredAuthSession {
   accessToken: string;
+  avatarUrl: string | null;
   displayName: string;
   email: string | null;
   userId: string;

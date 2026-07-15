@@ -13,8 +13,10 @@ import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import {
   changeCurrentUserPassword,
   getCurrentUserProfile,
+  updateCurrentUserAvatar,
   updateCurrentUserProfile
 } from "../api/profile";
+import { fileToAvatarDataUrl } from "../lib/resize-avatar";
 import type { CurrentUserProfile } from "../types/profile";
 import { ProfileDashboardSummary } from "./profile-dashboard-summary";
 import { ProfileUserTopsSection } from "./profile-user-tops-section";
@@ -34,6 +36,25 @@ export function ProfilePageView() {
     queryFn: () => getCurrentUserProfile(accessToken ?? ""),
     queryKey: ["profile", "me", accessToken]
   });
+
+  useEffect(() => {
+    if (!profileQuery.data) {
+      return;
+    }
+
+    updateAuthSession({
+      avatarUrl: profileQuery.data.avatarUrl,
+      displayName: profileQuery.data.displayName,
+      email: profileQuery.data.email
+    });
+    // Sync session once when loaded profile changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    profileQuery.data?.avatarUrl,
+    profileQuery.data?.displayName,
+    profileQuery.data?.email,
+    profileQuery.data?.id
+  ]);
 
   const flowState: ProfileFlowState = !isAuthSessionLoaded
     ? "loading"
@@ -98,6 +119,7 @@ export function ProfilePageView() {
                   profile={profileQuery.data}
                   onProfileUpdated={(profile) => {
                     updateAuthSession({
+                      avatarUrl: profile.avatarUrl,
                       displayName: profile.displayName,
                       email: profile.email
                     });
@@ -176,6 +198,8 @@ function ProfileDetails({
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [passwordStatusMessage, setPasswordStatusMessage] = useState<string | null>(null);
   const [passwordErrorMessage, setPasswordErrorMessage] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarErrorMessage, setAvatarErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setDisplayName(profile.displayName);
@@ -269,12 +293,36 @@ function ProfileDetails({
     changePasswordMutation.mutate();
   }
 
+  async function handleAvatarChange(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    setAvatarBusy(true);
+    setAvatarErrorMessage(null);
+
+    try {
+      const imageDataUrl = await fileToAvatarDataUrl(file);
+      const updatedProfile = await updateCurrentUserAvatar(imageDataUrl, accessToken);
+      onProfileUpdated(updatedProfile);
+    } catch {
+      setAvatarErrorMessage(t("web.profile.avatarError"));
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
   return (
     <div className="profile-details ui-fade-in">
       {showIdentity ? (
         <>
           <div className="profile-avatar" aria-hidden="true">
-            {getInitials(displayName)}
+            {profile.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img alt="" className="profile-avatar-image" src={profile.avatarUrl} />
+            ) : (
+              getInitials(displayName)
+            )}
           </div>
           <div>
             <p className="result-type">{t("web.profile.currentUser")}</p>
@@ -283,6 +331,37 @@ function ProfileDetails({
           </div>
         </>
       ) : null}
+
+      <div className="profile-avatar-editor">
+        <div className="profile-avatar" aria-hidden="true">
+          {profile.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img alt="" className="profile-avatar-image" src={profile.avatarUrl} />
+          ) : (
+            getInitials(displayName)
+          )}
+        </div>
+        <div className="profile-avatar-editor-copy">
+          <p className="result-type">{t("web.profile.avatarEyebrow")}</p>
+          <strong>{t("web.profile.avatarTitle")}</strong>
+          <p className="muted-copy">{t("web.profile.avatarHint")}</p>
+          <label className="button-secondary profile-avatar-upload">
+            <input
+              accept="image/jpeg,image/png,image/webp"
+              disabled={avatarBusy}
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                event.target.value = "";
+                void handleAvatarChange(file);
+              }}
+              type="file"
+            />
+            {avatarBusy ? t("web.profile.avatarBusy") : t("web.profile.avatarChange")}
+          </label>
+          {avatarErrorMessage ? <FormFeedback errorMessage={avatarErrorMessage} /> : null}
+        </div>
+      </div>
 
       <form className="profile-edit-form form-stack" onSubmit={handleProfileSubmit}>
         <div className="section-heading">

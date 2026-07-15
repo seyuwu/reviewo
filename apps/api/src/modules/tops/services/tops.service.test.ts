@@ -38,6 +38,7 @@ function createTopsService(topsRepository: Partial<TopsRepository>): TopsService
 }
 
 const otherUser: AuthenticatedUser = {
+  avatarUrl: null,
   displayName: "Other User",
   email: "other@example.com",
   id: "user-other",
@@ -193,3 +194,4 @@ describe("resolveUpdateRankMode", () => {
     assert.equal(patch.systemSortKey, null);
   });
 });
+

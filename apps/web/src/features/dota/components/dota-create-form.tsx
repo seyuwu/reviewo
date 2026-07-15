@@ -4,12 +4,15 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { ApiError } from "../../../lib/api/api-error";
-import { login, register } from "../../auth/api/authenticate";
-import { readAuthErrorMessage } from "../../auth/components/minimal-auth-panel";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
-import type { AuthResponse } from "../../auth/types/auth";
 import { useTranslation } from "../../i18n/locale-provider";
-import { createDotaProfile, fetchMyDotaProfile, updateMyDotaProfile } from "../api/dota-api";
+import {
+  createDotaProfile,
+  createGuestDotaProfile,
+  fetchMyDotaProfile,
+  setDotaLfgLooking,
+  updateMyDotaProfile
+} from "../api/dota-api";
 import { trackDotaEvent } from "../lib/analytics";
 import { trackAnalyticsCta } from "../../analytics/components/product-analytics-listener";
 import {
@@ -22,15 +25,14 @@ import {
   parseDotaMmrRange,
   resolveDotaMmrMode
 } from "../lib/labels";
+import { stashDotaRecovery } from "../lib/recovery-storage";
 import type { DotaProfile } from "../types/dota";
-import { DotaCreateIdleReel } from "./dota-create-idle-reel";
 import { DotaMmrField } from "./dota-mmr-field";
 import styles from "./dota-create-form.module.css";
 
 const ROLE_OPTIONS = ["1", "2", "3", "4", "5"] as const;
 const SERVER_OPTIONS = ["EU", "RU", "US", "SEA"] as const;
 
-type AuthMode = "login" | "register";
 type PlayIntent = "fun" | "ranked" | "tournament";
 type ProfileLoadState = "idle" | "loading" | "loaded";
 
@@ -40,10 +42,6 @@ export function DotaCreateForm() {
   const searchParams = useSearchParams();
   const { authSession, isAuthSessionLoaded, signOut, storeAuthSession } = useAuthSession();
   const dotaIdFieldRef = useRef<HTMLLabelElement | null>(null);
-  const [authMode, setAuthMode] = useState<AuthMode>("register");
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [dotaAccountId, setDotaAccountId] = useState("");
   const [mmrFrom, setMmrFrom] = useState("");
   const [mmrTo, setMmrTo] = useState("");
@@ -64,20 +62,6 @@ export function DotaCreateForm() {
   const hasValidMmr = isValidDotaMmrInput(mmrFrom, mmrTo, mmrMode);
 
   const validationMessage = useMemo(() => {
-    if (!authSession?.accessToken) {
-      if (authMode === "register" && !displayName.trim()) {
-        return t("dota.create.validation.displayName");
-      }
-
-      if (!email.trim()) {
-        return t("dota.create.validation.email");
-      }
-
-      if (password.length < 8) {
-        return t("dota.create.validation.password");
-      }
-    }
-
     if (dotaAccountId.trim() && !/^\d{8,10}$/.test(dotaAccountId.trim())) {
       return t("dota.create.validation.dotaAccountId");
     }
@@ -91,18 +75,7 @@ export function DotaCreateForm() {
     }
 
     return null;
-  }, [
-    authMode,
-    authSession?.accessToken,
-    displayName,
-    dotaAccountId,
-    email,
-    hasValidMmr,
-    isEditMode,
-    password,
-    roles.length,
-    t
-  ]);
+  }, [dotaAccountId, hasValidMmr, isEditMode, roles.length, t]);
 
   const bottomError = error ?? (showValidation ? validationMessage : null);
 
@@ -191,11 +164,6 @@ export function DotaCreateForm() {
     );
   }
 
-  function handleAuthModeChange(nextMode: AuthMode) {
-    setAuthMode(nextMode);
-    setError(null);
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -207,45 +175,26 @@ export function DotaCreateForm() {
 
     setIsSubmitting(true);
 
-    let isAuthPhase = !authSession?.accessToken;
-    let accessToken = authSession?.accessToken;
-    let pendingAuthResponse: AuthResponse | null = null;
+    const accessToken = authSession?.accessToken;
+    const mmr = formatDotaMmrRange(mmrFrom, mmrTo);
+    const trimmedDotaAccountId = dotaAccountId.trim();
+    const profilePayload = {
+      ...(trimmedDotaAccountId ? { dotaAccountId: trimmedDotaAccountId } : {}),
+      hasMic,
+      ...(mmr ? { mmr } : {}),
+      playIntent,
+      roles,
+      server
+    };
 
     try {
-      if (!accessToken) {
-        const authResponse =
-          authMode === "register"
-            ? await register({
-                displayName: displayName.trim(),
-                email: email.trim(),
-                password
-              })
-            : await login({
-                email: email.trim(),
-                password
-              });
-
-        pendingAuthResponse = authResponse;
-        accessToken = authResponse.accessToken;
-        isAuthPhase = false;
-      }
-
-      const mmr = formatDotaMmrRange(mmrFrom, mmrTo);
-      const trimmedDotaAccountId = dotaAccountId.trim();
-
       if (isEditMode) {
-        const profile = await updateMyDotaProfile(
-          {
-            ...(trimmedDotaAccountId ? { dotaAccountId: trimmedDotaAccountId } : {}),
-            hasMic,
-            ...(mmr ? { mmr } : {}),
-            playIntent,
-            roles,
-            server
-          },
-          accessToken
-        );
+        if (!accessToken) {
+          setError(t("dota.create.signInRequired"));
+          return;
+        }
 
+        const profile = await updateMyDotaProfile(profilePayload, accessToken);
         trackDotaEvent("dota_profile_updated", { slug: profile.slug });
         router.push(`/dota/${profile.slug}`);
         return;
@@ -256,33 +205,104 @@ export function DotaCreateForm() {
         return;
       }
 
-      const profile = await createDotaProfile(
-        {
-          ...(trimmedDotaAccountId ? { dotaAccountId: trimmedDotaAccountId } : {}),
-          hasMic,
-          mmr,
-          playIntent,
-          roles,
-          server
-        },
-        accessToken
-      );
+      if (!accessToken) {
+        const guestResponse = await createGuestDotaProfile(profilePayload);
+        storeAuthSession({
+          accessToken: guestResponse.accessToken,
+          expiresIn: guestResponse.expiresIn,
+          tokenType: guestResponse.tokenType,
+          user: {
+            avatarUrl: guestResponse.user.avatarUrl ?? null,
+            displayName: guestResponse.user.displayName,
+            email: guestResponse.user.email,
+            id: guestResponse.user.id
+          }
+        });
+        stashDotaRecovery({
+          recoveryToken: guestResponse.recoveryToken,
+          recoveryUrl: guestResponse.recoveryUrl,
+          slug: guestResponse.profile.slug
+        });
+        trackDotaEvent("dota_profile_created", { slug: guestResponse.profile.slug });
+        trackAnalyticsCta("dota_create_submit");
 
-      if (pendingAuthResponse) {
-        storeAuthSession(pendingAuthResponse);
+        const pendingJoinRaw = window.sessionStorage.getItem("opinia.pendingPartyJoin");
+
+        if (pendingJoinRaw) {
+          try {
+            const pendingJoin = JSON.parse(pendingJoinRaw) as { slug?: string };
+            if (pendingJoin.slug) {
+              router.push(`/dota/teams/${pendingJoin.slug}`, { scroll: false });
+              return;
+            }
+          } catch {
+            // Fall through to normal intent routing.
+          }
+        }
+
+        const intent = searchParams.get("intent");
+        const target = searchParams.get("target");
+
+        if (intent === "stack" && target) {
+          window.sessionStorage.setItem("opinia.pendingStackSlug", target);
+          router.push("/games/search", { scroll: false });
+          return;
+        }
+
+        if (intent === "search") {
+          try {
+            await setDotaLfgLooking(true, guestResponse.accessToken);
+          } catch {
+            // Looking toggle is best-effort after create.
+          }
+          router.push("/games/search", { scroll: false });
+          return;
+        }
+
+        router.push(`/dota/${guestResponse.profile.slug}?created=1`, { scroll: false });
+        return;
       }
 
+      const profile = await createDotaProfile(profilePayload, accessToken);
       trackDotaEvent("dota_profile_created", { slug: profile.slug });
       trackAnalyticsCta("dota_create_submit");
-      router.push(`/dota/${profile.slug}?created=1`, { scroll: false });
-    } catch (submitError) {
-      if (pendingAuthResponse) {
-        storeAuthSession(pendingAuthResponse);
+
+      const pendingJoinRaw = window.sessionStorage.getItem("opinia.pendingPartyJoin");
+
+      if (pendingJoinRaw) {
+        try {
+          const pendingJoin = JSON.parse(pendingJoinRaw) as { slug?: string };
+          if (pendingJoin.slug) {
+            router.push(`/dota/teams/${pendingJoin.slug}`, { scroll: false });
+            return;
+          }
+        } catch {
+          // Fall through to normal intent routing.
+        }
       }
 
-      if (isAuthPhase) {
-        setError(readAuthErrorMessage(submitError, authMode, t));
-      } else if (isDotaProfileAlreadyExistsError(submitError) && accessToken) {
+      const intent = searchParams.get("intent");
+      const target = searchParams.get("target");
+
+      if (intent === "stack" && target) {
+        window.sessionStorage.setItem("opinia.pendingStackSlug", target);
+        router.push("/games/search", { scroll: false });
+        return;
+      }
+
+      if (intent === "search") {
+        try {
+          await setDotaLfgLooking(true, accessToken);
+        } catch {
+          // Looking toggle is best-effort after create.
+        }
+        router.push("/games/search", { scroll: false });
+        return;
+      }
+
+      router.push(`/dota/${profile.slug}?created=1`, { scroll: false });
+    } catch (submitError) {
+      if (isDotaProfileAlreadyExistsError(submitError) && accessToken) {
         try {
           const profile = await fetchMyDotaProfile(accessToken);
           router.push(`/dota/${profile.slug}`);
@@ -311,13 +331,25 @@ export function DotaCreateForm() {
         ? t("dota.create.submitUpdate")
         : t("dota.create.submit")
     : isSubmitting
-      ? t("dota.create.submittingCombined")
-      : authMode === "register"
-        ? t("dota.create.submitRegister")
-        : t("dota.create.submitLogin");
+      ? t("dota.create.submittingGuest")
+      : t("dota.create.submitGuest");
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page}${!isEditMode ? ` ${styles.pageWithArt}` : ""}`}>
+      {!isEditMode ? (
+        <div aria-hidden="true" className={styles.backdrop}>
+          <img
+            alt=""
+            className={styles.backdropArt}
+            decoding="async"
+            height={720}
+            src="/dota/idle/party-slots-arena.png"
+            width={1280}
+          />
+          <div className={styles.backdropVeil} />
+        </div>
+      ) : null}
+
       <section className={`creation-card ${styles.card}`}>
         <header className={styles.header}>
           <h1 className={styles.title}>{isEditMode ? t("dota.create.editTitle") : t("dota.create.title")}</h1>
@@ -329,76 +361,12 @@ export function DotaCreateForm() {
             <div className="signed-in-box">
               <p>{t("auth.signedInLabel")}</p>
               <strong>{authSession.displayName}</strong>
-              <span>{authSession.email}</span>
+              {authSession.email ? <span>{authSession.email}</span> : null}
               <button className="secondary-button" onClick={signOut} type="button">
                 {t("auth.useAnotherAccount")}
               </button>
             </div>
-          ) : (
-            <section className={styles.section}>
-              <div className="segmented-control" aria-label={t("auth.mode.ariaLabel")}>
-                <button
-                  aria-pressed={authMode === "register"}
-                  onClick={() => handleAuthModeChange("register")}
-                  type="button"
-                >
-                  {t("auth.mode.register")}
-                </button>
-                <button
-                  aria-pressed={authMode === "login"}
-                  onClick={() => handleAuthModeChange("login")}
-                  type="button"
-                >
-                  {t("auth.mode.login")}
-                </button>
-              </div>
-
-              <div
-                aria-hidden={authMode !== "register"}
-                className={`auth-display-name-slot${authMode === "register" ? " is-visible" : ""}`}
-              >
-                <div className="auth-display-name-slot__inner">
-                  <label className="field-label">
-                    {t("auth.field.displayName")}
-                    <input
-                      autoComplete="name"
-                      maxLength={100}
-                      minLength={1}
-                      onChange={(event) => setDisplayName(event.target.value)}
-                      required={authMode === "register"}
-                      tabIndex={authMode === "register" ? 0 : -1}
-                      value={displayName}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <label className="field-label">
-                {t("auth.field.email")}
-                <input
-                  autoComplete="email"
-                  maxLength={320}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                  type="email"
-                  value={email}
-                />
-              </label>
-
-              <label className="field-label">
-                {t("auth.field.password")}
-                <input
-                  autoComplete={authMode === "register" ? "new-password" : "current-password"}
-                  maxLength={128}
-                  minLength={8}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  type="password"
-                  value={password}
-                />
-              </label>
-            </section>
-          )}
+          ) : null}
 
           <section className={styles.section}>
             <label
@@ -489,13 +457,7 @@ export function DotaCreateForm() {
 
           <button
             className="primary-button"
-            data-analytics={
-              authSession
-                ? undefined
-                : authMode === "register"
-                  ? "auth_register_submit"
-                  : "auth_login_submit"
-            }
+            data-analytics="dota_create_submit"
             disabled={isSubmitting}
             type="submit"
           >
@@ -505,8 +467,6 @@ export function DotaCreateForm() {
           {bottomError ? <p className={styles.formError}>{bottomError}</p> : null}
         </form>
       </section>
-
-      {!isEditMode ? <DotaCreateIdleReel /> : null}
     </div>
   );
 }

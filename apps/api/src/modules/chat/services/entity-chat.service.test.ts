@@ -10,6 +10,7 @@ import type { PresenceService } from "./presence.service.js";
 
 const entityId = "22222222-2222-4222-8222-222222222222";
 const currentUser: AuthenticatedUser = {
+  avatarUrl: null,
   displayName: "Tester",
   email: "tester@example.com",
   id: "11111111-1111-4111-8111-111111111111",
@@ -220,3 +221,4 @@ function createService(overrides: {
     { publish: async () => undefined } as never
   );
 }
+

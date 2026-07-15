@@ -23,7 +23,7 @@ export function VerticalModeSwitch({ mode }: VerticalModeSwitchProps) {
       <Link
         aria-current={mode === "games" ? "page" : undefined}
         className={`vertical-mode-switch-link${mode === "games" ? " is-active" : ""}`}
-        href="/games"
+        href="/games/search"
       >
         {t("web.vertical.games")}
       </Link>

@@ -37,6 +37,13 @@ export function buildDotaTeamUrl(slug: string): string {
   return new URL(`/dota/teams/${slug}`, publicEnv.siteUrl).toString();
 }
 
+/** Signed join link: opening while signed in auto-adds the viewer to the party. */
+export function buildDotaTeamJoinUrl(slug: string, joinToken: string): string {
+  const url = new URL(`/dota/teams/${slug}`, publicEnv.siteUrl);
+  url.searchParams.set("join", joinToken);
+  return url.toString();
+}
+
 export function buildDotaShareText(
   kind: DotaShareKind,
   profile: Pick<DotaProfile, "dotaAccountId" | "slug">,
@@ -80,34 +87,6 @@ export async function copyDotaShareText(
   return copyTextToClipboard(buildDotaShareText(kind, profile, t, friendInviteToken));
 }
 
-export function buildDotaTeamShareText(
-  party: {
-    kind?: "TEAM" | "PARTY";
-    maxMembers: number;
-    memberCount: number;
-    name: string;
-    slug: string;
-  },
-  t: TranslateFn
-): string {
-  const url = buildDotaTeamUrl(party.slug);
-
-  if (party.kind === "PARTY") {
-    return t("dota.team.shareTextParty" as never, { url });
-  }
-
-  return t("dota.team.shareTextTeam" as never, { url });
-}
-
-export async function copyDotaTeamShareText(
-  party: {
-    kind?: "TEAM" | "PARTY";
-    maxMembers: number;
-    memberCount: number;
-    name: string;
-    slug: string;
-  },
-  t: TranslateFn
-): Promise<boolean> {
-  return copyTextToClipboard(buildDotaTeamShareText(party, t));
+export async function copyDotaTeamJoinUrl(slug: string, joinToken: string): Promise<boolean> {
+  return copyTextToClipboard(buildDotaTeamJoinUrl(slug, joinToken));
 }

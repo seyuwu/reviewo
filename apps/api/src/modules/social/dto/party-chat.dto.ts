@@ -4,7 +4,7 @@ import { IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "cla
 export class SendPartyChatMessageDto {
   @IsString()
   @MinLength(1)
-  @MaxLength(2000)
+  @MaxLength(10000)
   message!: string;
 }
 

@@ -13,7 +13,6 @@ export function HeaderActivityNav() {
 
   const links = [
     { href: "/search", icon: "search" as const, label: t("web.nav.search"), tone: "objects" as const },
-    { href: "/games", icon: "gamepad" as const, label: t("web.nav.gamesHub"), tone: "games" as const },
     { href: "/battles", icon: "battle" as const, label: t("web.nav.battles"), tone: "battles" as const },
     { href: "/top", icon: "trophy" as const, label: t("web.nav.tops"), tone: "tops" as const },
     { href: "/spotlight", icon: "spotlight" as const, label: t("web.nav.spotlight"), tone: "spotlight" as const },
@@ -23,12 +22,7 @@ export function HeaderActivityNav() {
   return (
     <nav className="app-chrome-nav" aria-label={t("web.nav.ariaLabel")}>
       {links.map((link) => (
-        <Link
-          key={link.href}
-          className={navLinkClass(pathname, link.href, link.tone)}
-          data-analytics={link.href === "/games" ? "header_games" : undefined}
-          href={link.href}
-        >
+        <Link key={link.href} className={navLinkClass(pathname, link.href, link.tone)} href={link.href}>
           <span className={`app-chrome-nav-icon app-chrome-nav-icon--${link.tone}`}>
             <OpiniaIcon className="app-chrome-nav-icon-svg" name={link.icon} />
           </span>

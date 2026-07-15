@@ -79,6 +79,12 @@
   margin: 0;
 }
 
+.error {
+  color: #b91c1c;
+  font-size: 0.78rem;
+  margin: 0;
+}
+
 .section {
   display: grid;
   gap: 0.5rem;
@@ -137,4 +143,81 @@
   font-size: 0.78rem;
   min-height: 2rem;
   padding: 0.35rem 0.7rem;
+}
+
+/* Keep decline readable when global games theme makes secondary buttons light-on-light. */
+.declineButton {
+  background: rgb(15 23 42 / 4%) !important;
+  border-color: rgb(15 23 42 / 18%) !important;
+  color: #1e293b !important;
+}
+
+.declineButton:hover:not(:disabled),
+.declineButton:focus-visible:not(:disabled) {
+  background: rgb(15 23 42 / 8%) !important;
+  border-color: rgb(15 23 42 / 28%) !important;
+  color: #0f172a !important;
+}
+
+:global([data-product="games"]) .panel {
+  background: rgb(22 24 36 / 96%);
+  border-color: rgb(147 130 255 / 18%);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 45%);
+}
+
+:global([data-product="games"]) .panelTitle {
+  color: #f4f4f8;
+}
+
+:global([data-product="games"]) .empty {
+  color: #9aa3b5;
+}
+
+:global([data-product="games"]) .error {
+  color: #fca5a5;
+}
+
+:global([data-product="games"]) .section h3 {
+  color: #9aa3b5;
+}
+
+:global([data-product="games"]) .list li {
+  background: rgb(255 255 255 / 6%);
+  border-color: rgb(147 130 255 / 16%);
+}
+
+:global([data-product="games"]) .itemCopy a,
+:global([data-product="games"]) .itemCopy strong {
+  color: #f4f4f8;
+}
+
+:global([data-product="games"]) .itemCopy span {
+  color: #9aa3b5;
+}
+
+:global([data-product="games"]) .declineButton {
+  background: rgb(255 255 255 / 6%) !important;
+  border-color: rgb(147 130 255 / 28%) !important;
+  color: #f4f4f8 !important;
+}
+
+:global([data-product="games"]) .declineButton:hover:not(:disabled),
+:global([data-product="games"]) .declineButton:focus-visible:not(:disabled) {
+  background: rgb(255 255 255 / 10%) !important;
+  border-color: rgb(147 130 255 / 40%) !important;
+  color: #fff !important;
+}
+
+:global([data-product="games"]) .trigger {
+  background: rgb(255 255 255 / 6%);
+  border-color: rgb(147 130 255 / 22%);
+}
+
+:global([data-product="games"]) .trigger:hover {
+  background: rgb(255 255 255 / 10%);
+  border-color: rgb(147 130 255 / 36%);
+}
+
+:global([data-product="games"]) .triggerIcon {
+  color: #b8a8ff;
 }

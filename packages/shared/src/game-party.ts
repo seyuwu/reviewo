@@ -3,6 +3,13 @@ export const DOTA_PARTY_VERTICAL = "dota" as const;
 /** Temporary stack/party lifetime */
 export const DOTA_TEMP_PARTY_TTL_HOURS = 12;
 
+export const DOTA_POSITION_ROLES = ["1", "2", "3", "4", "5"] as const;
+export type DotaPositionRole = (typeof DOTA_POSITION_ROLES)[number];
+
+export function isDotaPositionRole(value: string): value is DotaPositionRole {
+  return (DOTA_POSITION_ROLES as readonly string[]).includes(value);
+}
+
 export type DotaFriendshipStatus = "none" | "outgoing" | "incoming" | "friends" | "self";
 
 export type GamePartyKind = "TEAM" | "PARTY";

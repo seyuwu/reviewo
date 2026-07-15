@@ -22,6 +22,14 @@ interface FriendInviteTokenPayload {
   sub: string;
 }
 
+interface PartyJoinTokenPayload {
+  exp: number;
+  iat: number;
+  purpose: "party_join";
+  slug: string;
+  sub: string;
+}
+
 export interface VerifiedAccessToken {
   userId: string;
 }
@@ -30,8 +38,16 @@ export interface VerifiedFriendInviteToken {
   inviterUserId: string;
 }
 
+export interface VerifiedPartyJoinToken {
+  partyId: string;
+  slug: string;
+}
+
 /** Friend-invite share links remain valid for 30 days. */
 const FRIEND_INVITE_TTL_SECONDS = 60 * 60 * 24 * 30;
+
+/** Party auto-join share links remain valid for 7 days. */
+const PARTY_JOIN_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 @Injectable()
 export class JwtTokenService {
@@ -67,6 +83,26 @@ export class JwtTokenService {
       iat: nowSeconds,
       purpose: "friend_invite",
       sub: inviterUserId
+    };
+    const encodedHeader = encodeJson(header);
+    const encodedPayload = encodeJson(payload);
+    const signature = this.sign(`${encodedHeader}.${encodedPayload}`);
+
+    return `${encodedHeader}.${encodedPayload}.${signature}`;
+  }
+
+  signPartyJoinToken(partyId: string, slug: string): string {
+    const nowSeconds = getCurrentUnixSeconds();
+    const header: JwtHeader = {
+      alg: "HS256",
+      typ: "JWT"
+    };
+    const payload: PartyJoinTokenPayload = {
+      exp: nowSeconds + PARTY_JOIN_TTL_SECONDS,
+      iat: nowSeconds,
+      purpose: "party_join",
+      slug,
+      sub: partyId
     };
     const encodedHeader = encodeJson(header);
     const encodedPayload = encodeJson(payload);
@@ -155,6 +191,42 @@ export class JwtTokenService {
     };
   }
 
+  verifyPartyJoinToken(token: string): VerifiedPartyJoinToken | null {
+    const parts = token.split(".");
+
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    const [encodedHeader, encodedPayload, encodedSignature] = parts;
+
+    if (!encodedHeader || !encodedPayload || !encodedSignature) {
+      return null;
+    }
+
+    const expectedSignature = this.sign(`${encodedHeader}.${encodedPayload}`);
+
+    if (!safeEqual(encodedSignature, expectedSignature)) {
+      return null;
+    }
+
+    const header = decodeJson(encodedHeader);
+    const payload = decodeJson(encodedPayload);
+
+    if (!isJwtHeader(header) || !isPartyJoinTokenPayload(payload)) {
+      return null;
+    }
+
+    if (payload.exp <= getCurrentUnixSeconds()) {
+      return null;
+    }
+
+    return {
+      partyId: payload.sub,
+      slug: payload.slug
+    };
+  }
+
   private sign(value: string): string {
     const secret = this.configService.get("JWT_SECRET", { infer: true });
 
@@ -219,6 +291,24 @@ function isFriendInviteTokenPayload(value: unknown): value is FriendInviteTokenP
     typeof candidate.iat === "number" &&
     typeof candidate.sub === "string" &&
     candidate.sub.length > 0
+  );
+}
+
+function isPartyJoinTokenPayload(value: unknown): value is PartyJoinTokenPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<PartyJoinTokenPayload>;
+
+  return (
+    candidate.purpose === "party_join" &&
+    typeof candidate.exp === "number" &&
+    typeof candidate.iat === "number" &&
+    typeof candidate.sub === "string" &&
+    candidate.sub.length > 0 &&
+    typeof candidate.slug === "string" &&
+    candidate.slug.length > 0
   );
 }
 

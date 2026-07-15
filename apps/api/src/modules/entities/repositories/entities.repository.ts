@@ -258,6 +258,50 @@ export class EntitiesRepository {
     });
   }
 
+  /** Next free "Dota player N" title for anonymous / default guest profiles. */
+  async nextDefaultDotaPlayerTitle(): Promise<string> {
+    const rows = await this.prismaService.entity.findMany({
+      select: {
+        title: true
+      },
+      where: {
+        OR: [
+          {
+            title: {
+              equals: "Dota player",
+              mode: "insensitive"
+            }
+          },
+          {
+            title: {
+              startsWith: "Dota player ",
+              mode: "insensitive"
+            }
+          }
+        ],
+        type: "person"
+      }
+    });
+
+    let max = 0;
+
+    for (const row of rows) {
+      const match = /^dota player(?:\s+(\d+))?$/i.exec(row.title.trim());
+
+      if (!match) {
+        continue;
+      }
+
+      const parsed = match[1] ? Number.parseInt(match[1], 10) : 1;
+
+      if (Number.isFinite(parsed) && parsed > max) {
+        max = parsed;
+      }
+    }
+
+    return `Dota player ${max + 1}`;
+  }
+
   isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
     return (
       typeof error === "object" &&

@@ -52,7 +52,7 @@
 }
 
 .preview {
-  background: rgb(255 255 255 / 88%);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
   border: 1px dashed var(--color-card-border);
   border-radius: 0.8rem;
   color: var(--color-text);
@@ -61,4 +61,10 @@
   margin: 0;
   padding: 0.7rem 0.8rem;
   word-break: break-word;
+}
+
+:global([data-product="games"]) .preview {
+  background: rgb(0 0 0 / 34%);
+  border-color: rgb(147 130 255 / 22%);
+  color: #e8eaf0;
 }

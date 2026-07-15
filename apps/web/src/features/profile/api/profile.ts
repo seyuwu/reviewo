@@ -38,3 +38,16 @@ export function changeCurrentUserPassword(
     method: "POST"
   });
 }
+
+export function updateCurrentUserAvatar(
+  imageDataUrl: string,
+  accessToken: string
+): Promise<CurrentUserProfile> {
+  return apiRequest<CurrentUserProfile>("/auth/me/avatar", {
+    body: { imageDataUrl },
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    },
+    method: "POST"
+  });
+}

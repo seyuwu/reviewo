@@ -58,7 +58,7 @@ export function useAuthSession() {
   }
 
   function updateAuthSession(
-    input: Partial<Pick<StoredAuthSession, "displayName" | "email">>
+    input: Partial<Pick<StoredAuthSession, "avatarUrl" | "displayName" | "email">>
   ): StoredAuthSession | null {
     const updatedSession = updateStoredAuthSession(input);
 

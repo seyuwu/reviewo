@@ -2,15 +2,29 @@
   display: grid;
   gap: 1rem;
   margin: 0 auto;
-  max-width: 56rem;
+  max-width: 72rem;
   padding: clamp(1.25rem, 3vw, 2rem);
   width: 100%;
 }
 
+.workspace {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+}
+
+.rosterColumn {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
 .header {
+  backdrop-filter: blur(16px);
   background:
-    radial-gradient(circle at 88% 10%, rgb(139 92 246 / 12%), transparent 22rem),
-    linear-gradient(135deg, #fff, #f8f2ff);
+    radial-gradient(circle at 88% 10%, rgb(109 74 255 / 18%), transparent 22rem),
+    var(--games-glass, rgb(18 22 32 / 72%));
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card-lg);
   box-shadow: var(--shadow-card);
@@ -35,7 +49,6 @@
 }
 
 .lead,
-.searchSoon,
 .canonicalHint {
   color: var(--color-text-muted);
   font-size: 0.88rem;
@@ -49,17 +62,11 @@
   gap: 0.5rem;
 }
 
-.searchSoon {
-  background: rgb(243 232 255 / 55%);
-  border: 1px solid rgb(139 92 246 / 18%);
-  border-radius: var(--radius-card);
-  padding: 0.75rem 0.9rem;
-}
-
 .slots {
   display: grid;
   gap: 0.65rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
+  overflow: visible;
 }
 
 .slot {
@@ -70,12 +77,21 @@
   display: grid;
   gap: 0.35rem;
   min-height: 8.5rem;
+  overflow: visible;
   padding: 0.85rem;
+  position: relative;
 }
 
 .slotEmpty {
-  background: linear-gradient(180deg, #fff, #fafafa);
+  background: rgb(255 255 255 / 2.5%);
   border-style: dashed;
+}
+
+.slotRecruiting {
+  background: rgb(109 74 255 / 10%);
+  border-color: rgb(109 74 255 / 42%);
+  border-style: solid;
+  box-shadow: inset 0 0 0 1px rgb(109 74 255 / 12%);
 }
 
 .slotRole {
@@ -100,6 +116,177 @@
   font-size: 0.75rem;
 }
 
+.slotActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.slotProfileLink {
+  color: #c4b5fd;
+  font-size: 0.75rem;
+  font-weight: 650;
+  margin-top: 0.25rem;
+}
+
+.slotWaiting {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  margin: 0.35rem 0 0;
+}
+
+.slotAppsRoot {
+  margin-top: 0.35rem;
+  position: relative;
+}
+
+.slotAppsTrigger {
+  appearance: none;
+  background: rgb(109 74 255 / 16%);
+  border: 1px solid rgb(147 130 255 / 36%);
+  border-radius: 0.55rem;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-height: 1.9rem;
+  padding: 0.3rem 0.55rem;
+  width: 100%;
+}
+
+.slotAppsTrigger:hover {
+  background: rgb(109 74 255 / 24%);
+}
+
+.slotAppsPanel {
+  background: var(--games-glass, rgb(18 22 32 / 96%));
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-hover, 0 16px 40px rgb(0 0 0 / 45%));
+  display: grid;
+  gap: 0.55rem;
+  left: 0;
+  max-height: min(22rem, 55vh);
+  overflow: auto;
+  padding: 0.7rem;
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  width: min(18rem, calc(100vw - 2rem));
+  z-index: 30;
+}
+
+.slotAppsPanelTitle {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.slotApps {
+  display: grid;
+  gap: 0.45rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.slotApp {
+  background: rgb(0 0 0 / 22%);
+  border: 1px solid rgb(147 130 255 / 18%);
+  border-radius: 0.7rem;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.55rem 0.6rem;
+}
+
+.slotAppCopy {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.slotAppCopy a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.slotAppMeta {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.slotAppFlags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.slotAppFlagRed,
+.slotAppFlagGreen {
+  border-radius: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 650;
+  padding: 0.12rem 0.35rem;
+}
+
+.slotAppFlagRed {
+  background: rgb(248 113 113 / 14%);
+  color: #fca5a5;
+}
+
+.slotAppFlagGreen {
+  background: rgb(74 222 128 / 12%);
+  color: #86efac;
+}
+
+.slotAppActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.slotAppActions :global(.button-primary),
+.slotAppActions :global(.button-secondary) {
+  font-size: 0.72rem;
+  min-height: 1.9rem;
+  padding: 0.3rem 0.55rem;
+}
+
+.slot:nth-child(n + 4) .slotAppsPanel {
+  left: auto;
+  right: 0;
+}
+
+.kickButton {
+  align-self: start;
+  appearance: none;
+  background: rgb(248 113 113 / 12%);
+  border: 1px solid rgb(248 113 113 / 32%);
+  border-radius: 0.55rem;
+  color: #fecaca;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+  padding: 0.35rem 0.55rem;
+}
+
+.kickButton:hover:not(:disabled) {
+  background: rgb(248 113 113 / 22%);
+  border-color: rgb(248 113 113 / 48%);
+}
+
+.kickButton:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .invitePanel {
   background: var(--color-primary-soft);
   border: 1px solid var(--color-card-border);
@@ -109,9 +296,56 @@
   padding: 1rem;
 }
 
+.invitePanelHead {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: space-between;
+}
+
 .invitePanel h2 {
+  align-items: center;
+  display: flex;
   font-size: 1rem;
+  gap: 0.5rem;
   margin: 0;
+}
+
+.inviteSearch {
+  background: rgb(0 0 0 / 28%);
+  border: 1px solid rgb(147 130 255 / 24%);
+  border-radius: 0.65rem;
+  color: inherit;
+  font-size: 0.82rem;
+  min-height: 2.1rem;
+  min-width: min(14rem, 100%);
+  padding: 0.35rem 0.65rem;
+}
+
+.inviteHint {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.inviteFriendList {
+  display: grid;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  max-height: min(22rem, 48vh);
+  overflow: auto;
+  padding: 0.15rem;
+}
+
+.inviteFriendList::-webkit-scrollbar {
+  width: 0.45rem;
+}
+
+.inviteFriendList::-webkit-scrollbar-thumb {
+  background: rgb(147 130 255 / 28%);
+  border-radius: 999px;
 }
 
 .friendList {
@@ -129,6 +363,60 @@
   gap: 0.75rem;
 }
 
+.inviteFriendRow {
+  align-items: center;
+  background: rgb(0 0 0 / 16%);
+  border: 1px solid rgb(147 130 255 / 12%);
+  border-radius: 0.7rem;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.45rem 0.55rem;
+}
+
+.inviteFriendName {
+  font-size: 0.88rem;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inviteRoleRow {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+  justify-content: flex-end;
+}
+
+.inviteRoleChip {
+  appearance: none;
+  background: rgb(109 74 255 / 18%);
+  border: 1px solid rgb(147 130 255 / 36%);
+  border-radius: 0.5rem;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0.25rem 0.4rem;
+}
+
+.inviteRoleChip:hover:not(:disabled) {
+  background: rgb(109 74 255 / 30%);
+}
+
+.inviteRoleChip:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.inviteRoleHint {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
 .inviteEmpty {
   display: grid;
   gap: 0.75rem;
@@ -137,6 +425,82 @@
 
 .inviteEmpty p {
   margin: 0;
+}
+
+.applicationCount {
+  align-items: center;
+  background: rgb(109 74 255 / 22%);
+  border-radius: 999px;
+  color: #d4c8ff;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 800;
+  justify-content: center;
+  min-width: 1.4rem;
+  padding: 0.15rem 0.45rem;
+}
+
+.applicationHint {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.applicationList {
+  display: grid;
+  gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.applicationItem {
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid rgb(147 130 255 / 16%);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.applicationCopy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.applicationCopy span {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+.applicationFlags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.flagGreen,
+.flagRed {
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.28rem 0.55rem;
+}
+
+.flagGreen {
+  background: rgb(74 222 128 / 14%);
+  color: #86efac;
+}
+
+.flagRed {
+  background: rgb(248 113 113 / 14%);
+  color: #fca5a5;
+}
+
+.applicationActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
 }
 
 .createForm {
@@ -216,13 +580,26 @@
 }
 
 .chatPanel {
-  background: var(--color-card);
+  align-self: start;
+  backdrop-filter: blur(16px);
+  background: var(--games-glass, rgb(18 22 32 / 78%));
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card-lg);
   box-shadow: var(--shadow-card);
   display: grid;
   gap: 0.65rem;
-  padding: 1rem;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: calc(100vh - 5.5rem);
+  margin-block: 0;
+  max-height: none;
+  padding: 0.9rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.chatHead {
+  display: grid;
+  gap: 0.2rem;
 }
 
 .chatPanel h2 {
@@ -233,65 +610,161 @@
 .chatHint,
 .chatEmpty {
   color: var(--color-text-muted);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   margin: 0;
 }
 
 .chatMessages {
   display: grid;
-  gap: 0.45rem;
-  max-height: 16rem;
+  gap: 0.5rem;
+  align-content: start;
+  min-height: 0;
   overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.dotaIdButton {
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(147 130 255 / 24%);
+  border-radius: 0.45rem;
+  color: #c4b5fd;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  justify-self: start;
+  margin-top: 0.15rem;
+  padding: 0.28rem 0.5rem;
+  text-align: left;
+  width: fit-content;
+}
+
+.dotaIdButton:hover {
+  background: rgb(255 255 255 / 9%);
+  border-color: rgb(147 130 255 / 40%);
+  color: #ddd6fe;
+}
+
+.unassignedCopy {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .chatMessage {
-  background: rgb(248 250 252 / 90%);
-  border-radius: var(--radius-card);
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(147 130 255 / 12%);
+  border-radius: 0.85rem;
   display: grid;
   gap: 0.2rem;
-  padding: 0.55rem 0.7rem;
+  padding: 0.6rem 0.75rem;
 }
 
 .chatMessage strong {
+  color: #c4b5fd;
   font-size: 0.78rem;
 }
 
 .chatMessage span {
-  font-size: 0.88rem;
-  line-height: 1.4;
+  font-size: 0.9rem;
+  line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .chatForm {
-  align-items: center;
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: 1fr auto;
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
 }
 
 .chatForm input {
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.85rem;
   box-sizing: border-box;
-  height: 2.75rem;
+  color: var(--color-text);
+  flex: 1 1 14rem;
+  font: inherit;
   margin: 0;
+  min-height: 2.85rem;
   min-width: 0;
+  padding: 0.7rem 0.95rem;
+}
+
+.chatForm input::placeholder {
+  color: rgb(154 163 181 / 78%);
+}
+
+.chatForm input:focus-visible {
+  border-color: rgb(109 74 255 / 55%);
+  outline: 2px solid rgb(109 74 255 / 25%);
+  outline-offset: 1px;
 }
 
 .chatForm button {
-  align-self: center;
-  height: 2.75rem;
+  align-self: stretch;
+  flex: 0 0 auto;
   margin: 0;
+  min-height: 2.85rem;
   white-space: nowrap;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 980px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .rosterColumn {
+    order: 1;
+  }
+
+  .chatPanel {
+    bottom: 0.65rem;
+    box-shadow: 0 -16px 40px rgb(0 0 0 / 42%);
+    height: min(22rem, 42vh);
+    margin-block: 0;
+    max-height: none;
+    order: 2;
+    position: sticky;
+    top: auto;
+    z-index: 8;
+  }
+
   .slots {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .slot:nth-child(even) .slotAppsPanel {
+    left: auto;
+    right: 0;
   }
 }
 
 @media (max-width: 560px) {
   .slots {
     grid-template-columns: 1fr;
+  }
+
+  .inviteFriendRow {
+    grid-template-columns: 1fr;
+  }
+
+  .inviteRoleRow {
+    justify-content: flex-start;
+  }
+
+  .chatPanel {
+    bottom: 0.4rem;
+    height: min(16rem, 38vh);
+  }
+
+  .chatForm {
+    flex-direction: column;
+  }
+
+  .chatForm button {
+    width: 100%;
   }
 }

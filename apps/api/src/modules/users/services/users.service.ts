@@ -11,6 +11,10 @@ export interface CreateUserWithEmailInput {
   email: string;
 }
 
+export interface CreateGuestUserInput {
+  displayName: string;
+}
+
 export interface UpdateUserProfileInput {
   displayName: string;
   email: string;
@@ -88,6 +92,21 @@ export class UsersService {
     }
   }
 
+  async createGuestUserProfile(
+    input: CreateGuestUserInput,
+    transaction: Prisma.TransactionClient
+  ): Promise<AuthenticatedUser> {
+    const user = await this.usersRepository.create(
+      {
+        displayName: input.displayName.trim(),
+        email: null
+      },
+      transaction
+    );
+
+    return toAuthenticatedUser(user);
+  }
+
   async ensureEmailAvailable(email: string): Promise<void> {
     const normalizedEmail = normalizeEmail(email);
     const existingUser = await this.usersRepository.findByEmail(normalizedEmail);
@@ -129,6 +148,11 @@ export class UsersService {
       return null;
     }
 
+    return toAuthenticatedUser(user);
+  }
+
+  async updateUserAvatar(id: string, avatarUrl: string | null): Promise<AuthenticatedUser> {
+    const user = await this.usersRepository.updateAvatarUrl(id, avatarUrl);
     return toAuthenticatedUser(user);
   }
 
@@ -189,6 +213,7 @@ function createUsernameAlreadyExistsException(): Error {
 
 function toAuthenticatedUser(user: User): AuthenticatedUser {
   return {
+    avatarUrl: user.avatarUrl,
     displayName: user.displayName,
     email: user.email,
     id: user.id,

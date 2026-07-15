@@ -9,6 +9,7 @@ import type { RatingsRepository } from "../repositories/ratings.repository.js";
 import { RatingsService } from "./ratings.service.js";
 
 const currentUser: AuthenticatedUser = {
+  avatarUrl: null,
   displayName: "Tester",
   email: "tester@example.com",
   id: "11111111-1111-4111-8111-111111111111",
@@ -171,3 +172,4 @@ describe("RatingsService", () => {
     assert.equal(result.rating.score, 5);
   });
 });
+

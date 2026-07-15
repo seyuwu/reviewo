@@ -1,0 +1,68 @@
+.root {
+  position: relative;
+  z-index: 12;
+}
+
+.trigger,
+.split {
+  min-height: 2.45rem;
+}
+
+.trigger {
+  appearance: none;
+  background: linear-gradient(135deg, rgb(109 74 255 / 92%), rgb(88 56 220 / 88%));
+  border: 1px solid rgb(167 139 250 / 42%);
+  border-radius: 0.75rem;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 750;
+  padding: 0.45rem 0.95rem;
+  white-space: nowrap;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  border: 1px solid rgb(167 139 250 / 42%);
+  border-radius: 0.75rem;
+}
+
+.half {
+  appearance: none;
+  background: linear-gradient(135deg, rgb(109 74 255 / 92%), rgb(88 56 220 / 88%));
+  border: 0;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 750;
+  min-width: 6.5rem;
+  padding: 0.45rem 0.85rem;
+  transition: background-color 140ms ease, filter 140ms ease;
+}
+
+.half + .half {
+  border-left: 1px solid rgb(255 255 255 / 22%);
+}
+
+.half:hover:not(:disabled),
+.half:focus-visible:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.halfParty {
+  background: linear-gradient(135deg, rgb(14 165 233 / 88%), rgb(37 99 235 / 86%));
+}
+
+.half:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.error {
+  color: #fca5a5;
+  font-size: 0.75rem;
+  margin: 0.35rem 0 0;
+  max-width: 16rem;
+}

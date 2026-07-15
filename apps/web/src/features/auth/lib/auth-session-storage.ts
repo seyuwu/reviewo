@@ -23,7 +23,10 @@ export function getStoredAuthSession(): StoredAuthSession | null {
       return null;
     }
 
-    return parsed;
+    return {
+      ...parsed,
+      avatarUrl: typeof parsed.avatarUrl === "string" ? parsed.avatarUrl : null
+    };
   } catch {
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
     return null;
@@ -33,6 +36,7 @@ export function getStoredAuthSession(): StoredAuthSession | null {
 export function saveAuthSession(authResponse: AuthResponse): StoredAuthSession {
   const authSession: StoredAuthSession = {
     accessToken: authResponse.accessToken,
+    avatarUrl: authResponse.user.avatarUrl ?? null,
     displayName: authResponse.user.displayName,
     email: authResponse.user.email,
     userId: authResponse.user.id
@@ -46,7 +50,7 @@ export function saveAuthSession(authResponse: AuthResponse): StoredAuthSession {
 }
 
 export function updateStoredAuthSession(
-  input: Partial<Pick<StoredAuthSession, "displayName" | "email">>
+  input: Partial<Pick<StoredAuthSession, "avatarUrl" | "displayName" | "email">>
 ): StoredAuthSession | null {
   const currentSession = getStoredAuthSession();
 

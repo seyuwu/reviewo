@@ -1,0 +1,56 @@
+.wrap {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.avatar {
+  align-items: center;
+  background: linear-gradient(145deg, #6d4aff, #5d3fd3);
+  border: 2px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 1.25rem;
+  font-weight: 800;
+  height: 3.5rem;
+  justify-content: center;
+  overflow: hidden;
+  width: 3.5rem;
+}
+
+.avatarImage {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.copy {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.copy strong {
+  font-size: 0.88rem;
+}
+
+.upload {
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.7rem;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  justify-self: start;
+  padding: 0.45rem 0.75rem;
+  width: fit-content;
+}
+
+.upload:has(input:disabled) {
+  opacity: 0.55;
+  pointer-events: none;
+}

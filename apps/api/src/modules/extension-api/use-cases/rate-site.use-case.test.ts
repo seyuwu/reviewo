@@ -9,6 +9,7 @@ import type { RatingsPort } from "../../ratings/interfaces/ratings.port.js";
 import type { ReputationDisplayService } from "../../reputation/services/reputation-display.service.js";
 
 const currentUser: AuthenticatedUser = {
+  avatarUrl: null,
   displayName: "Tester",
   email: "tester@example.com",
   id: "11111111-1111-4111-8111-111111111111",
@@ -182,3 +183,4 @@ describe("RateSiteUseCase", () => {
     assert.equal(result.entity.id, entity.id);
   });
 });
+

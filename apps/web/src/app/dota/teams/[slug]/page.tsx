@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
 import { DotaTeamView } from "../../../../features/dota/components/dota-team-view";
 import { buildDotaTeamUrl } from "../../../../features/dota/lib/share";
@@ -58,7 +59,9 @@ export default async function DotaTeamPage({ params }: DotaTeamPageProps) {
 
   return (
     <main className="shell entity-route">
-      <DotaTeamView party={party} />
+      <Suspense fallback={null}>
+        <DotaTeamView party={party} />
+      </Suspense>
     </main>
   );
 }

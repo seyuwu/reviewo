@@ -8,8 +8,19 @@ export const DOTA_ATTRIBUTE_KEYS = {
   server: "server",
   language: "language",
   hasMic: "has_mic",
-  playIntent: "play_intent"
+  playIntent: "play_intent",
+  lfgUntil: "lfg_until",
+  lfgPartySlug: "lfg_party_slug",
+  lfgDesiredSize: "lfg_desired_size",
+  lfgRecruitedRoles: "lfg_recruited_roles",
+  lfgPartyName: "lfg_party_name",
+  lfgPartyKind: "lfg_party_kind",
+  lfgMemberCount: "lfg_member_count",
+  lfgMaxMembers: "lfg_max_members"
 } as const;
+
+/** How long "Looking for party" stays active without refresh. */
+export const DOTA_LFG_TTL_SECONDS = 20 * 60;
 
 export const DOTA_QUALITY_KEYS = [
   "has_mic",

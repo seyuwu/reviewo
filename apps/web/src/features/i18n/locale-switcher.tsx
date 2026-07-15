@@ -11,24 +11,28 @@ const LOCALE_OPTIONS: Array<{ label: string; value: LocalePreference }> = [
 ];
 
 export function LocaleSwitcher() {
-  const { localePreference, setLocalePreference, t } = useLocale();
+  const { isLocaleHydrated, localePreference, setLocalePreference, t } = useLocale();
 
   return (
     <div className="locale-switcher" role="group" aria-label={t("locale.label")}>
-      {LOCALE_OPTIONS.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className={`locale-switcher-button${localePreference === option.value ? " is-active" : ""}`}
-          aria-pressed={localePreference === option.value}
-          title={localeOptionTitle(t, option.value)}
-          onClick={() => {
-            setLocalePreference(normalizeLocalePreference(option.value));
-          }}
-        >
-          {option.label}
-        </button>
-      ))}
+      {LOCALE_OPTIONS.map((option) => {
+        const isActive = isLocaleHydrated && localePreference === option.value;
+
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={`locale-switcher-button${isActive ? " is-active" : ""}`}
+            aria-pressed={isActive}
+            title={localeOptionTitle(t, option.value)}
+            onClick={() => {
+              setLocalePreference(normalizeLocalePreference(option.value));
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

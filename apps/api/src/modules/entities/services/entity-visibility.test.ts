@@ -9,6 +9,7 @@ import { EntitiesService } from "./entities.service.js";
 import type { UrlNormalizer } from "../interfaces/url-normalizer.js";
 
 const currentUser: AuthenticatedUser = {
+  avatarUrl: null,
   displayName: "Tester",
   email: "tester@example.com",
   id: "11111111-1111-4111-8111-111111111111",
@@ -109,3 +110,4 @@ describe("EntitiesService visibility", () => {
     );
   });
 });
+

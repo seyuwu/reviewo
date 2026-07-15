@@ -13,7 +13,7 @@ import { PasswordHasherService } from "./services/password-hasher.service.js";
 
 @Module({
   controllers: [AuthController],
-  exports: [AdminGuard, JwtAuthGuard, JwtTokenService, OptionalJwtAuthGuard],
+  exports: [AdminGuard, AuthService, JwtAuthGuard, JwtTokenService, OptionalJwtAuthGuard],
   imports: [UsersModule, AnalyticsModule],
   providers: [
     AdminGuard,

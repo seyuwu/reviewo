@@ -2,33 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 
 import { useAuthSession } from "../features/auth/hooks/use-auth-session";
 import { useMyDotaProfileNav } from "../features/dota/hooks/use-my-dota-profile-nav";
 import { useTranslation } from "../features/i18n/locale-provider";
+import { OpiniaIcon } from "./opinia-icon";
 
 export function HeaderGamesNav() {
   const t = useTranslation();
   const pathname = usePathname();
   const { authSession } = useAuthSession();
-  const [locationHash, setLocationHash] = useState("");
   const profileNav = useMyDotaProfileNav();
+  const isGamesHub = pathname === "/games";
+  const isTeammateSearch = pathname === "/games/search" || pathname.startsWith("/games/search/");
+  const isCommunity =
+    pathname === "/games/community" || pathname.startsWith("/games/community/");
   const isDotaSection = pathname.startsWith("/dota");
-  const isGamesHub = pathname === "/games" || pathname.startsWith("/games/");
-
-  useEffect(() => {
-    const syncHash = () => {
-      setLocationHash(window.location.hash);
-    };
-
-    syncHash();
-    window.addEventListener("hashchange", syncHash);
-
-    return () => {
-      window.removeEventListener("hashchange", syncHash);
-    };
-  }, [pathname]);
 
   const isProfileActive =
     profileNav.hasProfile &&
@@ -38,86 +27,84 @@ export function HeaderGamesNav() {
   const showCreateLink = !profileNav.isLoading && !profileNav.hasProfile;
 
   return (
-    <nav aria-label={t("web.nav.gamesActivityAriaLabel")} className="app-activity-nav">
-      <Link className={isGamesHub ? "app-activity-link is-active" : "app-activity-link"} href="/games" title={t("web.nav.gamesHub")}>
-        <span aria-hidden="true" className="app-activity-icon">
-          🎮
+    <nav aria-label={t("web.nav.gamesActivityAriaLabel")} className="app-chrome-nav">
+      <Link
+        className={navLinkClass(isGamesHub, "games")}
+        href="/games"
+        title={t("web.nav.gamesHub")}
+      >
+        <span className="app-chrome-nav-icon app-chrome-nav-icon--games">
+          <OpiniaIcon className="app-chrome-nav-icon-svg" name="gamepad" />
         </span>
-        <span className="app-activity-copy">
-          <span className="app-activity-label app-activity-label-only">{t("web.nav.gamesHub")}</span>
-        </span>
+        <span>{t("web.nav.gamesHub")}</span>
       </Link>
 
-      <Link className={isDotaSection ? "app-activity-link is-active" : "app-activity-link"} href="/dota" title={t("web.nav.dotaVertical")}>
-        <span aria-hidden="true" className="app-activity-icon">
-          ⚔️
+      <Link
+        className={navLinkClass(isTeammateSearch, "objects")}
+        href="/games/search"
+        title={t("web.nav.teammateSearch")}
+      >
+        <span className="app-chrome-nav-icon app-chrome-nav-icon--objects">
+          <OpiniaIcon className="app-chrome-nav-icon-svg" name="search" />
         </span>
-        <span className="app-activity-copy">
-          <span className="app-activity-label app-activity-label-only">{t("web.nav.dotaVertical")}</span>
-        </span>
+        <span>{t("web.nav.teammateSearch")}</span>
       </Link>
 
-      {isDotaSection ? (
-        <>
-          <Link
-            className={dotaSearchLinkClass(pathname, locationHash)}
-            href="/dota#dota-account-id-search"
-            title={t("web.nav.dotaSearch")}
-          >
-            <SearchNavIcon />
-            <span className="app-activity-copy">
-              <span className="app-activity-label app-activity-label-only">{t("web.nav.dotaSearch")}</span>
-            </span>
-          </Link>
+      <Link
+        className={navLinkClass(isCommunity, "tops")}
+        href="/games/community"
+        title={t("web.nav.gamesCommunity")}
+      >
+        <span className="app-chrome-nav-icon app-chrome-nav-icon--tops">
+          <OpiniaIcon className="app-chrome-nav-icon-svg" name="spotlight" />
+        </span>
+        <span>{t("web.nav.gamesCommunity")}</span>
+      </Link>
 
-          {authSession && profileNav.hasProfile ? (
-            <Link
-              className={isProfileActive ? "app-activity-link is-active" : "app-activity-link"}
-              href={profileNav.href}
-              title={t("web.nav.myDotaProfile")}
-            >
-              <span aria-hidden="true" className="app-activity-icon">
-                👤
-              </span>
-              <span className="app-activity-copy">
-                <span className="app-activity-label app-activity-label-only">{t("web.nav.myDotaProfile")}</span>
-              </span>
-            </Link>
-          ) : null}
+      <Link
+        className={navLinkClass(isDotaSection, "battles")}
+        href="/dota"
+        title={t("web.nav.dotaVertical")}
+      >
+        <span className="app-chrome-nav-icon app-chrome-nav-icon--battles">
+          <OpiniaIcon className="app-chrome-nav-icon-svg" name="battle" />
+        </span>
+        <span>{t("web.nav.dotaVertical")}</span>
+      </Link>
 
-          {showCreateLink ? (
-            <Link className={activityLinkClass(pathname, "/dota/create")} href="/dota/create" title={t("web.nav.dotaCreate")}>
-              <span aria-hidden="true" className="app-activity-icon">
-                ✚
-              </span>
-              <span className="app-activity-copy">
-                <span className="app-activity-label app-activity-label-only">{t("web.nav.dotaCreate")}</span>
-              </span>
-            </Link>
-          ) : null}
-        </>
+      {authSession && profileNav.hasProfile ? (
+        <Link
+          className={navLinkClass(isProfileActive, "spotlight")}
+          href={profileNav.href}
+          title={t("web.nav.myDotaProfile")}
+        >
+          <span className="app-chrome-nav-icon app-chrome-nav-icon--spotlight">
+            <OpiniaIcon className="app-chrome-nav-icon-svg" name="spotlight" />
+          </span>
+          <span>{t("web.nav.myDotaProfile")}</span>
+        </Link>
+      ) : null}
+
+      {showCreateLink ? (
+        <Link
+          className={navLinkClass(pathname.startsWith("/dota/create"), "contribute")}
+          href="/dota/create"
+          title={t("web.nav.dotaCreate")}
+        >
+          <span className="app-chrome-nav-icon app-chrome-nav-icon--contribute">
+            <OpiniaIcon className="app-chrome-nav-icon-svg" name="help" />
+          </span>
+          <span>{t("web.nav.dotaCreate")}</span>
+        </Link>
       ) : null}
     </nav>
   );
 }
 
-function SearchNavIcon() {
-  return (
-    <svg aria-hidden="true" className="app-activity-icon-svg" fill="none" viewBox="0 0 20 20">
-      <circle cx="8.5" cy="8.5" r="5.75" stroke="currentColor" strokeWidth="1.75" />
-      <path d="M13 13l4 4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.75" />
-    </svg>
-  );
+function navLinkClass(isActive: boolean, tone: NavTone): string {
+  return isActive
+    ? `app-chrome-nav-link app-chrome-nav-link--${tone} is-active`
+    : `app-chrome-nav-link app-chrome-nav-link--${tone}`;
 }
 
-function dotaSearchLinkClass(pathname: string, hash: string): string {
-  return pathname === "/dota" && hash === "#dota-account-id-search"
-    ? "app-activity-link is-active"
-    : "app-activity-link";
-}
-
-function activityLinkClass(pathname: string, href: string): string {
-  const isActive = pathname === href || pathname.startsWith(`${href}/`);
-
-  return isActive ? "app-activity-link is-active" : "app-activity-link";
-}
+type NavTone = "objects" | "games" | "battles" | "tops" | "spotlight" | "contribute";

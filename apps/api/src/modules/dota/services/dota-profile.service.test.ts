@@ -4,6 +4,7 @@ import type { Entity } from "#prisma/client";
 
 import type { RequestLike } from "../../../common/rate-limiting/api-rate-limiter.service.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
+import type { AuthService } from "../../auth/services/auth.service.js";
 import type { EntitiesRepository } from "../../entities/repositories/entities.repository.js";
 import type { UsersRepository } from "../../users/repositories/users.repository.js";
 import type { FriendshipsService } from "../../social/services/friendships.service.js";
@@ -12,6 +13,7 @@ import type { EntityQualityConfirmationsRepository } from "../repositories/entit
 import { DotaProfileService } from "./dota-profile.service.js";
 
 const owner: AuthenticatedUser = {
+  avatarUrl: null,
   displayName: "Fivii",
   email: "fivii@example.com",
   id: "11111111-1111-4111-8111-111111111111",
@@ -21,6 +23,7 @@ const owner: AuthenticatedUser = {
 };
 
 const friend: AuthenticatedUser = {
+  avatarUrl: null,
   displayName: "Friend",
   email: "friend@example.com",
   id: "22222222-2222-4222-8222-222222222222",
@@ -110,14 +113,33 @@ function createService(overrides?: {
       }
 
       return "none";
+    },
+    getStatusDetails: async (viewerUserId?: string, otherUserId?: string | null) => {
+      if (!otherUserId) {
+        return { requestId: null, status: null };
+      }
+
+      if (!viewerUserId) {
+        return { requestId: null, status: "none" as const };
+      }
+
+      if (viewerUserId === otherUserId) {
+        return { requestId: null, status: "self" as const };
+      }
+
+      return { requestId: null, status: "none" as const };
     }
   } as unknown as FriendshipsService;
 
+  const authService = {} as unknown as AuthService;
+
   return new DotaProfileService(
+    authService,
     entitiesRepository,
     entityAttributesRepository,
     entityQualityConfirmationsRepository,
     friendshipsService,
+    {} as never,
     usersRepository
   );
 }
@@ -167,3 +189,4 @@ describe("DotaProfileService", () => {
     assert.equal(profile.isOwner, true);
   });
 });
+

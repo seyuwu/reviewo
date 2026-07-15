@@ -85,8 +85,14 @@ function stopServer() {
     return;
   }
 
-  serverProcess.kill("SIGTERM");
+  const processToStop = serverProcess;
   serverProcess = null;
+
+  try {
+    processToStop.kill("SIGKILL");
+  } catch {
+    // Process may already be gone.
+  }
 }
 
 function startServer() {

@@ -1,4 +1,5 @@
 export interface CurrentUserProfile {
+  avatarUrl: string | null;
   displayName: string;
   email: string | null;
   id: string;

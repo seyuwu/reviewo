@@ -1,6 +1,5 @@
-Mixkit Stock Video Free License (commercial use OK). No attribution required.
+Original artwork generated for OpinIA Games create-profile idle panel.
+No third-party stock video. No Valve / Dota franchise IP (generic fantasy arena + role markers only).
 
-Sources:
-- skate-front.mp4 — https://mixkit.co/free-stock-video/front-view-of-a-skateboarder-skating-1368/
-- skate-bowl.mp4 — https://mixkit.co/free-stock-video/a-skater-in-a-skate-bowl-1362/
-- skate-ramps.mp4 — https://mixkit.co/free-stock-video/boy-skating-with-a-skateboard-in-a-park-with-ramps-34389/
+File:
+- party-slots-arena.png — owned visual used under /dota/idle/

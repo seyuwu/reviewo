@@ -60,6 +60,209 @@ body {
     sans-serif;
 }
 
+/* OpinIA Games: dark glass theme scoped to games routes */
+[data-product="games"] {
+  color-scheme: dark;
+  --color-accent: #6d4aff;
+  --color-accent-strong: #5d3fd3;
+  --color-accent-rose: #a78bfa;
+  --color-accent-soft: rgb(109 74 255 / 18%);
+  --color-accent-gold: #fbbf24;
+  --color-accent-gold-soft: rgb(251 191 36 / 14%);
+  --color-background: #0b0e14;
+  --color-surface: rgb(255 255 255 / 4.5%);
+  --color-card: rgb(255 255 255 / 5.5%);
+  --color-card-border: rgb(147 130 255 / 16%);
+  --color-error: #f87171;
+  --color-error-soft: rgb(248 113 113 / 16%);
+  --color-success: #4ade80;
+  --color-success-soft: rgb(74 222 128 / 14%);
+  --color-primary: #f4f4f8;
+  --color-primary-soft: rgb(255 255 255 / 6%);
+  --color-text: #f4f4f8;
+  --color-text-muted: #9aa3b5;
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 12px 40px rgb(0 0 0 / 28%);
+  --shadow-card-hover: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 18px 48px rgb(0 0 0 / 36%);
+  --games-glass: rgb(18 22 32 / 72%);
+  --games-glass-strong: rgb(22 26 38 / 88%);
+  background:
+    radial-gradient(circle at 12% -4%, rgb(109 74 255 / 22%), transparent 28rem),
+    radial-gradient(circle at 88% 8%, rgb(93 63 211 / 18%), transparent 30rem),
+    radial-gradient(circle at 50% 100%, rgb(109 74 255 / 8%), transparent 32rem),
+    var(--color-background);
+  color: var(--color-text);
+  min-height: 100vh;
+}
+
+[data-product="games"] .app-chrome {
+  background: rgb(11 14 20 / 82%);
+  border-bottom-color: rgb(147 130 255 / 14%);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 10px 36px rgb(0 0 0 / 28%);
+}
+
+[data-product="games"] .app-chrome-nav-link {
+  border-radius: 0.7rem;
+  color: #9aa3b5;
+}
+
+[data-product="games"] .app-chrome-nav-link:hover {
+  background: rgb(255 255 255 / 5%);
+  color: #f4f4f8;
+}
+
+[data-product="games"] .app-chrome-nav-link.is-active {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 0;
+  color: #f4f4f8;
+  position: relative;
+}
+
+[data-product="games"] .app-chrome-nav-link.is-active::after {
+  background: var(--color-accent);
+  border-radius: 999px;
+  bottom: -0.12rem;
+  content: "";
+  height: 2px;
+  left: 0.55rem;
+  position: absolute;
+  right: 0.55rem;
+}
+
+[data-product="games"] .product-brand-switcher-trigger {
+  color: #f4f4f8;
+}
+
+[data-product="games"] .product-brand-switcher-hint {
+  color: #8b93a7;
+}
+
+[data-product="games"] .product-brand-menu-panel {
+  background: var(--games-glass-strong);
+  backdrop-filter: blur(16px);
+  border-color: rgb(147 130 255 / 22%);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 45%);
+}
+
+[data-product="games"] .product-brand-menu-item:hover,
+[data-product="games"] .product-brand-menu-item.is-active {
+  background: rgb(109 74 255 / 16%);
+}
+
+[data-product="games"] .app-chrome-user {
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(147 130 255 / 16%);
+}
+
+[data-product="games"] .app-chrome-user:hover {
+  background: rgb(255 255 255 / 8%);
+}
+
+[data-product="games"] .app-chrome-user-avatar {
+  background: linear-gradient(145deg, #6d4aff, #5d3fd3);
+}
+
+[data-product="games"] .app-nav-cta,
+[data-product="games"] .button-primary {
+  background: linear-gradient(180deg, #7b5cff, #5d3fd3);
+  border-color: transparent;
+  box-shadow: 0 8px 24px rgb(93 63 211 / 35%);
+  color: #fff;
+}
+
+[data-product="games"] .app-nav-cta:hover,
+[data-product="games"] .button-primary:hover:not(:disabled),
+[data-product="games"] .button-primary:focus-visible:not(:disabled) {
+  background: linear-gradient(180deg, #8b6fff, #6d4aff);
+  border-color: transparent;
+  filter: brightness(1.04);
+}
+
+[data-product="games"] .button-secondary {
+  background: rgb(255 255 255 / 5%);
+  border-color: rgb(147 130 255 / 18%);
+  color: #f4f4f8;
+}
+
+[data-product="games"] .button-secondary:hover:not(:disabled),
+[data-product="games"] .button-secondary:focus-visible:not(:disabled) {
+  background: rgb(255 255 255 / 9%);
+  border-color: rgb(147 130 255 / 28%);
+}
+
+[data-product="games"] .app-nav-button {
+  color: #9aa3b5;
+}
+
+[data-product="games"] .site-footer {
+  border-top-color: rgb(147 130 255 / 12%);
+}
+
+[data-product="games"] .signed-in-box {
+  background: rgb(74 222 128 / 10%);
+  border-color: rgb(74 222 128 / 28%);
+}
+
+[data-product="games"] input,
+[data-product="games"] textarea,
+[data-product="games"] select {
+  background: rgb(255 255 255 / 4%);
+  border-color: var(--color-card-border);
+  color: var(--color-text);
+}
+
+[data-product="games"] .secondary-button {
+  background: rgb(255 255 255 / 5%);
+  border-color: rgb(147 130 255 / 18%);
+  color: #f4f4f8;
+}
+
+[data-product="games"] .primary-button {
+  background: linear-gradient(180deg, #7b5cff, #5d3fd3);
+  border-color: transparent;
+  color: #fff;
+}
+
+[data-product="games"] .muted-copy,
+[data-product="games"] .result-type,
+[data-product="games"] .eyebrow,
+[data-product="games"] .field-label span,
+[data-product="games"] .field-label small,
+[data-product="games"] .profile-field span,
+[data-product="games"] .profile-field small,
+[data-product="games"] .panel-header h2,
+[data-product="games"] .home-hub-subtitle,
+[data-product="games"] .home-hub-panel-copy {
+  color: var(--color-text-muted);
+}
+
+[data-product="games"] h1,
+[data-product="games"] h2,
+[data-product="games"] h3,
+[data-product="games"] .profile-field strong,
+[data-product="games"] .creation-card,
+[data-product="games"] .panel-card,
+[data-product="games"] .form-stack {
+  color: var(--color-text);
+}
+
+[data-product="games"] .panel-card,
+[data-product="games"] .creation-card,
+[data-product="games"] .profile-edit-form {
+  background: var(--games-glass);
+  border-color: var(--color-card-border);
+  color: var(--color-text);
+}
+
+[data-product="games"] .button-primary:hover:not(:disabled),
+[data-product="games"] .button-primary:focus-visible:not(:disabled) {
+  color: #fff;
+}
+
+[data-product="games"] ::placeholder {
+  color: rgb(154 163 181 / 72%);
+}
+
 button,
 input,
 textarea,
@@ -349,7 +552,6 @@ button:disabled {
 }
 
 .page-transition {
-  animation: ui-page-enter 300ms ease forwards;
   width: 100%;
 }
 
@@ -482,12 +684,19 @@ button:disabled {
   grid-template-columns: auto minmax(0, 1fr) minmax(11rem, 18rem) auto;
 }
 
+.app-chrome-inner--games {
+  gap: 0.45rem 0.65rem;
+  grid-template-areas: "brand nav tools";
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
 .app-chrome-brand {
   align-items: center;
   display: inline-flex;
   flex-shrink: 0;
   gap: 0.55rem;
   grid-area: brand;
+  position: relative;
 }
 
 .app-chrome-main {
@@ -534,6 +743,136 @@ button:disabled {
 .app-brand-mark svg {
   height: 0.8rem;
   width: 0.8rem;
+}
+
+.product-brand-switcher {
+  position: relative;
+}
+
+.product-brand-switcher-trigger {
+  align-items: flex-start;
+  background: transparent;
+  border: 0;
+  color: var(--color-primary);
+  cursor: pointer;
+  display: inline-flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 0.12rem;
+  padding: 0.1rem 0;
+  text-align: left;
+  text-decoration: none;
+}
+
+.product-brand-switcher-label {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.product-brand-switcher-hint {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  max-width: 12rem;
+  white-space: nowrap;
+}
+
+.product-brand-switcher.is-highlight .product-brand-switcher-label {
+  box-decoration-break: clone;
+  text-decoration: underline;
+  text-decoration-color: rgb(124 58 237 / 42%);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.22em;
+}
+
+.product-brand-switcher-trigger:hover .product-brand-switcher-label,
+.product-brand-switcher.is-open .product-brand-switcher-label {
+  color: var(--color-accent-strong, var(--color-primary));
+}
+
+@keyframes product-brand-pulse {
+  0%,
+  100% {
+    text-decoration-color: rgb(124 58 237 / 22%);
+  }
+
+  50% {
+    text-decoration-color: rgb(124 58 237 / 55%);
+  }
+}
+
+.product-brand-menu {
+  background: transparent;
+  border: 0;
+  left: 0;
+  min-width: max(100%, 12.5rem);
+  opacity: 0;
+  padding: 0.4rem 0 0;
+  pointer-events: none;
+  position: absolute;
+  top: 100%;
+  transform: translateY(-4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 140ms ease;
+  visibility: hidden;
+  z-index: 40;
+}
+
+.product-brand-switcher.is-open .product-brand-menu {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.product-brand-menu-panel {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.85rem;
+  box-shadow: 0 14px 36px rgb(15 23 42 / 12%);
+  display: grid;
+  gap: 0.15rem;
+  overflow: hidden;
+  padding: 0.4rem;
+}
+
+.product-brand-menu-caption {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0;
+  padding: 0.25rem 0.7rem 0.15rem;
+  text-transform: uppercase;
+}
+
+.product-brand-menu-item {
+  border-radius: 0.6rem;
+  color: var(--color-primary);
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  padding: 0.65rem 0.8rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.product-brand-menu-item:hover {
+  background: var(--color-primary-soft);
+}
+
+.product-brand-menu-item.is-active {
+  background: var(--color-primary-soft);
+  color: var(--color-text-muted);
+  font-weight: 650;
 }
 
 #home-search {
@@ -807,7 +1146,15 @@ button:disabled {
   font-weight: 800;
   height: 1.75rem;
   justify-content: center;
+  overflow: hidden;
   width: 1.75rem;
+}
+
+.app-chrome-user-avatar-image {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
 }
 
 .app-chrome-user-name {
@@ -957,6 +1304,27 @@ button:disabled {
   background: rgb(255 255 255 / 96%);
   border-color: rgb(139 92 246 / 38%);
   color: var(--color-primary);
+}
+
+[data-product="games"] .locale-switcher {
+  background: rgb(255 255 255 / 6%);
+  border-color: rgb(147 130 255 / 22%);
+}
+
+[data-product="games"] .locale-switcher-button {
+  color: rgb(186 193 208 / 88%);
+}
+
+[data-product="games"] .locale-switcher-button:hover {
+  background: rgb(255 255 255 / 8%);
+  color: #f4f4f8;
+}
+
+[data-product="games"] .locale-switcher-button.is-active {
+  background: rgb(109 74 255 / 48%);
+  border-color: rgb(167 139 250 / 55%);
+  color: #f5f3ff;
+  text-shadow: none;
 }
 
 .app-chrome-auth {
@@ -3086,6 +3454,7 @@ h1 {
   display: grid;
   width: 5rem;
   height: 5rem;
+  overflow: hidden;
   place-items: center;
   border-radius: 1.5rem;
   background: var(--color-primary);
@@ -3093,6 +3462,39 @@ h1 {
   font-size: 1.5rem;
   font-weight: 900;
   letter-spacing: -0.04em;
+}
+
+.profile-avatar-image {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.profile-avatar-editor {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.profile-avatar-editor-copy {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(100%, 14rem);
+}
+
+.profile-avatar-editor-copy strong {
+  color: var(--color-text);
+  font-size: 1rem;
+}
+
+.profile-avatar-upload {
+  cursor: pointer;
+  justify-self: start;
+  margin-top: 0.25rem;
+  width: fit-content;
 }
 
 .profile-details h2 {
@@ -5670,6 +6072,11 @@ h1 {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
+  .app-chrome-inner--games {
+    grid-template-areas: "brand nav tools";
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
   .app-chrome-main {
     justify-content: flex-start;
   }
@@ -5678,12 +6085,14 @@ h1 {
 
 @media (max-width: 640px) {
   .app-chrome-inner,
-  .app-chrome-inner--opinia {
+  .app-chrome-inner--opinia,
+  .app-chrome-inner--games {
     gap: 0.5rem 0.65rem;
     padding-inline: 0.85rem;
   }
 
-  .app-brand {
+  .app-brand,
+  .product-brand-switcher-trigger {
     font-size: 0.92rem;
   }
 

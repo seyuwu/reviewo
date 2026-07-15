@@ -7,7 +7,7 @@ type PrismaClientOrTransaction = Prisma.TransactionClient | PrismaService;
 
 export interface CreateUserInput {
   displayName: string;
-  email: string;
+  email?: string | null;
 }
 
 export interface UpdateUserProfileInput {
@@ -27,7 +27,7 @@ export class UsersRepository {
     return client.user.create({
       data: {
         displayName: input.displayName,
-        email: input.email,
+        email: input.email ?? null,
         status: "active"
       }
     });
@@ -126,6 +126,17 @@ export class UsersRepository {
       where: {
         id
       }
+    });
+  }
+
+  async updateAvatarUrl(
+    id: string,
+    avatarUrl: string | null,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<User> {
+    return client.user.update({
+      data: { avatarUrl },
+      where: { id }
     });
   }
 

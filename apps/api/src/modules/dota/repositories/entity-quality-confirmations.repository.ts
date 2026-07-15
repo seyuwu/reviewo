@@ -68,6 +68,38 @@ export class EntityQualityConfirmationsRepository {
     return Object.fromEntries(rows.map((row) => [row.qualityKey, row._count._all]));
   }
 
+  async countByQualityKeyForEntities(
+    entityIds: string[]
+  ): Promise<Record<string, Record<string, number>>> {
+    if (entityIds.length === 0) {
+      return {};
+    }
+
+    const rows = await this.prismaService.entityQualityConfirmation.groupBy({
+      _count: {
+        _all: true
+      },
+      by: ["entityId", "qualityKey"],
+      where: {
+        entityId: {
+          in: entityIds
+        }
+      }
+    });
+
+    const result: Record<string, Record<string, number>> = {};
+
+    for (const row of rows) {
+      if (!result[row.entityId]) {
+        result[row.entityId] = {};
+      }
+
+      result[row.entityId]![row.qualityKey] = row._count._all;
+    }
+
+    return result;
+  }
+
   async deleteConfirmation(input: {
     confirmerKey: string;
     entityId: string;

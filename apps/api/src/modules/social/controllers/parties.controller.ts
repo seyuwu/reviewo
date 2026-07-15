@@ -29,21 +29,42 @@ import type {
   GamePartyResponseDto,
   MyPartiesResponseDto
 } from "../dto/game-party-response.dto.js";
+import { JoinPartyByTokenDto } from "../dto/join-party-by-token.dto.js";
 import { ListPartyChatMessagesQueryDto, SendPartyChatMessageDto } from "../dto/party-chat.dto.js";
+import { StackInviteDto } from "../dto/stack-invite.dto.js";
 import { UpdateGamePartyDto } from "../dto/update-game-party.dto.js";
+import { UpdatePartyMemberPositionDto } from "../dto/update-party-member-position.dto.js";
+import { GamePartyGateway } from "../gateways/game-party.gateway.js";
 import { GamePartiesService } from "../services/game-parties.service.js";
 
 @Controller("social/parties")
 export class PartiesController {
   constructor(
     private readonly apiRateLimiterService: ApiRateLimiterService,
-    private readonly gamePartiesService: GamePartiesService
+    private readonly gamePartiesService: GamePartiesService,
+    private readonly gamePartyGateway: GamePartyGateway
   ) {}
 
   @Get("me")
   @UseGuards(JwtAuthGuard)
   getMyParties(@CurrentUser() currentUser: AuthenticatedUser): Promise<MyPartiesResponseDto> {
     return this.gamePartiesService.getMyParties(currentUser);
+  }
+
+  @Post("join")
+  @UseGuards(JwtAuthGuard)
+  async joinByToken(
+    @Body() input: JoinPartyByTokenDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ): Promise<GamePartyResponseDto> {
+    await this.apiRateLimiterService.assertWithinLimits(
+      createSocialWriteRateLimitRules(currentUser.id, request)
+    );
+
+    const party = await this.gamePartiesService.joinByToken(input.token, currentUser);
+    this.gamePartyGateway.broadcastPartyUpdated(party);
+    return party;
   }
 
   @Post("invites/:id/accept")
@@ -57,7 +78,9 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
-    return this.gamePartiesService.acceptInvite(id, currentUser);
+    const party = await this.gamePartiesService.acceptInvite(id, currentUser);
+    this.gamePartyGateway.broadcastPartyUpdated(party);
+    return party;
   }
 
   @Post("invites/:id/decline")
@@ -88,6 +111,25 @@ export class PartiesController {
     return this.gamePartiesService.createParty(input, currentUser);
   }
 
+  @Post("stack")
+  @UseGuards(JwtAuthGuard)
+  async stackInvite(
+    @Body() input: StackInviteDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ): Promise<{ invite: GamePartyInviteDto; party: GamePartyResponseDto }> {
+    await this.apiRateLimiterService.assertWithinLimits(
+      createSocialWriteRateLimitRules(currentUser.id, request)
+    );
+
+    return this.gamePartiesService.stackInvite(
+      input.targetSlug,
+      currentUser,
+      input.partySlug,
+      input.positionRole
+    );
+  }
+
   @Get(":slug")
   @UseGuards(OptionalJwtAuthGuard)
   getParty(
@@ -109,7 +151,9 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
-    return this.gamePartiesService.renameParty(slug, input.name, currentUser);
+    const party = await this.gamePartiesService.renameParty(slug, input.name, currentUser);
+    this.gamePartyGateway.broadcastPartyUpdated(party);
+    return party;
   }
 
   @Get(":slug/messages")
@@ -127,14 +171,16 @@ export class PartiesController {
   async sendMessage(
     @Param("slug") slug: string,
     @Body() input: SendPartyChatMessageDto,
-    @CurrentUser() currentUser: AuthenticatedUser,
-    @Req() request: RequestLike
+    @CurrentUser() currentUser: AuthenticatedUser
   ): Promise<GamePartyChatMessageDto> {
-    await this.apiRateLimiterService.assertWithinLimits(
-      createSocialWriteRateLimitRules(currentUser.id, request)
+    const message = await this.gamePartiesService.sendChatMessage(
+      slug,
+      input.message,
+      currentUser
     );
-
-    return this.gamePartiesService.sendChatMessage(slug, input.message, currentUser);
+    const party = await this.gamePartiesService.getPartyBySlug(slug, currentUser.id);
+    this.gamePartyGateway.broadcastNewMessage(party.id, message);
+    return message;
   }
 
   @Post(":slug/invites")
@@ -152,6 +198,48 @@ export class PartiesController {
     return this.gamePartiesService.inviteFriend(slug, input, currentUser);
   }
 
+  @Post(":slug/join-token")
+  @UseGuards(JwtAuthGuard)
+  async createJoinToken(
+    @Param("slug") slug: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ): Promise<{ token: string }> {
+    await this.apiRateLimiterService.assertWithinLimits(
+      createSocialWriteRateLimitRules(currentUser.id, request)
+    );
+
+    return this.gamePartiesService.createJoinToken(slug, currentUser);
+  }
+
+  @Delete(":slug")
+  @UseGuards(JwtAuthGuard)
+  async disbandParty(
+    @Param("slug") slug: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ): Promise<{ ok: true }> {
+    await this.apiRateLimiterService.assertWithinLimits(
+      createSocialWriteRateLimitRules(currentUser.id, request)
+    );
+
+    const party = await this.gamePartiesService.getPartyBySlug(slug, currentUser.id).catch(() => null);
+    const result = await this.gamePartiesService.disbandParty(slug, currentUser);
+
+    if (party) {
+      this.gamePartyGateway.broadcastPartyUpdated({
+        ...party,
+        isMember: false,
+        isOwner: false,
+        memberCount: 0,
+        members: [],
+        openSlots: party.maxMembers
+      });
+    }
+
+    return result;
+  }
+
   @Delete(":slug/members/me")
   @UseGuards(JwtAuthGuard)
   async leaveParty(
@@ -163,6 +251,60 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
-    return this.gamePartiesService.leaveParty(slug, currentUser);
+    const party = await this.gamePartiesService.getPartyBySlug(slug, currentUser.id);
+    const result = await this.gamePartiesService.leaveParty(slug, currentUser);
+    const updated = await this.gamePartiesService.getPartyBySlug(slug).catch(() => null);
+
+    if (updated) {
+      this.gamePartyGateway.broadcastPartyUpdated(updated);
+    } else {
+      this.gamePartyGateway.broadcastPartyUpdated({
+        ...party,
+        isMember: false,
+        memberCount: Math.max(0, party.memberCount - 1),
+        members: party.members.filter((member) => member.userId !== currentUser.id),
+        openSlots: Math.min(party.maxMembers, party.openSlots + 1)
+      });
+    }
+
+    return result;
+  }
+
+  @Patch(":slug/members/me/position")
+  @UseGuards(JwtAuthGuard)
+  async updateMyPosition(
+    @Param("slug") slug: string,
+    @Body() input: UpdatePartyMemberPositionDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ): Promise<GamePartyResponseDto> {
+    await this.apiRateLimiterService.assertWithinLimits(
+      createSocialWriteRateLimitRules(currentUser.id, request)
+    );
+
+    const party = await this.gamePartiesService.updateMyPosition(
+      slug,
+      input.positionRole,
+      currentUser
+    );
+    this.gamePartyGateway.broadcastPartyUpdated(party);
+    return party;
+  }
+
+  @Delete(":slug/members/:userId")
+  @UseGuards(JwtAuthGuard)
+  async kickMember(
+    @Param("slug") slug: string,
+    @Param("userId") userId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ): Promise<GamePartyResponseDto> {
+    await this.apiRateLimiterService.assertWithinLimits(
+      createSocialWriteRateLimitRules(currentUser.id, request)
+    );
+
+    const party = await this.gamePartiesService.kickMember(slug, userId, currentUser);
+    this.gamePartyGateway.broadcastPartyUpdated(party);
+    return party;
   }
 }
