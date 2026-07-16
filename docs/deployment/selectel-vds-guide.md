@@ -8,7 +8,7 @@ docker compose --env-file .env.production \
   up -d --build
 ```
 
-**Статус:** Opinia в production — [opinia.ru](https://opinia.ru), `api.opinia.ru`, расширение в Chrome Web Store. Workflow: [../development-workflow.md](../development-workflow.md).
+**Статус:** Opinia в production — [opinia.ru](https://opinia.ru), `games.opinia.ru`, `dota.opinia.ru`, `api.opinia.ru`, расширение в Chrome Web Store. Workflow: [../development-workflow.md](../development-workflow.md).
 
 # Деплой Opinia на VDS Selectel (рядом с logITika)
 
@@ -174,7 +174,8 @@ WEB_PORT=8889
 
 # Публичные URL (HTTPS обязателен)
 NEXT_PUBLIC_API_BASE_URL=https://api.<домен>
-CORS_ALLOWED_ORIGINS=https://<домен>,https://www.<домен>,chrome-extension://ВАШ_EXTENSION_ID
+NEXT_PUBLIC_SITE_URL=https://<домен>
+CORS_ALLOWED_ORIGINS=https://<домен>,https://www.<домен>,https://games.<домен>,https://dota.<домен>,chrome-extension://ВАШ_EXTENSION_ID
 
 # За nginx reverse proxy
 TRUST_PROXY_HOPS=1
@@ -200,7 +201,8 @@ REPUTATION_ENGINE_ENABLED=true
 openssl rand -base64 48
 ```
 
-> **CORS и расширение:** в production нельзя `chrome-extension://*`. После первой установки расширения возьмите ID из `chrome://extensions` и добавьте в `CORS_ALLOWED_ORIGINS`.
+> **CORS и расширение:** в production нельзя `chrome-extension://*`. После первой установки расширения возьмите ID из `chrome://extensions` и добавьте в `CORS_ALLOWED_ORIGINS`.  
+> **Games / Dota:** обязательно включите `https://games.<домен>` и `https://dota.<домен>` в `CORS_ALLOWED_ORIGINS`, иначе поиск/API с этих хостов падают в браузере. Подробности: [../development-workflow.md](../development-workflow.md#хосты-games--dota-важно-при-разработке).
 
 > **Не коммитьте** `.env.production`.
 
@@ -287,7 +289,7 @@ curl -I http://127.0.0.1:8889
 # HTTP → HTTPS + certbot
 server {
     listen 80;
-    server_name <домен> www.<домен> api.<домен>;
+    server_name <домен> www.<домен> api.<домен> games.<домен> dota.<домен>;
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
@@ -300,6 +302,27 @@ server {
 server {
     listen 443 ssl http2;
     server_name <домен> www.<домен>;
+
+    ssl_certificate     /etc/letsencrypt/live/<домен>/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/<домен>/privkey.pem;
+
+    client_max_body_size 10m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8889;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+}
+
+# Games / Dota (тот же Next.js, что и web)
+server {
+    listen 443 ssl http2;
+    server_name games.<домен> dota.<домен>;
 
     ssl_certificate     /etc/letsencrypt/live/<домен>/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/<домен>/privkey.pem;
@@ -341,6 +364,17 @@ server {
 }
 ```
 
+Сертификат расширяйте через **webroot** (не nginx-плагин, если он не установлен):
+
+```bash
+sudo certbot certonly --webroot -w /var/www/certbot \
+  -d <домен> -d www.<домен> -d api.<домен> \
+  -d games.<домен> -d dota.<домен> \
+  --expand
+```
+
+Редирект на `/games/search` **не** делайте в nginx — это делает Next middleware по `Host`.
+
 ### Порядок включения
 
 1. **Сначала** временный HTTP-only конфиг (только `listen 80` + `proxy_pass`), если сертификатов ещё нет.
@@ -357,6 +391,7 @@ nginx -t && systemctl reload nginx
 ```bash
 certbot certonly --webroot -w /var/www/certbot \
   -d <домен> -d www.<домен> -d api.<домен> \
+  -d games.<домен> -d dota.<домен> \
   --email <email> --agree-tos --no-eff-email
 ```
 

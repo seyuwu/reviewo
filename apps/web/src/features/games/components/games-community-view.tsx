@@ -165,7 +165,12 @@ export function GamesCommunityView() {
 
     try {
       const joined = await acceptPartyInvite(invite.id, authSession.accessToken);
-      router.push(`/dota/teams/${joined.slug}`);
+      // Invitee → team page; captain accepting an application stays put.
+      if (invite.inviteKind !== "APPLICATION") {
+        router.push(`/dota/teams/${joined.slug}`);
+      } else {
+        await refresh();
+      }
     } catch (acceptError) {
       setError(resolveInviteDecisionError(acceptError, t));
     } finally {

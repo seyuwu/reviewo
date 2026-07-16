@@ -9,6 +9,7 @@ const STACK_ERROR_MESSAGES: Record<string, string> = {
   "Player is not looking for a party right now": "games.search.error.notLooking",
   "Player was not found": "games.search.error.playerNotFound",
   "Select at least one role to recruit": "games.search.rolesNeedSelect",
+  "No open roles left to recruit": "games.search.rolesNeedSelect",
   "Team was not found": "games.search.error.partyNotFound",
   "This role is already taken": "games.search.error.roleTaken",
   "This role is not open on that party": "games.search.error.roleNotOpen",

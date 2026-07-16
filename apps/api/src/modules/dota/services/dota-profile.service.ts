@@ -7,6 +7,7 @@ import {
   DOTA_LFG_TTL_SECONDS,
   DOTA_PARTY_SIZE,
   DOTA_PARTY_VERTICAL,
+  DOTA_POSITION_ROLES,
   DOTA_VERTICAL,
   isDotaConfirmationKey,
   isDotaGreenFlagKey,
@@ -23,6 +24,11 @@ import { AuthService } from "../../auth/services/auth.service.js";
 import { EntitiesRepository } from "../../entities/repositories/entities.repository.js";
 import { createSlug } from "../../entities/services/entity-slug.js";
 import { GamePartiesRepository } from "../../social/repositories/game-parties.repository.js";
+import { FriendshipsService } from "../../social/services/friendships.service.js";
+import {
+  PARTY_REALTIME_PUBLISHER,
+  type PartyRealtimePublisher
+} from "../../social/party-realtime.types.js";
 import { UsersRepository } from "../../users/repositories/users.repository.js";
 import type { ConfirmDotaQualitiesDto } from "../dto/confirm-dota-qualities.dto.js";
 import type { CreateDotaProfileDto } from "../dto/create-dota-profile.dto.js";
@@ -34,7 +40,6 @@ import type { UpdateDotaProfileDto } from "../dto/update-dota-profile.dto.js";
 import { buildConfirmerKey } from "../lib/confirmer-key.js";
 import { EntityAttributesRepository } from "../repositories/entity-attributes.repository.js";
 import { EntityQualityConfirmationsRepository } from "../repositories/entity-quality-confirmations.repository.js";
-import { FriendshipsService } from "../../social/services/friendships.service.js";
 
 interface DotaAttributeInput {
   dotaAccountId?: string;
@@ -56,6 +61,8 @@ export class DotaProfileService {
     private readonly friendshipsService: FriendshipsService,
     @Inject(forwardRef(() => GamePartiesRepository))
     private readonly gamePartiesRepository: GamePartiesRepository,
+    @Inject(PARTY_REALTIME_PUBLISHER)
+    private readonly partyRealtimeService: PartyRealtimePublisher,
     private readonly usersRepository: UsersRepository
   ) {}
 
@@ -326,8 +333,18 @@ export class DotaProfileService {
     currentUser: AuthenticatedUser,
     options?: { partySlug?: string; recruitedRoles?: string[] }
   ): Promise<DotaProfileResponseDto> {
-    const entity = await this.requireOwnedProfile(currentUser.id);
     const partySlug = options?.partySlug?.trim() || "";
+
+    // Party recruit: write LFG attrs on the captain's profile so one card exists
+    // even when a sub-captain toggles looking (idempotent last-write-wins).
+    if (partySlug) {
+      return this.setPartyRecruitLooking(looking, currentUser, partySlug, options?.recruitedRoles);
+    }
+
+    const entity = await this.requireOwnedProfile(currentUser.id);
+    const currentAttributes = await this.entityAttributesRepository.findByEntityId(entity.id);
+    const previousPartySlug = currentAttributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || "";
+    const broadcastSlug = previousPartySlug;
 
     let recruitAttributes: Record<string, string> = {
       [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
@@ -339,28 +356,111 @@ export class DotaProfileService {
       [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: ""
     };
 
-    if (looking && partySlug) {
+    if (looking && options?.recruitedRoles?.length) {
+      const recruitedRoles = [...new Set(options.recruitedRoles.filter(isDotaPositionRole))];
+      recruitAttributes = {
+        ...recruitAttributes,
+        [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: String(
+          Math.min(DOTA_PARTY_SIZE, Math.max(1, recruitedRoles.length))
+        ),
+        [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: recruitedRoles.join(",")
+      };
+    }
+
+    await this.entityAttributesRepository.upsertMany(entity.id, {
+      [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
+        ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
+        : new Date(0).toISOString(),
+      [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
+      ...recruitAttributes
+    });
+
+    if (broadcastSlug) {
       const party = await this.gamePartiesRepository.findByVerticalAndSlug(
         DOTA_PARTY_VERTICAL,
-        partySlug
+        broadcastSlug
       );
 
-      if (!party || party.ownerUserId !== currentUser.id) {
-        throw createAppException({
-          code: AppErrorCode.Forbidden,
-          message: "Only the captain can search on behalf of this party",
-          statusCode: HttpStatus.FORBIDDEN
-        });
-      }
+      this.partyRealtimeService.broadcastPartyRecruitUpdated({
+        looking: false,
+        ...(party?.id ? { partyId: party.id } : {}),
+        partySlug: broadcastSlug,
+        recruitedRoles: []
+      });
+    }
 
-      if (party.expiresAt && party.expiresAt.getTime() <= Date.now()) {
-        throw createAppException({
-          code: AppErrorCode.NotFound,
-          message: "Team was not found",
-          statusCode: HttpStatus.NOT_FOUND
-        });
-      }
+    const nextAttributes = await this.entityAttributesRepository.findByEntityId(entity.id);
 
+    return this.buildProfileResponse(entity, nextAttributes, {
+      isOwner: true,
+      viewerUserId: currentUser.id
+    });
+  }
+
+  /**
+   * Merge role toggles when possible: if the party is already recruiting the same
+   * slug, keep previously open roles that are still unclaimed unless the client
+   * sent an explicit role set (always the case today). Last-write-wins on the
+   * full set is fine for same-button retries; concurrent different role sets
+   * still race — mitigated by realtime broadcast so UIs converge.
+   */
+  private async setPartyRecruitLooking(
+    looking: boolean,
+    currentUser: AuthenticatedUser,
+    partySlug: string,
+    recruitedRolesInput?: string[]
+  ): Promise<DotaProfileResponseDto> {
+    const party = await this.gamePartiesRepository.findByVerticalAndSlug(
+      DOTA_PARTY_VERTICAL,
+      partySlug
+    );
+
+    if (!party || (party.expiresAt && party.expiresAt.getTime() <= Date.now())) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Team was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    const isManager =
+      party.ownerUserId === currentUser.id ||
+      party.members.some(
+        (member) => member.userId === currentUser.id && member.role === "OFFICER"
+      );
+
+    if (!isManager) {
+      throw createAppException({
+        code: AppErrorCode.Forbidden,
+        message: "Only the captain or a sub-captain can search on behalf of this party",
+        statusCode: HttpStatus.FORBIDDEN
+      });
+    }
+
+    const ownerEntity = await this.entitiesRepository.findByOwnerUserId(party.ownerUserId);
+
+    if (!ownerEntity) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "Captain needs a Dota profile to recruit",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
+
+    const ownerAttributes = await this.entityAttributesRepository.findByEntityId(ownerEntity.id);
+    const previousPartySlug = ownerAttributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || "";
+
+    let recruitAttributes: Record<string, string> = {
+      [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: "",
+      [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: ""
+    };
+
+    if (looking) {
       const memberCount = party.members.length;
       const maxMembers = party.maxMembers;
       const claimed = new Set(
@@ -368,14 +468,19 @@ export class DotaProfileService {
           .map((member) => member.positionRole)
           .filter((role): role is string => Boolean(role))
       );
-      const recruitedRoles = [
-        ...new Set((options?.recruitedRoles ?? []).filter(isDotaPositionRole))
+      const explicitRoles = [
+        ...new Set((recruitedRolesInput ?? []).filter(isDotaPositionRole))
       ].filter((role) => !claimed.has(role));
+      // No roles selected → recruit for every unfilled position slot.
+      const recruitedRoles =
+        explicitRoles.length > 0
+          ? explicitRoles
+          : DOTA_POSITION_ROLES.filter((role) => !claimed.has(role));
 
       if (recruitedRoles.length === 0) {
         throw createAppException({
           code: AppErrorCode.ValidationError,
-          message: "Select at least one role to recruit",
+          message: "No open roles left to recruit",
           statusCode: HttpStatus.BAD_REQUEST
         });
       }
@@ -399,18 +504,9 @@ export class DotaProfileService {
         [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: party.slug,
         [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: recruitedRoles.join(",")
       };
-    } else if (looking && options?.recruitedRoles?.length) {
-      const recruitedRoles = [...new Set(options.recruitedRoles.filter(isDotaPositionRole))];
-      recruitAttributes = {
-        ...recruitAttributes,
-        [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: String(
-          Math.min(DOTA_PARTY_SIZE, Math.max(1, recruitedRoles.length))
-        ),
-        [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: recruitedRoles.join(",")
-      };
     }
 
-    await this.entityAttributesRepository.upsertMany(entity.id, {
+    await this.entityAttributesRepository.upsertMany(ownerEntity.id, {
       [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
         ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
         : new Date(0).toISOString(),
@@ -418,10 +514,44 @@ export class DotaProfileService {
       ...recruitAttributes
     });
 
-    const nextAttributes = await this.entityAttributesRepository.findByEntityId(entity.id);
+    const recruitedRoles = looking
+      ? parseRecruitedRoles(recruitAttributes[DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles])
+      : [];
 
-    return this.buildProfileResponse(entity, nextAttributes, {
-      isOwner: true,
+    this.partyRealtimeService.broadcastPartyRecruitUpdated({
+      looking: looking && recruitedRoles.length > 0,
+      partyId: party.id,
+      partySlug: party.slug,
+      recruitedRoles
+    });
+
+    // If owner profile was recruiting a different party, notify that room too.
+    if (previousPartySlug && previousPartySlug !== party.slug) {
+      const previousParty = await this.gamePartiesRepository.findByVerticalAndSlug(
+        DOTA_PARTY_VERTICAL,
+        previousPartySlug
+      );
+      this.partyRealtimeService.broadcastPartyRecruitUpdated({
+        looking: false,
+        ...(previousParty?.id ? { partyId: previousParty.id } : {}),
+        partySlug: previousPartySlug,
+        recruitedRoles: []
+      });
+    }
+
+    const callerEntity = await this.entitiesRepository.findByOwnerUserId(currentUser.id);
+
+    if (callerEntity) {
+      const callerAttributes = await this.entityAttributesRepository.findByEntityId(callerEntity.id);
+      return this.buildProfileResponse(callerEntity, callerAttributes, {
+        isOwner: true,
+        viewerUserId: currentUser.id
+      });
+    }
+
+    const nextOwnerAttributes = await this.entityAttributesRepository.findByEntityId(ownerEntity.id);
+    return this.buildProfileResponse(ownerEntity, nextOwnerAttributes, {
+      isOwner: party.ownerUserId === currentUser.id,
       viewerUserId: currentUser.id
     });
   }

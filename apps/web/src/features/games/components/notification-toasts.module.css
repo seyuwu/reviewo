@@ -1,0 +1,83 @@
+.root {
+  display: grid;
+  gap: 0.55rem;
+  max-width: min(22rem, calc(100vw - 1.5rem));
+  pointer-events: none;
+  position: fixed;
+  right: 1rem;
+  top: 4.75rem;
+  z-index: 80;
+}
+
+.card {
+  animation: toastIn 280ms ease both;
+  background: rgb(15 23 42 / 94%);
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.85rem;
+  box-shadow: 0 14px 36px rgb(15 23 42 / 35%);
+  color: #f8fafc;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  pointer-events: auto;
+}
+
+.content {
+  color: inherit;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem 0.85rem;
+  text-decoration: none;
+}
+
+.title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.body {
+  color: rgb(226 232 240 / 88%);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.cta {
+  color: #86efac;
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-top: 0.2rem;
+}
+
+.close {
+  align-self: start;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: rgb(148 163 184);
+  cursor: pointer;
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 0.45rem 0.55rem;
+}
+
+.close:hover {
+  color: #f8fafc;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
+}

@@ -2,6 +2,8 @@ export const DOTA_PARTY_SIZE = 5;
 export const DOTA_PARTY_VERTICAL = "dota" as const;
 /** Temporary stack/party lifetime */
 export const DOTA_TEMP_PARTY_TTL_HOURS = 12;
+/** Pending INVITE / APPLICATION auto-cancel after this age */
+export const DOTA_PARTY_INVITE_TTL_HOURS = 3;
 
 export const DOTA_POSITION_ROLES = ["1", "2", "3", "4", "5"] as const;
 export type DotaPositionRole = (typeof DOTA_POSITION_ROLES)[number];

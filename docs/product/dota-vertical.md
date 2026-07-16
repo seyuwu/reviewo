@@ -1,6 +1,8 @@
 # Dota Vertical — Product
 
-Актуально на **2026-07-13**. Первый vertical Opinia для репутации людей. Техническая спецификация: [RFC 0015](../11-rfc/0015-person-entities-and-quality-confirmations.md).
+Актуально на **2026-07-16**. Первый vertical Opinia для репутации людей. Техническая спецификация: [RFC 0015](../11-rfc/0015-person-entities-and-quality-confirmations.md).
+
+**Хосты:** публичный вход — `https://dota.opinia.ru` (тот же Next, что `opinia.ru`). С apex пути `/dota*` канонически редиректят на `dota.opinia.ru`. Локально — `http://localhost:3001/dota...` без поддоменов. Shared login и CORS: [development-workflow.md](../development-workflow.md#хосты-games--dota-важно-при-разработке).
 
 ## Позиционирование
 
@@ -21,15 +23,15 @@ One-liner для чата:
 
 ### Создание профиля
 
-1. Заход на `opinia.ru/dota`
+1. Заход на `dota.opinia.ru` (или `opinia.ru/dota` → редирект на dota-хост)
 2. «Создать профиль» → регистрация/логин
 3. Wizard: Dota Account ID, MMR, роли, сервер, мик
-4. Получает `opinia.ru/dota/{slug}`
+4. Получает `dota.opinia.ru/dota/{slug}` (path тот же)
 5. Экран «0/3 подтверждений» + три кнопки copy
 
 ### Подтверждение (без регистрации)
 
-1. Друг открывает `opinia.ru/dota/{slug}/confirm`
+1. Друг открывает `dota.opinia.ru/dota/{slug}/confirm`
 2. Видит галочки качеств
 3. Нажимает «Подтвердить» — один POST
 4. Footer: «Хочешь такой же профиль?» → `/dota/create`
@@ -37,7 +39,7 @@ One-liner для чата:
 ### Поиск по Dota ID
 
 1. Игрок знает только цифры из клиента
-2. `opinia.ru/dota/id/123456789` → редирект на профиль
+2. `dota.opinia.ru/dota/id/123456789` → редирект на профиль
 3. Или поле «введи Dota ID» на лендинге `/dota`
 
 ## Share templates
@@ -45,19 +47,19 @@ One-liner для чата:
 ### Профиль (Discord ЛС / party chat)
 
 ```
-Сделал профиль с подтверждениями от тиммейтов — глянь: https://opinia.ru/dota/{slug}
+Сделал профиль с подтверждениями от тиммейтов — глянь: https://dota.opinia.ru/dota/{slug}
 ```
 
 ### Confirm (короче)
 
 ```
-Подтверди мои качества в доте, 10 сек: https://opinia.ru/dota/{slug}/confirm
+Подтверди мои качества в доте, 10 сек: https://dota.opinia.ru/dota/{slug}/confirm
 ```
 
 ### По цифрам (Dota chat)
 
 ```
-мой dota id {accountId}, профиль: https://opinia.ru/dota/id/{accountId}
+мой dota id {accountId}, профиль: https://dota.opinia.ru/dota/id/{accountId}
 ```
 
 ## Lean GTM
@@ -72,7 +74,7 @@ One-liner для чата:
 ### Скрипты для Discord ЛС
 
 - «запустил штуку — профиль с галочками от тех с кем играл. можешь подтвердить? [ссылка]»
-- После confirm: «спасибо. если хочешь свой — opinia.ru/dota»
+- После confirm: «спасибо. если хочешь свой — dota.opinia.ru»
 
 ### Возражения
 
@@ -174,7 +176,6 @@ GA4/GTM — только если уже есть в проекте; иначе 
 - Steam OAuth / OpenDota
 - Email уведомления
 - Ежедневные кредиты
-- `dota.opinia.ru` subdomain
 
 ## OG requirements
 

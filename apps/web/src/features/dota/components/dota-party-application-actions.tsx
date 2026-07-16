@@ -1,7 +1,6 @@
 "use client";
 
 import type { DotaGreenFlagKey, DotaRedFlagKey } from "@reviewo/shared";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { FormFeedback } from "../../../components/form-feedback";
@@ -27,7 +26,6 @@ interface DotaPartyApplicationActionsProps {
 
 export function DotaPartyApplicationActions({ ownerUserId }: DotaPartyApplicationActionsProps) {
   const t = useTranslation();
-  const router = useRouter();
   const { authSession } = useAuthSession();
   const [applications, setApplications] = useState<GamePartyInvite[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -80,9 +78,8 @@ export function DotaPartyApplicationActions({ ownerUserId }: DotaPartyApplicatio
     setError(null);
 
     try {
-      const joined = await acceptPartyInvite(invite.id, authSession.accessToken);
+      await acceptPartyInvite(invite.id, authSession.accessToken);
       setApplications((current) => current.filter((item) => item.id !== invite.id));
-      router.push(`/dota/teams/${joined.slug}`);
     } catch (acceptError) {
       setError(resolveInviteDecisionError(acceptError, t));
     } finally {

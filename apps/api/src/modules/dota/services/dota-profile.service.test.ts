@@ -140,6 +140,7 @@ function createService(overrides?: {
     entityQualityConfirmationsRepository,
     friendshipsService,
     {} as never,
+    { broadcastPartyRecruitUpdated: () => undefined } as never,
     usersRepository
   );
 }

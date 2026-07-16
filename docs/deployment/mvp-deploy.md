@@ -22,8 +22,9 @@ For a step-by-step guide on a shared Selectel VDS (alongside another Docker proj
 | `JWT_SECRET` | At least 32 characters; must not start with `change_me` |
 | `POSTGRES_PASSWORD` | Strong password used by Compose Postgres |
 | `DATABASE_URL` | Built automatically in Compose from Postgres vars; for external DB set explicitly on API |
-| `CORS_ALLOWED_ORIGINS` | Comma-separated public web origins, e.g. `https://app.example.com` |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated public web origins, including apex + `games.` + `dota.` + extension id (see [development-workflow.md](../development-workflow.md#хосты-games--dota-важно-при-разработке)) |
 | `NEXT_PUBLIC_API_BASE_URL` | Public API URL embedded into the web build, e.g. `https://api.example.com` |
+| `NEXT_PUBLIC_SITE_URL` | Public apex site URL, e.g. `https://opinia.ru` (used for Games/Dota host helpers) |
 | `TRUST_PROXY_HOPS` | Set to the number of trusted reverse proxy hops; keep `0` when the API is directly exposed |
 
 Optional:

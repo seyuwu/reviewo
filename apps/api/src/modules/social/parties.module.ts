@@ -10,10 +10,18 @@ import { FriendshipsModule } from "./friendships.module.js";
 import { GamePartyGateway } from "./gateways/game-party.gateway.js";
 import { GamePartiesRepository } from "./repositories/game-parties.repository.js";
 import { GamePartiesService } from "./services/game-parties.service.js";
+import { PartyRealtimeService } from "./services/party-realtime.service.js";
+import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
 
 @Module({
   controllers: [PartiesController],
-  exports: [GamePartiesService, GamePartyGateway, GamePartiesRepository],
+  exports: [
+    GamePartiesService,
+    GamePartyGateway,
+    GamePartiesRepository,
+    PartyRealtimeService,
+    PARTY_REALTIME_PUBLISHER
+  ],
   imports: [
     AuthModule,
     forwardRef(() => DotaModule),
@@ -22,6 +30,15 @@ import { GamePartiesService } from "./services/game-parties.service.js";
     RateLimitingModule,
     UsersModule
   ],
-  providers: [GamePartiesRepository, GamePartiesService, GamePartyGateway]
+  providers: [
+    GamePartiesRepository,
+    GamePartiesService,
+    GamePartyGateway,
+    PartyRealtimeService,
+    {
+      provide: PARTY_REALTIME_PUBLISHER,
+      useExisting: PartyRealtimeService
+    }
+  ]
 })
 export class PartiesModule {}

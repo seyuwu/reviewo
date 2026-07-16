@@ -33,6 +33,7 @@ import {
   fetchMyParties,
   stackWithPlayer
 } from "../../social/api/social-api";
+import { PARTY_NOTIFICATION_EVENT } from "../../social/lib/party-notifications-socket";
 import type { DotaPositionRole, GameParty, GamePartyInvite } from "../../social/types/social";
 import { resolveInviteDecisionError, resolveStackInviteError } from "../lib/resolve-stack-invite-error";
 import {
@@ -46,7 +47,8 @@ import { GamesSearchTipRotator } from "./games-search-tip-rotator";
 const PENDING_STACK_KEY = "opinia.pendingStackSlug";
 const RECOMMENDATION_COUNT = 3;
 const REFRESH_MS = 15_000;
-const INVITE_POLL_MS = 5_000;
+/** Fallback when party_notification socket misses an event. */
+const INVITE_POLL_MS = 15_000;
 const OUTGOING_FLASH_MS = 3_500;
 const ONLINE_POLL_MS = 45_000;
 const ROLE_POSITIONS = ["1", "2", "3", "4", "5"] as const satisfies readonly DotaPositionRole[];
@@ -177,7 +179,7 @@ export function GamesSearchView() {
   const railRef = useRef<HTMLElement | null>(null);
 
   const refreshList = useCallback(
-    async (options?: { quiet?: boolean }) => {
+    async (options?: { advanceBatch?: boolean; quiet?: boolean }) => {
       if (!options?.quiet) {
         setIsLoading(true);
       }
@@ -188,7 +190,10 @@ export function GamesSearchView() {
         const response = await fetchDotaLfg();
         setResults(response.results);
 
-        if (!options?.quiet) {
+        if (options?.advanceBatch) {
+          // After a fresh fetch, move to the next trio so refresh doesn't re-show the same cards.
+          setBatchIndex((current) => current + 1);
+        } else if (!options?.quiet) {
           setBatchIndex(0);
         }
       } catch {
@@ -223,9 +228,9 @@ export function GamesSearchView() {
       const owned = [
         parties.team,
         ...(parties.parties?.length ? parties.parties : parties.party ? [parties.party] : [])
-      ].filter((party): party is GameParty => Boolean(party?.isOwner));
+      ].filter((party): party is GameParty => Boolean(party?.canManageParty ?? party?.isOwner));
       setOwnedParties(owned);
-      setInvites(parties.invites);
+      setInvites(parties.invites.filter((invite) => invite.status === "PENDING"));
       setOutgoingInvites((current) =>
         mergeOutgoingInvites(current, parties.outgoingInvites ?? [])
       );
@@ -280,8 +285,57 @@ export function GamesSearchView() {
       void refreshParties();
     }, INVITE_POLL_MS);
 
+    function handlePartyNotification(event: Event) {
+      const detail = (event as CustomEvent<{ invite?: GamePartyInvite; type?: string }>).detail;
+      const invite = detail?.invite;
+      const type = detail?.type;
+
+      if (!invite?.id || !type) {
+        void refreshParties();
+        return;
+      }
+
+      // Instant UI from socket payload; confirm with API in background.
+      if (type === "invite_received" && invite.status === "PENDING") {
+        setInvites((current) => {
+          if (current.some((item) => item.id === invite.id)) {
+            return current;
+          }
+
+          return [{ ...invite, direction: "incoming" }, ...current];
+        });
+      }
+
+      if (type === "application_received" && invite.status === "PENDING") {
+        setOutgoingInvites((current) => {
+          if (current.some((item) => item.id === invite.id)) {
+            return current;
+          }
+
+          return [
+            {
+              ...invite,
+              direction: "outgoing",
+              inviteKind: invite.inviteKind ?? "APPLICATION"
+            },
+            ...current
+          ];
+        });
+      }
+
+      if (type === "declined" || type === "accepted" || type === "member_joined") {
+        setInvites((current) => current.filter((item) => item.id !== invite.id));
+        setOutgoingInvites((current) => current.filter((item) => item.id !== invite.id));
+      }
+
+      void refreshParties();
+    }
+
+    window.addEventListener(PARTY_NOTIFICATION_EVENT, handlePartyNotification);
+
     return () => {
       window.clearInterval(intervalId);
+      window.removeEventListener(PARTY_NOTIFICATION_EVENT, handlePartyNotification);
     };
   }, [refreshParties]);
 
@@ -330,22 +384,27 @@ export function GamesSearchView() {
     }
   }, [outgoingInvites]);
 
-  const myLfgHit = useMemo(
-    () =>
-      myDotaProfile.slug
-        ? results.find((player) => player.slug === myDotaProfile.slug) ?? null
-        : null,
-    [myDotaProfile.slug, results]
-  );
+  const myLfgHit = useMemo(() => {
+    if (myDotaProfile.slug) {
+      const byProfile = results.find((player) => player.slug === myDotaProfile.slug);
+      if (byProfile) {
+        return byProfile;
+      }
+    }
+
+    // Sub-captains recruit on the captain's LFG card — match by managed party slug.
+    const managedSlugs = new Set(ownedParties.map((party) => party.slug));
+    return results.find((player) => player.partySlug && managedSlugs.has(player.partySlug)) ?? null;
+  }, [myDotaProfile.slug, ownedParties, results]);
 
   useEffect(() => {
-    if (!myDotaProfile.slug) {
+    if (!myDotaProfile.slug && ownedParties.length === 0) {
       setIsLooking(false);
       return;
     }
 
     setIsLooking(Boolean(myLfgHit));
-  }, [myDotaProfile.slug, myLfgHit]);
+  }, [myDotaProfile.slug, myLfgHit, ownedParties.length]);
 
   useEffect(() => {
     if (!isLooking || !myLfgHit) {
@@ -358,17 +417,8 @@ export function GamesSearchView() {
   useEffect(() => {
     if (intentMode === "join") {
       setSelectedPartySlug("");
-      return;
     }
-
-    if (selectedPartySlug) {
-      return;
-    }
-
-    if (ownedParties.length === 1) {
-      setSelectedPartySlug(ownedParties[0]!.slug);
-    }
-  }, [intentMode, ownedParties, selectedPartySlug]);
+  }, [intentMode]);
 
   useEffect(() => {
     if (!selectedPartySlug) {
@@ -490,7 +540,16 @@ export function GamesSearchView() {
       const nextLooking = !isLooking;
 
       if (!nextLooking) {
-        await setDotaLfgLooking(false, authSession.accessToken);
+        const stopPartySlug =
+          intentMode === "recruit"
+            ? selectedPartySlug || myLfgHit?.partySlug || undefined
+            : myLfgHit?.partySlug || undefined;
+
+        await setDotaLfgLooking(
+          false,
+          authSession.accessToken,
+          stopPartySlug ? { partySlug: stopPartySlug } : undefined
+        );
         setIsLooking(false);
         await refreshList({ quiet: true });
         return;
@@ -498,29 +557,30 @@ export function GamesSearchView() {
 
       if (intentMode === "recruit") {
         let partySlug = selectedPartySlug;
+        let createdParty: GameParty | null = null;
 
         if (!partySlug) {
-          if (ownedParties.length === 1) {
-            partySlug = ownedParties[0]!.slug;
-            setSelectedPartySlug(partySlug);
-          } else if (ownedParties.length === 0) {
-            const created = await createGameParty("PARTY", authSession.accessToken);
-            partySlug = created.slug;
-            setSelectedPartySlug(partySlug);
-            await refreshParties();
-          } else {
-            setStackError(t("games.search.recruitNeedParty"));
-            return;
-          }
+          createdParty = await createGameParty("PARTY", authSession.accessToken);
+          partySlug = createdParty.slug;
+          setSelectedPartySlug(partySlug);
+          setOwnedParties((current) => {
+            if (current.some((item) => item.id === createdParty!.id)) {
+              return current;
+            }
+
+            return [createdParty!, ...current];
+          });
+          await refreshParties();
         }
 
         const party =
+          createdParty ??
           ownedParties.find((item) => item.slug === partySlug) ??
           (await fetchMyParties(authSession.accessToken).then((parties) => {
             const owned = [
               parties.team,
               ...(parties.parties?.length ? parties.parties : parties.party ? [parties.party] : [])
-            ].filter((item): item is GameParty => Boolean(item?.isOwner));
+            ].filter((item): item is GameParty => Boolean(item?.canManageParty ?? item?.isOwner));
             return owned.find((item) => item.slug === partySlug) ?? null;
           }));
 
@@ -529,10 +589,9 @@ export function GamesSearchView() {
           return;
         }
 
+        // Empty selection → all unfilled position slots on this party.
         const rolesToRecruit =
-          effectiveRecruitedRoles.length > 0
-            ? effectiveRecruitedRoles
-            : selectableRecruitRoles.slice(0, Math.min(party.openSlots, selectableRecruitRoles.length));
+          effectiveRecruitedRoles.length > 0 ? effectiveRecruitedRoles : selectableRecruitRoles;
 
         if (rolesToRecruit.length === 0) {
           setStackError(t("games.search.rolesNeedSelect"));
@@ -645,7 +704,8 @@ export function GamesSearchView() {
         });
         flashScheduledRef.current.delete(stacked.invite.id);
       }
-      await Promise.all([refreshList({ quiet: true }), refreshParties()]);
+      // Don't block the CTA on a full LFG/parties refresh.
+      void Promise.all([refreshList({ quiet: true }), refreshParties()]);
     } catch (error) {
       setStackError(resolveStackInviteError(error, t));
     } finally {
@@ -665,7 +725,10 @@ export function GamesSearchView() {
       const joined = await acceptPartyInvite(invite.id, authSession.accessToken);
       setInvites((current) => current.filter((item) => item.id !== invite.id));
       setOutgoingInvites((current) => current.filter((item) => item.id !== invite.id));
-      router.push(`/dota/teams/${joined.slug}`);
+      // Invitee → team page; captain accepting an application stays on search.
+      if (invite.inviteKind !== "APPLICATION") {
+        router.push(`/dota/teams/${joined.slug}`);
+      }
     } catch (error) {
       setStackError(resolveInviteDecisionError(error, t));
       await refreshParties();
@@ -772,18 +835,16 @@ export function GamesSearchView() {
                     role="radiogroup"
                     aria-label={t("games.search.recruitAsTitle")}
                   >
-                    {ownedParties.length === 0 ? (
-                      <label className={styles.radioItem}>
-                        <input
-                          checked={selectedPartySlug === ""}
-                          disabled={isLooking || lookingBusy}
-                          name="stack-as"
-                          onChange={() => setSelectedPartySlug("")}
-                          type="radio"
-                        />
-                        <span>{t("games.search.stackAsNewParty")}</span>
-                      </label>
-                    ) : null}
+                    <label className={styles.radioItem}>
+                      <input
+                        checked={selectedPartySlug === ""}
+                        disabled={isLooking || lookingBusy}
+                        name="stack-as"
+                        onChange={() => setSelectedPartySlug("")}
+                        type="radio"
+                      />
+                      <span>{t("games.search.stackAsNewParty")}</span>
+                    </label>
                     {ownedParties.map((party) => (
                       <label className={styles.radioItem} key={party.id}>
                         <input
@@ -877,6 +938,7 @@ export function GamesSearchView() {
                       );
                     })}
                   </div>
+                  <p className={styles.controlHint}>{t("games.search.rolesNeededHelp")}</p>
                   {rolesLegendOpen ? (
                     <ul className={styles.roleLegend}>
                       {ROLE_POSITIONS.map((role) => (
@@ -889,7 +951,11 @@ export function GamesSearchView() {
                   ) : null}
                   <p className={styles.slotsMeta}>
                     {t("games.search.rolesNeededCount", {
-                      count: String(effectiveRecruitedRoles.length),
+                      count: String(
+                        effectiveRecruitedRoles.length > 0
+                          ? effectiveRecruitedRoles.length
+                          : selectableRecruitRoles.length
+                      ),
                       current: String(selectedParty?.memberCount ?? 0),
                       max: String(slotMax)
                     })}
@@ -965,7 +1031,7 @@ export function GamesSearchView() {
               <button
                 className="button-secondary"
                 disabled={isLoading}
-                onClick={() => void refreshList()}
+                onClick={() => void refreshList({ advanceBatch: true })}
                 type="button"
               >
                 {isLoading ? t("common.loadingEllipsis") : t("games.search.refresh")}

@@ -33,7 +33,7 @@ export interface GamePartyMember {
   dotaSlug: string | null;
   mmr: string | null;
   positionRole: DotaPositionRole | null;
-  role: "OWNER" | "MEMBER";
+  role: "OWNER" | "OFFICER" | "MEMBER";
   userId: string;
 }
 
@@ -62,9 +62,11 @@ export interface GamePartyInvite {
 }
 
 export interface GameParty {
+  canManageParty?: boolean;
   expiresAt: string | null;
   id: string;
   isMember: boolean;
+  isOfficer?: boolean;
   isOwner: boolean;
   kind: GamePartyKind;
   maxMembers: number;

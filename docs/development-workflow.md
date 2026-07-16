@@ -6,12 +6,57 @@
 
 | Компонент | Где живёт |
 | --- | --- |
-| **Сайт** | [https://opinia.ru](https://opinia.ru) — VPS Selectel, Docker |
+| **Сайт (OpinIA)** | [https://opinia.ru](https://opinia.ru) — VPS Selectel, Docker |
+| **Games** | [https://games.opinia.ru](https://games.opinia.ru) — тот же Next.js |
+| **Dota** | [https://dota.opinia.ru](https://dota.opinia.ru) — тот же Next.js |
 | **API** | [https://api.opinia.ru](https://api.opinia.ru) — тот же VPS |
 | **Chrome-расширение** | [Chrome Web Store](https://chromewebstore.google.com/) — опубликовано, у пользователей |
 | **Исходный код** | [github.com/seyuwu/reviewo](https://github.com/seyuwu/reviewo) |
 
 Backend и сайт **не** крутятся на локальной машине разработчика в повседневной работе — они на хостинге. Расширение из Store ходит на production API.
+
+---
+
+## Хосты Games / Dota (важно при разработке)
+
+Один Next.js (`apps/web`) обслуживает несколько публичных хостов. Отдельных контейнеров для Games/Dota нет.
+
+| Хост | Поведение |
+| --- | --- |
+| `opinia.ru` / `www` | Основной продукт (рейтинги, битвы, топы) |
+| `games.opinia.ru` | `/` → `/games/search` (middleware) |
+| `dota.opinia.ru` | `/` → `/games/search` (middleware) |
+| `api.opinia.ru` | Nest API |
+
+### Middleware (`apps/web/src/middleware.ts`)
+
+- На **apex** (`opinia.ru` / `www`): пути `/games*` и `/dota*` **редиректят** на `games.opinia.ru` / `dota.opinia.ru` с тем же path.
+- На **games.** / **dota.**: только `/` уходит на `/games/search`.
+- Локально (`localhost`) канонические редиректы на поддомены **не** включаются — можно работать по путям `/games/...`, `/dota/...` на `http://localhost:3001`.
+
+### Shared login
+
+Сессия шарится между `opinia.ru`, `games.opinia.ru`, `dota.opinia.ru` через cookie `Domain=.opinia.ru` (`opinia.sharedAuth` / `opinia.webSignedOut`) + localStorage. API по-прежнему принимает `Authorization: Bearer`.
+
+Код: `apps/web/src/features/auth/lib/auth-session-cookie.ts`, `auth-session-storage.ts`.
+
+Локально cookie domain — `.localhost` (если браузер его принимает); иначе сессия остаётся origin-local на `:3001`.
+
+### CORS (production)
+
+В `.env.production` на VPS **обязательно** все web-origins:
+
+```env
+CORS_ALLOWED_ORIGINS=https://opinia.ru,https://www.opinia.ru,https://games.opinia.ru,https://dota.opinia.ru,chrome-extension://<EXTENSION_ID>
+```
+
+Без `games` / `dota` браузер режет API с поддоменов (`CORS Missing Allow Origin`). После правки — `up -d api` (rebuild web не нужен).
+
+Хелперы ссылок: `apps/web/src/lib/config/product-hosts.ts` (`getGamesHomeUrl`, `getDotaHomeUrl`, `getOpiniaHomeUrl`, `getDotaPublicOrigin`). На production entry ведёт на поддомены; **share/canonical/OG для Dota** всегда через `https://dota.opinia.ru/...` (`apps/web/src/features/dota/lib/share.ts`). На localhost — тот же origin, что `NEXT_PUBLIC_SITE_URL`.
+
+### Entry UX с главной
+
+С `opinia.ru`: intent-prompt и quick nav ведут на `games.opinia.ru` / `dota.opinia.ru`. Переключатель бренда «Opinia» с games/dota-хостов — на `https://opinia.ru/`.
 
 ---
 
@@ -21,7 +66,7 @@ Backend и сайт **не** крутятся на локальной машин
 Локальная машина                    GitHub                         Production (VPS)
 ─────────────────                   ──────                         ──────────────────
 make dev                            git push                       git pull
-localhost:3000 / :3001         →    main                    →    opinia.ru / api.opinia.ru
+localhost:3000 / :3001         →    main                    →    opinia.ru / games. / dota. / api.
 расширение unpacked (dist)          история и бэкап                docker compose up -d --build
 pnpm test / lint                    (источник правды)              Chrome Web Store (новая версия)
 ```

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { getDotaHomeUrl, getGamesHomeUrl } from "../../../lib/config/product-hosts";
 import { useTranslation } from "../../i18n/locale-provider";
 import styles from "./home-product-intent-prompt.module.css";
 
@@ -12,8 +13,13 @@ const SHOW_DELAY_MS = 1_400;
 export function HomeProductIntentPrompt() {
   const t = useTranslation();
   const [open, setOpen] = useState(false);
+  const [gamesHref, setGamesHref] = useState("/games/search");
+  const [dotaHref, setDotaHref] = useState("/games/search");
 
   useEffect(() => {
+    setGamesHref(getGamesHomeUrl());
+    setDotaHref(getDotaHomeUrl());
+
     if (typeof window === "undefined") {
       return;
     }
@@ -53,9 +59,13 @@ export function HomeProductIntentPrompt() {
         </div>
 
         <div className={styles.actions}>
-          <Link className={styles.gamesCta} href="/games/search" onClick={dismiss}>
+          <Link className={styles.gamesCta} href={gamesHref} onClick={dismiss}>
             <strong>{t("web.homeIntent.gamesCta")}</strong>
             <span>{t("web.homeIntent.gamesHint")}</span>
+          </Link>
+          <Link className={styles.dotaCta} href={dotaHref} onClick={dismiss}>
+            <strong>{t("web.homeIntent.dotaCta")}</strong>
+            <span>{t("web.homeIntent.dotaHint")}</span>
           </Link>
           <button className={styles.stayCta} onClick={dismiss} type="button">
             <strong>{t("web.homeIntent.stayCta")}</strong>

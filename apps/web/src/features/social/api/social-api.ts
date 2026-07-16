@@ -184,6 +184,22 @@ export function kickGamePartyMember(
   );
 }
 
+export function updatePartyMemberRole(
+  slug: string,
+  userId: string,
+  role: "OFFICER" | "MEMBER",
+  accessToken: string
+): Promise<GameParty> {
+  return apiRequest<GameParty>(
+    `/social/parties/${encodeURIComponent(slug)}/members/${encodeURIComponent(userId)}/role`,
+    {
+      body: { role },
+      headers: authHeaders(accessToken),
+      method: "PATCH"
+    }
+  );
+}
+
 export function stackWithPlayer(
   targetSlug: string,
   accessToken: string,

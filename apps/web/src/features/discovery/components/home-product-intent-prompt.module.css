@@ -64,6 +64,7 @@
 }
 
 .gamesCta,
+.dotaCta,
 .stayCta {
   appearance: none;
   border-radius: 0.85rem;
@@ -86,22 +87,31 @@
   border: 1px solid rgb(124 58 237 / 28%);
 }
 
+.dotaCta {
+  background: linear-gradient(135deg, rgb(220 38 38 / 10%), rgb(249 115 22 / 10%));
+  border: 1px solid rgb(220 38 38 / 26%);
+}
+
 .stayCta {
   background: rgb(248 250 252 / 95%);
   border: 1px solid rgb(15 23 42 / 8%);
+  grid-column: 1 / -1;
 }
 
 .gamesCta:hover,
+.dotaCta:hover,
 .stayCta:hover {
   transform: translateY(-1px);
 }
 
 .gamesCta strong,
+.dotaCta strong,
 .stayCta strong {
   font-size: 0.88rem;
 }
 
 .gamesCta span,
+.dotaCta span,
 .stayCta span {
   color: #64748b;
   font-size: 0.74rem;
@@ -154,6 +164,7 @@
   }
 
   .gamesCta:hover,
+  .dotaCta:hover,
   .stayCta:hover {
     transform: none;
   }

@@ -1038,6 +1038,7 @@ enum GamePartyVisibility {
 
 enum GamePartyMemberRole {
   OWNER
+  OFFICER
   MEMBER
 
   @@map("game_party_member_role")

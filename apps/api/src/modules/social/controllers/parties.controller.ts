@@ -34,6 +34,7 @@ import { ListPartyChatMessagesQueryDto, SendPartyChatMessageDto } from "../dto/p
 import { StackInviteDto } from "../dto/stack-invite.dto.js";
 import { UpdateGamePartyDto } from "../dto/update-game-party.dto.js";
 import { UpdatePartyMemberPositionDto } from "../dto/update-party-member-position.dto.js";
+import { UpdatePartyMemberRoleDto } from "../dto/update-party-member-role.dto.js";
 import { GamePartyGateway } from "../gateways/game-party.gateway.js";
 import { GamePartiesService } from "../services/game-parties.service.js";
 
@@ -78,9 +79,22 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
-    const party = await this.gamePartiesService.acceptInvite(id, currentUser);
-    this.gamePartyGateway.broadcastPartyUpdated(party);
-    return party;
+    const result = await this.gamePartiesService.acceptInvite(id, currentUser);
+    this.gamePartyGateway.broadcastPartyUpdated(result.party);
+
+    if (result.inviteKind === "INVITE") {
+      this.gamePartyGateway.emitPartyNotification(result.inviterUserId, {
+        invite: { ...result.notifyInvite, direction: "outgoing" },
+        type: "member_joined"
+      });
+    } else {
+      this.gamePartyGateway.emitPartyNotification(result.inviteeUserId, {
+        invite: { ...result.notifyInvite, direction: "incoming" },
+        type: "accepted"
+      });
+    }
+
+    return result.party;
   }
 
   @Post("invites/:id/decline")
@@ -94,7 +108,41 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
-    return this.gamePartiesService.declineInvite(id, currentUser);
+    const result = await this.gamePartiesService.declineInvite(id, currentUser);
+
+    if (result.inviteKind === "INVITE") {
+      this.gamePartyGateway.emitPartyNotification(result.inviterUserId, {
+        invite: { ...result.notifyInvite, direction: "outgoing" },
+        type: "declined"
+      });
+    } else if (currentUser.id === result.inviteeUserId) {
+      // APPLICATION withdrawn → notify all managers so lists drop instantly
+      for (const userId of result.managerUserIds) {
+        this.gamePartyGateway.emitPartyNotification(userId, {
+          invite: { ...result.notifyInvite, direction: "outgoing" },
+          type: "declined"
+        });
+      }
+    } else {
+      // APPLICATION declined by a manager → notify applicant + other managers
+      this.gamePartyGateway.emitPartyNotification(result.inviteeUserId, {
+        invite: { ...result.notifyInvite, direction: "incoming" },
+        type: "declined"
+      });
+
+      for (const userId of result.managerUserIds) {
+        if (userId === currentUser.id) {
+          continue;
+        }
+
+        this.gamePartyGateway.emitPartyNotification(userId, {
+          invite: { ...result.notifyInvite, direction: "outgoing" },
+          type: "declined"
+        });
+      }
+    }
+
+    return { ok: true };
   }
 
   @Post()
@@ -122,12 +170,35 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
-    return this.gamePartiesService.stackInvite(
+    const result = await this.gamePartiesService.stackInvite(
       input.targetSlug,
       currentUser,
       input.partySlug,
       input.positionRole
     );
+
+    if (result.invite.inviteKind === "APPLICATION") {
+      const managers = new Set<string>([result.party.ownerUserId]);
+      for (const member of result.party.members) {
+        if (member.role === "OFFICER") {
+          managers.add(member.userId);
+        }
+      }
+
+      for (const userId of managers) {
+        this.gamePartyGateway.emitPartyNotification(userId, {
+          invite: { ...result.invite, direction: "outgoing" },
+          type: "application_received"
+        });
+      }
+    } else {
+      this.gamePartyGateway.emitPartyNotification(result.invite.inviteeUserId, {
+        invite: { ...result.invite, direction: "incoming" },
+        type: "invite_received"
+      });
+    }
+
+    return result;
   }
 
   @Get(":slug")
@@ -195,7 +266,12 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
-    return this.gamePartiesService.inviteFriend(slug, input, currentUser);
+    const invite = await this.gamePartiesService.inviteFriend(slug, input, currentUser);
+    this.gamePartyGateway.emitPartyNotification(invite.inviteeUserId, {
+      invite: { ...invite, direction: "incoming" },
+      type: "invite_received"
+    });
+    return invite;
   }
 
   @Post(":slug/join-token")
@@ -287,7 +363,9 @@ export class PartiesController {
       input.positionRole,
       currentUser
     );
-    this.gamePartyGateway.broadcastPartyUpdated(party);
+    // Broadcast viewer-neutral roster so clients recalculate their own flags.
+    const broadcastParty = await this.gamePartiesService.getPartyBySlug(slug).catch(() => party);
+    this.gamePartyGateway.broadcastPartyUpdated(broadcastParty);
     return party;
   }
 
@@ -305,6 +383,30 @@ export class PartiesController {
 
     const party = await this.gamePartiesService.kickMember(slug, userId, currentUser);
     this.gamePartyGateway.broadcastPartyUpdated(party);
+    return party;
+  }
+
+  @Patch(":slug/members/:userId/role")
+  @UseGuards(JwtAuthGuard)
+  async updateMemberRole(
+    @Param("slug") slug: string,
+    @Param("userId") userId: string,
+    @Body() input: UpdatePartyMemberRoleDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ): Promise<GamePartyResponseDto> {
+    await this.apiRateLimiterService.assertWithinLimits(
+      createSocialWriteRateLimitRules(currentUser.id, request)
+    );
+
+    const party = await this.gamePartiesService.updateMemberRole(
+      slug,
+      userId,
+      input.role,
+      currentUser
+    );
+    const broadcastParty = await this.gamePartiesService.getPartyBySlug(slug).catch(() => party);
+    this.gamePartyGateway.broadcastPartyUpdated(broadcastParty);
     return party;
   }
 }

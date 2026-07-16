@@ -33,8 +33,8 @@ export function playNotificationSound(): void {
       oscillator.stop(start + duration + 0.02);
     }
 
-    tone(880, now, 0.12, 0.07);
-    tone(1175, now + 0.1, 0.16, 0.055);
+    tone(880, now, 0.13, 0.3);
+    tone(1175, now + 0.1, 0.17, 0.26);
 
     window.setTimeout(() => {
       void context.close();

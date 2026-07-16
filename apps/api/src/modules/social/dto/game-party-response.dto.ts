@@ -6,7 +6,7 @@ export class GamePartyMemberDto {
   dotaSlug!: string | null;
   mmr!: string | null;
   positionRole!: "1" | "2" | "3" | "4" | "5" | null;
-  role!: "OWNER" | "MEMBER";
+  role!: "OWNER" | "OFFICER" | "MEMBER";
   userId!: string;
 }
 
@@ -35,9 +35,12 @@ export class GamePartyInviteDto {
 }
 
 export class GamePartyResponseDto {
+  /** Captain or sub-captain: recruit, apps, invites, kick members. */
+  canManageParty!: boolean;
   expiresAt!: string | null;
   id!: string;
   isMember!: boolean;
+  isOfficer!: boolean;
   isOwner!: boolean;
   kind!: GamePartyKind;
   maxMembers!: number;

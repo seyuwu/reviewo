@@ -62,6 +62,14 @@
   gap: 0.5rem;
 }
 
+.viewerInviteHint {
+  color: var(--color-accent-strong);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0.15rem 0 0;
+}
+
 .slots {
   display: grid;
   gap: 0.65rem;

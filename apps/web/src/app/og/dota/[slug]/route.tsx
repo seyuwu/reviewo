@@ -74,7 +74,7 @@ function renderFallback(title: string, subtitle: string, extra?: string) {
           <div style={{ color: "rgba(255,255,255,0.82)", fontSize: 30 }}>{subtitle}</div>
           {extra ? <div style={{ color: "rgba(255,255,255,0.72)", fontSize: 24 }}>{extra}</div> : null}
         </div>
-        <div style={{ color: "#d4af37", fontSize: 28, fontWeight: 700 }}>opinia.ru/dota</div>
+        <div style={{ color: "#d4af37", fontSize: 28, fontWeight: 700 }}>dota.opinia.ru</div>
       </div>
     ),
     {

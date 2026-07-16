@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { useTranslation } from "../features/i18n/locale-provider";
+import {
+  getGamesEntryUrl,
+  getOpiniaHomeUrl,
+  isGamesVerticalHostname
+} from "../lib/config/product-hosts";
 
 const SWITCH_SEEN_KEY = "opinia.productSwitchSeen";
 const SWITCH_PEEK_KEY = "opinia.productSwitchPeeked";
@@ -18,12 +23,21 @@ export function ProductBrandSwitcher({ mode }: ProductBrandSwitcherProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(false);
+  const [onGamesHost, setOnGamesHost] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
   const peekTimerRef = useRef<number | null>(null);
   const suppressUntilLeaveRef = useRef(false);
 
   const previousModeRef = useRef(mode);
   const homeHref = mode === "games" ? "/games/search" : "/";
+  // On games./dota. hosts, "/" is rewritten to /games/search by middleware — leave via absolute main site URL.
+  const opiniaHref = onGamesHost ? getOpiniaHomeUrl() : "/";
+  // Games menu temporarily lands on the Dota host (same search vertical).
+  const gamesHref = getGamesEntryUrl();
+
+  useEffect(() => {
+    setOnGamesHost(isGamesVerticalHostname(window.location.hostname));
+  }, []);
 
   useEffect(() => {
     if (previousModeRef.current === mode) {
@@ -200,7 +214,7 @@ export function ProductBrandSwitcher({ mode }: ProductBrandSwitcherProps) {
           <Link
             aria-current={mode === "opinia" ? "page" : undefined}
             className={`product-brand-menu-item${mode === "opinia" ? " is-active" : ""}`}
-            href="/"
+            href={opiniaHref}
             onClick={handleSelect}
             role="menuitem"
           >
@@ -209,7 +223,7 @@ export function ProductBrandSwitcher({ mode }: ProductBrandSwitcherProps) {
           <Link
             aria-current={mode === "games" ? "page" : undefined}
             className={`product-brand-menu-item${mode === "games" ? " is-active" : ""}`}
-            href="/games/search"
+            href={gamesHref}
             onClick={handleSelect}
             role="menuitem"
           >

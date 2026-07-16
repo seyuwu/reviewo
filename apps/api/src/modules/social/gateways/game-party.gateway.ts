@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable, forwardRef } from "@nestjs/common";
 import {
   ConnectedSocket,
   MessageBody,
@@ -17,12 +17,27 @@ import { JwtTokenService } from "../../auth/services/jwt-token.service.js";
 import { UsersService } from "../../users/services/users.service.js";
 import type {
   GamePartyChatMessageDto,
+  GamePartyInviteDto,
   GamePartyResponseDto
 } from "../dto/game-party-response.dto.js";
+import type {
+  PartyNotificationPayload,
+  PartyRecruitUpdatedPayload
+} from "../party-realtime.types.js";
 import { GamePartiesService } from "../services/game-parties.service.js";
+
+export type {
+  PartyNotificationPayload,
+  PartyNotificationType,
+  PartyRecruitUpdatedPayload
+} from "../party-realtime.types.js";
 
 interface JoinPartyPayload {
   limit?: number;
+  partySlug: string;
+}
+
+interface WatchPartyPayload {
   partySlug: string;
 }
 
@@ -37,9 +52,15 @@ interface PartySocketSession {
   room: string;
 }
 
+interface PartyViewSession {
+  partySlug: string;
+  room: string;
+}
+
 interface AuthenticatedSocketData {
   partySession?: PartySocketSession;
   user: AuthenticatedUser | null;
+  viewSession?: PartyViewSession;
 }
 
 @Injectable()
@@ -51,6 +72,7 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
   private server!: Server;
 
   constructor(
+    @Inject(forwardRef(() => GamePartiesService))
     private readonly gamePartiesService: GamePartiesService,
     private readonly jwtTokenService: JwtTokenService,
     private readonly usersService: UsersService
@@ -73,10 +95,58 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
     }
 
     data.user = await this.usersService.findAuthenticatedUserById(verified.userId);
+
+    if (data.user) {
+      await client.join(userRoomName(data.user.id));
+    }
   }
 
   handleDisconnect(client: Socket): void {
     delete getSocketData(client).partySession;
+    delete getSocketData(client).viewSession;
+  }
+
+  /** Public watch room for roster visitors (LFG/recruit updates). Auth optional. */
+  @SubscribeMessage("watch")
+  async handleWatch(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: WatchPartyPayload
+  ): Promise<{ ok: true; partySlug: string }> {
+    const partySlug = payload.partySlug?.trim();
+
+    if (!partySlug) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "partySlug is required",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    const data = getSocketData(client);
+    const previous = data.viewSession;
+
+    if (previous) {
+      await client.leave(previous.room);
+    }
+
+    const room = partyViewRoomName(partySlug);
+    await client.join(room);
+    data.viewSession = { partySlug, room };
+
+    return { ok: true, partySlug };
+  }
+
+  @SubscribeMessage("unwatch")
+  async handleUnwatch(@ConnectedSocket() client: Socket): Promise<{ ok: true } | null> {
+    const session = getSocketData(client).viewSession;
+
+    if (!session) {
+      return null;
+    }
+
+    await client.leave(session.room);
+    delete getSocketData(client).viewSession;
+    return { ok: true };
   }
 
   @SubscribeMessage("join")
@@ -202,11 +272,33 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   broadcastPartyUpdated(party: GamePartyResponseDto): void {
     this.server.to(partyRoomName(party.id)).emit("party_updated", party);
+    // Visitors on the team page watch party_view — keep their roster in sync too.
+    this.server.to(partyViewRoomName(party.slug)).emit("party_updated", party);
+  }
+
+  broadcastPartyRecruitUpdated(payload: PartyRecruitUpdatedPayload): void {
+    this.server.to(partyViewRoomName(payload.partySlug)).emit("party_recruit_updated", payload);
+
+    if (payload.partyId) {
+      this.server.to(partyRoomName(payload.partyId)).emit("party_recruit_updated", payload);
+    }
+  }
+
+  emitPartyNotification(userId: string, payload: PartyNotificationPayload): void {
+    this.server.to(userRoomName(userId)).emit("party_notification", payload);
   }
 }
 
 export function partyRoomName(partyId: string): string {
   return `party:${partyId}`;
+}
+
+export function partyViewRoomName(partySlug: string): string {
+  return `party_view:${partySlug}`;
+}
+
+export function userRoomName(userId: string): string {
+  return `user:${userId}`;
 }
 
 function extractHandshakeToken(client: Socket): string | null {

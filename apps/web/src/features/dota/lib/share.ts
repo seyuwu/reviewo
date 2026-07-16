@@ -1,22 +1,26 @@
 import type { TranslateFn } from "@reviewo/i18n";
 
-import { publicEnv } from "../../../lib/config/public-env";
+import { getDotaPublicOrigin } from "../../../lib/config/product-hosts";
 import { copyTextToClipboard } from "../../growth/lib/share-urls";
 import type { DotaProfile, DotaShareKind } from "../types/dota";
 
+function dotaAbsoluteUrl(pathname: string): URL {
+  return new URL(pathname, `${getDotaPublicOrigin()}/`);
+}
+
 export function buildDotaProfileUrl(slug: string): string {
-  return new URL(`/dota/${slug}`, publicEnv.siteUrl).toString();
+  return dotaAbsoluteUrl(`/dota/${slug}`).toString();
 }
 
 /** Owner-shared link: opening while signed in auto-adds friendship (requires signed token). */
 export function buildDotaFriendInviteUrl(slug: string, inviteToken: string): string {
-  const url = new URL(`/dota/${slug}`, publicEnv.siteUrl);
+  const url = dotaAbsoluteUrl(`/dota/${slug}`);
   url.searchParams.set("friendInvite", inviteToken);
   return url.toString();
 }
 
 export function buildDotaConfirmUrl(slug: string, ref?: string): string {
-  const url = new URL(`/dota/${slug}/confirm`, publicEnv.siteUrl);
+  const url = dotaAbsoluteUrl(`/dota/${slug}/confirm`);
 
   if (ref) {
     url.searchParams.set("ref", ref);
@@ -26,20 +30,20 @@ export function buildDotaConfirmUrl(slug: string, ref?: string): string {
 }
 
 export function buildDotaIdUrl(accountId: string): string {
-  return new URL(`/dota/id/${accountId}`, publicEnv.siteUrl).toString();
+  return dotaAbsoluteUrl(`/dota/id/${accountId}`).toString();
 }
 
 export function buildDotaOgImageUrl(slug: string): string {
-  return new URL(`/og/dota/${slug}`, publicEnv.siteUrl).toString();
+  return dotaAbsoluteUrl(`/og/dota/${slug}`).toString();
 }
 
 export function buildDotaTeamUrl(slug: string): string {
-  return new URL(`/dota/teams/${slug}`, publicEnv.siteUrl).toString();
+  return dotaAbsoluteUrl(`/dota/teams/${slug}`).toString();
 }
 
 /** Signed join link: opening while signed in auto-adds the viewer to the party. */
 export function buildDotaTeamJoinUrl(slug: string, joinToken: string): string {
-  const url = new URL(`/dota/teams/${slug}`, publicEnv.siteUrl);
+  const url = dotaAbsoluteUrl(`/dota/teams/${slug}`);
   url.searchParams.set("join", joinToken);
   return url.toString();
 }

@@ -3,11 +3,19 @@ import { io, type Socket } from "socket.io-client";
 import { publicEnv } from "../../../lib/config/public-env";
 import type { GameParty, GamePartyChatMessage } from "../types/social";
 
+export interface PartyRecruitUpdated {
+  looking: boolean;
+  partyId?: string;
+  partySlug: string;
+  recruitedRoles: string[];
+}
+
 export interface PartySocketHandlers {
   onDisconnect?: () => void;
   onMessages?: (messages: GamePartyChatMessage[], nextCursor?: string | null) => void;
   onNewMessage?: (message: GamePartyChatMessage) => void;
   onPartyUpdated?: (party: GameParty) => void;
+  onRecruitUpdated?: (payload: PartyRecruitUpdated) => void;
 }
 
 export type PartySocketHandlersRef = {
@@ -18,6 +26,10 @@ export interface PartySocketConnection {
   disconnect: () => void;
   isReady: () => boolean;
   sendMessage: (message: string) => Promise<GamePartyChatMessage>;
+}
+
+export interface PartyWatchSocketConnection {
+  disconnect: () => void;
 }
 
 const JOIN_ROOM_TIMEOUT_MS = 10_000;
@@ -78,6 +90,8 @@ export function connectPartySocket(
       }
 
       hasJoinedRoom = true;
+      // Also join party_view so roster updates arrive even if chat room membership flaps.
+      socket.emit("watch", { partySlug });
       readHandlers(handlersRef).onPartyUpdated?.(response.party);
       readHandlers(handlersRef).onMessages?.(response.messages, response.nextCursor ?? null);
     });
@@ -113,7 +127,15 @@ export function connectPartySocket(
   });
 
   socket.on("party_updated", (party: GameParty) => {
-    readHandlers(handlersRef).onPartyUpdated?.(party);
+    if (party?.slug === partySlug) {
+      readHandlers(handlersRef).onPartyUpdated?.(party);
+    }
+  });
+
+  socket.on("party_recruit_updated", (payload: PartyRecruitUpdated) => {
+    if (payload?.partySlug === partySlug) {
+      readHandlers(handlersRef).onRecruitUpdated?.(payload);
+    }
   });
 
   return {
@@ -155,5 +177,53 @@ export function connectPartySocket(
           }
         );
       })
+  };
+}
+
+/** Lightweight public watch for roster + recruit updates (members use join for chat). */
+export function connectPartyWatchSocket(
+  partySlug: string,
+  accessToken: string | null,
+  handlers: {
+    onPartyUpdated?: (party: GameParty) => void;
+    onRecruitUpdated: (payload: PartyRecruitUpdated) => void;
+  }
+): PartyWatchSocketConnection {
+  const socket: Socket = io(`${publicEnv.apiBaseUrl}/parties`, {
+    ...(accessToken ? { auth: { token: accessToken } } : {}),
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    transports: ["websocket", "polling"]
+  });
+
+  const watch = (): void => {
+    socket.emit("watch", { partySlug });
+  };
+
+  socket.on("connect", watch);
+
+  socket.on("party_updated", (party: GameParty) => {
+    if (party?.slug === partySlug) {
+      handlers.onPartyUpdated?.(party);
+    }
+  });
+
+  socket.on("party_recruit_updated", (payload: PartyRecruitUpdated) => {
+    if (payload?.partySlug === partySlug) {
+      handlers.onRecruitUpdated(payload);
+    }
+  });
+
+  return {
+    disconnect: () => {
+      if (socket.connected) {
+        socket.emit("unwatch");
+      }
+
+      socket.off();
+      socket.disconnect();
+    }
   };
 }
