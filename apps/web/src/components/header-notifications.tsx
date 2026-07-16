@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuthSession } from "../features/auth/hooks/use-auth-session";
+import { playNotificationSound } from "../features/games/lib/play-notification-sound";
 import { resolveInviteDecisionError } from "../features/games/lib/resolve-stack-invite-error";
 import { useTranslation } from "../features/i18n/locale-provider";
 import {
@@ -41,6 +42,8 @@ export function HeaderNotifications() {
   const pendingForceRef = useRef(false);
   const lastFetchAtRef = useRef(0);
   const accessTokenRef = useRef<string | null>(null);
+  const knownPartyInviteIdsRef = useRef<Set<string> | null>(null);
+  const knownFriendIdsRef = useRef<Set<string> | null>(null);
 
   accessTokenRef.current = authSession?.accessToken ?? null;
 
@@ -91,7 +94,33 @@ export function HeaderNotifications() {
           byId.set(invite.id, invite);
         }
 
-        setPartyInvites([...byId.values()]);
+        const nextPartyInvites = [...byId.values()];
+        const nextPartyIds = new Set(nextPartyInvites.map((invite) => invite.id));
+        const nextFriendIds = new Set(friends.incoming.map((request) => request.id));
+
+        const knownParties = knownPartyInviteIdsRef.current;
+        const knownFriends = knownFriendIdsRef.current;
+
+        if (knownParties) {
+          const notifyCandidates = nextPartyInvites.filter((invite) => {
+            if (invite.inviteKind === "APPLICATION") {
+              // Captain: new applications into your roster.
+              return invite.direction === "outgoing";
+            }
+
+            // You: someone invited you into a party/team.
+            return true;
+          });
+          const hasNewParty = notifyCandidates.some((invite) => !knownParties.has(invite.id));
+
+          if (hasNewParty) {
+            playNotificationSound();
+          }
+        }
+
+        knownPartyInviteIdsRef.current = nextPartyIds;
+        knownFriendIdsRef.current = nextFriendIds;
+        setPartyInvites(nextPartyInvites);
       }
     } catch {
       // Keep previous values on transient failures.
@@ -114,6 +143,8 @@ export function HeaderNotifications() {
       setIncomingFriends([]);
       setPartyInvites([]);
       setActionError(null);
+      knownPartyInviteIdsRef.current = null;
+      knownFriendIdsRef.current = null;
       return;
     }
 

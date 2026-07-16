@@ -5,6 +5,13 @@
 }
 
 .header {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 1.2fr);
+}
+
+.headerCopy {
   display: grid;
   gap: 0.35rem;
 }
@@ -36,6 +43,8 @@
   display: grid;
   gap: 1rem;
   min-width: 0;
+  position: relative;
+  z-index: 0;
 }
 
 .panel {
@@ -1007,6 +1016,10 @@
 }
 
 @media (max-width: 760px) {
+  .header {
+    grid-template-columns: 1fr;
+  }
+
   .layout {
     grid-template-columns: 1fr;
   }

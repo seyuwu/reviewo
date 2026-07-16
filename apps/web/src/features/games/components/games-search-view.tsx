@@ -35,7 +35,13 @@ import {
 } from "../../social/api/social-api";
 import type { DotaPositionRole, GameParty, GamePartyInvite } from "../../social/types/social";
 import { resolveInviteDecisionError, resolveStackInviteError } from "../lib/resolve-stack-invite-error";
+import {
+  GAMES_SEARCH_COACH_SEEN_KEY,
+  GamesSearchOnboarding
+} from "./games-search-onboarding";
+import type { IntentMode } from "./games-search-onboarding-types";
 import styles from "./games-search-view.module.css";
+import { GamesSearchTipRotator } from "./games-search-tip-rotator";
 
 const PENDING_STACK_KEY = "opinia.pendingStackSlug";
 const RECOMMENDATION_COUNT = 3;
@@ -44,8 +50,6 @@ const INVITE_POLL_MS = 5_000;
 const OUTGOING_FLASH_MS = 3_500;
 const ONLINE_POLL_MS = 45_000;
 const ROLE_POSITIONS = ["1", "2", "3", "4", "5"] as const satisfies readonly DotaPositionRole[];
-
-type IntentMode = "join" | "recruit";
 
 function mmrMidpoint(mmr: string | null): number | null {
   const { from, to } = parseDotaMmrRange(mmr);
@@ -167,6 +171,10 @@ export function GamesSearchView() {
   const [stackError, setStackError] = useState<string | null>(null);
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
   const [invitePickerSlug, setInvitePickerSlug] = useState<string | null>(null);
+  const [coachOpen, setCoachOpen] = useState(false);
+  const controlsRef = useRef<HTMLElement | null>(null);
+  const feedRef = useRef<HTMLDivElement | null>(null);
+  const railRef = useRef<HTMLElement | null>(null);
 
   const refreshList = useCallback(
     async (options?: { quiet?: boolean }) => {
@@ -240,6 +248,22 @@ export function GamesSearchView() {
   useEffect(() => {
     void refreshParties();
   }, [refreshParties]);
+
+  useEffect(() => {
+    if (!isAuthSessionLoaded || !myDotaProfile.hasProfile) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (window.localStorage.getItem(GAMES_SEARCH_COACH_SEEN_KEY) === "1") {
+      return;
+    }
+
+    setCoachOpen(true);
+  }, [isAuthSessionLoaded, myDotaProfile.hasProfile]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -678,12 +702,20 @@ export function GamesSearchView() {
   return (
     <section className={styles.page}>
       <header className={styles.header}>
-        <h1 className={styles.title}>{t("games.search.pageTitle")}</h1>
-        <p className={styles.lead}>{t("games.search.pageLead")}</p>
+        <div className={styles.headerCopy}>
+          <h1 className={styles.title}>{t("games.search.pageTitle")}</h1>
+          <p className={styles.lead}>{t("games.search.pageLead")}</p>
+        </div>
+        <GamesSearchTipRotator />
       </header>
 
       <div className={styles.layout}>
-        <aside className={styles.sidebar}>
+        <aside
+          className={styles.sidebar}
+          ref={(node) => {
+            controlsRef.current = node;
+          }}
+        >
           {!myDotaProfile.hasProfile ? (
             <section className={`${styles.panel} ${styles.promoPanel}`}>
               <p className={styles.promoTitle}>{t("games.search.promoTitle")}</p>
@@ -901,7 +933,7 @@ export function GamesSearchView() {
           )}
         </aside>
 
-        <div className={styles.main}>
+        <div className={styles.main} ref={feedRef}>
           <div className={styles.statusBar}>
             <div className={styles.statsRow}>
               <p className={styles.statusText}>
@@ -1180,7 +1212,12 @@ export function GamesSearchView() {
           )}
         </div>
 
-        <aside className={styles.sidebar}>
+        <aside
+          className={styles.sidebar}
+          ref={(node) => {
+            railRef.current = node;
+          }}
+        >
           <section className={styles.panel}>
             <div className={styles.panelHead}>
               <h2 className={styles.panelTitle}>{t("games.search.invitesTitle")}</h2>
@@ -1358,6 +1395,16 @@ export function GamesSearchView() {
           </section>
         </aside>
       </div>
+
+      <GamesSearchOnboarding
+        controlsRef={controlsRef}
+        feedRef={feedRef}
+        intentMode={intentMode}
+        onClose={() => setCoachOpen(false)}
+        onIntentPick={setIntentMode}
+        open={coachOpen}
+        railRef={railRef}
+      />
 
       {gateSlug ? (
         <div className={styles.modalBackdrop} role="presentation">

@@ -1,0 +1,85 @@
+.root {
+  backdrop-filter: blur(14px);
+  background: var(--games-glass, rgb(18 22 32 / 72%));
+  border: 1px solid var(--color-card-border);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-rows: minmax(3.6rem, auto) auto;
+  min-height: 5.4rem;
+  padding: 0.75rem 0.9rem 0.65rem;
+}
+
+.slide {
+  display: grid;
+  gap: 0.25rem;
+  opacity: 0;
+  transform: translateY(0.35rem);
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
+}
+
+.slideVisible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.slideInstant {
+  transition: none;
+}
+
+.eyebrow {
+  color: var(--color-accent-strong, #a78bfa);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.body {
+  color: var(--color-text-muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.dots {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.dot {
+  appearance: none;
+  background: rgb(255 255 255 / 18%);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  height: 0.4rem;
+  padding: 0;
+  transition:
+    background-color 180ms ease,
+    width 180ms ease;
+  width: 0.4rem;
+}
+
+.dot:hover,
+.dot:focus-visible {
+  background: rgb(167 139 250 / 55%);
+}
+
+.dotActive {
+  background: rgb(167 139 250 / 92%);
+  width: 1.1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide {
+    transition: none;
+  }
+
+  .dot {
+    transition: none;
+  }
+}

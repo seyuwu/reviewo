@@ -7,6 +7,7 @@ import { BestWeekSection } from "./best-week-section";
 import { CompactSearchBar } from "./compact-search-bar";
 import { DiscussingNowSection } from "./discussing-now-section";
 import { HomeBottomCta } from "./home-bottom-cta";
+import { HomeProductIntentPrompt } from "./home-product-intent-prompt";
 import { HomeQuickNav } from "./home-quick-nav";
 import { RandomBattleSection } from "./random-battle-section";
 import type { HomeFeedInitialData } from "../lib/load-home-feed-data";
@@ -56,6 +57,8 @@ export function HomeFeedView({ initialData }: HomeFeedViewProps) {
       <div className="home-dashboard-cta">
         <HomeBottomCta />
       </div>
+
+      <HomeProductIntentPrompt />
     </div>
   );
 }
