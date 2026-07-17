@@ -209,6 +209,14 @@ body {
   background: rgb(255 255 255 / 4%);
   border-color: var(--color-card-border);
   color: var(--color-text);
+  color-scheme: dark;
+}
+
+/* Native dropdown panels often keep a light system surface; force readable options. */
+[data-product="games"] select option,
+[data-product="games"] select optgroup {
+  background-color: #161b27;
+  color: #f4f4f8;
 }
 
 [data-product="games"] .secondary-button {

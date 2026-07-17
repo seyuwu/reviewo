@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { ApiError } from "../../../lib/api/api-error";
@@ -370,7 +371,14 @@ export function DotaCreateForm() {
       <section className={`creation-card ${styles.card}`}>
         <header className={styles.header}>
           <h1 className={styles.title}>{isEditMode ? t("dota.create.editTitle") : t("dota.create.title")}</h1>
-          {isEditMode ? <p className={styles.lead}>{t("dota.create.editLead")}</p> : null}
+          {isEditMode && existingProfile ? (
+            <>
+              <p className={styles.lead}>{t("dota.create.editLead")}</p>
+              <Link className="app-nav-link" href={`/dota/${existingProfile.slug}`}>
+                {t("dota.create.viewProfile")}
+              </Link>
+            </>
+          ) : null}
         </header>
 
         <GamesLaunchWaitBanner showSearchLink={!isEditMode} />

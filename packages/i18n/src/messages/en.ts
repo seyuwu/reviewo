@@ -488,6 +488,12 @@ export const enMessages = {
   "games.launch.community.suggestionTitle": "Suggest a community idea",
   "games.launch.profileBanner":
     "Teammate search opens {date} at {time}. You can create a profile now — then we launch together.",
+  "dota.profile.waitlistCta.eyebrow": "Opinia Games",
+  "dota.profile.waitlistCta.title": "Want to find girls like this easily?",
+  "dota.profile.waitlistCta.lead":
+    "Join the waitlist — in two days, all the altushkas are yours",
+  "dota.profile.waitlistCta.when": "Search opens {date} at {time} MSK",
+  "dota.profile.waitlistCta.cta": "Join the waitlist",
   "games.launch.admin.title": "Teammate search (full Games)",
   "games.launch.admin.lead":
     "Legacy button: opens community and live search together. Closing returns full waitlist.",
@@ -1760,6 +1766,7 @@ export const enMessages = {
   "dota.create.submitting": "Creating...",
   "dota.create.editTitle": "Edit profile",
   "dota.create.editLead": "Changes show up on your profile right away.",
+  "dota.create.viewProfile": "Open my profile",
   "dota.create.submitUpdate": "Save profile",
   "dota.create.submittingUpdate": "Saving...",
   "dota.create.error": "Could not create profile. Try again.",

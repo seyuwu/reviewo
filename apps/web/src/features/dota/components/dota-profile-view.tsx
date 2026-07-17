@@ -27,7 +27,7 @@ import { DotaProfileAvatarEditor } from "./dota-profile-avatar-editor";
 import { DotaProfileFlags } from "./dota-profile-flags";
 import { DotaRecoveryNotice } from "./dota-recovery-notice";
 import { DotaSharePanel } from "./dota-share-panel";
-import { GamesLaunchWaitBanner } from "../../games/components/games-launch-wait-banner";
+import { DotaProfileWaitlistCta } from "./dota-profile-waitlist-cta";
 import styles from "./dota-profile-view.module.css";
 
 interface DotaProfileViewProps {
@@ -211,6 +211,11 @@ export function DotaProfileView({ profile: initialProfile }: DotaProfileViewProp
       <header className={styles.header}>
         <p className="eyebrow">{t("dota.profile.eyebrow")}</p>
         <h1>{profile.title}</h1>
+        {profile.gender && profile.gender !== "unspecified" ? (
+          <p className={styles.genderLine}>
+            {t("dota.profile.gender")}: {getDotaGenderLabel(profile.gender, t)}
+          </p>
+        ) : null}
         <DotaFriendshipActions onProfileUpdated={setProfile} profile={profile} />
         {profile.isOwner ? <DotaProfileAvatarEditor displayName={profile.title} /> : null}
         {friendInviteMessage ? <p className={styles.ownerHint}>{friendInviteMessage}</p> : null}
@@ -219,7 +224,7 @@ export function DotaProfileView({ profile: initialProfile }: DotaProfileViewProp
 
       {profile.isOwner ? <DotaRecoveryNotice slug={profile.slug} /> : null}
       {profile.isOwner ? <DotaClaimEmailBanner isOwner={profile.isOwner} /> : null}
-      {profile.isOwner ? <GamesLaunchWaitBanner /> : null}
+      <DotaProfileWaitlistCta />
 
       <div className={`profile-fields ${styles.metaGrid}`}>
         <DotaIdCopyField accountId={profile.dotaAccountId} showFillCta={profile.isOwner} />

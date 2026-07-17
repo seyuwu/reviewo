@@ -56,6 +56,19 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Short marketing links on dota.*: /games/altushka → /dota/altushka
+  // (skip real Games routes: search, community)
+  if (DOTA_HOSTS.has(host)) {
+    const gamesProfileMatch = pathname.match(/^\/games\/([^/]+)\/?$/);
+    const gamesSlug = gamesProfileMatch?.[1];
+
+    if (gamesSlug && gamesSlug !== "search" && gamesSlug !== "community") {
+      const url = request.nextUrl.clone();
+      url.pathname = `/dota/${gamesSlug}`;
+      return NextResponse.redirect(url);
+    }
+  }
+
   return NextResponse.next();
 }
 

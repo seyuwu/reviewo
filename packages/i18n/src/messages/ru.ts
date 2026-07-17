@@ -489,6 +489,12 @@ export const ruMessages: MessageDictionary = {
   "games.launch.community.suggestionTitle": "Предложи идею для сообщества",
   "games.launch.profileBanner":
     "Поиск тиммейтов откроется {date} в {time}. Профиль уже можно создать — ждем старт вместе.",
+  "dota.profile.waitlistCta.eyebrow": "Opinia Games",
+  "dota.profile.waitlistCta.title": "Хочешь легко находить таких альтушек?",
+  "dota.profile.waitlistCta.lead":
+    "Запишись в список ожидания, и через 2 дня все альтушки твои",
+  "dota.profile.waitlistCta.when": "Старт поиска: {date} в {time} МСК",
+  "dota.profile.waitlistCta.cta": "Записаться в waitlist",
   "games.launch.admin.title": "Поиск тиммейтов (весь Games)",
   "games.launch.admin.lead":
     "Старая кнопка: открывает и сообщество, и живой поиск. Закрытие возвращает полный waitlist.",
@@ -1761,6 +1767,7 @@ export const ruMessages: MessageDictionary = {
   "dota.create.submitting": "Создаём...",
   "dota.create.editTitle": "Редактировать профиль",
   "dota.create.editLead": "Изменения сразу видны на профиле.",
+  "dota.create.viewProfile": "Открыть мой профиль",
   "dota.create.submitUpdate": "Сохранить профиль",
   "dota.create.submittingUpdate": "Сохраняем...",
   "dota.create.error": "Не удалось создать профиль. Попробуй ещё раз.",
