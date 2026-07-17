@@ -8,9 +8,10 @@ import styles from "./games-launch-wait-banner.module.css";
 
 export function GamesLaunchWaitBanner({ showSearchLink = true }: { showSearchLink?: boolean }) {
   const t = useTranslation();
-  const { status } = useGamesLaunchStatus();
+  const { status, isLoading } = useGamesLaunchStatus();
 
-  if (status.searchLive) {
+  // Avoid flashing the waitlist banner before status resolves (or while cached live).
+  if (isLoading || status.searchLive) {
     return null;
   }
 

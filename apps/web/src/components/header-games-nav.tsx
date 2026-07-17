@@ -14,8 +14,17 @@ export function HeaderGamesNav() {
   const pathname = usePathname();
   const { authSession } = useAuthSession();
   const profileNav = useMyDotaProfileNav();
-  const { status: launchStatus } = useGamesLaunchStatus();
+  const { status: launchStatus, isLoading: isLaunchStatusLoading } = useGamesLaunchStatus();
   const searchLive = launchStatus.searchLive;
+
+  // While status is unknown, don't assume waitlist (avoids nav flicker after going live).
+  if (isLaunchStatusLoading) {
+    return (
+      <nav aria-label={t("web.nav.gamesActivityAriaLabel")} className="app-chrome-nav">
+        <span className="muted-copy">{t("common.loadingEllipsis")}</span>
+      </nav>
+    );
+  }
   const isGamesHub = pathname === "/games";
   const isTeammateSearch = pathname === "/games/search" || pathname.startsWith("/games/search/");
   const isCommunity =

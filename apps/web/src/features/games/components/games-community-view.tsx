@@ -40,8 +40,9 @@ export function GamesCommunityView() {
   const router = useRouter();
   const { authSession, isAuthSessionLoaded } = useAuthSession();
   const profileNav = useMyDotaProfileNav();
-  const { status: launchStatus } = useGamesLaunchStatus();
+  const { status: launchStatus, isLoading: isLaunchStatusLoading } = useGamesLaunchStatus();
   const searchLive = launchStatus.searchLive;
+  const showWaitlistUi = !isLaunchStatusLoading && !searchLive;
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendshipRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<FriendshipRequest[]>([]);
@@ -285,12 +286,12 @@ export function GamesCommunityView() {
         <header className={styles.header}>
           <h1 className={styles.title}>{t("games.community.pageTitle")}</h1>
           <p className={styles.lead}>
-            {searchLive
-              ? t("games.community.pageLead")
-              : t("games.launch.community.pageLead")}
+            {showWaitlistUi
+              ? t("games.launch.community.pageLead")
+              : t("games.community.pageLead")}
           </p>
         </header>
-        {!searchLive ? (
+        {showWaitlistUi ? (
           <CommunityLaunchPanel
             onSubmit={(event) => void handleSuggestion(event)}
             suggestion={suggestion}
@@ -321,9 +322,9 @@ export function GamesCommunityView() {
         <div className={styles.headerCopy}>
           <h1 className={styles.title}>{t("games.community.pageTitle")}</h1>
           <p className={styles.lead}>
-            {searchLive
-              ? t("games.community.pageLead")
-              : t("games.launch.community.pageLead")}
+            {showWaitlistUi
+              ? t("games.launch.community.pageLead")
+              : t("games.community.pageLead")}
           </p>
         </div>
         <div className={styles.headerActions}>
@@ -345,7 +346,7 @@ export function GamesCommunityView() {
         </div>
       </header>
 
-      {!searchLive ? (
+      {showWaitlistUi ? (
         <CommunityLaunchPanel
           onSubmit={(event) => void handleSuggestion(event)}
           suggestion={suggestion}

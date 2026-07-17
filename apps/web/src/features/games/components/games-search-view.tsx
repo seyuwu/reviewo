@@ -151,7 +151,7 @@ export function GamesSearchView() {
   const router = useRouter();
   const { authSession, isAuthSessionLoaded } = useAuthSession();
   const myDotaProfile = useMyDotaProfileNav();
-  const { status: launchStatus } = useGamesLaunchStatus();
+  const { status: launchStatus, isLoading: isLaunchStatusLoading } = useGamesLaunchStatus();
   const searchLive = launchStatus.searchLive;
   const [results, setResults] = useState<DotaLfgHit[]>([]);
   const [myMmr, setMyMmr] = useState<string | null>(null);
@@ -793,6 +793,14 @@ export function GamesSearchView() {
     gateSlug && gateSlug !== "__looking__"
       ? `/dota/create?intent=stack&target=${encodeURIComponent(gateSlug)}`
       : "/dota/create?intent=search";
+
+  if (isLaunchStatusLoading) {
+    return (
+      <section className={styles.page}>
+        <p className="muted-copy">{t("common.loadingEllipsis")}</p>
+      </section>
+    );
+  }
 
   if (!searchLive) {
     return <GamesSearchWaitlistView />;

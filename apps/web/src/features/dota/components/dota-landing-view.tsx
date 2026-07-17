@@ -18,8 +18,9 @@ export function DotaLandingView() {
   const t = useTranslation();
   const router = useRouter();
   const myDotaProfile = useMyDotaProfileNav();
-  const { status: launchStatus } = useGamesLaunchStatus();
-  const searchLive = launchStatus.searchLive;
+  const { status: launchStatus, isLoading: isLaunchStatusLoading } = useGamesLaunchStatus();
+  // While loading, hide waitlist-gated CTAs (don't flash "waitlist mode" after go-live).
+  const searchLive = !isLaunchStatusLoading && launchStatus.searchLive;
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
