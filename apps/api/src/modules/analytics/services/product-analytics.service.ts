@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import {
   bucketAnalyticsPath,
   funnelStepForPath,
+  isAnalyticsCounterKey,
   isAnalyticsCtaKey,
   isAnalyticsPathKey,
   type AnalyticsCounterKey,
@@ -22,6 +23,7 @@ export class ProductAnalyticsService {
     const counters: Partial<Record<AnalyticsCounterKey, number>> = {};
     const ctas: Partial<Record<AnalyticsCtaKey, number>> = {};
     const pathTimes: Partial<Record<AnalyticsPathKey, { samples: number; timeMs: number }>> = {};
+    const scopes = new Set<"dota">();
 
     for (const event of input.events) {
       const count = Math.max(1, Math.min(20, Math.floor(event.count ?? 1)));
@@ -32,6 +34,16 @@ export class ProductAnalyticsService {
 
         if (funnel) {
           counters[funnel] = (counters[funnel] ?? 0) + count;
+        }
+
+        continue;
+      }
+
+      if (event.type === "counter" && event.key && isAnalyticsCounterKey(event.key)) {
+        counters[event.key] = (counters[event.key] ?? 0) + count;
+
+        if (event.key === "dota_host_pageviews") {
+          scopes.add("dota");
         }
 
         continue;
@@ -69,6 +81,7 @@ export class ProductAnalyticsService {
       counters,
       ctas,
       pathTimes,
+      scopes: [...scopes],
       visitorId: input.visitorId
     });
 
@@ -79,7 +92,15 @@ export class ProductAnalyticsService {
     return this.analyticsRepository.recordRegistration();
   }
 
+  recordWaitlistInterestSubmit(): Promise<void> {
+    return this.analyticsRepository.incrementCounter("waitlist_interest_submit", 1);
+  }
+
   getOverview(days: number) {
     return this.analyticsRepository.getOverview(days);
+  }
+
+  getWaitlistMetrics(days: number) {
+    return this.analyticsRepository.getWaitlistMetrics(days);
   }
 }

@@ -42,17 +42,17 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // games.* → Games vertical entry
+  // games.* → Games vertical entry (waitlist or live search)
   if (GAMES_HOSTS.has(host) && pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/games/search";
     return NextResponse.redirect(url);
   }
 
-  // dota.* → search entry (same vertical for now)
+  // dota.* → Dota landing (not search/waitlist — matching stays under /games/search)
   if (DOTA_HOSTS.has(host) && pathname === "/") {
     const url = request.nextUrl.clone();
-    url.pathname = "/games/search";
+    url.pathname = "/dota";
     return NextResponse.redirect(url);
   }
 

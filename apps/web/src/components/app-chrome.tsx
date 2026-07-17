@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 
 import { useAuthSession } from "../features/auth/hooks/use-auth-session";
 import { useMyDotaProfileNav } from "../features/dota/hooks/use-my-dota-profile-nav";
 import { NotificationToastsHost } from "../features/games/components/notification-toasts";
-import { isGamesModePath } from "../features/games/lib/games-mode";
+import { isGamesModePath, isGamesProductMode } from "../features/games/lib/games-mode";
 import { NotificationToastsProvider } from "../features/games/lib/use-notification-toasts";
 import { LocaleSwitcher } from "../features/i18n/locale-switcher";
 import { useTranslation } from "../features/i18n/locale-provider";
@@ -34,15 +34,24 @@ export function AppChrome({ children }: AppChromeProps) {
   const { authSession, isAuthSessionLoaded, signOut } = useAuthSession();
   const profileNav = useMyDotaProfileNav();
   const t = useTranslation();
+  const [hostname, setHostname] = useState("");
+
+  useEffect(() => {
+    setHostname(window.location.hostname);
+  }, []);
 
   if (pathname.startsWith("/embed")) {
     return <>{children}</>;
   }
 
-  const isGamesMode = isGamesModePath(pathname);
+  const isGamesMode = isGamesProductMode(pathname, hostname);
   const mode = isGamesMode ? "games" : "opinia";
   const authNavState = !isAuthSessionLoaded ? "loading" : authSession ? "signed-in" : "guest";
-  const accountHref = profileNav.href;
+  const accountHref = isGamesMode ? profileNav.href : "/profile";
+  const signInNext = isGamesModePath(pathname) ? pathname : "/games/search";
+  const signInHref = isGamesMode
+    ? `/profile?next=${encodeURIComponent(signInNext)}`
+    : "/profile";
 
   return (
     <NotificationToastsProvider>
@@ -74,7 +83,7 @@ export function AppChrome({ children }: AppChromeProps) {
               <LocaleSwitcher />
               <div className="app-chrome-auth" data-state={authNavState}>
                 <div className="app-chrome-auth-cluster guest-cluster">
-                  <Link className="app-nav-cta" href="/profile">
+                  <Link className="app-nav-cta" href={signInHref}>
                     {t("web.nav.signIn")}
                   </Link>
                 </div>

@@ -26,6 +26,7 @@ import type {
   SpotlightTopPlacement,
   SpotlightTypePerformance
 } from "../types/admin-economy";
+import { AdminGamesLaunchToggle } from "./admin-games-launch-toggle";
 import styles from "./admin-economy-page-view.module.css";
 
 export function AdminEconomyPageView() {
@@ -126,8 +127,15 @@ export function AdminEconomyPageView() {
           <Link className="button-secondary" href="/admin">
             {t("web.admin.economy.backToAdmin")}
           </Link>
+          <Link className="button-secondary" href="/admin/games-launch">
+            {t("web.admin.gamesLaunch.openPanel")}
+          </Link>
         </div>
       </header>
+
+      <section className={styles.adminEconomySection}>
+        <AdminGamesLaunchToggle />
+      </section>
 
       <section className={styles.adminEconomySection}>
         <h2>{t("web.admin.economy.platformTitle")}</h2>

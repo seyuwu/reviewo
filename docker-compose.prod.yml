@@ -8,6 +8,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-reviewo}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-reviewo}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
+      GOOGLE_SHEETS_CLIENT_EMAIL: ${GOOGLE_SHEETS_CLIENT_EMAIL:-}
+      GOOGLE_SHEETS_PRIVATE_KEY: ${GOOGLE_SHEETS_PRIVATE_KEY:-}
+      GAMES_LAUNCH_SHEET_ID: ${GAMES_LAUNCH_SHEET_ID:-}
     restart: always
     command:
       ["sh", "-c", "corepack pnpm --filter @reviewo/api start:prod"]

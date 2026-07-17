@@ -961,6 +961,30 @@
   margin: 0;
 }
 
+.launchField {
+  background: rgb(8 12 20 / 55%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.65rem;
+  box-sizing: border-box;
+  color: var(--color-text);
+  font: inherit;
+  max-height: 16rem;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.launchField::placeholder {
+  color: var(--color-text-muted);
+}
+
+.launchField:focus {
+  border-color: rgb(109 74 255 / 55%);
+  outline: none;
+}
+
 .feedback {
   color: var(--color-text-muted);
   font-size: 0.9rem;

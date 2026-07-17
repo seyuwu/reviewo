@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -12,6 +13,8 @@ import {
 } from "@nestjs/common";
 
 import { CurrentUser } from "../../../common/decorators/current-user.decorator.js";
+import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
+import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import {
   ApiRateLimiterService,
@@ -20,6 +23,7 @@ import {
 import { createSocialWriteRateLimitRules } from "../../../common/rate-limiting/write-rate-limit-rules.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.js";
+import { GamesLaunchService } from "../../games-launch/services/games-launch.service.js";
 import { CreateGamePartyDto } from "../dto/create-game-party.dto.js";
 import { CreatePartyInviteDto } from "../dto/create-party-invite.dto.js";
 import type {
@@ -43,9 +47,23 @@ export class PartiesController {
   constructor(
     private readonly apiRateLimiterService: ApiRateLimiterService,
     private readonly gamePartiesService: GamePartiesService,
-    private readonly gamePartyGateway: GamePartyGateway
+    private readonly gamePartyGateway: GamePartyGateway,
+    private readonly gamesLaunchService: GamesLaunchService
   ) {}
 
+  private async assertMatchingLive(currentUser: AuthenticatedUser): Promise<void> {
+    const searchLive = await this.gamesLaunchService.isSearchLive();
+
+    if (searchLive || currentUser.role === "ADMIN") {
+      return;
+    }
+
+    throw createAppException({
+      code: AppErrorCode.Forbidden,
+      message: "Team and party matching opens after the Games launch",
+      statusCode: HttpStatus.FORBIDDEN
+    });
+  }
   @Get("me")
   @UseGuards(JwtAuthGuard)
   getMyParties(@CurrentUser() currentUser: AuthenticatedUser): Promise<MyPartiesResponseDto> {
@@ -152,6 +170,7 @@ export class PartiesController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Req() request: RequestLike
   ): Promise<GamePartyResponseDto> {
+    await this.assertMatchingLive(currentUser);
     await this.apiRateLimiterService.assertWithinLimits(
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
@@ -166,6 +185,7 @@ export class PartiesController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Req() request: RequestLike
   ): Promise<{ invite: GamePartyInviteDto; party: GamePartyResponseDto }> {
+    await this.assertMatchingLive(currentUser);
     await this.apiRateLimiterService.assertWithinLimits(
       createSocialWriteRateLimitRules(currentUser.id, request)
     );

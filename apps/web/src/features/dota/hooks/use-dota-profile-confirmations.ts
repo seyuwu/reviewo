@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import {
   DOTA_FLAG_LIMIT_PER_SIDE,
@@ -22,7 +22,24 @@ import type { DotaProfile } from "../types/dota";
 
 interface UseDotaProfileConfirmationsOptions {
   canConfirmOverride?: boolean;
-  onProfileUpdated?: (profile: DotaProfile) => void;
+  onProfileUpdated?: Dispatch<SetStateAction<DotaProfile>>;
+}
+
+function withQualityDelta(profile: DotaProfile, key: string, delta: 1 | -1): DotaProfile {
+  const currentCount = profile.qualities[key] ?? 0;
+  const nextCount = Math.max(0, currentCount + delta);
+  const nextQualities = { ...profile.qualities };
+
+  if (nextCount === 0) {
+    delete nextQualities[key];
+  } else {
+    nextQualities[key] = nextCount;
+  }
+
+  return {
+    ...profile,
+    qualities: nextQualities
+  };
 }
 
 export function useDotaProfileConfirmations(
@@ -99,23 +116,22 @@ export function useDotaProfileConfirmations(
 
     const visitorId = getOrCreateDotaVisitorId();
     const isConfirmed = currentKeys.includes(key);
-    const nextPending = [...pendingKeysRef.current, key];
+    const nextKeys = isConfirmed
+      ? currentKeys.filter((value) => value !== key)
+      : [...new Set([...currentKeys, key])];
 
     setError(null);
-    pendingKeysRef.current = nextPending;
-    setPendingKeys(nextPending);
+    pendingKeysRef.current = [...pendingKeysRef.current, key];
+    setPendingKeys(pendingKeysRef.current);
+    updateConfirmedKeys(nextKeys);
+    onProfileUpdatedRef.current?.((current) =>
+      withQualityDelta(current, key, isConfirmed ? -1 : 1)
+    );
 
     try {
       const nextProfile = isConfirmed
         ? await revokeDotaQuality(profile.slug, [key], visitorId, authSession?.accessToken)
         : await confirmDotaQualities(profile.slug, [key], visitorId, authSession?.accessToken);
-
-      const latestKeys = confirmedKeysRef.current;
-      const nextKeys = isConfirmed
-        ? latestKeys.filter((value) => value !== key)
-        : [...new Set([...latestKeys, key])];
-
-      updateConfirmedKeys(nextKeys);
 
       if (!isConfirmed) {
         trackDotaEvent("dota_confirmation_submitted", { slug: profile.slug });
@@ -123,6 +139,14 @@ export function useDotaProfileConfirmations(
 
       onProfileUpdatedRef.current?.(nextProfile);
     } catch (submitError) {
+      updateConfirmedKeys(
+        isConfirmed
+          ? [...new Set([...confirmedKeysRef.current, key])]
+          : confirmedKeysRef.current.filter((value) => value !== key)
+      );
+      onProfileUpdatedRef.current?.((current) =>
+        withQualityDelta(current, key, isConfirmed ? 1 : -1)
+      );
       setError(resolveDotaConfirmError(submitError, t));
     } finally {
       const clearedPending = pendingKeysRef.current.filter((value) => value !== key);

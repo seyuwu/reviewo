@@ -13,6 +13,7 @@ import { CommunityModule } from "./modules/community/community.module.js";
 import { ContributionsModule } from "./modules/contributions/contributions.module.js";
 import { DotaModule } from "./modules/dota/dota.module.js";
 import { DiscoveryModule } from "./modules/discovery/discovery.module.js";
+import { GamesLaunchModule } from "./modules/games-launch/games-launch.module.js";
 import { EntityPageModule } from "./modules/entity-page/entity-page.module.js";
 import { EntitiesModule } from "./modules/entities/entities.module.js";
 import { ExtensionApiModule } from "./modules/extension-api/extension-api.module.js";
@@ -57,6 +58,7 @@ import { RedisModule } from "./redis/redis.module.js";
     CommunityModule,
     DiscoveryModule,
     DotaModule,
+    GamesLaunchModule,
     SocialModule,
     AnalyticsModule,
     GrowthModule

@@ -16,6 +16,47 @@ type RecoverResponse = AuthResponse & {
   recoveryUrl: string;
 };
 
+const POST_RECOVER_PATH_KEY = "opinia.recover.postPath";
+
+/** Deduplicate Strict Mode double-mount — recovery tokens are single-use. */
+const recoverInFlight = new Map<string, Promise<RecoverResponse>>();
+
+function recoverAccountOnce(token: string): Promise<RecoverResponse> {
+  const existing = recoverInFlight.get(token);
+
+  if (existing) {
+    return existing;
+  }
+
+  const request = recoverAccount(token) as Promise<RecoverResponse>;
+  recoverInFlight.set(token, request);
+  return request;
+}
+
+function readPendingRecoverPath(): string | null {
+  try {
+    return window.sessionStorage.getItem(POST_RECOVER_PATH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writePendingRecoverPath(path: string): void {
+  try {
+    window.sessionStorage.setItem(POST_RECOVER_PATH_KEY, path);
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearPendingRecoverPath(): void {
+  try {
+    window.sessionStorage.removeItem(POST_RECOVER_PATH_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function RecoverAccountView() {
   const t = useTranslation();
   const router = useRouter();
@@ -25,6 +66,14 @@ export function RecoverAccountView() {
   const token = typeof params.token === "string" ? params.token : "";
 
   useEffect(() => {
+    const pendingPath = readPendingRecoverPath();
+
+    if (pendingPath?.startsWith("/")) {
+      clearPendingRecoverPath();
+      router.replace(pendingPath);
+      return;
+    }
+
     if (!token) {
       setError(t("auth.recover.error"));
       return;
@@ -32,18 +81,17 @@ export function RecoverAccountView() {
 
     let cancelled = false;
 
-    void recoverAccount(token)
-      .then(async (response: RecoverResponse) => {
-        if (cancelled) {
-          return;
-        }
-
+    void recoverAccountOnce(token)
+      .then(async (response) => {
+        // Always persist session — Strict Mode may cancel the first effect after the API succeeds.
         storeAuthSession({
           accessToken: response.accessToken,
           expiresIn: response.expiresIn,
           tokenType: response.tokenType,
           user: response.user
         });
+
+        let nextPath = "/dota";
 
         try {
           const profile = await fetchMyDotaProfile(response.accessToken);
@@ -52,10 +100,18 @@ export function RecoverAccountView() {
             recoveryUrl: response.recoveryUrl,
             slug: profile.slug
           });
-          router.replace(`/dota/${profile.slug}`);
+          nextPath = `/dota/${profile.slug}`;
         } catch {
-          router.replace("/dota");
+          /* profile fetch can fail; still land on /dota signed-in */
         }
+
+        if (cancelled) {
+          writePendingRecoverPath(nextPath);
+          return;
+        }
+
+        clearPendingRecoverPath();
+        router.replace(nextPath);
       })
       .catch(() => {
         if (!cancelled) {

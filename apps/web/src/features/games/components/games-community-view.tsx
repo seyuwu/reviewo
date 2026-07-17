@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+import { FormFeedback } from "../../../components/form-feedback";
 import { OpiniaIcon } from "../../../components/opinia-icon";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { CreateRosterSplitButton } from "../../dota/components/create-roster-split-button";
 import { useMyDotaProfileNav } from "../../dota/hooks/use-my-dota-profile-nav";
 import { buildDotaFriendInviteUrl } from "../../dota/lib/share";
-import { resolveInviteDecisionError } from "../lib/resolve-stack-invite-error";
 import { useTranslation } from "../../i18n/locale-provider";
 import {
   acceptFriendRequest,
@@ -30,6 +30,9 @@ import type {
   GamePartyInvite,
   MyPartiesResponse
 } from "../../social/types/social";
+import { submitGamesLaunchSuggestion } from "../api/games-launch-api";
+import { useGamesLaunchStatus } from "../hooks/use-games-launch-status";
+import { resolveInviteDecisionError } from "../lib/resolve-stack-invite-error";
 import styles from "./games-community-view.module.css";
 
 export function GamesCommunityView() {
@@ -37,6 +40,8 @@ export function GamesCommunityView() {
   const router = useRouter();
   const { authSession, isAuthSessionLoaded } = useAuthSession();
   const profileNav = useMyDotaProfileNav();
+  const { status: launchStatus } = useGamesLaunchStatus();
+  const searchLive = launchStatus.searchLive;
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendshipRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<FriendshipRequest[]>([]);
@@ -46,6 +51,10 @@ export function GamesCommunityView() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState("");
+  const [suggestionBusy, setSuggestionBusy] = useState(false);
+  const [suggestionDone, setSuggestionDone] = useState(false);
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!authSession?.accessToken) {
@@ -201,16 +210,6 @@ export function GamesCommunityView() {
       return;
     }
 
-    const confirmed = window.confirm(
-      roster.isOwner
-        ? t("games.community.disbandConfirm", { name: roster.name })
-        : t("games.community.leaveConfirm", { name: roster.name })
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     setBusyId(`roster-${roster.id}`);
     setError(null);
 
@@ -249,6 +248,29 @@ export function GamesCommunityView() {
     }
   }
 
+  async function handleSuggestion(event: FormEvent) {
+    event.preventDefault();
+    if (suggestionBusy || suggestion.trim().length < 3) {
+      return;
+    }
+
+    setSuggestionBusy(true);
+    setSuggestionError(null);
+
+    try {
+      await submitGamesLaunchSuggestion(
+        { body: suggestion.trim(), source: "community" },
+        authSession?.accessToken
+      );
+      setSuggestion("");
+      setSuggestionDone(true);
+    } catch {
+      setSuggestionError(t("games.launch.waitlist.suggestionError"));
+    } finally {
+      setSuggestionBusy(false);
+    }
+  }
+
   if (!isAuthSessionLoaded) {
     return (
       <section className={styles.page}>
@@ -262,8 +284,25 @@ export function GamesCommunityView() {
       <section className={styles.page}>
         <header className={styles.header}>
           <h1 className={styles.title}>{t("games.community.pageTitle")}</h1>
-          <p className={styles.lead}>{t("games.community.pageLead")}</p>
+          <p className={styles.lead}>
+            {searchLive
+              ? t("games.community.pageLead")
+              : t("games.launch.community.pageLead")}
+          </p>
         </header>
+        {!searchLive ? (
+          <CommunityLaunchPanel
+            onSubmit={(event) => void handleSuggestion(event)}
+            suggestion={suggestion}
+            suggestionBusy={suggestionBusy}
+            suggestionDone={suggestionDone}
+            suggestionError={suggestionError}
+            onSuggestionChange={(value) => {
+              setSuggestionDone(false);
+              setSuggestion(value);
+            }}
+          />
+        ) : null}
         <div className={styles.gate}>
           <OpiniaIcon name="spotlight" />
           <h2>{t("games.community.signInTitle")}</h2>
@@ -281,10 +320,16 @@ export function GamesCommunityView() {
       <header className={styles.header}>
         <div className={styles.headerCopy}>
           <h1 className={styles.title}>{t("games.community.pageTitle")}</h1>
-          <p className={styles.lead}>{t("games.community.pageLead")}</p>
+          <p className={styles.lead}>
+            {searchLive
+              ? t("games.community.pageLead")
+              : t("games.launch.community.pageLead")}
+          </p>
         </div>
         <div className={styles.headerActions}>
-          <CreateRosterSplitButton disableTeam={Boolean(parties?.team)} />
+          {searchLive ? (
+            <CreateRosterSplitButton disableTeam={Boolean(parties?.team)} />
+          ) : null}
           <Link className="button-secondary" href="/games/search">
             {t("games.community.openSearch")}
           </Link>
@@ -299,6 +344,20 @@ export function GamesCommunityView() {
           )}
         </div>
       </header>
+
+      {!searchLive ? (
+        <CommunityLaunchPanel
+          onSubmit={(event) => void handleSuggestion(event)}
+          suggestion={suggestion}
+          suggestionBusy={suggestionBusy}
+          suggestionDone={suggestionDone}
+          suggestionError={suggestionError}
+          onSuggestionChange={(value) => {
+            setSuggestionDone(false);
+            setSuggestion(value);
+          }}
+        />
+      ) : null}
 
       <div className={styles.stats}>
         <article className={styles.stat}>
@@ -585,5 +644,75 @@ export function GamesCommunityView() {
         </div>
       )}
     </section>
+  );
+}
+
+function CommunityLaunchPanel({
+  onSubmit,
+  onSuggestionChange,
+  suggestion,
+  suggestionBusy,
+  suggestionDone,
+  suggestionError
+}: {
+  onSubmit: (event: FormEvent) => void;
+  onSuggestionChange: (value: string) => void;
+  suggestion: string;
+  suggestionBusy: boolean;
+  suggestionDone: boolean;
+  suggestionError: string | null;
+}) {
+  const t = useTranslation();
+
+  return (
+    <div className={styles.launchGrid}>
+      <section className={styles.panel}>
+        <h2 className={styles.panelTitle}>{t("games.launch.community.tipsTitle")}</h2>
+        <ul className={styles.launchTips}>
+          <li>
+            <strong>{t("games.launch.tip.communityEyebrow")}</strong>
+            <span>{t("games.launch.tip.communityBody")}</span>
+          </li>
+          <li>
+            <strong>{t("games.launch.tip.rolesEyebrow")}</strong>
+            <span>{t("games.launch.tip.rolesBody")}</span>
+          </li>
+          <li>
+            <strong>{t("games.launch.tip.officerEyebrow")}</strong>
+            <span>{t("games.launch.tip.officerBody")}</span>
+          </li>
+          <li>
+            <strong>{t("games.launch.tip.notifyEyebrow")}</strong>
+            <span>{t("games.launch.tip.notifyBody")}</span>
+          </li>
+        </ul>
+      </section>
+      <section className={styles.panel}>
+        <h2 className={styles.panelTitle}>{t("games.launch.community.suggestionTitle")}</h2>
+        <form className={styles.launchForm} onSubmit={onSubmit}>
+          <textarea
+            className={styles.launchField}
+            maxLength={2000}
+            onChange={(event) => onSuggestionChange(event.target.value)}
+            placeholder={t("games.launch.waitlist.suggestionPlaceholder")}
+            rows={4}
+            value={suggestion}
+          />
+          <button
+            className="button-primary"
+            disabled={suggestionBusy || suggestion.trim().length < 3}
+            type="submit"
+          >
+            {suggestionBusy
+              ? t("common.loadingEllipsis")
+              : t("games.launch.waitlist.suggestionSubmit")}
+          </button>
+          {suggestionDone ? (
+            <FormFeedback statusMessage={t("games.launch.waitlist.suggestionThanks")} />
+          ) : null}
+          {suggestionError ? <FormFeedback errorMessage={suggestionError} /> : null}
+        </form>
+      </section>
+    </div>
   );
 }

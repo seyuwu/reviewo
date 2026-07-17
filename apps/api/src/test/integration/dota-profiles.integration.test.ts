@@ -81,7 +81,7 @@ describe("Dota profiles integration", { skip: !shouldRunIntegrationTests }, () =
 
     const confirmResponse = await fetch(`${context.baseUrl}/dota/profiles/${created.slug}/confirm`, {
       body: JSON.stringify({
-        qualityKeys: ["chill", "has_mic"],
+        qualityKeys: ["play_again", "has_mic"],
         visitorId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
       }),
       headers: {
@@ -97,7 +97,7 @@ describe("Dota profiles integration", { skip: !shouldRunIntegrationTests }, () =
 
     assertCreated(confirmResponse);
     assert.equal(confirmed.progress.current, 1);
-    assert.equal(confirmed.qualities.chill, 1);
+    assert.equal(confirmed.qualities.play_again, 1);
 
     const byIdResponse = await fetch(`${context.baseUrl}/dota/profiles/by-id/${accountId}`);
     const byId = await readJson<{ slug: string }>(byIdResponse);

@@ -1,9 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import {
+  dotaHostVisitorScopeKey,
   isAnalyticsCounterKey,
   isAnalyticsCtaKey,
   isAnalyticsPathKey,
+  isDotaHostVisitorScopeKey,
   type AnalyticsCounterKey,
   type AnalyticsCtaKey,
   type AnalyticsPathKey
@@ -29,20 +31,22 @@ export class AnalyticsRepository {
     counters: Partial<Record<AnalyticsCounterKey, number>>;
     ctas: Partial<Record<AnalyticsCtaKey, number>>;
     pathTimes: Partial<Record<AnalyticsPathKey, { samples: number; timeMs: number }>>;
+    scopes?: Array<"dota">;
     visitorId: string;
   }): Promise<void> {
     const day = this.utcDay();
     const visitorHash = this.hashVisitorId(input.visitorId);
+    const visitorRows = [{ day, visitorHash }];
+
+    if (input.scopes?.includes("dota")) {
+      visitorRows.push({ day, visitorHash: dotaHostVisitorScopeKey(visitorHash) });
+    }
 
     await this.prismaService.$transaction(async (tx) => {
-      const visitorInsert = await tx.analyticsDailyVisitor.createMany({
-        data: [{ day, visitorHash }],
+      await tx.analyticsDailyVisitor.createMany({
+        data: visitorRows,
         skipDuplicates: true
       });
-
-      if (visitorInsert.count > 0) {
-        // First sighting of this visitor today — counted via visitors table for uniques.
-      }
 
       for (const [key, delta] of Object.entries(input.counters)) {
         if (!isAnalyticsCounterKey(key) || !delta || delta < 1) {
@@ -97,15 +101,23 @@ export class AnalyticsRepository {
     });
   }
 
-  async recordRegistration(): Promise<void> {
+  async incrementCounter(key: AnalyticsCounterKey, delta = 1): Promise<void> {
+    if (!isAnalyticsCounterKey(key) || delta < 1) {
+      return;
+    }
+
     const day = this.utcDay();
 
     await this.prismaService.$executeRaw`
       INSERT INTO community.analytics_daily_counters (day, key, value)
-      VALUES (${day}, ${"registrations"}, ${BigInt(1)})
+      VALUES (${day}, ${key}, ${BigInt(delta)})
       ON CONFLICT (day, key)
       DO UPDATE SET value = community.analytics_daily_counters.value + EXCLUDED.value
     `;
+  }
+
+  async recordRegistration(): Promise<void> {
+    await this.incrementCounter("registrations", 1);
   }
 
   async getOverview(days: number): Promise<{
@@ -142,9 +154,8 @@ export class AnalyticsRepository {
           }
         }
       }),
-      this.prismaService.analyticsDailyVisitor.groupBy({
-        by: ["day"],
-        _count: { _all: true },
+      this.prismaService.analyticsDailyVisitor.findMany({
+        select: { day: true, visitorHash: true },
         where: {
           day: {
             gte: start,
@@ -182,12 +193,22 @@ export class AnalyticsRepository {
       });
     }
 
+    const globalUniquesByDay = new Map<string, number>();
+
     for (const row of visitors) {
+      if (isDotaHostVisitorScopeKey(row.visitorHash)) {
+        continue;
+      }
+
       const key = row.day.toISOString().slice(0, 10);
+      globalUniquesByDay.set(key, (globalUniquesByDay.get(key) ?? 0) + 1);
+    }
+
+    for (const [key, uniques] of globalUniquesByDay) {
       const bucket = byDayMap.get(key);
 
       if (bucket) {
-        bucket.uniques = row._count._all;
+        bucket.uniques = uniques;
       }
     }
 
@@ -260,8 +281,8 @@ export class AnalyticsRepository {
     }, 0);
     const totalSamples = averagesByPath.reduce((sum, row) => sum + row.samples, 0);
 
-    const uniqueVisitorDays = visitors.reduce((sum, row) => sum + row._count._all, 0);
-    const daysWithTraffic = visitors.filter((row) => row._count._all > 0).length;
+    const uniqueVisitorDays = [...globalUniquesByDay.values()].reduce((sum, value) => sum + value, 0);
+    const daysWithTraffic = [...globalUniquesByDay.values()].filter((value) => value > 0).length;
 
     return {
       averagesByPath,
@@ -279,4 +300,119 @@ export class AnalyticsRepository {
       topCtas
     };
   }
+
+  async getWaitlistMetrics(days: number): Promise<{
+    conversionFormStartPct: number | null;
+    conversionSubmitPct: number | null;
+    createProfileClicks: number;
+    dotaHostPageviews: number;
+    dotaHostUniques: number;
+    formStarts: number;
+    interestSubmits: number;
+    inviteClicks: number;
+    inviteVisits: number;
+    profileShareClicks: number;
+    rangeDays: number;
+  }> {
+    const safeDays = Math.min(90, Math.max(1, Math.floor(days)));
+    const end = this.utcDay();
+    const start = new Date(end);
+    start.setUTCDate(start.getUTCDate() - (safeDays - 1));
+
+    const [counters, dotaUniques, ctas] = await Promise.all([
+      this.prismaService.analyticsDailyCounter.findMany({
+        where: {
+          day: { gte: start, lte: end },
+          key: { in: ["dota_host_pageviews", "waitlist_interest_submit"] }
+        }
+      }),
+      this.prismaService.analyticsDailyVisitor.count({
+        where: {
+          day: { gte: start, lte: end },
+          visitorHash: { startsWith: "dota:" }
+        }
+      }),
+      this.prismaService.analyticsDailyCta.findMany({
+        where: {
+          day: { gte: start, lte: end },
+          ctaKey: {
+            in: [
+              "games_waitlist_form_start",
+              "games_waitlist_invite_click",
+              "games_waitlist_invite_visit",
+              "games_waitlist_create_profile_click",
+              "dota_share_profile"
+            ]
+          }
+        }
+      })
+    ]);
+
+    let dotaHostPageviews = 0;
+    let interestSubmits = 0;
+
+    for (const row of counters) {
+      const value = Number(row.value);
+
+      if (row.key === "dota_host_pageviews") {
+        dotaHostPageviews += value;
+      }
+
+      if (row.key === "waitlist_interest_submit") {
+        interestSubmits += value;
+      }
+    }
+
+    let formStarts = 0;
+    let inviteClicks = 0;
+    let inviteVisits = 0;
+    let createProfileClicks = 0;
+    let profileShareClicks = 0;
+
+    for (const row of ctas) {
+      const value = Number(row.clicks);
+
+      if (row.ctaKey === "games_waitlist_form_start") {
+        formStarts += value;
+      }
+
+      if (row.ctaKey === "games_waitlist_invite_click") {
+        inviteClicks += value;
+      }
+
+      if (row.ctaKey === "games_waitlist_invite_visit") {
+        inviteVisits += value;
+      }
+
+      if (row.ctaKey === "games_waitlist_create_profile_click") {
+        createProfileClicks += value;
+      }
+
+      if (row.ctaKey === "dota_share_profile") {
+        profileShareClicks += value;
+      }
+    }
+
+    return {
+      conversionFormStartPct: pct(formStarts, dotaUniques),
+      conversionSubmitPct: pct(interestSubmits, formStarts),
+      createProfileClicks,
+      dotaHostPageviews,
+      dotaHostUniques: dotaUniques,
+      formStarts,
+      interestSubmits,
+      inviteClicks,
+      inviteVisits,
+      profileShareClicks,
+      rangeDays: safeDays
+    };
+  }
+}
+
+function pct(part: number, whole: number): number | null {
+  if (whole < 1) {
+    return null;
+  }
+
+  return Math.round((part / whole) * 1000) / 10;
 }

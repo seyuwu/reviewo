@@ -67,6 +67,26 @@ test("readSharedAuthSessionCookie round-trips session payload", () => {
   assert.deepEqual(parsed, sampleSession);
 });
 
+test("writeSharedAuthSessionCookie strips avatarUrl to stay under cookie size limits", () => {
+  const written = writeSharedAuthSessionCookie(
+    {
+      ...sampleSession,
+      avatarUrl: `data:image/jpeg;base64,${"A".repeat(8_000)}`
+    },
+    {
+      hostname: "opinia.ru",
+      maxAgeSeconds: 120,
+      secure: true
+    }
+  );
+  const nameValue = written.split(";")[0] ?? "";
+  const parsed = readSharedAuthSessionCookie(nameValue);
+
+  assert.equal(parsed?.avatarUrl, null);
+  assert.equal(parsed?.accessToken, sampleSession.accessToken);
+  assert.ok(written.length < 4_000);
+});
+
 test("signed-out cookie helpers encode and detect flag", () => {
   const written = writeSharedSignedOutCookie({
     hostname: "games.opinia.ru",

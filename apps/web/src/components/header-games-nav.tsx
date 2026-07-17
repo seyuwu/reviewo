@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { useAuthSession } from "../features/auth/hooks/use-auth-session";
 import { useMyDotaProfileNav } from "../features/dota/hooks/use-my-dota-profile-nav";
+import { useGamesLaunchStatus } from "../features/games/hooks/use-games-launch-status";
 import { useTranslation } from "../features/i18n/locale-provider";
 import { OpiniaIcon } from "./opinia-icon";
 
@@ -13,6 +14,8 @@ export function HeaderGamesNav() {
   const pathname = usePathname();
   const { authSession } = useAuthSession();
   const profileNav = useMyDotaProfileNav();
+  const { status: launchStatus } = useGamesLaunchStatus();
+  const searchLive = launchStatus.searchLive;
   const isGamesHub = pathname === "/games";
   const isTeammateSearch = pathname === "/games/search" || pathname.startsWith("/games/search/");
   const isCommunity =
@@ -28,16 +31,18 @@ export function HeaderGamesNav() {
 
   return (
     <nav aria-label={t("web.nav.gamesActivityAriaLabel")} className="app-chrome-nav">
-      <Link
-        className={navLinkClass(isGamesHub, "games")}
-        href="/games"
-        title={t("web.nav.gamesHub")}
-      >
-        <span className="app-chrome-nav-icon app-chrome-nav-icon--games">
-          <OpiniaIcon className="app-chrome-nav-icon-svg" name="gamepad" />
-        </span>
-        <span>{t("web.nav.gamesHub")}</span>
-      </Link>
+      {searchLive ? (
+        <Link
+          className={navLinkClass(isGamesHub, "games")}
+          href="/games"
+          title={t("web.nav.gamesHub")}
+        >
+          <span className="app-chrome-nav-icon app-chrome-nav-icon--games">
+            <OpiniaIcon className="app-chrome-nav-icon-svg" name="gamepad" />
+          </span>
+          <span>{t("web.nav.gamesHub")}</span>
+        </Link>
+      ) : null}
 
       <Link
         className={navLinkClass(isTeammateSearch, "objects")}
@@ -61,16 +66,18 @@ export function HeaderGamesNav() {
         <span>{t("web.nav.gamesCommunity")}</span>
       </Link>
 
-      <Link
-        className={navLinkClass(isDotaSection, "battles")}
-        href="/dota"
-        title={t("web.nav.dotaVertical")}
-      >
-        <span className="app-chrome-nav-icon app-chrome-nav-icon--battles">
-          <OpiniaIcon className="app-chrome-nav-icon-svg" name="battle" />
-        </span>
-        <span>{t("web.nav.dotaVertical")}</span>
-      </Link>
+      {searchLive ? (
+        <Link
+          className={navLinkClass(isDotaSection, "battles")}
+          href="/dota"
+          title={t("web.nav.dotaVertical")}
+        >
+          <span className="app-chrome-nav-icon app-chrome-nav-icon--battles">
+            <OpiniaIcon className="app-chrome-nav-icon-svg" name="battle" />
+          </span>
+          <span>{t("web.nav.dotaVertical")}</span>
+        </Link>
+      ) : null}
 
       {authSession && profileNav.hasProfile ? (
         <Link

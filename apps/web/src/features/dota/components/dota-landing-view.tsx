@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { FormFeedback } from "../../../components/form-feedback";
 import { OpiniaIcon } from "../../../components/opinia-icon";
+import { useGamesLaunchStatus } from "../../games/hooks/use-games-launch-status";
 import { useTranslation } from "../../i18n/locale-provider";
 import { searchDotaProfile } from "../api/dota-api";
 import { useMyDotaProfileNav } from "../hooks/use-my-dota-profile-nav";
@@ -17,6 +18,8 @@ export function DotaLandingView() {
   const t = useTranslation();
   const router = useRouter();
   const myDotaProfile = useMyDotaProfileNav();
+  const { status: launchStatus } = useGamesLaunchStatus();
+  const searchLive = launchStatus.searchLive;
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -87,12 +90,16 @@ export function DotaLandingView() {
                 ? t("dota.landing.openProfileCta")
                 : t("dota.landing.createCta")}
           </Link>
-          <Link className="button-secondary" href="/games">
-            {t("web.profile.dashboard.gameProfiles")}
+          <Link className="button-secondary" href={searchLive ? "/games" : "/games/search"}>
+            {searchLive
+              ? t("web.profile.dashboard.gameProfiles")
+              : t("games.community.openSearch")}
           </Link>
-          <Link className="button-secondary" href="/dota/teams/create">
-            {t("dota.team.createCta")}
-          </Link>
+          {searchLive ? (
+            <Link className="button-secondary" href="/dota/teams/create">
+              {t("dota.team.createCta")}
+            </Link>
+          ) : null}
         </div>
 
         <div className={styles.searchWrap}>

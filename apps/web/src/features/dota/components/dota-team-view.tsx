@@ -1024,16 +1024,6 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
 
     const mustDisband = party.isOwner && party.members.length > 1;
 
-    if (mustDisband) {
-      const confirmed = window.confirm(
-        t("games.community.disbandConfirm", { name: party.name })
-      );
-
-      if (!confirmed) {
-        return;
-      }
-    }
-
     setPending(true);
     setError(null);
 

@@ -2,72 +2,33 @@ import type { DotaGreenFlagKey, DotaQualityKey, DotaRedFlagKey } from "@reviewo/
 
 import type { TranslateFn } from "@reviewo/i18n";
 
-const QUALITY_LABEL_KEYS: Record<DotaQualityKey, string> = {
-  chill: "dota.quality.chill",
-  good_caller: "dota.quality.goodCaller",
-  good_support: "dota.quality.goodSupport",
-  has_mic: "dota.quality.hasMic",
-  stress_resistant: "dota.quality.stressResistant"
-};
-
 const GREEN_FLAG_LABEL_KEYS: Record<DotaGreenFlagKey, string> = {
-  chill: "dota.flag.green.chill",
-  clutch: "dota.flag.green.clutch",
-  fair_play: "dota.flag.green.fairPlay",
-  flexible_roles: "dota.flag.green.flexibleRoles",
-  fun: "dota.flag.green.fun",
-  game_sense: "dota.flag.green.gameSense",
+  adequate: "dota.flag.green.adequate",
   good_caller: "dota.flag.green.goodCaller",
-  good_comms: "dota.flag.green.goodComms",
-  good_support: "dota.flag.green.goodSupport",
   has_mic: "dota.flag.green.hasMic",
-  listens: "dota.flag.green.listens",
-  no_tilt: "dota.flag.green.noTilt",
-  positive: "dota.flag.green.positive",
-  punctual: "dota.flag.green.punctual",
-  reliable: "dota.flag.green.reliable",
-  shotcalling: "dota.flag.green.shotcalling",
-  stack_friendly: "dota.flag.green.stackFriendly",
-  stress_resistant: "dota.flag.green.stressResistant",
-  team_player: "dota.flag.green.teamPlayer",
-  trustworthy: "dota.flag.green.trustworthy"
+  play_again: "dota.flag.green.playAgain",
+  team_player: "dota.flag.green.teamPlayer"
 };
 
 const RED_FLAG_LABEL_KEYS: Record<DotaRedFlagKey, string> = {
-  account_share: "dota.flag.red.accountShare",
-  afk: "dota.flag.red.afk",
-  bad_calls: "dota.flag.red.badCalls",
-  blame: "dota.flag.red.blame",
-  boosted: "dota.flag.red.boosted",
-  feeds: "dota.flag.red.feeds",
-  griefing: "dota.flag.red.griefing",
-  mute_refusal: "dota.flag.red.muteRefusal",
-  negative: "dota.flag.red.negative",
-  no_mic: "dota.flag.red.noMic",
-  pause_abuse: "dota.flag.red.pauseAbuse",
-  ragequit: "dota.flag.red.ragequit",
-  refuses_role: "dota.flag.red.refusesRole",
-  scammer: "dota.flag.red.scammer",
-  selfish: "dota.flag.red.selfish",
-  smurf_sus: "dota.flag.red.smurfSus",
-  spam_pings: "dota.flag.red.spamPings",
-  throws: "dota.flag.red.throws",
+  leaves: "dota.flag.red.leaves",
+  ruins: "dota.flag.red.ruins",
   tilts: "dota.flag.red.tilts",
   toxic: "dota.flag.red.toxic"
 };
 
 export function getDotaQualityLabel(key: string, t: TranslateFn): string {
-  const labelKey = QUALITY_LABEL_KEYS[key as DotaQualityKey];
-
-  return labelKey ? t(labelKey as never) : key;
+  return getDotaGreenFlagLabel(key as DotaQualityKey, t);
 }
 
 export function getDotaGreenFlagLabel(key: DotaGreenFlagKey, t: TranslateFn): string {
-  return t(GREEN_FLAG_LABEL_KEYS[key] as never);
+  const labelKey = GREEN_FLAG_LABEL_KEYS[key];
+  return labelKey ? t(labelKey as never) : key;
 }
 
 export function getDotaRedFlagLabel(key: DotaRedFlagKey, t: TranslateFn): string {
-  return t(RED_FLAG_LABEL_KEYS[key] as never);
+  const labelKey = RED_FLAG_LABEL_KEYS[key];
+  return labelKey ? t(labelKey as never) : key;
 }
 
 export function formatDotaRoles(roles: string[]): string {

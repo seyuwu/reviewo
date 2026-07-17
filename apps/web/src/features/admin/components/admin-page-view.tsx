@@ -149,6 +149,9 @@ export function AdminPageView() {
         <Link className="button-secondary" href="/admin/economy">
           {t("web.admin.economy.openPanel")}
         </Link>
+        <Link className="button-secondary" href="/admin/games-launch">
+          {t("web.admin.gamesLaunch.openPanel")}
+        </Link>
       </header>
 
       <div className={styles.adminStatsGrid}>

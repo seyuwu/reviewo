@@ -96,6 +96,16 @@
   padding: 0.7rem 0.9rem;
 }
 
+.ownerShareRow {
+  display: grid;
+  gap: 0.55rem;
+  justify-items: start;
+}
+
+.copyProfileButton {
+  width: fit-content;
+}
+
 .errorBanner {
   position: sticky;
   top: 0.35rem;

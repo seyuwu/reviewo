@@ -73,7 +73,16 @@ export function writeSharedAuthSessionCookie(
     secure: boolean;
   }
 ): string {
-  const value = encodeURIComponent(JSON.stringify(session));
+  // Never put avatar data URLs in the cookie — they exceed browser cookie size (~4KB)
+  // and a failed write leaves a stale cookie that overwrites localStorage on sync.
+  const cookieSession: SharedAuthCookieSession = {
+    accessToken: session.accessToken,
+    avatarUrl: null,
+    displayName: session.displayName,
+    email: session.email,
+    userId: session.userId
+  };
+  const value = encodeURIComponent(JSON.stringify(cookieSession));
   return applyCookie(SHARED_AUTH_COOKIE_NAME, value, {
     ...options,
     maxAgeSeconds: Math.max(60, options.maxAgeSeconds)

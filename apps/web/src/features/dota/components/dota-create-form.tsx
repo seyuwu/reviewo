@@ -27,6 +27,7 @@ import {
 } from "../lib/labels";
 import { stashDotaRecovery } from "../lib/recovery-storage";
 import type { DotaProfile } from "../types/dota";
+import { GamesLaunchWaitBanner } from "../../games/components/games-launch-wait-banner";
 import { DotaMmrField } from "./dota-mmr-field";
 import styles from "./dota-create-form.module.css";
 
@@ -355,6 +356,8 @@ export function DotaCreateForm() {
           <h1 className={styles.title}>{isEditMode ? t("dota.create.editTitle") : t("dota.create.title")}</h1>
           {isEditMode ? <p className={styles.lead}>{t("dota.create.editLead")}</p> : null}
         </header>
+
+        <GamesLaunchWaitBanner showSearchLink={!isEditMode} />
 
         <form className={`form-stack ${styles.form}`} onSubmit={handleSubmit}>
           {authSession ? (

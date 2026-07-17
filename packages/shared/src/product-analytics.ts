@@ -5,7 +5,9 @@ export const ANALYTICS_COUNTER_KEYS = [
   "funnel_games",
   "funnel_dota",
   "funnel_register",
-  "funnel_dota_profile"
+  "funnel_dota_profile",
+  "dota_host_pageviews",
+  "waitlist_interest_submit"
 ] as const;
 
 export type AnalyticsCounterKey = (typeof ANALYTICS_COUNTER_KEYS)[number];
@@ -23,7 +25,11 @@ export const ANALYTICS_CTA_KEYS = [
   "dota_share_profile",
   "dota_share_friend",
   "home_quick_games",
-  "home_create_entity"
+  "home_create_entity",
+  "games_waitlist_form_start",
+  "games_waitlist_invite_click",
+  "games_waitlist_invite_visit",
+  "games_waitlist_create_profile_click"
 ] as const;
 
 export type AnalyticsCtaKey = (typeof ANALYTICS_CTA_KEYS)[number];
@@ -147,3 +153,16 @@ export function funnelStepForPath(pathname: string): AnalyticsCounterKey | null 
 
   return null;
 }
+
+/** Daily unique visitor hash scoped to the Dota product host. */
+export function dotaHostVisitorScopeKey(visitorHash: string): string {
+  return `dota:${visitorHash}`;
+}
+
+export function isDotaHostVisitorScopeKey(visitorHash: string): boolean {
+  return visitorHash.startsWith("dota:");
+}
+
+export const WAITLIST_INVITE_QUERY = "from";
+export const WAITLIST_INVITE_VALUE = "waitlist_invite";
+

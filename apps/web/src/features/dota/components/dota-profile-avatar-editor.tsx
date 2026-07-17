@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { FormFeedback } from "../../../components/form-feedback";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
@@ -18,8 +18,15 @@ export function DotaProfileAvatarEditor({ displayName }: DotaProfileAvatarEditor
   const { authSession, updateAuthSession } = useAuthSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const avatarUrl = authSession?.avatarUrl ?? null;
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const avatarUrl = previewUrl ?? authSession?.avatarUrl ?? null;
   const initial = displayName.trim().charAt(0).toUpperCase() || "?";
+
+  useEffect(() => {
+    if (authSession?.avatarUrl) {
+      setPreviewUrl(authSession.avatarUrl);
+    }
+  }, [authSession?.avatarUrl]);
 
   async function handleAvatarChange(file: File | null) {
     if (!file || !authSession?.accessToken) {
@@ -32,7 +39,9 @@ export function DotaProfileAvatarEditor({ displayName }: DotaProfileAvatarEditor
     try {
       const imageDataUrl = await fileToAvatarDataUrl(file);
       const updated = await updateCurrentUserAvatar(imageDataUrl, authSession.accessToken);
-      updateAuthSession({ avatarUrl: updated.avatarUrl });
+      const nextAvatar = updated.avatarUrl ?? imageDataUrl;
+      setPreviewUrl(nextAvatar);
+      updateAuthSession({ avatarUrl: nextAvatar });
     } catch {
       setError(t("web.profile.avatarError"));
     } finally {

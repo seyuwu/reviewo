@@ -31,14 +31,21 @@ export function getStoredAuthSession(): StoredAuthSession | null {
   }
 
   const fromCookie = readSharedAuthSessionCookie();
+  const fromLocal = readLocalAuthSession();
 
   if (fromCookie?.accessToken && fromCookie.userId) {
     window.localStorage.removeItem(WEB_SIGNED_OUT_KEY);
-    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(fromCookie));
-    return fromCookie;
+    const merged: StoredAuthSession = {
+      ...fromCookie,
+      // Cookie never carries avatar (size limit); keep local avatar for the same user.
+      avatarUrl:
+        fromLocal?.userId === fromCookie.userId && fromLocal.avatarUrl
+          ? fromLocal.avatarUrl
+          : fromCookie.avatarUrl
+    };
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(merged));
+    return merged;
   }
-
-  const fromLocal = readLocalAuthSession();
 
   if (fromLocal) {
     // Hydrate shared cookie so sibling hosts (games./dota.) can pick up this session.

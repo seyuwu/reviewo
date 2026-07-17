@@ -41,11 +41,15 @@ export async function GET(_request: Request, { params }: OgDotaRouteProps) {
 
 function labelForQuality(key: string): string {
   const labels: Record<string, string> = {
-    chill: "Chill",
-    good_caller: "Caller",
-    good_support: "Support",
+    play_again: "Party again",
     has_mic: "Mic",
-    stress_resistant: "Stable"
+    adequate: "Decent",
+    team_player: "Team",
+    good_caller: "Caller",
+    toxic: "Toxic",
+    tilts: "Tilts",
+    leaves: "Leaves",
+    ruins: "Ruins"
   };
 
   return labels[key] ?? key;

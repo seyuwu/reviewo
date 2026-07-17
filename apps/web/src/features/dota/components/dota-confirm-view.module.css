@@ -8,7 +8,7 @@
   box-shadow: var(--shadow-card);
   display: grid;
   gap: 1rem;
-  max-width: 52rem;
+  max-width: 64rem;
   margin: 0 auto;
   padding: clamp(1.25rem, 3vw, 2rem);
 }
@@ -32,19 +32,59 @@
   gap: 1rem;
 }
 
+.flagGrid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.flagPanel {
+  border: 1px solid var(--color-card-border);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+}
+
+.flagPanel.green {
+  background: rgb(34 197 94 / 8%);
+}
+
+.flagPanel.red {
+  background: rgb(239 68 68 / 8%);
+}
+
+.flagHeader {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  justify-content: space-between;
+}
+
+.flagHeader h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.flagHeader span {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
 .options {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.55rem;
 }
 
 .option {
   align-items: center;
-  background: var(--color-primary-soft);
+  background: rgb(8 12 20 / 45%);
   border: 1px solid var(--color-card-border);
   border-radius: 0.75rem;
   display: flex;
   gap: 0.75rem;
-  padding: 0.9rem 1rem;
+  padding: 0.75rem 0.9rem;
 }
 
 .footer {
@@ -58,4 +98,10 @@
 .footer p {
   color: var(--color-text-muted);
   margin: 0;
+}
+
+@media (max-width: 760px) {
+  .flagGrid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -6,9 +6,12 @@ import { useEffect } from "react";
 import {
   bucketAnalyticsPath,
   isAnalyticsCtaKey,
+  WAITLIST_INVITE_QUERY,
+  WAITLIST_INVITE_VALUE,
   type AnalyticsCtaKey
 } from "@reviewo/shared";
 
+import { isGamesVerticalHostname } from "../../../lib/config/product-hosts";
 import { publicEnv } from "../../../lib/config/public-env";
 
 const VISITOR_KEY = "opinia.analytics.visitorId";
@@ -65,9 +68,9 @@ function enqueue(event: PendingEvent): void {
   }
 }
 
-async function flushQueue(options: { allowBeacon: boolean }): Promise<void> {
+async function flushQueue(options: { allowBeacon: boolean }): Promise<boolean> {
   if (queue.length === 0) {
-    return;
+    return true;
   }
 
   if (flushTimer !== null) {
@@ -83,23 +86,35 @@ async function flushQueue(options: { allowBeacon: boolean }): Promise<void> {
   const url = `${publicEnv.apiBaseUrl}/analytics/collect`;
 
   try {
-    // Regular flushes use fetch (more reliable CORS/JSON). Beacon only for unload.
-    if (options.allowBeacon && typeof navigator.sendBeacon === "function") {
-      const blob = new Blob([body], { type: "application/json" });
-      if (navigator.sendBeacon(url, blob)) {
-        return;
-      }
-    }
-
-    await fetch(url, {
+    // Prefer fetch+keepalive. Cross-origin sendBeacon(application/json) cannot
+    // complete CORS preflight and silently drops events while returning true.
+    const response = await fetch(url, {
       body,
       headers: { "content-type": "application/json" },
       keepalive: true,
       method: "POST",
       mode: "cors"
     });
+
+    if (!response.ok) {
+      queue.unshift(...events);
+      return false;
+    }
+
+    return true;
   } catch {
-    // Drop failed batches — analytics must never block UX.
+    if (options.allowBeacon && typeof navigator.sendBeacon === "function") {
+      // Last-resort unload path only; text/plain avoids CORS preflight.
+      // API still expects JSON — this rarely succeeds cross-origin, but does not
+      // falsely report success the way application/json beacons did.
+      const blob = new Blob([body], { type: "text/plain;charset=UTF-8" });
+      if (navigator.sendBeacon(url, blob)) {
+        return true;
+      }
+    }
+
+    queue.unshift(...events);
+    return false;
   }
 }
 
@@ -143,15 +158,104 @@ function trackPageview(pathname: string): void {
   if (shouldCountPageview) {
     lastPageviewAt = now;
     enqueue({ key: pathname, type: "pageview" });
+
+    if (isGamesProductHost()) {
+      enqueue({ key: "dota_host_pageviews", type: "counter" });
+    }
   }
+
+  trackWaitlistInviteVisitOnce();
 }
 
-export function trackAnalyticsCta(ctaKey: AnalyticsCtaKey): void {
+let inviteVisitQueued = false;
+
+const INVITE_SHARE_AT_KEY = "opinia.waitlist.inviteShareAt";
+const INVITE_VISIT_KEY = "opinia.waitlist.inviteVisit.v3";
+/** Skip counting an invite visit shortly after this browser copied an invite link (self-test). */
+const INVITE_SELF_OPEN_MS = 3 * 60 * 1000;
+
+export function trackAnalyticsCta(ctaKey: AnalyticsCtaKey): Promise<boolean> {
   if (!isAnalyticsCtaKey(ctaKey)) {
-    return;
+    return Promise.resolve(false);
+  }
+
+  if (ctaKey === "games_waitlist_invite_click") {
+    try {
+      window.localStorage.setItem(INVITE_SHARE_AT_KEY, String(Date.now()));
+    } catch {
+      /* ignore */
+    }
   }
 
   enqueue({ key: ctaKey, type: "cta" });
+  // Waitlist / conversion CTAs should not wait for the 15s batch window.
+  // Soft navigations do not abort keepalive fetch, so await this before Link nav.
+  return flushQueue({ allowBeacon: false });
+}
+
+function trackWaitlistInviteVisitOnce(): void {
+  if (typeof window === "undefined" || inviteVisitQueued) {
+    return;
+  }
+
+  const inviteQuery = WAITLIST_INVITE_QUERY || "from";
+  const inviteValue = WAITLIST_INVITE_VALUE || "waitlist_invite";
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get(inviteQuery) !== inviteValue) {
+    return;
+  }
+
+  try {
+    if (window.sessionStorage.getItem(INVITE_VISIT_KEY) === "1") {
+      inviteVisitQueued = true;
+      return;
+    }
+
+    const shareAt = Number(window.localStorage.getItem(INVITE_SHARE_AT_KEY) ?? "0");
+
+    if (shareAt > 0 && Date.now() - shareAt < INVITE_SELF_OPEN_MS) {
+      // Own invite link opened right after copy — mark seen, do not count as a friend visit.
+      inviteVisitQueued = true;
+      window.sessionStorage.setItem(INVITE_VISIT_KEY, "1");
+      return;
+    }
+  } catch {
+    /* ignore storage read failures */
+  }
+
+  // Guard React Strict Mode double-effect before the async flush finishes.
+  inviteVisitQueued = true;
+  enqueue({ key: "games_waitlist_invite_visit", type: "cta" });
+
+  void flushQueue({ allowBeacon: false }).then((ok) => {
+    if (!ok) {
+      inviteVisitQueued = false;
+      return;
+    }
+
+    try {
+      window.sessionStorage.setItem(INVITE_VISIT_KEY, "1");
+    } catch {
+      /* ignore storage write failures */
+    }
+  });
+}
+
+function isGamesProductHost(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const host = window.location.hostname.toLowerCase();
+
+  if (isGamesVerticalHostname(host) || host.startsWith("dota.") || host.startsWith("games.")) {
+    return true;
+  }
+
+  // Local same-origin (localhost:3001): waitlist lives under /games and /dota.
+  const path = window.location.pathname;
+  return path.startsWith("/games") || path.startsWith("/dota");
 }
 
 export function ProductAnalyticsListener() {

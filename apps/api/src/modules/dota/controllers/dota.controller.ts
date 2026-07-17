@@ -25,6 +25,7 @@ import {
 import { createDotaConfirmationRateLimitRules } from "../../../common/rate-limiting/write-rate-limit-rules.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.js";
+import { GamesLaunchService } from "../../games-launch/services/games-launch.service.js";
 import { ConfirmDotaQualitiesDto } from "../dto/confirm-dota-qualities.dto.js";
 import { CreateDotaProfileDto } from "../dto/create-dota-profile.dto.js";
 import { DotaProfileResponseDto } from "../dto/dota-profile-response.dto.js";
@@ -41,7 +42,8 @@ import { DotaProfileService } from "../services/dota-profile.service.js";
 export class DotaController {
   constructor(
     private readonly apiRateLimiterService: ApiRateLimiterService,
-    private readonly dotaProfileService: DotaProfileService
+    private readonly dotaProfileService: DotaProfileService,
+    private readonly gamesLaunchService: GamesLaunchService
   ) {}
 
   @Post("guest")
@@ -73,6 +75,12 @@ export class DotaController {
 
   @Get("lfg")
   async listLookingPlayers(@Query() query: ListDotaLfgQueryDto): Promise<DotaLfgListResponseDto> {
+    const searchLive = await this.gamesLaunchService.isSearchLive();
+
+    if (!searchLive) {
+      return { results: [] };
+    }
+
     return this.dotaProfileService.listLookingPlayers({
       ...(query.roles ? { roles: query.roles } : {}),
       ...(query.server ? { server: query.server } : {})
@@ -85,6 +93,16 @@ export class DotaController {
     @Body() input: SetDotaLfgLookingDto,
     @CurrentUser() currentUser: AuthenticatedUser
   ): Promise<DotaProfileResponseDto> {
+    const searchLive = await this.gamesLaunchService.isSearchLive();
+
+    if (!searchLive && currentUser.role !== "ADMIN") {
+      throw createAppException({
+        code: AppErrorCode.Forbidden,
+        message: "Teammate search is not open yet",
+        statusCode: HttpStatus.FORBIDDEN
+      });
+    }
+
     return this.dotaProfileService.setLooking(input.looking, currentUser, {
       ...(input.recruitedRoles !== undefined ? { recruitedRoles: input.recruitedRoles } : {}),
       ...(input.partySlug ? { partySlug: input.partySlug } : {})

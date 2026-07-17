@@ -23,7 +23,8 @@ export class AnalyticsController {
     await this.apiRateLimiterService.assertWithinLimits([
       {
         key: resolveRequestIp(request),
-        limit: 60,
+        // SPA flushes every ~15s plus CTA bursts; 60/hour blocks local testing.
+        limit: 600,
         message: "Too many analytics batches from this network",
         namespace: "analytics:collect:ip",
         windowSeconds: 60 * 60

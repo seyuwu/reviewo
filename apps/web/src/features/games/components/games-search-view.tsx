@@ -41,8 +41,10 @@ import {
   GamesSearchOnboarding
 } from "./games-search-onboarding";
 import type { IntentMode } from "./games-search-onboarding-types";
+import { useGamesLaunchStatus } from "../hooks/use-games-launch-status";
 import styles from "./games-search-view.module.css";
 import { GamesSearchTipRotator } from "./games-search-tip-rotator";
+import { GamesSearchWaitlistView } from "./games-search-waitlist-view";
 
 const PENDING_STACK_KEY = "opinia.pendingStackSlug";
 const RECOMMENDATION_COUNT = 3;
@@ -149,6 +151,8 @@ export function GamesSearchView() {
   const router = useRouter();
   const { authSession, isAuthSessionLoaded } = useAuthSession();
   const myDotaProfile = useMyDotaProfileNav();
+  const { status: launchStatus } = useGamesLaunchStatus();
+  const searchLive = launchStatus.searchLive;
   const [results, setResults] = useState<DotaLfgHit[]>([]);
   const [myMmr, setMyMmr] = useState<string | null>(null);
   const [ownedParties, setOwnedParties] = useState<GameParty[]>([]);
@@ -247,15 +251,31 @@ export function GamesSearchView() {
   }, [authSession?.accessToken, myDotaProfile.hasProfile]);
 
   useEffect(() => {
+    if (!searchLive) {
+      setResults([]);
+      setIsLoading(false);
+      setHasLoadedOnce(true);
+      return;
+    }
+
     void refreshList();
-  }, [refreshList]);
+  }, [refreshList, searchLive]);
 
   useEffect(() => {
+    if (!searchLive) {
+      setMyMmr(null);
+      setOwnedParties([]);
+      setInvites([]);
+      setOutgoingInvites([]);
+      setSelectedPartySlug("");
+      return;
+    }
+
     void refreshParties();
-  }, [refreshParties]);
+  }, [refreshParties, searchLive]);
 
   useEffect(() => {
-    if (!isAuthSessionLoaded || !myDotaProfile.hasProfile) {
+    if (!searchLive || !isAuthSessionLoaded || !myDotaProfile.hasProfile) {
       return;
     }
 
@@ -268,9 +288,13 @@ export function GamesSearchView() {
     }
 
     setCoachOpen(true);
-  }, [isAuthSessionLoaded, myDotaProfile.hasProfile]);
+  }, [isAuthSessionLoaded, myDotaProfile.hasProfile, searchLive]);
 
   useEffect(() => {
+    if (!searchLive) {
+      return;
+    }
+
     const intervalId = window.setInterval(() => {
       void refreshList({ quiet: true });
     }, REFRESH_MS);
@@ -278,9 +302,13 @@ export function GamesSearchView() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [refreshList]);
+  }, [refreshList, searchLive]);
 
   useEffect(() => {
+    if (!searchLive) {
+      return;
+    }
+
     const intervalId = window.setInterval(() => {
       void refreshParties();
     }, INVITE_POLL_MS);
@@ -337,9 +365,13 @@ export function GamesSearchView() {
       window.clearInterval(intervalId);
       window.removeEventListener(PARTY_NOTIFICATION_EVENT, handlePartyNotification);
     };
-  }, [refreshParties]);
+  }, [refreshParties, searchLive]);
 
   useEffect(() => {
+    if (!searchLive) {
+      return;
+    }
+
     let cancelled = false;
 
     async function loadOnline() {
@@ -365,7 +397,7 @@ export function GamesSearchView() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [searchLive]);
 
   useEffect(() => {
     for (const invite of outgoingInvites) {
@@ -761,6 +793,10 @@ export function GamesSearchView() {
     gateSlug && gateSlug !== "__looking__"
       ? `/dota/create?intent=stack&target=${encodeURIComponent(gateSlug)}`
       : "/dota/create?intent=search";
+
+  if (!searchLive) {
+    return <GamesSearchWaitlistView />;
+  }
 
   return (
     <section className={styles.page}>

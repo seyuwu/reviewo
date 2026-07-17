@@ -109,7 +109,7 @@ export function DotaProfileFlagPanel({
                       ) : null}
                       <span className={styles.flagText}>{getLabel(flagKey)}</span>
                     </span>
-                    {count > 0 ? <span className={styles.countBadge}>{count}</span> : null}
+                    <span className={styles.countBadge}>{count}</span>
                   </button>
                 </li>
               );

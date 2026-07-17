@@ -21,6 +21,10 @@ async function bootstrap(): Promise<void> {
     bufferLogs: true
   });
 
+  // Avatars are sent as JPEG data URLs (DTO max ~350KB); default Express limit is 100KB.
+  app.useBodyParser("json", { limit: "512kb" });
+  app.useBodyParser("urlencoded", { extended: true, limit: "512kb" });
+
   const logger = app.get(AppLogger);
   app.useLogger(logger);
 

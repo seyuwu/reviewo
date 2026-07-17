@@ -3,6 +3,7 @@ import { Module, forwardRef } from "@nestjs/common";
 import { RateLimitingModule } from "../../common/rate-limiting/rate-limiting.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { EntitiesModule } from "../entities/entities.module.js";
+import { GamesLaunchModule } from "../games-launch/games-launch.module.js";
 import { FriendshipsModule } from "../social/friendships.module.js";
 import { PartiesModule } from "../social/parties.module.js";
 import { UsersModule } from "../users/users.module.js";
@@ -18,6 +19,7 @@ import { DotaProfileService } from "./services/dota-profile.service.js";
     AuthModule,
     EntitiesModule,
     FriendshipsModule,
+    GamesLaunchModule,
     forwardRef(() => PartiesModule),
     RateLimitingModule,
     UsersModule

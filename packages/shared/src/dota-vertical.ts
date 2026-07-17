@@ -22,66 +22,27 @@ export const DOTA_ATTRIBUTE_KEYS = {
 /** How long "Looking for party" stays active without refresh. */
 export const DOTA_LFG_TTL_SECONDS = 20 * 60;
 
-export const DOTA_QUALITY_KEYS = [
-  "has_mic",
-  "chill",
-  "good_caller",
-  "stress_resistant",
-  "good_support"
-] as const;
-
+/** Compact vibe tags — keep short so people actually click. */
 export const DOTA_GREEN_FLAG_KEYS = [
+  "play_again",
   "has_mic",
-  "chill",
-  "good_caller",
-  "stress_resistant",
-  "good_support",
+  "adequate",
   "team_player",
-  "positive",
-  "punctual",
-  "flexible_roles",
-  "good_comms",
-  "clutch",
-  "fair_play",
-  "listens",
-  "no_tilt",
-  "stack_friendly",
-  "game_sense",
-  "reliable",
-  "fun",
-  "shotcalling",
-  "trustworthy"
+  "good_caller"
 ] as const;
 
-export const DOTA_RED_FLAG_KEYS = [
-  "toxic",
-  "no_mic",
-  "tilts",
-  "afk",
-  "throws",
-  "griefing",
-  "spam_pings",
-  "blame",
-  "selfish",
-  "refuses_role",
-  "negative",
-  "ragequit",
-  "smurf_sus",
-  "boosted",
-  "mute_refusal",
-  "feeds",
-  "bad_calls",
-  "pause_abuse",
-  "account_share",
-  "scammer"
-] as const;
+export const DOTA_RED_FLAG_KEYS = ["toxic", "tilts", "leaves", "ruins"] as const;
 
-export type DotaQualityKey = (typeof DOTA_QUALITY_KEYS)[number];
+/** @deprecated Use green flags; kept as alias for older confirmation keys. */
+export const DOTA_QUALITY_KEYS = DOTA_GREEN_FLAG_KEYS;
+
 export type DotaGreenFlagKey = (typeof DOTA_GREEN_FLAG_KEYS)[number];
 export type DotaRedFlagKey = (typeof DOTA_RED_FLAG_KEYS)[number];
-export type DotaConfirmationKey = DotaQualityKey | DotaGreenFlagKey | DotaRedFlagKey;
+export type DotaQualityKey = DotaGreenFlagKey;
+export type DotaConfirmationKey = DotaGreenFlagKey | DotaRedFlagKey;
 
-export const DOTA_FLAG_LIMIT_PER_SIDE = 12;
+/** Max selectable flags per polarity (matches list size). */
+export const DOTA_FLAG_LIMIT_PER_SIDE = 5;
 export const DOTA_CONFIRMATION_MILESTONE = 3;
 export const DOTA_ACCOUNT_ID_PATTERN = /^\d{8,10}$/;
 
@@ -98,9 +59,7 @@ export function isDotaRedFlagKey(value: string): value is DotaRedFlagKey {
 }
 
 export function isDotaConfirmationKey(value: string): value is DotaConfirmationKey {
-  return (
-    isDotaQualityKey(value) || isDotaGreenFlagKey(value) || isDotaRedFlagKey(value)
-  );
+  return isDotaGreenFlagKey(value) || isDotaRedFlagKey(value);
 }
 
 export function isValidDotaAccountId(value: string): boolean {

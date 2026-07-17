@@ -272,6 +272,43 @@ export function createSpotlightEventRateLimitRules(request: RequestLike): RateLi
   ];
 }
 
+/** Soft anti-spam for waitlist writes — high enough for real users + light QA. */
+export function createGamesLaunchInterestRateLimitRules(request: RequestLike): RateLimitRule[] {
+  return [
+    {
+      key: resolveRequestIp(request),
+      limit: 120,
+      message: "Too many waitlist signups from this network",
+      namespace: "games-launch:interest:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
+export function createGamesLaunchSuggestionRateLimitRules(request: RequestLike): RateLimitRule[] {
+  return [
+    {
+      key: resolveRequestIp(request),
+      limit: 60,
+      message: "Too many waitlist suggestions from this network",
+      namespace: "games-launch:suggestion:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
+export function createGamesLaunchDevNoteLikeRateLimitRules(request: RequestLike): RateLimitRule[] {
+  return [
+    {
+      key: resolveRequestIp(request),
+      limit: 180,
+      message: "Too many waitlist likes from this network",
+      namespace: "games-launch:dev-note-like:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
 export function createPresenceHeartbeatRateLimitRules(
   userId: string,
   request: RequestLike

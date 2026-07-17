@@ -32,12 +32,12 @@ export async function generateMetadata({ params }: DotaConfirmPageProps): Promis
   }
 
   return {
-    description: `Подтвердите качества игрока ${profile.title}.`,
+    description: `Отметьте green/red флаги игрока ${profile.title}.`,
     openGraph: {
-      title: `Подтвердить ${profile.title} | Opinia Dota`,
+      title: `Флаги для ${profile.title} | Opinia Dota`,
       url: buildDotaConfirmUrl(profile.slug)
     },
-    title: `Подтвердить ${profile.title} | Opinia Dota`
+    title: `Флаги для ${profile.title} | Opinia Dota`
   };
 }
 

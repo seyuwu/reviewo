@@ -4,6 +4,7 @@ import { RateLimitingModule } from "../../common/rate-limiting/rate-limiting.mod
 import { AuthModule } from "../auth/auth.module.js";
 import { DotaModule } from "../dota/dota.module.js";
 import { EntitiesModule } from "../entities/entities.module.js";
+import { GamesLaunchModule } from "../games-launch/games-launch.module.js";
 import { UsersModule } from "../users/users.module.js";
 import { PartiesController } from "./controllers/parties.controller.js";
 import { FriendshipsModule } from "./friendships.module.js";
@@ -27,6 +28,7 @@ import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
     forwardRef(() => DotaModule),
     EntitiesModule,
     FriendshipsModule,
+    GamesLaunchModule,
     RateLimitingModule,
     UsersModule
   ],

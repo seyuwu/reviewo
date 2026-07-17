@@ -2,6 +2,7 @@
 
 import type { TranslateFn } from "@reviewo/i18n";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -10,6 +11,7 @@ import { ApiError } from "../../../lib/api/api-error";
 import { useTranslation } from "../../i18n/locale-provider";
 import { MinimalAuthPanel } from "../../auth/components/minimal-auth-panel";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
+import { isGamesProductMode, safeInternalNextPath } from "../../games/lib/games-mode";
 import {
   changeCurrentUserPassword,
   getCurrentUserProfile,
@@ -26,10 +28,18 @@ type ProfileFlowState = "loading" | "guest" | "authenticated";
 
 export function ProfilePageView() {
   const t = useTranslation();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { authSession, isAuthSessionLoaded, signOut, storeAuthSession, updateAuthSession } =
     useAuthSession();
   const accessToken = authSession?.accessToken;
+  const [hostname, setHostname] = useState("");
+
+  useEffect(() => {
+    setHostname(window.location.hostname);
+  }, []);
+
+  const isGamesAuth = isGamesProductMode("/profile", hostname);
 
   const profileQuery = useQuery({
     enabled: Boolean(accessToken),
@@ -74,8 +84,12 @@ export function ProfilePageView() {
           <div className="auth-center-card">
             <header className="auth-center-header">
               <p className="eyebrow">{t("common.account")}</p>
-              <h1 id="auth-heading">{t("auth.context.signInToOpinia")}</h1>
-              <p className="muted-copy">{t("auth.context.signInHint")}</p>
+              <h1 id="auth-heading">
+                {t(isGamesAuth ? "auth.context.signInToOpiniaGames" : "auth.context.signInToOpinia")}
+              </h1>
+              <p className="muted-copy">
+                {t(isGamesAuth ? "auth.context.signInHintGames" : "auth.context.signInHint")}
+              </p>
             </header>
 
             <MinimalAuthPanel
@@ -83,6 +97,13 @@ export function ProfilePageView() {
               contextLabel={t("auth.context.registerOrSignIn")}
               onAuthSuccess={(authResponse) => {
                 storeAuthSession(authResponse);
+                const next = safeInternalNextPath(
+                  new URLSearchParams(window.location.search).get("next")
+                );
+
+                if (next) {
+                  router.replace(next);
+                }
               }}
               onSignOut={signOut}
             />

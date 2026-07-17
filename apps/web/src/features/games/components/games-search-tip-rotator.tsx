@@ -7,21 +7,32 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "../../i18n/locale-provider";
 import styles from "./games-search-tip-rotator.module.css";
 
-const TIP_IDS = ["party", "invite", "chat", "search"] as const;
+const TIP_IDS = [
+  "party",
+  "invite",
+  "chat",
+  "search",
+  "roles",
+  "officer"
+] as const;
 type TipId = (typeof TIP_IDS)[number];
 
 const TIP_EYEBROW: Record<TipId, MessageKey> = {
   party: "games.search.tipRotator.partyEyebrow",
   invite: "games.search.tipRotator.inviteEyebrow",
   chat: "games.search.tipRotator.chatEyebrow",
-  search: "games.search.tipRotator.searchEyebrow"
+  search: "games.search.tipRotator.searchEyebrow",
+  roles: "games.launch.tip.rolesEyebrow",
+  officer: "games.launch.tip.officerEyebrow"
 };
 
 const TIP_BODY: Record<TipId, MessageKey> = {
   party: "games.search.tipRotator.partyBody",
   invite: "games.search.tipRotator.inviteBody",
   chat: "games.search.tipRotator.chatBody",
-  search: "games.search.tipRotator.searchBody"
+  search: "games.search.tipRotator.searchBody",
+  roles: "games.launch.tip.rolesBody",
+  officer: "games.launch.tip.officerBody"
 };
 
 const ROTATE_MS = 5_500;

@@ -3,6 +3,7 @@
 import { useEffect, useState, type RefObject } from "react";
 
 import { FormFeedback } from "../../../components/form-feedback";
+import { trackAnalyticsCta } from "../../analytics/components/product-analytics-listener";
 import { useTranslation } from "../../i18n/locale-provider";
 import { copyDotaShareText } from "../lib/share";
 import { hasSeenShareModal, markShareModalSeen } from "../lib/share-modal-storage";
@@ -71,6 +72,7 @@ export function DotaSharePanel({ autoOpenModal = false, panelRef, profile }: Dot
 
     setCopiedPrimary(true);
     trackDotaEvent("dota_share_copied", { kind: "profile", slug: profile.slug });
+    trackAnalyticsCta("dota_share_profile");
     window.setTimeout(() => setCopiedPrimary(false), 2200);
   }
 

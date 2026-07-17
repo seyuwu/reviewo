@@ -147,13 +147,13 @@ function createService(overrides?: {
 
 describe("DotaProfileService", () => {
   it("returns public profile with progress milestone", async () => {
-    const service = createService({ distinctConfirmers: 1, qualities: { chill: 1 } });
+    const service = createService({ distinctConfirmers: 1, qualities: { play_again: 1 } });
     const profile = await service.getPublicProfileBySlug("fivii");
 
     assert.equal(profile.slug, "fivii");
     assert.equal(profile.progress.current, 1);
     assert.equal(profile.progress.target, 3);
-    assert.equal(profile.qualities.chill, 1);
+    assert.equal(profile.qualities.play_again, 1);
   });
 
   it("blocks self-confirmation for profile owner", async () => {
@@ -163,7 +163,7 @@ describe("DotaProfileService", () => {
       () =>
         service.confirmQualities(
           "fivii",
-          { qualityKeys: ["chill"], visitorId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+          { qualityKeys: ["play_again"], visitorId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
           request,
           owner
         ),
@@ -172,10 +172,10 @@ describe("DotaProfileService", () => {
   });
 
   it("accepts anonymous confirmation from another visitor", async () => {
-    const service = createService({ distinctConfirmers: 1, qualities: { chill: 1 } });
+    const service = createService({ distinctConfirmers: 1, qualities: { play_again: 1 } });
     const profile = await service.confirmQualities(
       "fivii",
-      { qualityKeys: ["chill", "has_mic"], visitorId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+      { qualityKeys: ["play_again", "has_mic"], visitorId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
       request
     );
 

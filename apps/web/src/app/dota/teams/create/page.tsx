@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { DotaCreateTeamForm } from "../../../../features/dota/components/dota-team-view";
+import { DotaCreateTeamGate } from "../../../../features/dota/components/dota-create-team-gate";
 
 export const metadata: Metadata = {
   description: "Создай постоянную Dota-команду или временное пати из 5 игроков на Opinia.",
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function DotaCreateTeamPage() {
   return (
     <main className="shell entity-route">
-      <DotaCreateTeamForm />
+      <DotaCreateTeamGate />
     </main>
   );
 }
