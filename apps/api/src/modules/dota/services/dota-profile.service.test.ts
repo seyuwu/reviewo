@@ -95,6 +95,10 @@ function createService(overrides?: {
     findById: async () => ({
       displayName: owner.displayName,
       username: owner.username
+    }),
+    updateDisplayName: async (_id: string, displayName: string) => ({
+      displayName,
+      username: owner.username
     })
   } as unknown as UsersRepository;
 

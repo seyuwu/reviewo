@@ -1716,6 +1716,9 @@ export const enMessages = {
   "dota.create.rolesRequired": "Pick at least one role.",
   "dota.create.mmrRequired": "Enter your MMR.",
   "dota.create.validation.displayName": "Enter a display name.",
+  "dota.create.displayName": "Nickname",
+  "dota.create.displayNameHint": "Shown in search and parties. Also updates your Opinia account name.",
+  "dota.create.displayNamePlaceholder": "What should we call you",
   "dota.create.validation.email": "Enter your email.",
   "dota.create.validation.password": "Password must be at least 8 characters.",
   "dota.create.validation.dotaAccountId": "Dota ID must be 8–10 digits.",
@@ -1959,15 +1962,24 @@ export const enMessages = {
   "dota.quality.adequate": "🧠 Decent person",
   "dota.quality.teamPlayer": "🤝 Team player",
   "dota.quality.goodCaller": "📞 Good caller",
+  "dota.quality.altushka": "🎀 Altushka",
   "dota.flag.green.playAgain": "👍 Want to party again",
   "dota.flag.green.hasMic": "🎤 Has mic",
   "dota.flag.green.adequate": "🧠 Decent person",
   "dota.flag.green.teamPlayer": "🤝 Team player",
   "dota.flag.green.goodCaller": "📞 Good caller",
+  "dota.flag.green.altushka": "🎀 Altushka",
   "dota.flag.red.toxic": "👎 Toxic",
   "dota.flag.red.tilts": "😡 Tilts",
   "dota.flag.red.leaves": "🚪 Leaves",
-  "dota.flag.red.ruins": "💀 Ruins"
+  "dota.flag.red.ruins": "💀 Ruins",
+  "dota.gender.label": "Gender",
+  "dota.gender.female": "Girl",
+  "dota.gender.male": "Guy",
+  "dota.gender.unspecified": "Prefer not to say",
+  "dota.create.gender": "Gender",
+  "dota.create.genderHint": "Optional.",
+  "dota.profile.gender": "Gender"
 } as const;
 
 export type MessageKey = keyof typeof enMessages;

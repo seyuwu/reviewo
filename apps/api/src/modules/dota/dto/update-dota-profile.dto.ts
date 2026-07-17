@@ -38,6 +38,19 @@ export class UpdateDotaProfileDto {
   title?: string;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmed = value.trim().toLowerCase();
+
+    return trimmed.length > 0 ? trimmed : undefined;
+  })
+  @IsIn(["female", "male", "unspecified"])
+  gender?: "female" | "male" | "unspecified";
+
+  @IsOptional()
   @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
   @IsString()
   @MinLength(1)

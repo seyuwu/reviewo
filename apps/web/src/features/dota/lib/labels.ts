@@ -4,6 +4,7 @@ import type { TranslateFn } from "@reviewo/i18n";
 
 const GREEN_FLAG_LABEL_KEYS: Record<DotaGreenFlagKey, string> = {
   adequate: "dota.flag.green.adequate",
+  altushka: "dota.flag.green.altushka",
   good_caller: "dota.flag.green.goodCaller",
   has_mic: "dota.flag.green.hasMic",
   play_again: "dota.flag.green.playAgain",
@@ -29,6 +30,19 @@ export function getDotaGreenFlagLabel(key: DotaGreenFlagKey, t: TranslateFn): st
 export function getDotaRedFlagLabel(key: DotaRedFlagKey, t: TranslateFn): string {
   const labelKey = RED_FLAG_LABEL_KEYS[key];
   return labelKey ? t(labelKey as never) : key;
+}
+
+export function getDotaGenderLabel(gender: string | null | undefined, t: TranslateFn): string {
+  switch (gender) {
+    case "female":
+      return t("dota.gender.female" as never);
+    case "male":
+      return t("dota.gender.male" as never);
+    case "unspecified":
+      return t("dota.gender.unspecified" as never);
+    default:
+      return "—";
+  }
 }
 
 export function formatDotaRoles(roles: string[]): string {

@@ -43,6 +43,7 @@ import { EntityQualityConfirmationsRepository } from "../repositories/entity-qua
 
 interface DotaAttributeInput {
   dotaAccountId?: string;
+  gender?: CreateDotaProfileDto["gender"];
   hasMic?: boolean;
   language?: string;
   mmr?: string;
@@ -67,9 +68,11 @@ export class DotaProfileService {
   ) {}
 
   async createGuestProfile(input: CreateDotaProfileDto): Promise<GuestDotaProfileCreateResponseDto> {
-    const displayName = input.dotaAccountId
-      ? `Player ${input.dotaAccountId}`
-      : await this.resolveDefaultDotaPlayerName(input.title);
+    const displayName = input.title?.trim()
+      ? input.title.trim()
+      : input.dotaAccountId
+        ? `Player ${input.dotaAccountId}`
+        : await this.resolveDefaultDotaPlayerName(input.title);
 
     const guest = await this.authService.createGuestAccount(displayName);
     const profile = await this.createProfile(
@@ -143,6 +146,10 @@ export class DotaProfileService {
       }
 
       throw error;
+    }
+
+    if (title !== currentUser.displayName) {
+      await this.usersRepository.updateDisplayName(currentUser.id, title);
     }
 
     return this.buildProfileResponse(entity, await this.entityAttributesRepository.findByEntityId(entity.id), {
@@ -579,9 +586,15 @@ export class DotaProfileService {
     }
 
     let updatedEntity = entity;
+    const nextTitle = input.title?.trim();
 
-    if (input.title?.trim()) {
-      updatedEntity = await this.entitiesRepository.updateTitle(entity.id, input.title.trim());
+    if (nextTitle && nextTitle !== entity.title) {
+      updatedEntity = await this.entitiesRepository.updateTitle(entity.id, nextTitle);
+
+      // Keep Opinia account name in sync — parties/friends UI use user.displayName.
+      if (nextTitle !== currentUser.displayName) {
+        await this.usersRepository.updateDisplayName(currentUser.id, nextTitle);
+      }
     }
 
     try {
@@ -901,6 +914,10 @@ export class DotaProfileService {
       attributes[DOTA_ATTRIBUTE_KEYS.language] = input.language.trim().toLowerCase();
     }
 
+    if (input.gender) {
+      attributes[DOTA_ATTRIBUTE_KEYS.gender] = input.gender;
+    }
+
     if (typeof input.hasMic === "boolean") {
       attributes[DOTA_ATTRIBUTE_KEYS.hasMic] = String(input.hasMic);
     }
@@ -930,6 +947,11 @@ export class DotaProfileService {
       next[DOTA_ATTRIBUTE_KEYS.roles] = roles;
     }
 
+    const gender = currentAttributes[DOTA_ATTRIBUTE_KEYS.gender];
+    if (input.gender === undefined && gender) {
+      next[DOTA_ATTRIBUTE_KEYS.gender] = gender;
+    }
+
     const hasMic = currentAttributes[DOTA_ATTRIBUTE_KEYS.hasMic];
     if (input.hasMic === undefined && hasMic) {
       next[DOTA_ATTRIBUTE_KEYS.hasMic] = hasMic;
@@ -954,6 +976,7 @@ export class DotaProfileService {
       entityId: entity.id,
       friendshipRequestId: friendship.requestId,
       friendshipStatus: friendship.status,
+      gender: attributes[DOTA_ATTRIBUTE_KEYS.gender] ?? null,
       hasMic: parseOptionalBoolean(attributes[DOTA_ATTRIBUTE_KEYS.hasMic]),
       isOwner: options.isOwner,
       language: attributes[DOTA_ATTRIBUTE_KEYS.language] ?? null,

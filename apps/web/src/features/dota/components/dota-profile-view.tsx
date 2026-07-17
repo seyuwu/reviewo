@@ -17,7 +17,7 @@ import {
   peekPendingFriendInvite,
   stashPendingFriendInvite
 } from "../lib/friend-invite-storage";
-import { formatDotaMmr, formatDotaRoles } from "../lib/labels";
+import { formatDotaMmr, formatDotaRoles, getDotaGenderLabel } from "../lib/labels";
 import { copyDotaShareText } from "../lib/share";
 import type { DotaProfile } from "../types/dota";
 import { DotaClaimEmailBanner } from "./dota-claim-email-banner";
@@ -236,6 +236,12 @@ export function DotaProfileView({ profile: initialProfile }: DotaProfileViewProp
           <span>{t("dota.profile.server")}</span>
           <strong>{profile.server ?? "—"}</strong>
         </div>
+        {profile.gender && profile.gender !== "unspecified" ? (
+          <div className="profile-field">
+            <span>{t("dota.profile.gender")}</span>
+            <strong>{getDotaGenderLabel(profile.gender, t)}</strong>
+          </div>
+        ) : null}
       </div>
 
       {showSharePanel ? (

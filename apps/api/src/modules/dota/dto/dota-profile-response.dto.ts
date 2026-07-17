@@ -8,6 +8,7 @@ export class DotaProfileResponseDto {
   entityId!: string;
   friendshipRequestId!: string | null;
   friendshipStatus!: "none" | "outgoing" | "incoming" | "friends" | "self" | null;
+  gender!: string | null;
   hasMic!: boolean | null;
   isOwner!: boolean;
   language!: string | null;

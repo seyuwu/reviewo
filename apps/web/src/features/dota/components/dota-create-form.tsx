@@ -41,13 +41,16 @@ export function DotaCreateForm() {
   const t = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { authSession, isAuthSessionLoaded, signOut, storeAuthSession } = useAuthSession();
+  const { authSession, isAuthSessionLoaded, signOut, storeAuthSession, updateAuthSession } =
+    useAuthSession();
   const dotaIdFieldRef = useRef<HTMLLabelElement | null>(null);
+  const [displayName, setDisplayName] = useState("");
   const [dotaAccountId, setDotaAccountId] = useState("");
   const [mmrFrom, setMmrFrom] = useState("");
   const [mmrTo, setMmrTo] = useState("");
   const [roles, setRoles] = useState<string[]>([]);
   const [server, setServer] = useState<(typeof SERVER_OPTIONS)[number]>("EU");
+  const [gender, setGender] = useState<"female" | "male" | "unspecified">("unspecified");
   const [hasMic, setHasMic] = useState(true);
   const [playIntent, setPlayIntent] = useState<PlayIntent>("ranked");
   const [existingProfile, setExistingProfile] = useState<DotaProfile | null>(null);
@@ -63,6 +66,10 @@ export function DotaCreateForm() {
   const hasValidMmr = isValidDotaMmrInput(mmrFrom, mmrTo, mmrMode);
 
   const validationMessage = useMemo(() => {
+    if (displayName.trim().length < 1) {
+      return t("dota.create.validation.displayName");
+    }
+
     if (dotaAccountId.trim() && !/^\d{8,10}$/.test(dotaAccountId.trim())) {
       return t("dota.create.validation.dotaAccountId");
     }
@@ -76,7 +83,7 @@ export function DotaCreateForm() {
     }
 
     return null;
-  }, [dotaAccountId, hasValidMmr, isEditMode, roles.length, t]);
+  }, [displayName, dotaAccountId, hasValidMmr, isEditMode, roles.length, t]);
 
   const bottomError = error ?? (showValidation ? validationMessage : null);
 
@@ -87,12 +94,14 @@ export function DotaCreateForm() {
 
     if (!authSession?.accessToken) {
       setExistingProfile(null);
+      setDisplayName("");
       setProfileLoadState("loaded");
       return;
     }
 
     let isCancelled = false;
     setProfileLoadState("loading");
+    setDisplayName(authSession.displayName);
 
     void fetchMyDotaProfile(authSession.accessToken)
       .then((profile) => {
@@ -145,11 +154,13 @@ export function DotaCreateForm() {
   function applyProfileToForm(profile: DotaProfile) {
     const { from, to } = parseDotaMmrRange(profile.mmr);
 
+    setDisplayName(profile.title);
     setDotaAccountId(profile.dotaAccountId);
     setMmrFrom(from);
     setMmrTo(to);
     setRoles(profile.roles);
     setServer(resolveServer(profile.server));
+    setGender(resolveGender(profile.gender));
     setHasMic(profile.hasMic ?? true);
     setPlayIntent(resolvePlayIntent(profile.playIntent));
   }
@@ -179,13 +190,16 @@ export function DotaCreateForm() {
     const accessToken = authSession?.accessToken;
     const mmr = formatDotaMmrRange(mmrFrom, mmrTo);
     const trimmedDotaAccountId = dotaAccountId.trim();
+    const trimmedDisplayName = displayName.trim();
     const profilePayload = {
       ...(trimmedDotaAccountId ? { dotaAccountId: trimmedDotaAccountId } : {}),
+      gender,
       hasMic,
       ...(mmr ? { mmr } : {}),
       playIntent,
       roles,
-      server
+      server,
+      title: trimmedDisplayName
     };
 
     try {
@@ -196,6 +210,7 @@ export function DotaCreateForm() {
         }
 
         const profile = await updateMyDotaProfile(profilePayload, accessToken);
+        updateAuthSession({ displayName: profile.title });
         trackDotaEvent("dota_profile_updated", { slug: profile.slug });
         router.push(`/dota/${profile.slug}`);
         return;
@@ -265,6 +280,7 @@ export function DotaCreateForm() {
       }
 
       const profile = await createDotaProfile(profilePayload, accessToken);
+      updateAuthSession({ displayName: profile.title });
       trackDotaEvent("dota_profile_created", { slug: profile.slug });
       trackAnalyticsCta("dota_create_submit");
 
@@ -372,6 +388,18 @@ export function DotaCreateForm() {
           ) : null}
 
           <section className={styles.section}>
+            <label className="field-label">
+              {t("dota.create.displayName")}
+              <input
+                autoComplete="nickname"
+                maxLength={200}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder={t("dota.create.displayNamePlaceholder")}
+                value={displayName}
+              />
+              <span className={styles.fieldHint}>{t("dota.create.displayNameHint")}</span>
+            </label>
+
             <label
               className={`field-label${highlightDotaId ? ` ${styles.fieldHighlight}` : ""}`}
               ref={dotaIdFieldRef}
@@ -435,6 +463,21 @@ export function DotaCreateForm() {
                 </select>
               </label>
 
+              <label className="field-label">
+                {t("dota.create.gender")}
+                <select
+                  onChange={(event) =>
+                    setGender(event.target.value as "female" | "male" | "unspecified")
+                  }
+                  value={gender}
+                >
+                  <option value="unspecified">{t("dota.gender.unspecified")}</option>
+                  <option value="female">{t("dota.gender.female")}</option>
+                  <option value="male">{t("dota.gender.male")}</option>
+                </select>
+                <span className={styles.fieldHint}>{t("dota.create.genderHint")}</span>
+              </label>
+
               <label className={styles.checkboxRow}>
                 <input
                   checked={hasMic}
@@ -480,6 +523,14 @@ function resolveServer(value: string | null): (typeof SERVER_OPTIONS)[number] {
   }
 
   return "EU";
+}
+
+function resolveGender(value: string | null): "female" | "male" | "unspecified" {
+  if (value === "female" || value === "male" || value === "unspecified") {
+    return value;
+  }
+
+  return "unspecified";
 }
 
 function resolvePlayIntent(value: string | null): PlayIntent {

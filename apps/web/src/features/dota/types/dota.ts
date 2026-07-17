@@ -8,6 +8,7 @@ export interface DotaProfile {
   entityId: string;
   friendshipRequestId: string | null;
   friendshipStatus: "none" | "outgoing" | "incoming" | "friends" | "self" | null;
+  gender: string | null;
   hasMic: boolean | null;
   isOwner: boolean;
   language: string | null;
@@ -24,6 +25,7 @@ export interface DotaProfile {
 
 export interface CreateDotaProfileInput {
   dotaAccountId?: string;
+  gender?: "female" | "male" | "unspecified";
   hasMic?: boolean;
   language?: string;
   mmr?: string;

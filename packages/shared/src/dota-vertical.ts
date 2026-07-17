@@ -7,6 +7,7 @@ export const DOTA_ATTRIBUTE_KEYS = {
   roles: "roles",
   server: "server",
   language: "language",
+  gender: "gender",
   hasMic: "has_mic",
   playIntent: "play_intent",
   lfgUntil: "lfg_until",
@@ -22,13 +23,17 @@ export const DOTA_ATTRIBUTE_KEYS = {
 /** How long "Looking for party" stays active without refresh. */
 export const DOTA_LFG_TTL_SECONDS = 20 * 60;
 
+export const DOTA_GENDER_VALUES = ["female", "male", "unspecified"] as const;
+export type DotaGender = (typeof DOTA_GENDER_VALUES)[number];
+
 /** Compact vibe tags — keep short so people actually click. */
 export const DOTA_GREEN_FLAG_KEYS = [
   "play_again",
   "has_mic",
   "adequate",
   "team_player",
-  "good_caller"
+  "good_caller",
+  "altushka"
 ] as const;
 
 export const DOTA_RED_FLAG_KEYS = ["toxic", "tilts", "leaves", "ruins"] as const;
@@ -41,10 +46,14 @@ export type DotaRedFlagKey = (typeof DOTA_RED_FLAG_KEYS)[number];
 export type DotaQualityKey = DotaGreenFlagKey;
 export type DotaConfirmationKey = DotaGreenFlagKey | DotaRedFlagKey;
 
-/** Max selectable flags per polarity (matches list size). */
+/** Max selectable flags per polarity (choose up to this many from the list). */
 export const DOTA_FLAG_LIMIT_PER_SIDE = 5;
 export const DOTA_CONFIRMATION_MILESTONE = 3;
 export const DOTA_ACCOUNT_ID_PATTERN = /^\d{8,10}$/;
+
+export function isDotaGender(value: string): value is DotaGender {
+  return (DOTA_GENDER_VALUES as readonly string[]).includes(value);
+}
 
 export function isDotaQualityKey(value: string): value is DotaQualityKey {
   return (DOTA_QUALITY_KEYS as readonly string[]).includes(value);

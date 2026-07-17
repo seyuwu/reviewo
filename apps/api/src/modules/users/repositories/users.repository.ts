@@ -129,6 +129,17 @@ export class UsersRepository {
     });
   }
 
+  async updateDisplayName(
+    id: string,
+    displayName: string,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<User> {
+    return client.user.update({
+      data: { displayName },
+      where: { id }
+    });
+  }
+
   async updateAvatarUrl(
     id: string,
     avatarUrl: string | null,

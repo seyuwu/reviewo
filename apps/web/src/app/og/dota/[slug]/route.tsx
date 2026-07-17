@@ -46,6 +46,7 @@ function labelForQuality(key: string): string {
     adequate: "Decent",
     team_player: "Team",
     good_caller: "Caller",
+    altushka: "Altushka",
     toxic: "Toxic",
     tilts: "Tilts",
     leaves: "Leaves",
