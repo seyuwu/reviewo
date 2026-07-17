@@ -1162,6 +1162,8 @@ model GamePartyChatMessage {
 model GamesLaunchSetting {
   id              String   @id @db.VarChar(32)
   searchLive      Boolean  @default(false) @map("search_live")
+  /// Early unlock: create teams/parties + invite friends (search/LFG stays on searchLive).
+  communityOpen   Boolean  @default(false) @map("community_open")
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedByUserId String?  @map("updated_by_user_id") @db.Uuid
 

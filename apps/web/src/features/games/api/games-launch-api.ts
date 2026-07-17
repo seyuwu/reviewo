@@ -11,6 +11,7 @@ export type GamesLaunchSuggestionSource = "search" | "community";
 
 export interface GamesLaunchStatus {
   averageMmr: string | null;
+  communityOpen: boolean;
   devNoteLikeCount: number;
   devNoteLiked: boolean;
   launchAt: string;
@@ -80,11 +81,11 @@ export function fetchAdminGamesLaunchStatus(accessToken: string): Promise<GamesL
 }
 
 export function updateAdminGamesLaunch(
-  searchLive: boolean,
+  input: { communityOpen?: boolean; searchLive?: boolean },
   accessToken: string
 ): Promise<GamesLaunchStatus> {
   return apiRequest<GamesLaunchStatus>("/admin/games/launch", {
-    body: { searchLive },
+    body: input,
     headers: { authorization: `Bearer ${accessToken}` },
     method: "PATCH"
   });

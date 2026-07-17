@@ -27,6 +27,7 @@ export const ANALYTICS_CTA_KEYS = [
   "home_quick_games",
   "home_create_entity",
   "games_waitlist_form_start",
+  "games_waitlist_telegram_join",
   "games_waitlist_invite_click",
   "games_waitlist_invite_visit",
   "games_waitlist_create_profile_click"

@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 
 import { FormFeedback } from "../../../components/form-feedback";
 import { OpiniaIcon } from "../../../components/opinia-icon";
-import { useGamesLaunchStatus } from "../../games/hooks/use-games-launch-status";
+import {
+  isGamesCommunityLive,
+  useGamesLaunchStatus
+} from "../../games/hooks/use-games-launch-status";
 import { useTranslation } from "../../i18n/locale-provider";
 import { searchDotaProfile } from "../api/dota-api";
 import { useMyDotaProfileNav } from "../hooks/use-my-dota-profile-nav";
@@ -21,6 +24,7 @@ export function DotaLandingView() {
   const { status: launchStatus, isLoading: isLaunchStatusLoading } = useGamesLaunchStatus();
   // While loading, hide waitlist-gated CTAs (don't flash "waitlist mode" after go-live).
   const searchLive = !isLaunchStatusLoading && launchStatus.searchLive;
+  const communityLive = !isLaunchStatusLoading && isGamesCommunityLive(launchStatus);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -96,7 +100,7 @@ export function DotaLandingView() {
               ? t("web.profile.dashboard.gameProfiles")
               : t("games.community.openSearch")}
           </Link>
-          {searchLive ? (
+          {communityLive ? (
             <Link className="button-secondary" href="/dota/teams/create">
               {t("dota.team.createCta")}
             </Link>

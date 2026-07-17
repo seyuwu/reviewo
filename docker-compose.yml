@@ -20,6 +20,8 @@ x-app-environment: &app-environment
   GOOGLE_SHEETS_CLIENT_EMAIL: ${GOOGLE_SHEETS_CLIENT_EMAIL:-}
   GOOGLE_SHEETS_PRIVATE_KEY: ${GOOGLE_SHEETS_PRIVATE_KEY:-}
   GAMES_LAUNCH_SHEET_ID: ${GAMES_LAUNCH_SHEET_ID:-}
+  WAITLIST_BOT_TOKEN: ${WAITLIST_BOT_TOKEN:-}
+  WAITLIST_CHANNEL_URL: ${WAITLIST_CHANNEL_URL:-https://t.me/opinia_official}
 
 x-app-common: &app-common
   init: true

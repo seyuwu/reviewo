@@ -136,6 +136,10 @@ export function AdminGamesLaunchPageView() {
               value={metrics.formStarts}
             />
             <StatCard
+              label={t("web.admin.gamesLaunch.metricTelegramJoins")}
+              value={metrics.telegramJoins}
+            />
+            <StatCard
               label={t("web.admin.gamesLaunch.metricSubmits")}
               value={metrics.interestSubmits}
             />

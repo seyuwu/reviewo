@@ -313,6 +313,7 @@ export class AnalyticsRepository {
     inviteVisits: number;
     profileShareClicks: number;
     rangeDays: number;
+    telegramJoins: number;
   }> {
     const safeDays = Math.min(90, Math.max(1, Math.floor(days)));
     const end = this.utcDay();
@@ -338,6 +339,7 @@ export class AnalyticsRepository {
           ctaKey: {
             in: [
               "games_waitlist_form_start",
+              "games_waitlist_telegram_join",
               "games_waitlist_invite_click",
               "games_waitlist_invite_visit",
               "games_waitlist_create_profile_click",
@@ -364,6 +366,7 @@ export class AnalyticsRepository {
     }
 
     let formStarts = 0;
+    let telegramJoins = 0;
     let inviteClicks = 0;
     let inviteVisits = 0;
     let createProfileClicks = 0;
@@ -374,6 +377,10 @@ export class AnalyticsRepository {
 
       if (row.ctaKey === "games_waitlist_form_start") {
         formStarts += value;
+      }
+
+      if (row.ctaKey === "games_waitlist_telegram_join") {
+        telegramJoins += value;
       }
 
       if (row.ctaKey === "games_waitlist_invite_click") {
@@ -404,7 +411,8 @@ export class AnalyticsRepository {
       inviteClicks,
       inviteVisits,
       profileShareClicks,
-      rangeDays: safeDays
+      rangeDays: safeDays,
+      telegramJoins
     };
   }
 }

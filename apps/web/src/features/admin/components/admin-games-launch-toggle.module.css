@@ -1,3 +1,8 @@
+.stack {
+  display: grid;
+  gap: 0.85rem;
+}
+
 .panel {
   background: var(--games-glass, rgb(18 22 32 / 72%));
   border: 1px solid var(--color-card-border);

@@ -118,6 +118,6 @@ export class AdminGamesLaunchController {
     @Body() input: UpdateGamesLaunchDto,
     @CurrentUser() currentUser: AuthenticatedUser
   ): Promise<GamesLaunchStatusDto> {
-    return this.gamesLaunchService.setSearchLive(input.searchLive, currentUser);
+    return this.gamesLaunchService.updateSettings(input, currentUser);
   }
 }

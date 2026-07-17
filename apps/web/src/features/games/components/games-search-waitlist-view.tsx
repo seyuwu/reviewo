@@ -14,8 +14,9 @@ import { OpiniaIcon } from "../../../components/opinia-icon";
 import { getOrCreateVisitorId } from "../../../lib/site-presence";
 import { trackAnalyticsCta } from "../../analytics/components/product-analytics-listener";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
+import { useMyDotaProfileNav } from "../../dota/hooks/use-my-dota-profile-nav";
 import { copyTextToClipboard } from "../../growth/lib/share-urls";
-import { useTranslation } from "../../i18n/locale-provider";
+import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import {
   submitGamesLaunchInterest,
   submitGamesLaunchSuggestion,
@@ -27,14 +28,7 @@ import { GamesSearchTipRotator } from "./games-search-tip-rotator";
 import styles from "./games-search-view.module.css";
 import waitlistStyles from "./games-search-waitlist-view.module.css";
 
-const CHANNELS: GamesLaunchChannel[] = [
-  "telegram",
-  "discord",
-  "newsletter",
-  "vk",
-  "email",
-  "other"
-];
+const ALT_CHANNELS: GamesLaunchChannel[] = ["telegram", "discord", "email", "other"];
 
 const CHANNEL_LABEL: Record<GamesLaunchChannel, MessageKey> = {
   telegram: "games.launch.waitlist.channelTelegram",
@@ -55,6 +49,10 @@ const CHANNEL_PLACEHOLDER: Record<GamesLaunchChannel, MessageKey> = {
 };
 
 const TELEGRAM_CHANNEL_URL = "https://t.me/opinia_official";
+const TELEGRAM_CHANNEL_HANDLE = "@opinia_official";
+const TELEGRAM_JOIN_RECORDED_KEY = "opinia.games.waitlist.telegramJoin.v1";
+/** "1" = show after-join; "0" = user chose fill-again (do not remigrate from TG key). */
+const WAITLIST_COMMITTED_KEY = "opinia.games.waitlist.committed.v1";
 
 interface CountdownParts {
   days: number;
@@ -77,6 +75,100 @@ function getCountdownParts(launchAtMs: number, nowMs: number): CountdownParts {
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
+}
+
+function russianPluralUnit(
+  count: number,
+  one: string,
+  few: string,
+  many: string
+): string {
+  const n = Math.abs(count) % 100;
+  const n1 = n % 10;
+
+  if (n > 10 && n < 20) {
+    return many;
+  }
+
+  if (n1 === 1) {
+    return one;
+  }
+
+  if (n1 >= 2 && n1 <= 4) {
+    return few;
+  }
+
+  return many;
+}
+
+function englishPluralUnit(count: number, one: string, many: string): string {
+  return count === 1 ? one : many;
+}
+
+function formatOpensWhen(
+  t: (key: MessageKey, params?: Record<string, string | number>) => string,
+  locale: "en" | "ru",
+  launchAt: string,
+  nowMs: number
+): string {
+  const launchAtMs = Date.parse(launchAt);
+  const parts = getCountdownParts(Number.isFinite(launchAtMs) ? launchAtMs : nowMs, nowMs);
+
+  if (parts.days >= 1) {
+    const unit =
+      locale === "ru"
+        ? russianPluralUnit(
+            parts.days,
+            t("games.launch.waitlist.unitDayOne"),
+            t("games.launch.waitlist.unitDayFew"),
+            t("games.launch.waitlist.unitDayMany")
+          )
+        : englishPluralUnit(
+            parts.days,
+            t("games.launch.waitlist.unitDayOne"),
+            t("games.launch.waitlist.unitDayMany")
+          );
+
+    return t("games.launch.waitlist.opensInDays", { count: parts.days, unit });
+  }
+
+  if (parts.hours >= 1) {
+    const unit =
+      locale === "ru"
+        ? russianPluralUnit(
+            parts.hours,
+            t("games.launch.waitlist.unitHourOne"),
+            t("games.launch.waitlist.unitHourFew"),
+            t("games.launch.waitlist.unitHourMany")
+          )
+        : englishPluralUnit(
+            parts.hours,
+            t("games.launch.waitlist.unitHourOne"),
+            t("games.launch.waitlist.unitHourMany")
+          );
+
+    return t("games.launch.waitlist.opensInHours", { count: parts.hours, unit });
+  }
+
+  if (parts.minutes >= 1) {
+    const unit =
+      locale === "ru"
+        ? russianPluralUnit(
+            parts.minutes,
+            t("games.launch.waitlist.unitMinuteOne"),
+            t("games.launch.waitlist.unitMinuteFew"),
+            t("games.launch.waitlist.unitMinuteMany")
+          )
+        : englishPluralUnit(
+            parts.minutes,
+            t("games.launch.waitlist.unitMinuteOne"),
+            t("games.launch.waitlist.unitMinuteMany")
+          );
+
+    return t("games.launch.waitlist.opensInMinutes", { count: parts.minutes, unit });
+  }
+
+  return t("games.launch.waitlist.opensSoon");
 }
 
 function ChannelLogo({ channel }: { channel: GamesLaunchChannel }) {
@@ -118,7 +210,9 @@ function ChannelLogo({ channel }: { channel: GamesLaunchChannel }) {
       return (
         <span className={`${waitlistStyles.channelLogo} ${waitlistStyles.channelLogoOther}`}>
           <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+            <circle cx="6" cy="12" r="1.8" />
+            <circle cx="12" cy="12" r="1.8" />
+            <circle cx="18" cy="12" r="1.8" />
           </svg>
         </span>
       );
@@ -177,13 +271,70 @@ function LaunchCountdown({ launchAt }: { launchAt: string }) {
   );
 }
 
+function readWaitlistCommitted(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const committed = window.localStorage.getItem(WAITLIST_COMMITTED_KEY);
+
+    if (committed === "1") {
+      return true;
+    }
+
+    if (committed === "0") {
+      return false;
+    }
+
+    // Migrate pre-persistence TG joins into committed UI state once.
+    if (window.localStorage.getItem(TELEGRAM_JOIN_RECORDED_KEY) === "1") {
+      window.localStorage.setItem(WAITLIST_COMMITTED_KEY, "1");
+      return true;
+    }
+  } catch {
+    /* ignore storage errors */
+  }
+
+  return false;
+}
+
+function writeWaitlistCommitted(committed: boolean) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(WAITLIST_COMMITTED_KEY, committed ? "1" : "0");
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
 export function GamesSearchWaitlistView() {
   const t = useTranslation();
+  const { resolvedLocale } = useLocale();
   const router = useRouter();
   const { authSession } = useAuthSession();
+  const myDotaProfile = useMyDotaProfileNav();
   const { status, refresh, setStatus } = useGamesLaunchStatus();
   const date = t("games.launch.waitlist.dateLabel");
   const time = t("games.launch.waitlist.timeLabel");
+  const [nowMs, setNowMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNowMs(Date.now());
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const opensWhen = useMemo(() => {
+    if (nowMs === null) {
+      return t("games.launch.waitlist.opensSoon");
+    }
+
+    return formatOpensWhen(t, resolvedLocale, status.launchAt, nowMs);
+  }, [nowMs, resolvedLocale, status.launchAt, t]);
 
   const [suggestion, setSuggestion] = useState("");
   const [suggestionBusy, setSuggestionBusy] = useState(false);
@@ -196,11 +347,27 @@ export function GamesSearchWaitlistView() {
   const [interestBusy, setInterestBusy] = useState(false);
   const [interestDone, setInterestDone] = useState(false);
   const [interestError, setInterestError] = useState<string | null>(null);
+  const [showAltContact, setShowAltContact] = useState(false);
+  const [telegramJoined, setTelegramJoined] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [channelHandleCopied, setChannelHandleCopied] = useState(false);
   const [createProfileBusy, setCreateProfileBusy] = useState(false);
   const otherServiceInputRef = useRef<HTMLInputElement>(null);
   const formStartTrackedRef = useRef(false);
+  const profileHref = myDotaProfile.href;
+  const profileCtaLabel = myDotaProfile.hasProfile
+    ? t("games.launch.waitlist.interestOpenProfile")
+    : t("games.launch.waitlist.interestCreateProfile");
+  const leftProfileCtaLabel = myDotaProfile.hasProfile
+    ? t("games.search.openProfileCta")
+    : t("games.search.createCta");
+
+  useEffect(() => {
+    if (readWaitlistCommitted()) {
+      setTelegramJoined(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (channel !== "other") {
@@ -209,6 +376,22 @@ export function GamesSearchWaitlistView() {
 
     otherServiceInputRef.current?.focus();
   }, [channel]);
+
+  function markWaitlistCommitted() {
+    writeWaitlistCommitted(true);
+    setTelegramJoined(true);
+    setShowAltContact(false);
+  }
+
+  function resetWaitlistCommittedUi() {
+    writeWaitlistCommitted(false);
+    setTelegramJoined(false);
+    setShowAltContact(false);
+    setInterestDone(false);
+    setInterestError(null);
+    setShareCopied(false);
+    setChannelHandleCopied(false);
+  }
 
   function trackFormStartOnce() {
     if (formStartTrackedRef.current) {
@@ -267,6 +450,7 @@ export function GamesSearchWaitlistView() {
       setContact("");
       setOtherService("");
       setInterestDone(true);
+      markWaitlistCommitted();
       void refresh();
     } catch {
       setInterestError(t("games.launch.waitlist.interestError"));
@@ -282,6 +466,48 @@ export function GamesSearchWaitlistView() {
     setInterestError(null);
     if (next !== "other") {
       setOtherService("");
+    }
+  }
+
+  function openAltContact(next: GamesLaunchChannel) {
+    selectChannel(next);
+    setShowAltContact(true);
+  }
+
+  async function handleCopyTelegramHandle() {
+    const ok = await copyTextToClipboard(TELEGRAM_CHANNEL_HANDLE);
+
+    if (!ok) {
+      return;
+    }
+
+    setChannelHandleCopied(true);
+    window.setTimeout(() => setChannelHandleCopied(false), 1800);
+  }
+
+  async function handleTelegramJoin() {
+    void trackAnalyticsCta("games_waitlist_telegram_join");
+    setInterestError(null);
+    markWaitlistCommitted();
+    window.open(TELEGRAM_CHANNEL_URL, "_blank", "noopener,noreferrer");
+
+    try {
+      const alreadyRecorded =
+        typeof window !== "undefined" &&
+        window.localStorage.getItem(TELEGRAM_JOIN_RECORDED_KEY) === "1";
+
+      if (alreadyRecorded) {
+        return;
+      }
+
+      await submitGamesLaunchInterest(
+        { channel: "telegram", contact: "@opinia_official" },
+        authSession?.accessToken
+      );
+      window.localStorage.setItem(TELEGRAM_JOIN_RECORDED_KEY, "1");
+      void refresh();
+    } catch {
+      /* channel still opens; counter update is best-effort */
     }
   }
 
@@ -310,9 +536,11 @@ export function GamesSearchWaitlistView() {
     setCreateProfileBusy(true);
 
     try {
-      await trackAnalyticsCta("games_waitlist_create_profile_click");
+      if (!myDotaProfile.hasProfile) {
+        await trackAnalyticsCta("games_waitlist_create_profile_click");
+      }
     } finally {
-      router.push("/dota/create");
+      router.push(profileHref);
     }
   }
 
@@ -346,7 +574,7 @@ export function GamesSearchWaitlistView() {
             {t("games.launch.waitlist.pageTitle")}
           </h1>
           <p className={`${styles.lead} ${waitlistStyles.pageLead}`}>
-            {t("games.launch.waitlist.pageLead", { date, time })}
+            {t("games.launch.waitlist.pageLead", { date, time, when: opensWhen })}
           </p>
         </div>
         <GamesSearchTipRotator />
@@ -395,152 +623,316 @@ export function GamesSearchWaitlistView() {
             >
               {t("games.launch.waitlist.botCta")}
             </a>
-            <Link className={styles.profileLink} href="/dota/create">
-              {t("games.search.createCta")}
+            <Link className={styles.profileLink} href={profileHref}>
+              {leftProfileCtaLabel}
             </Link>
           </section>
         </aside>
 
         <div className={`${styles.main} ${waitlistStyles.mainColumn}`}>
           <div className={`${styles.empty} ${waitlistStyles.centerCard}`}>
-            <h2 className={`${styles.emptyTitle} ${waitlistStyles.centerCardTitle}`}>
-              {t("games.launch.waitlist.centerTitle")}
-            </h2>
-            <p className={`${styles.emptyLead} ${waitlistStyles.centerCardLead}`}>
-              {t("games.launch.waitlist.centerLead")}
-            </p>
-            <p className={`${styles.statusText} ${waitlistStyles.centerCardMeta}`}>
-              {date} · {time}
-            </p>
+            <div aria-hidden="true" className={waitlistStyles.centerArt} />
+            <div aria-hidden="true" className={waitlistStyles.centerArtFade} />
 
-            <form
-              className={waitlistStyles.interestForm}
-              onSubmit={(event) => void handleInterest(event)}
-            >
-              <div
-                aria-hidden={interestDone}
-                className={`${waitlistStyles.interestFields}${
-                  interestDone ? ` ${waitlistStyles.interestFieldsHidden}` : ""
-                }`}
-              >
-                <div className={waitlistStyles.channelGrid} role="radiogroup">
-                  {CHANNELS.map((item) => {
-                    const selected = channel === item;
-                    const isOtherInput = item === "other" && selected;
+            <div className={waitlistStyles.centerInner}>
+              <div className={waitlistStyles.centerIntro}>
+                <h2 className={waitlistStyles.centerHero}>
+                  {t("games.launch.waitlist.centerHeroBefore")}
+                  <span className={waitlistStyles.centerHeroAccent}>
+                    {t("games.launch.waitlist.centerHeroAccent")}
+                  </span>
+                  {t("games.launch.waitlist.centerHeroAfter", { when: opensWhen })}
+                </h2>
+                <p className={waitlistStyles.centerHeroLead}>
+                  {t("games.launch.waitlist.centerHeroLead")}
+                </p>
+              </div>
 
-                    return (
-                      <button
-                        aria-checked={selected}
-                        className={`${waitlistStyles.channelCard}${
-                          selected ? ` ${waitlistStyles.channelCardActive}` : ""
+              <ul className={waitlistStyles.centerPills}>
+                <li>
+                  <span aria-hidden="true" className={waitlistStyles.centerPillIcon}>
+                    <svg fill="none" viewBox="0 0 24 24">
+                      <path
+                        d="M5 7h14a1 1 0 0 1 1 1v8.2a1 1 0 0 1-1 1H9.4L5 20.2V8a1 1 0 0 1 1-1z"
+                        stroke="currentColor"
+                        strokeLinejoin="round"
+                        strokeWidth="1.7"
+                      />
+                      <path
+                        d="M8.5 11.2c1.2.9 2.6 1.4 4 1.4s2.8-.5 4-1.4"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeWidth="1.7"
+                      />
+                    </svg>
+                  </span>
+                  <span>{t("games.launch.waitlist.centerPillIdeas")}</span>
+                </li>
+                <li>
+                  <span aria-hidden="true" className={waitlistStyles.centerPillIcon}>
+                    <svg fill="none" viewBox="0 0 24 24">
+                      <path
+                        d="M5 9.5h14v10H5v-10zM12 9.5v10M5 13.5h14M9 9.5V8a3 3 0 0 1 6 0v1.5"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="1.7"
+                      />
+                    </svg>
+                  </span>
+                  <span>{t("games.launch.waitlist.centerPillAccess")}</span>
+                </li>
+                <li>
+                  <span aria-hidden="true" className={waitlistStyles.centerPillIcon}>
+                    <svg fill="none" viewBox="0 0 24 24">
+                      <path
+                        d="M12 3.8c1.9 1.4 3.4 3.4 4 5.6.4 1.5.2 3-.5 4.3L12 20l-3.5-6.3c-.7-1.3-.9-2.8-.5-4.3.6-2.2 2.1-4.2 4-5.6z"
+                        stroke="currentColor"
+                        strokeLinejoin="round"
+                        strokeWidth="1.7"
+                      />
+                      <path
+                        d="m9.3 14.7-2 4M14.7 14.7l2 4"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeWidth="1.7"
+                      />
+                    </svg>
+                  </span>
+                  <span>{t("games.launch.waitlist.centerPillNews")}</span>
+                </li>
+                <li>
+                  <span aria-hidden="true" className={waitlistStyles.centerPillIcon}>
+                    <svg fill="none" viewBox="0 0 24 24">
+                      <circle cx="12" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+                      <circle cx="7.2" cy="9.2" r="1.8" stroke="currentColor" strokeWidth="1.7" />
+                      <circle cx="16.8" cy="9.2" r="1.8" stroke="currentColor" strokeWidth="1.7" />
+                      <path
+                        d="M5 18c.6-2 2-3.1 3.8-3.1.7 0 1.3.2 1.9.5M19 18c-.6-2-2-3.1-3.8-3.1-.7 0-1.3.2-1.9.5M8.8 18c.7-1.7 2-2.6 3.2-2.6s2.5.9 3.2 2.6"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeWidth="1.7"
+                      />
+                    </svg>
+                  </span>
+                  <span>{t("games.launch.waitlist.centerPillBuild")}</span>
+                </li>
+              </ul>
+
+              <div className={waitlistStyles.tgCard}>
+                <div className={waitlistStyles.tgCardCopy}>
+                  <span aria-hidden="true" className={waitlistStyles.tgCardLogo}>
+                    <svg fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+                    </svg>
+                  </span>
+                  <div className={waitlistStyles.tgCardText}>
+                    <strong>{t("games.launch.waitlist.centerTgTitle")}</strong>
+                    <p>{t("games.launch.waitlist.centerTgLead")}</p>
+                    <button
+                      className={waitlistStyles.tgHandleCopy}
+                      onClick={() => void handleCopyTelegramHandle()}
+                      type="button"
+                    >
+                      {channelHandleCopied
+                        ? t("games.launch.waitlist.altContactChannelCopied")
+                        : TELEGRAM_CHANNEL_HANDLE}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  className={waitlistStyles.tgCardCta}
+                  onClick={() => void handleTelegramJoin()}
+                  type="button"
+                >
+                  {t("games.launch.waitlist.channelJoinCta")}
+                  <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className={waitlistStyles.afterTgStage}>
+                <div
+                  aria-hidden={telegramJoined}
+                  className={`${waitlistStyles.afterTgPanel}${
+                    telegramJoined ? ` ${waitlistStyles.afterTgPanelHidden}` : ""
+                  }`}
+                >
+                  <div className={waitlistStyles.altContactBlock}>
+                    <p className={waitlistStyles.altContactPrompt}>
+                      {t("games.launch.waitlist.altContactPrompt")}
+                    </p>
+                    <div className={waitlistStyles.altContactRow}>
+                      {ALT_CHANNELS.map((item) => (
+                        <button
+                          className={`${waitlistStyles.altContactChip}${
+                            showAltContact && channel === item
+                              ? ` ${waitlistStyles.altContactChipActive}`
+                              : ""
+                          }`}
+                          key={item}
+                          onClick={() => openAltContact(item)}
+                          tabIndex={telegramJoined ? -1 : undefined}
+                          type="button"
+                        >
+                          <ChannelLogo channel={item} />
+                          <span>
+                            {item === "email"
+                              ? t("games.launch.waitlist.altContactEmail")
+                              : item === "telegram"
+                                ? t("games.launch.waitlist.altContactTelegram")
+                                : t(CHANNEL_LABEL[item])}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {showAltContact && !telegramJoined ? (
+                    <form
+                      className={waitlistStyles.interestForm}
+                      onSubmit={(event) => void handleInterest(event)}
+                    >
+                      <div
+                        aria-hidden={interestDone}
+                        className={`${waitlistStyles.interestFields}${
+                          interestDone ? ` ${waitlistStyles.interestFieldsHidden}` : ""
                         }`}
-                        disabled={interestDone}
-                        key={item}
-                        onClick={() => selectChannel(item)}
-                        role="radio"
-                        tabIndex={interestDone ? -1 : undefined}
-                        type="button"
                       >
-                        <ChannelLogo channel={item} />
-                        {isOtherInput ? (
+                        {channel === "other" ? (
                           <input
                             aria-label={t("games.launch.waitlist.otherServiceLabel")}
-                            className={waitlistStyles.otherServiceInput}
+                            className={`${styles.launchField} ${waitlistStyles.contactField}`}
                             maxLength={80}
                             onChange={(event) => {
                               setInterestDone(false);
                               setOtherService(event.target.value);
                             }}
-                            onClick={(event) => event.stopPropagation()}
                             placeholder={t("games.launch.waitlist.otherServicePlaceholder")}
                             ref={otherServiceInputRef}
-                            tabIndex={interestDone ? -1 : undefined}
                             type="text"
                             value={otherService}
                           />
-                        ) : (
-                          <strong>{t(CHANNEL_LABEL[item])}</strong>
-                        )}
-                      </button>
-                    );
-                  })}
+                        ) : null}
+                        <input
+                          className={`${styles.launchField} ${waitlistStyles.contactField}`}
+                          maxLength={320}
+                          onChange={(event) => {
+                            setInterestDone(false);
+                            setContact(event.target.value);
+                          }}
+                          onFocus={() => trackFormStartOnce()}
+                          placeholder={t(CHANNEL_PLACEHOLDER[channel])}
+                          tabIndex={interestDone ? -1 : undefined}
+                          type={
+                            channel === "email" || channel === "newsletter" ? "email" : "text"
+                          }
+                          value={contact}
+                        />
+                        <div className={waitlistStyles.altFormActions}>
+                          <button
+                            className={`button-primary ${styles.emptyCta}`}
+                            disabled={interestBusy || interestDone || !canSubmitInterest}
+                            tabIndex={interestDone ? -1 : undefined}
+                            type="submit"
+                          >
+                            {interestBusy
+                              ? t("common.loadingEllipsis")
+                              : t("games.launch.waitlist.interestSubmit")}
+                          </button>
+                          <button
+                            className={waitlistStyles.altContactToggle}
+                            onClick={() => {
+                              setShowAltContact(false);
+                              setInterestError(null);
+                            }}
+                            type="button"
+                          >
+                            {t("games.launch.waitlist.altContactHide")}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div
+                        aria-hidden={!interestDone}
+                        className={`${waitlistStyles.interestSuccess}${
+                          interestDone ? ` ${waitlistStyles.interestSuccessVisible}` : ""
+                        }`}
+                      >
+                        <p className={waitlistStyles.interestThanksTitle}>
+                          {t("games.launch.waitlist.interestThanks")}
+                        </p>
+                        <Link
+                          className={`button-primary ${waitlistStyles.createProfileButton}`}
+                          href={profileHref}
+                          onClick={(event) => void handleCreateProfileClick(event)}
+                          tabIndex={interestDone ? undefined : -1}
+                        >
+                          {profileCtaLabel}
+                        </Link>
+                        <button
+                          className={waitlistStyles.fillAgainButton}
+                          onClick={() => {
+                            resetWaitlistCommittedUi();
+                          }}
+                          tabIndex={interestDone ? undefined : -1}
+                          type="button"
+                        >
+                          {t("games.launch.waitlist.interestFillAgain")}
+                        </button>
+                      </div>
+
+                      {interestError ? <FormFeedback errorMessage={interestError} /> : null}
+                    </form>
+                  ) : null}
                 </div>
 
-                <input
-                  className={`${styles.launchField} ${waitlistStyles.contactField}`}
-                  maxLength={320}
-                  onChange={(event) => {
-                    setInterestDone(false);
-                    setContact(event.target.value);
-                  }}
-                  onFocus={() => trackFormStartOnce()}
-                  placeholder={t(CHANNEL_PLACEHOLDER[channel])}
-                  tabIndex={interestDone ? -1 : undefined}
-                  type={channel === "email" || channel === "newsletter" ? "email" : "text"}
-                  value={contact}
-                />
-                <button
-                  className={`button-primary ${styles.emptyCta}`}
-                  disabled={interestBusy || interestDone || !canSubmitInterest}
-                  tabIndex={interestDone ? -1 : undefined}
-                  type="submit"
+                <div
+                  aria-hidden={!telegramJoined}
+                  className={`${waitlistStyles.afterTgPanel} ${waitlistStyles.afterJoinWrap}${
+                    telegramJoined ? ` ${waitlistStyles.afterTgPanelVisible}` : ""
+                  }`}
                 >
-                  {interestBusy
-                    ? t("common.loadingEllipsis")
-                    : t("games.launch.waitlist.interestSubmit")}
-                </button>
-              </div>
-
-              <div
-                aria-hidden={!interestDone}
-                className={`${waitlistStyles.interestSuccess}${
-                  interestDone ? ` ${waitlistStyles.interestSuccessVisible}` : ""
-                }`}
-              >
-                <p className={waitlistStyles.interestThanksTitle}>
-                  {t("games.launch.waitlist.interestThanks")}
-                </p>
-                <p className={waitlistStyles.interestSharePrompt}>
-                  {t("games.launch.waitlist.interestSharePrompt")}
+                  <div className={waitlistStyles.afterJoinCard}>
+                    <div className={waitlistStyles.afterJoinCopy}>
+                      <strong>{t("games.launch.waitlist.afterJoinTitle")}</strong>
+                      <p>{t("games.launch.waitlist.afterJoinLead")}</p>
+                    </div>
+                    <div className={waitlistStyles.afterJoinActions}>
+                      <Link
+                        className={waitlistStyles.tgCardCta}
+                        href={profileHref}
+                        onClick={(event) => void handleCreateProfileClick(event)}
+                        tabIndex={telegramJoined ? undefined : -1}
+                      >
+                        {profileCtaLabel}
+                      </Link>
+                      <button
+                        className={waitlistStyles.afterJoinShare}
+                        onClick={() => void handleShareFriends()}
+                        tabIndex={telegramJoined ? undefined : -1}
+                        type="button"
+                      >
+                        {shareCopied
+                          ? t("games.launch.waitlist.devNoteShareCopied")
+                          : t("games.launch.waitlist.afterJoinShare")}
+                      </button>
+                    </div>
+                  </div>
                   <button
-                    className={waitlistStyles.shareLink}
-                    onClick={() => void handleShareFriends()}
-                    tabIndex={interestDone ? undefined : -1}
+                    className={waitlistStyles.afterJoinFillAgain}
+                    onClick={() => {
+                      resetWaitlistCommittedUi();
+                    }}
+                    tabIndex={telegramJoined ? undefined : -1}
                     type="button"
                   >
-                    {shareCopied
-                      ? t("games.launch.waitlist.devNoteShareCopied")
-                      : t("games.launch.waitlist.interestShareCta")}
+                    {t("games.launch.waitlist.afterJoinFillAgain")}
                   </button>
-                  <span aria-hidden="true">
-                    {" "}
-                    {t("games.launch.waitlist.interestShareEmoji")}
-                  </span>
-                </p>
-                <Link
-                  className={`button-primary ${waitlistStyles.createProfileButton}`}
-                  href="/dota/create"
-                  onClick={(event) => void handleCreateProfileClick(event)}
-                  tabIndex={interestDone ? undefined : -1}
-                >
-                  {t("games.launch.waitlist.interestCreateProfile")}
-                </Link>
-                <button
-                  className={waitlistStyles.fillAgainButton}
-                  onClick={() => {
-                    setInterestDone(false);
-                    setInterestError(null);
-                    setShareCopied(false);
-                  }}
-                  tabIndex={interestDone ? undefined : -1}
-                  type="button"
-                >
-                  {t("games.launch.waitlist.interestFillAgain")}
-                </button>
+                </div>
               </div>
-
-              {interestError ? <FormFeedback errorMessage={interestError} /> : null}
-            </form>
+            </div>
           </div>
 
           <section className={waitlistStyles.devNote}>

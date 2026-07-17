@@ -62,17 +62,57 @@ export class GamesLaunchService {
     return status.searchLive;
   }
 
-  async setSearchLive(
-    searchLive: boolean,
+  /** Team/party creation + community invites (search/LFG may still be closed). */
+  async isCommunityOpen(): Promise<boolean> {
+    const status = await this.getStatus();
+    return status.communityOpen || status.searchLive;
+  }
+
+  async updateSettings(
+    input: { communityOpen?: boolean; searchLive?: boolean },
     currentUser: AuthenticatedUser
   ): Promise<GamesLaunchStatusDto> {
+    if (input.searchLive === undefined && input.communityOpen === undefined) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Provide searchLive and/or communityOpen",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    const current = await this.prisma.gamesLaunchSetting.findUnique({
+      where: { id: GAMES_LAUNCH_SETTING_ID }
+    });
+
+    // Full Games open/close owns both flags (legacy "open search" button).
+    // Community-only toggle is allowed only while search is closed.
+    let searchLive = current?.searchLive ?? false;
+    let communityOpen = current?.communityOpen ?? false;
+
+    if (input.searchLive !== undefined) {
+      searchLive = input.searchLive;
+      communityOpen = input.searchLive;
+    } else if (input.communityOpen !== undefined) {
+      if (searchLive) {
+        throw createAppException({
+          code: AppErrorCode.ValidationError,
+          message: "Close teammate search before changing community-only mode",
+          statusCode: HttpStatus.BAD_REQUEST
+        });
+      }
+
+      communityOpen = input.communityOpen;
+    }
+
     await this.prisma.gamesLaunchSetting.upsert({
       create: {
+        communityOpen,
         id: GAMES_LAUNCH_SETTING_ID,
         searchLive,
         updatedByUserId: currentUser.id
       },
       update: {
+        communityOpen,
         searchLive,
         updatedByUserId: currentUser.id
       },
@@ -282,13 +322,14 @@ export class GamesLaunchService {
         this.prisma.gamesLaunchSetting.findUnique({
           where: { id: GAMES_LAUNCH_SETTING_ID }
         }),
-        this.prisma.gamesLaunchInterest.count(),
+        this.loadWaitingCount(),
         this.loadAverageMmr(),
         this.prisma.gamesLaunchDevNoteLike.count()
       ]);
 
       return {
         averageMmr,
+        communityOpen: row?.communityOpen ?? false,
         devNoteLikeCount,
         launchAt: GAMES_LAUNCH_AT_ISO,
         searchLive: row?.searchLive ?? false,
@@ -297,11 +338,74 @@ export class GamesLaunchService {
     } catch {
       return {
         averageMmr: null,
+        communityOpen: false,
         devNoteLikeCount: 0,
         launchAt: GAMES_LAUNCH_AT_ISO,
         searchLive: false,
         waitingCount: 0
       };
+    }
+  }
+
+  /**
+   * Counter = Telegram channel subscribers + applications via Discord/email/VK/other.
+   * Telegram interests are excluded when subscriber count is available (no double-count).
+   */
+  private async loadWaitingCount(): Promise<number> {
+    const [telegramSubscribers, altApplications, totalInterests] = await Promise.all([
+      this.loadTelegramSubscriberCount(),
+      this.prisma.gamesLaunchInterest.count({
+        where: { channel: { not: "telegram" } }
+      }),
+      this.prisma.gamesLaunchInterest.count()
+    ]);
+
+    if (telegramSubscribers === null) {
+      return totalInterests;
+    }
+
+    return telegramSubscribers + altApplications;
+  }
+
+  private async loadTelegramSubscriberCount(): Promise<number | null> {
+    const token = process.env["WAITLIST_BOT_TOKEN"]?.trim() ?? "";
+    const channelUrl =
+      process.env["WAITLIST_CHANNEL_URL"]?.trim() || "https://t.me/opinia_official";
+
+    if (!token || token.startsWith("change_me")) {
+      return null;
+    }
+
+    const chatId = resolveTelegramChatId(channelUrl);
+
+    if (!chatId) {
+      return null;
+    }
+
+    try {
+      const url = new URL(`https://api.telegram.org/bot${token}/getChatMemberCount`);
+      url.searchParams.set("chat_id", chatId);
+
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(4_000)
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        result?: number;
+      };
+
+      if (!payload.ok || typeof payload.result !== "number" || !Number.isFinite(payload.result)) {
+        return null;
+      }
+
+      return Math.max(0, Math.trunc(payload.result));
+    } catch {
+      return null;
     }
   }
 
@@ -355,6 +459,23 @@ function resolveVoterKey(userId?: string, voterKey?: string): string | null {
 
   const trimmed = voterKey?.trim();
   return trimmed ? `visitor:${trimmed}` : null;
+}
+
+function resolveTelegramChatId(channelUrl: string): string | null {
+  try {
+    const url = new URL(channelUrl);
+    const parts = url.pathname.split("/").filter(Boolean);
+    const handle = parts[0]?.replace(/^@/, "").trim() ?? "";
+
+    if (!handle || handle.startsWith("+") || handle.includes("joinchat")) {
+      return null;
+    }
+
+    return `@${handle}`;
+  } catch {
+    const trimmed = channelUrl.trim().replace(/^@/, "");
+    return trimmed ? `@${trimmed}` : null;
+  }
 }
 
 function averageDotaMmr(values: Array<string | null | undefined>): string | null {

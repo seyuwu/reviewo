@@ -37,7 +37,7 @@ export function AdminGamesLaunchToggle() {
     void refresh();
   }, [refresh]);
 
-  async function toggle(searchLive: boolean) {
+  async function patch(input: { communityOpen?: boolean; searchLive?: boolean }) {
     if (!accessToken || busy) {
       return;
     }
@@ -46,7 +46,7 @@ export function AdminGamesLaunchToggle() {
     setError(null);
 
     try {
-      const next = await updateAdminGamesLaunch(searchLive, accessToken);
+      const next = await updateAdminGamesLaunch(input, accessToken);
       setStatus(next);
     } catch {
       setError(t("games.launch.admin.error"));
@@ -56,35 +56,74 @@ export function AdminGamesLaunchToggle() {
   }
 
   return (
-    <section className={styles.panel}>
-      <div className={styles.copy}>
-        <h2 className={styles.title}>{t("games.launch.admin.title")}</h2>
-        <p className={styles.lead}>{t("games.launch.admin.lead")}</p>
-        <p className={styles.state}>
-          {status?.searchLive
-            ? t("games.launch.admin.stateOn")
-            : t("games.launch.admin.stateOff")}
-        </p>
-      </div>
-      <div className={styles.actions}>
-        <button
-          className="button-primary"
-          disabled={busy || status?.searchLive === true}
-          onClick={() => void toggle(true)}
-          type="button"
-        >
-          {t("games.launch.admin.open")}
-        </button>
-        <button
-          className="button-secondary"
-          disabled={busy || status?.searchLive === false}
-          onClick={() => void toggle(false)}
-          type="button"
-        >
-          {t("games.launch.admin.close")}
-        </button>
-      </div>
+    <div className={styles.stack}>
+      <section className={styles.panel}>
+        <div className={styles.copy}>
+          <h2 className={styles.title}>{t("games.launch.admin.communityTitle")}</h2>
+          <p className={styles.lead}>{t("games.launch.admin.communityLead")}</p>
+          <p className={styles.state}>
+            {status?.searchLive
+              ? t("games.launch.admin.communityStateOn")
+              : status?.communityOpen
+                ? t("games.launch.admin.communityStateOn")
+                : t("games.launch.admin.communityStateOff")}
+          </p>
+        </div>
+        <div className={styles.actions}>
+          <button
+            className="button-primary"
+            disabled={busy || status?.communityOpen === true || status?.searchLive === true}
+            onClick={() => void patch({ communityOpen: true })}
+            type="button"
+          >
+            {t("games.launch.admin.communityOpen")}
+          </button>
+          <button
+            className="button-secondary"
+            disabled={
+              busy ||
+              status?.searchLive === true ||
+              status?.communityOpen !== true
+            }
+            onClick={() => void patch({ communityOpen: false })}
+            type="button"
+          >
+            {t("games.launch.admin.communityClose")}
+          </button>
+        </div>
+      </section>
+
+      <section className={styles.panel}>
+        <div className={styles.copy}>
+          <h2 className={styles.title}>{t("games.launch.admin.title")}</h2>
+          <p className={styles.lead}>{t("games.launch.admin.lead")}</p>
+          <p className={styles.state}>
+            {status?.searchLive
+              ? t("games.launch.admin.stateOn")
+              : t("games.launch.admin.stateOff")}
+          </p>
+        </div>
+        <div className={styles.actions}>
+          <button
+            className="button-primary"
+            disabled={busy || status?.searchLive === true}
+            onClick={() => void patch({ searchLive: true })}
+            type="button"
+          >
+            {t("games.launch.admin.open")}
+          </button>
+          <button
+            className="button-secondary"
+            disabled={busy || status?.searchLive === false}
+            onClick={() => void patch({ searchLive: false })}
+            type="button"
+          >
+            {t("games.launch.admin.close")}
+          </button>
+        </div>
+      </section>
+
       {error ? <p className={styles.error}>{error}</p> : null}
-    </section>
+    </div>
   );
 }

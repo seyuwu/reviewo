@@ -11,6 +11,7 @@ import {
 
 const FALLBACK_STATUS: GamesLaunchStatus = {
   averageMmr: null,
+  communityOpen: false,
   devNoteLikeCount: 0,
   devNoteLiked: false,
   launchAt: "2026-07-19T16:00:00.000Z",
@@ -18,7 +19,20 @@ const FALLBACK_STATUS: GamesLaunchStatus = {
   waitingCount: 0
 };
 
-const STATUS_CACHE_KEY = "opinia.games.launchStatus.v1";
+const STATUS_CACHE_KEY = "opinia.games.launchStatus.v2";
+
+function normalizeStatus(input: Partial<GamesLaunchStatus>): GamesLaunchStatus {
+  return {
+    averageMmr: typeof input.averageMmr === "string" ? input.averageMmr : null,
+    communityOpen: Boolean(input.communityOpen),
+    devNoteLikeCount:
+      typeof input.devNoteLikeCount === "number" ? input.devNoteLikeCount : 0,
+    devNoteLiked: Boolean(input.devNoteLiked),
+    launchAt: input.launchAt || FALLBACK_STATUS.launchAt,
+    searchLive: Boolean(input.searchLive),
+    waitingCount: typeof input.waitingCount === "number" ? input.waitingCount : 0
+  };
+}
 
 function readCachedStatus(): GamesLaunchStatus | null {
   if (typeof window === "undefined") {
@@ -38,15 +52,7 @@ function readCachedStatus(): GamesLaunchStatus | null {
       return null;
     }
 
-    return {
-      averageMmr: typeof parsed.averageMmr === "string" ? parsed.averageMmr : null,
-      devNoteLikeCount:
-        typeof parsed.devNoteLikeCount === "number" ? parsed.devNoteLikeCount : 0,
-      devNoteLiked: Boolean(parsed.devNoteLiked),
-      launchAt: parsed.launchAt || FALLBACK_STATUS.launchAt,
-      searchLive: parsed.searchLive,
-      waitingCount: typeof parsed.waitingCount === "number" ? parsed.waitingCount : 0
-    };
+    return normalizeStatus(parsed);
   } catch {
     return null;
   }
@@ -62,6 +68,10 @@ function writeCachedStatus(status: GamesLaunchStatus): void {
   } catch {
     /* ignore quota / private mode */
   }
+}
+
+export function isGamesCommunityLive(status: Pick<GamesLaunchStatus, "communityOpen" | "searchLive">): boolean {
+  return status.communityOpen || status.searchLive;
 }
 
 export function useGamesLaunchStatus(): {
@@ -94,14 +104,7 @@ export function useGamesLaunchStatus(): {
         accessToken,
         voterKey
       });
-      const resolved: GamesLaunchStatus = {
-        averageMmr: next.averageMmr ?? null,
-        devNoteLikeCount: next.devNoteLikeCount ?? 0,
-        devNoteLiked: Boolean(next.devNoteLiked),
-        launchAt: next.launchAt || FALLBACK_STATUS.launchAt,
-        searchLive: Boolean(next.searchLive),
-        waitingCount: next.waitingCount ?? 0
-      };
+      const resolved = normalizeStatus(next);
       writeCachedStatus(resolved);
       setStatusState(resolved);
     } catch {
@@ -119,7 +122,7 @@ export function useGamesLaunchStatus(): {
   // Optimistic live from session cache only — never optimistic waitlist (stale false flashes UI).
   useLayoutEffect(() => {
     const cached = readCachedStatus();
-    if (cached?.searchLive) {
+    if (cached && (cached.searchLive || cached.communityOpen)) {
       setStatusState(cached);
       setIsLoading(false);
     }

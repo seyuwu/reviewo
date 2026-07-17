@@ -51,6 +51,20 @@ export class PartiesController {
     private readonly gamesLaunchService: GamesLaunchService
   ) {}
 
+  private async assertCommunityOpen(currentUser: AuthenticatedUser): Promise<void> {
+    const communityOpen = await this.gamesLaunchService.isCommunityOpen();
+
+    if (communityOpen || currentUser.role === "ADMIN") {
+      return;
+    }
+
+    throw createAppException({
+      code: AppErrorCode.Forbidden,
+      message: "Team and party creation opens when the community is unlocked",
+      statusCode: HttpStatus.FORBIDDEN
+    });
+  }
+
   private async assertMatchingLive(currentUser: AuthenticatedUser): Promise<void> {
     const searchLive = await this.gamesLaunchService.isSearchLive();
 
@@ -170,7 +184,7 @@ export class PartiesController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Req() request: RequestLike
   ): Promise<GamePartyResponseDto> {
-    await this.assertMatchingLive(currentUser);
+    await this.assertCommunityOpen(currentUser);
     await this.apiRateLimiterService.assertWithinLimits(
       createSocialWriteRateLimitRules(currentUser.id, request)
     );

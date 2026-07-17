@@ -31,7 +31,10 @@ import type {
   MyPartiesResponse
 } from "../../social/types/social";
 import { submitGamesLaunchSuggestion } from "../api/games-launch-api";
-import { useGamesLaunchStatus } from "../hooks/use-games-launch-status";
+import {
+  isGamesCommunityLive,
+  useGamesLaunchStatus
+} from "../hooks/use-games-launch-status";
 import { resolveInviteDecisionError } from "../lib/resolve-stack-invite-error";
 import styles from "./games-community-view.module.css";
 
@@ -41,8 +44,9 @@ export function GamesCommunityView() {
   const { authSession, isAuthSessionLoaded } = useAuthSession();
   const profileNav = useMyDotaProfileNav();
   const { status: launchStatus, isLoading: isLaunchStatusLoading } = useGamesLaunchStatus();
+  const communityLive = isGamesCommunityLive(launchStatus);
   const searchLive = launchStatus.searchLive;
-  const showWaitlistUi = !isLaunchStatusLoading && !searchLive;
+  const showWaitlistUi = !isLaunchStatusLoading && !communityLive;
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendshipRequest[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<FriendshipRequest[]>([]);
@@ -324,11 +328,13 @@ export function GamesCommunityView() {
           <p className={styles.lead}>
             {showWaitlistUi
               ? t("games.launch.community.pageLead")
-              : t("games.community.pageLead")}
+              : !searchLive
+                ? t("games.launch.community.openLead")
+                : t("games.community.pageLead")}
           </p>
         </div>
         <div className={styles.headerActions}>
-          {searchLive ? (
+          {communityLive ? (
             <CreateRosterSplitButton disableTeam={Boolean(parties?.team)} />
           ) : null}
           <Link className="button-secondary" href="/games/search">

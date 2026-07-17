@@ -17,8 +17,13 @@ import {
 } from "../games-launch.constants.js";
 
 export class UpdateGamesLaunchDto {
+  @IsOptional()
   @IsBoolean()
-  searchLive!: boolean;
+  searchLive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  communityOpen?: boolean;
 }
 
 export class CreateGamesLaunchInterestDto {
@@ -49,6 +54,7 @@ export class CreateGamesLaunchSuggestionDto {
 export class GamesLaunchStatusDto {
   launchAt!: string;
   searchLive!: boolean;
+  communityOpen!: boolean;
   waitingCount!: number;
   averageMmr!: string | null;
   devNoteLikeCount!: number;

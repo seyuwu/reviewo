@@ -26,6 +26,7 @@ export type AdminGamesLaunchMetrics = {
   dotaHostUniques: number;
   dotaHostPageviews: number;
   formStarts: number;
+  telegramJoins: number;
   interestSubmits: number;
   inviteClicks: number;
   inviteVisits: number;
