@@ -67,7 +67,8 @@ export function DotaCreateForm() {
   const hasValidMmr = isValidDotaMmrInput(mmrFrom, mmrTo, mmrMode);
 
   const validationMessage = useMemo(() => {
-    if (displayName.trim().length < 1) {
+    // Nick is optional on create — API assigns a default. Required only when editing.
+    if (isEditMode && displayName.trim().length < 1) {
       return t("dota.create.validation.displayName");
     }
 
@@ -200,7 +201,8 @@ export function DotaCreateForm() {
       playIntent,
       roles,
       server,
-      title: trimmedDisplayName
+      // Create: omit title so API picks default / account name. Edit: always send nick.
+      ...(isEditMode ? { title: trimmedDisplayName } : {})
     };
 
     try {
@@ -396,17 +398,19 @@ export function DotaCreateForm() {
           ) : null}
 
           <section className={styles.section}>
-            <label className="field-label">
-              {t("dota.create.displayName")}
-              <input
-                autoComplete="nickname"
-                maxLength={200}
-                onChange={(event) => setDisplayName(event.target.value)}
-                placeholder={t("dota.create.displayNamePlaceholder")}
-                value={displayName}
-              />
-              <span className={styles.fieldHint}>{t("dota.create.displayNameHint")}</span>
-            </label>
+            {isEditMode ? (
+              <label className="field-label">
+                {t("dota.create.displayName")}
+                <input
+                  autoComplete="nickname"
+                  maxLength={200}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder={t("dota.create.displayNamePlaceholder")}
+                  value={displayName}
+                />
+                <span className={styles.fieldHint}>{t("dota.create.displayNameHint")}</span>
+              </label>
+            ) : null}
 
             <label
               className={`field-label${highlightDotaId ? ` ${styles.fieldHighlight}` : ""}`}

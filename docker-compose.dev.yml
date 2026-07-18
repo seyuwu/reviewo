@@ -111,7 +111,18 @@ services:
         target: /data
     command: ["python", "-m", "bot"]
 
+  welcome-flow-bot:
+    volumes:
+      - type: bind
+        source: ./apps/welcome-flow-bot
+        target: /app
+      - type: volume
+        source: welcome_flow_bot_data
+        target: /data
+    command: ["python", "-m", "bot"]
+
 volumes:
+  welcome_flow_bot_data:
   dev_pnpm_store:
   dev_root_node_modules:
   dev_api_node_modules:

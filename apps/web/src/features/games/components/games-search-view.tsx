@@ -1,6 +1,6 @@
 "use client";
 
-import { DOTA_PARTY_SIZE, type DotaGreenFlagKey, type DotaRedFlagKey } from "@reviewo/shared";
+import { type DotaGreenFlagKey, type DotaRedFlagKey } from "@reviewo/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -26,10 +26,12 @@ import {
   parseDotaMmrRange
 } from "../../dota/lib/labels";
 import { useTranslation } from "../../i18n/locale-provider";
+import { trackAnalyticsCta } from "../../analytics/components/product-analytics-listener";
 import {
   acceptPartyInvite,
   createGameParty,
   declinePartyInvite,
+  disbandGameParty,
   fetchMyParties,
   stackWithPlayer
 } from "../../social/api/social-api";
@@ -37,9 +39,14 @@ import { PARTY_NOTIFICATION_EVENT } from "../../social/lib/party-notifications-s
 import type { DotaPositionRole, GameParty, GamePartyInvite } from "../../social/types/social";
 import { resolveInviteDecisionError, resolveStackInviteError } from "../lib/resolve-stack-invite-error";
 import {
-  GAMES_SEARCH_COACH_SEEN_KEY,
+  gamesSearchCoachSeenKey,
   GamesSearchOnboarding
 } from "./games-search-onboarding";
+import { GamesSearchCinematic } from "./games-search-cinematic";
+import type {
+  GamesSearchCinematicResult,
+  GamesSearchCinematicVisualPhase
+} from "./games-search-cinematic-types";
 import type { IntentMode } from "./games-search-onboarding-types";
 import { useGamesLaunchStatus } from "../hooks/use-games-launch-status";
 import styles from "./games-search-view.module.css";
@@ -155,6 +162,7 @@ export function GamesSearchView() {
   const searchLive = launchStatus.searchLive;
   const [results, setResults] = useState<DotaLfgHit[]>([]);
   const [myMmr, setMyMmr] = useState<string | null>(null);
+  const [myRoles, setMyRoles] = useState<DotaPositionRole[]>([]);
   const [ownedParties, setOwnedParties] = useState<GameParty[]>([]);
   const [invites, setInvites] = useState<GamePartyInvite[]>([]);
   const [outgoingInvites, setOutgoingInvites] = useState<GamePartyInvite[]>([]);
@@ -162,8 +170,6 @@ export function GamesSearchView() {
   const flashScheduledRef = useRef(new Set<string>());
   const [selectedPartySlug, setSelectedPartySlug] = useState("");
   const [intentMode, setIntentMode] = useState<IntentMode>("join");
-  const [recruitedRoles, setRecruitedRoles] = useState<DotaPositionRole[]>([]);
-  const [rolesLegendOpen, setRolesLegendOpen] = useState(false);
   const [onlineNow, setOnlineNow] = useState<number | null>(null);
   const [batchIndex, setBatchIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -178,7 +184,13 @@ export function GamesSearchView() {
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
   const [invitePickerSlug, setInvitePickerSlug] = useState<string | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
+  const [cinematicMode, setCinematicMode] = useState<"checking" | "active" | "done">("checking");
+  const [cinematicProfileReady, setCinematicProfileReady] = useState(false);
+  const [cinematicSearchPending, setCinematicSearchPending] = useState(false);
+  const [cinematicVisualPhase, setCinematicVisualPhase] =
+    useState<GamesSearchCinematicVisualPhase>("hidden");
   const controlsRef = useRef<HTMLElement | null>(null);
+  const intentCoachRef = useRef<HTMLDivElement | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
 
@@ -220,6 +232,7 @@ export function GamesSearchView() {
   const refreshParties = useCallback(async () => {
     if (!authSession?.accessToken || !myDotaProfile.hasProfile) {
       setMyMmr(null);
+      setMyRoles([]);
       setOwnedParties([]);
       setInvites([]);
       setOutgoingInvites([]);
@@ -242,6 +255,7 @@ export function GamesSearchView() {
       try {
         const profile = await fetchMyDotaProfile(authSession.accessToken);
         setMyMmr(profile.mmr);
+        setMyRoles(profile.roles as DotaPositionRole[]);
       } catch {
         // Keep party/invite state even if profile refresh fails.
       }
@@ -264,6 +278,7 @@ export function GamesSearchView() {
   useEffect(() => {
     if (!searchLive) {
       setMyMmr(null);
+      setMyRoles([]);
       setOwnedParties([]);
       setInvites([]);
       setOutgoingInvites([]);
@@ -275,7 +290,32 @@ export function GamesSearchView() {
   }, [refreshParties, searchLive]);
 
   useEffect(() => {
-    if (!searchLive || !isAuthSessionLoaded || !myDotaProfile.hasProfile) {
+    if (!searchLive || !isAuthSessionLoaded || myDotaProfile.isLoading) {
+      return;
+    }
+
+    setCinematicMode((current) => {
+      if (current !== "checking") {
+        return current;
+      }
+
+      return myDotaProfile.hasProfile ? "done" : "active";
+    });
+  }, [
+    isAuthSessionLoaded,
+    myDotaProfile.hasProfile,
+    myDotaProfile.isLoading,
+    searchLive
+  ]);
+
+  useEffect(() => {
+    if (
+      !searchLive ||
+      !isAuthSessionLoaded ||
+      !authSession?.userId ||
+      !myDotaProfile.hasProfile ||
+      cinematicMode !== "done"
+    ) {
       return;
     }
 
@@ -283,12 +323,41 @@ export function GamesSearchView() {
       return;
     }
 
-    if (window.localStorage.getItem(GAMES_SEARCH_COACH_SEEN_KEY) === "1") {
+    const seenKey = gamesSearchCoachSeenKey(authSession.userId);
+    if (window.localStorage.getItem(seenKey) === "1") {
       return;
     }
 
-    setCoachOpen(true);
-  }, [isAuthSessionLoaded, myDotaProfile.hasProfile, searchLive]);
+    const timerId = window.setTimeout(() => {
+      if (!intentCoachRef.current) {
+        return;
+      }
+
+      setCoachOpen(true);
+    }, cinematicProfileReady ? 1800 : 700);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [
+    authSession?.userId,
+    cinematicMode,
+    cinematicProfileReady,
+    isAuthSessionLoaded,
+    myDotaProfile.hasProfile,
+    searchLive
+  ]);
+
+  function markCoachSeen() {
+    if (authSession?.userId && typeof window !== "undefined") {
+      window.localStorage.setItem(gamesSearchCoachSeenKey(authSession.userId), "1");
+    }
+  }
+
+  function closeCoach() {
+    markCoachSeen();
+    setCoachOpen(false);
+  }
 
   useEffect(() => {
     if (!searchLive) {
@@ -430,13 +499,23 @@ export function GamesSearchView() {
   }, [myDotaProfile.slug, ownedParties, results]);
 
   useEffect(() => {
+    if (cinematicSearchPending) {
+      setIsLooking(true);
+
+      if (myLfgHit) {
+        setCinematicSearchPending(false);
+      }
+
+      return;
+    }
+
     if (!myDotaProfile.slug && ownedParties.length === 0) {
       setIsLooking(false);
       return;
     }
 
     setIsLooking(Boolean(myLfgHit));
-  }, [myDotaProfile.slug, myLfgHit, ownedParties.length]);
+  }, [cinematicSearchPending, myDotaProfile.slug, myLfgHit, ownedParties.length]);
 
   useEffect(() => {
     if (!isLooking || !myLfgHit) {
@@ -519,47 +598,26 @@ export function GamesSearchView() {
 
   const canFindOthers = candidates.length > RECOMMENDATION_COUNT;
   const lookingCount = candidates.length;
-  const selectedParty = selectedPartySlug
-    ? ownedParties.find((party) => party.slug === selectedPartySlug) ?? null
-    : null;
-  const selectedPartyFull = Boolean(selectedParty && selectedParty.openSlots <= 0);
   const visibleOutgoing = outgoingInvites.filter(
     (invite) => invite.status === "PENDING" || !dismissedOutgoingIds.has(invite.id)
   );
 
-  const slotMax = selectedParty?.maxMembers ?? DOTA_PARTY_SIZE;
-  const claimedRoles = useMemo(() => {
-    const claimed = new Set(
-      (selectedParty?.members ?? [])
-        .map((member) => member.positionRole)
-        .filter((role): role is DotaPositionRole => Boolean(role))
-    );
-    return claimed;
-  }, [selectedParty]);
-  const selectableRecruitRoles = useMemo(
-    () => ROLE_POSITIONS.filter((role) => !claimedRoles.has(role)),
-    [claimedRoles]
-  );
-  const effectiveRecruitedRoles = useMemo(
-    () => recruitedRoles.filter((role) => selectableRecruitRoles.includes(role)),
-    [recruitedRoles, selectableRecruitRoles]
-  );
-
-  useEffect(() => {
-    setRecruitedRoles((current) => current.filter((role) => selectableRecruitRoles.includes(role)));
-  }, [selectableRecruitRoles]);
-
-  function toggleRecruitedRole(role: DotaPositionRole) {
-    if (isLooking || lookingBusy || claimedRoles.has(role)) {
+  async function handleIntentAction(nextMode: IntentMode) {
+    if (lookingBusy || (isLooking && intentMode !== nextMode)) {
       return;
     }
 
-    setRecruitedRoles((current) =>
-      current.includes(role) ? current.filter((item) => item !== role) : [...current, role].sort()
-    );
+    closeCoach();
+
+    if (!isLooking) {
+      setIntentMode(nextMode);
+      setSelectedPartySlug("");
+    }
+
+    await handleToggleLooking(nextMode);
   }
 
-  async function handleToggleLooking() {
+  async function handleToggleLooking(requestedMode: IntentMode = intentMode) {
     if (!authSession?.accessToken || !myDotaProfile.hasProfile) {
       setGateSlug("__looking__");
       return;
@@ -567,13 +625,14 @@ export function GamesSearchView() {
 
     setLookingBusy(true);
     setStackError(null);
+    let createdRecruitPartySlug: string | null = null;
 
     try {
       const nextLooking = !isLooking;
 
       if (!nextLooking) {
         const stopPartySlug =
-          intentMode === "recruit"
+          requestedMode === "recruit"
             ? selectedPartySlug || myLfgHit?.partySlug || undefined
             : myLfgHit?.partySlug || undefined;
 
@@ -583,64 +642,66 @@ export function GamesSearchView() {
           stopPartySlug ? { partySlug: stopPartySlug } : undefined
         );
         setIsLooking(false);
+        if (requestedMode === "recruit") {
+          setSelectedPartySlug("");
+        }
+        void trackAnalyticsCta("games_search_stop");
         await refreshList({ quiet: true });
         return;
       }
 
-      if (intentMode === "recruit") {
-        let partySlug = selectedPartySlug;
-        let createdParty: GameParty | null = null;
+      if (requestedMode === "recruit") {
+        const party = await createGameParty("PARTY", authSession.accessToken);
+        const partySlug = party.slug;
+        createdRecruitPartySlug = partySlug;
+        setSelectedPartySlug(partySlug);
+        setOwnedParties((current) =>
+          current.some((item) => item.id === party.id) ? current : [party, ...current]
+        );
+        await refreshParties();
+        void trackAnalyticsCta("games_party_create_from_search");
 
-        if (!partySlug) {
-          createdParty = await createGameParty("PARTY", authSession.accessToken);
-          partySlug = createdParty.slug;
-          setSelectedPartySlug(partySlug);
-          setOwnedParties((current) => {
-            if (current.some((item) => item.id === createdParty!.id)) {
-              return current;
-            }
-
-            return [createdParty!, ...current];
-          });
-          await refreshParties();
-        }
-
-        const party =
-          createdParty ??
-          ownedParties.find((item) => item.slug === partySlug) ??
-          (await fetchMyParties(authSession.accessToken).then((parties) => {
-            const owned = [
-              parties.team,
-              ...(parties.parties?.length ? parties.parties : parties.party ? [parties.party] : [])
-            ].filter((item): item is GameParty => Boolean(item?.canManageParty ?? item?.isOwner));
-            return owned.find((item) => item.slug === partySlug) ?? null;
-          }));
-
-        if (!party || party.openSlots <= 0) {
+        if (party.openSlots <= 0) {
+          try {
+            await disbandGameParty(partySlug, authSession.accessToken);
+          } catch {
+            // Best-effort cleanup of unusable roster.
+          }
+          setSelectedPartySlug("");
+          setOwnedParties((current) => current.filter((item) => item.slug !== partySlug));
+          createdRecruitPartySlug = null;
           setStackError(t("games.search.partyFull"));
           return;
         }
 
-        // Empty selection → all unfilled position slots on this party.
-        const rolesToRecruit =
-          effectiveRecruitedRoles.length > 0 ? effectiveRecruitedRoles : selectableRecruitRoles;
-
-        if (rolesToRecruit.length === 0) {
-          setStackError(t("games.search.rolesNeedSelect"));
-          return;
+        try {
+          await setDotaLfgLooking(true, authSession.accessToken, {
+            partySlug,
+            recruitedRoles: [...ROLE_POSITIONS]
+          });
+        } catch (lookingError) {
+          try {
+            await disbandGameParty(partySlug, authSession.accessToken);
+          } catch {
+            // Best-effort cleanup if recruit LFG failed after create.
+          }
+          setSelectedPartySlug("");
+          setOwnedParties((current) => current.filter((item) => item.slug !== partySlug));
+          createdRecruitPartySlug = null;
+          throw lookingError;
         }
 
-        setRecruitedRoles(rolesToRecruit);
-
-        await setDotaLfgLooking(true, authSession.accessToken, {
-          partySlug,
-          recruitedRoles: rolesToRecruit
-        });
+        void trackAnalyticsCta("games_search_start_recruit");
       } else {
         await setDotaLfgLooking(true, authSession.accessToken);
+        void trackAnalyticsCta("games_search_start_join");
       }
 
       setIsLooking(true);
+      if (createdRecruitPartySlug) {
+        router.push(`/dota/teams/${createdRecruitPartySlug}`);
+        return;
+      }
       await refreshList({ quiet: true });
     } catch (error) {
       setStackError(resolveStackInviteError(error, t));
@@ -789,10 +850,44 @@ export function GamesSearchView() {
     }
   }
 
+  function handleCinematicPrepared(result: GamesSearchCinematicResult) {
+    setCinematicProfileReady(true);
+    setCinematicSearchPending(true);
+    setIntentMode(result.intentMode);
+    setMyMmr(result.mmr);
+    setMyRoles(result.roles);
+    setIsLooking(true);
+
+    if (result.party) {
+      setSelectedPartySlug(result.party.slug);
+      setOwnedParties((current) =>
+        current.some((party) => party.id === result.party?.id)
+          ? current
+          : [result.party!, ...current]
+      );
+    }
+
+    void refreshList({ quiet: true });
+  }
+
+  function handleCinematicComplete(result: GamesSearchCinematicResult) {
+    setCoachOpen(false);
+    setCinematicVisualPhase("rail");
+    setCinematicMode("done");
+    setCinematicProfileReady(true);
+    setIntentMode(result.intentMode);
+    if (result.intentMode === "recruit" && result.party) {
+      router.push(`/dota/teams/${result.party.slug}`);
+      return;
+    }
+    void Promise.all([refreshList({ quiet: true }), refreshParties()]);
+  }
+
   const createHref =
     gateSlug && gateSlug !== "__looking__"
       ? `/dota/create?intent=stack&target=${encodeURIComponent(gateSlug)}`
       : "/dota/create?intent=search";
+  const hasSearchProfile = myDotaProfile.hasProfile || cinematicProfileReady;
 
   if (isLaunchStatusLoading) {
     return (
@@ -808,7 +903,13 @@ export function GamesSearchView() {
 
   return (
     <section className={styles.page}>
-      <header className={styles.header}>
+      <header
+        className={`${styles.header}${
+          cinematicMode !== "done" || cinematicProfileReady
+            ? ` ${styles.headerCinematicHidden}`
+            : ""
+        }`}
+      >
         <div className={styles.headerCopy}>
           <h1 className={styles.title}>{t("games.search.pageTitle")}</h1>
           <p className={styles.lead}>{t("games.search.pageLead")}</p>
@@ -816,14 +917,31 @@ export function GamesSearchView() {
         <GamesSearchTipRotator />
       </header>
 
-      <div className={styles.layout}>
+      <div
+        className={`${styles.searchStage}${
+          cinematicMode !== "done" ? ` ${styles.searchStageCinematic}` : ""
+        }`}
+      >
+        <div
+          aria-hidden={cinematicMode !== "done"}
+          className={`${styles.layout}${
+            cinematicMode !== "done" ? ` ${styles.layoutCinematic}` : ""
+          }${
+            cinematicVisualPhase !== "hidden" ? ` ${styles.layoutShowLeft}` : ""
+          }${
+            cinematicVisualPhase === "feed" || cinematicVisualPhase === "rail"
+              ? ` ${styles.layoutShowFeed}`
+              : ""
+          }${cinematicVisualPhase === "rail" ? ` ${styles.layoutShowRail}` : ""}`}
+          inert={cinematicMode !== "done" ? true : undefined}
+        >
         <aside
           className={styles.sidebar}
           ref={(node) => {
             controlsRef.current = node;
           }}
         >
-          {!myDotaProfile.hasProfile ? (
+          {!hasSearchProfile ? (
             <section className={`${styles.panel} ${styles.promoPanel}`}>
               <p className={styles.promoTitle}>{t("games.search.promoTitle")}</p>
               <p className={styles.promoLead}>{t("games.search.promoLead")}</p>
@@ -832,209 +950,65 @@ export function GamesSearchView() {
               </Link>
             </section>
           ) : (
-            <section className={styles.panel}>
-              <div className={styles.controlBlock}>
+            <section className={styles.panel} data-cinematic-left-target>
+              <div className={styles.searchProfileSummary}>
+                <div className={styles.searchProfileMmr} data-cinematic-target="mmr">
+                  <span>MMR</span>
+                  <strong>{formatDotaMmr(myMmr)}</strong>
+                </div>
+                <div
+                  aria-label={t("games.search.cinematic.yourRoles")}
+                  className={styles.searchProfileRoles}
+                >
+                  {myRoles.map((role) => (
+                    <span data-cinematic-target={`role-${role}`} key={`my-role-${role}`}>
+                      {t("games.search.cinematic.positionShort", { role })}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className={styles.controlDivider} />
+              <div className={styles.controlBlock} ref={intentCoachRef}>
                 <h2 className={styles.panelTitle}>{t("games.search.intentTitle")}</h2>
-                {isLooking ? (
-                  <p className={styles.controlHint}>{t("games.search.lookingLockedHint")}</p>
-                ) : null}
-                <div className={styles.modeList} role="radiogroup" aria-label={t("games.search.intentTitle")}>
+                <div className={styles.modeList} aria-label={t("games.search.intentTitle")}>
                   <button
-                    aria-checked={intentMode === "join"}
-                    className={`${styles.modeCard}${intentMode === "join" ? ` ${styles.modeCardActive}` : ""}${
-                      isLooking ? ` ${styles.modeCardLocked}` : ""
+                    aria-pressed={isLooking && intentMode === "join"}
+                    className={`${styles.modeCard}${
+                      isLooking && intentMode === "join" ? ` ${styles.modeCardActive}` : ""
                     }`}
-                    disabled={isLooking || lookingBusy}
-                    onClick={() => setIntentMode("join")}
-                    role="radio"
+                    disabled={lookingBusy || (isLooking && intentMode !== "join")}
+                    onClick={() => void handleIntentAction("join")}
                     type="button"
                   >
                     <strong>{t("games.search.intentLooking")}</strong>
-                    <span>{t("games.search.intentLookingHint")}</span>
+                    <span>
+                      {lookingBusy && intentMode === "join"
+                        ? t("games.search.toggleLookingBusy")
+                        : isLooking && intentMode === "join"
+                          ? t("games.search.stopLooking")
+                          : t("games.search.intentLookingHint")}
+                    </span>
                   </button>
                   <button
-                    aria-checked={intentMode === "recruit"}
+                    aria-pressed={isLooking && intentMode === "recruit"}
                     className={`${styles.modeCard}${
-                      intentMode === "recruit" ? ` ${styles.modeCardActive}` : ""
-                    }${isLooking ? ` ${styles.modeCardLocked}` : ""}`}
-                    disabled={isLooking || lookingBusy}
-                    onClick={() => setIntentMode("recruit")}
-                    role="radio"
+                      isLooking && intentMode === "recruit" ? ` ${styles.modeCardActive}` : ""
+                    }`}
+                    disabled={lookingBusy || (isLooking && intentMode !== "recruit")}
+                    onClick={() => void handleIntentAction("recruit")}
                     type="button"
                   >
                     <strong>{t("games.search.intentInvite")}</strong>
-                    <span>{t("games.search.intentInviteHint")}</span>
+                    <span>
+                      {lookingBusy && intentMode === "recruit"
+                        ? t("games.search.toggleLookingBusy")
+                        : isLooking && intentMode === "recruit"
+                          ? t("games.search.stopRecruitLooking")
+                          : t("games.search.intentInviteHint")}
+                    </span>
                   </button>
                 </div>
               </div>
-
-              <div className={styles.controlDivider} />
-
-              {intentMode === "recruit" ? (
-                <div className={styles.controlBlock}>
-                  <h2 className={styles.panelTitle}>{t("games.search.recruitAsTitle")}</h2>
-                  <p className={styles.controlHint}>{t("games.search.recruitAsHint")}</p>
-                  <div
-                    className={`${styles.radioList}${isLooking ? ` ${styles.radioListLocked}` : ""}`}
-                    role="radiogroup"
-                    aria-label={t("games.search.recruitAsTitle")}
-                  >
-                    <label className={styles.radioItem}>
-                      <input
-                        checked={selectedPartySlug === ""}
-                        disabled={isLooking || lookingBusy}
-                        name="stack-as"
-                        onChange={() => setSelectedPartySlug("")}
-                        type="radio"
-                      />
-                      <span>{t("games.search.stackAsNewParty")}</span>
-                    </label>
-                    {ownedParties.map((party) => (
-                      <label className={styles.radioItem} key={party.id}>
-                        <input
-                          checked={selectedPartySlug === party.slug}
-                          disabled={isLooking || lookingBusy}
-                          name="stack-as"
-                          onChange={() => setSelectedPartySlug(party.slug)}
-                          type="radio"
-                        />
-                        <span>
-                          {party.kind === "TEAM"
-                            ? t("games.search.stackAsTeam", { name: party.name })
-                            : t("games.search.stackAsParty", { name: party.name })}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  {selectedPartyFull ? (
-                    <p className={styles.error}>{t("games.search.partyFull")}</p>
-                  ) : null}
-                </div>
-              ) : (
-                <div className={styles.controlBlock}>
-                  <p className={styles.controlHint}>{t("games.search.joinModeHint")}</p>
-                </div>
-              )}
-
-              <div className={styles.controlDivider} />
-
-              {intentMode === "join" ? (
-                <div className={styles.controlBlock}>
-                  <div className={styles.controlHead}>
-                    <h2 className={styles.panelTitle}>{t("games.search.statusTitle")}</h2>
-                    <span
-                      className={`${styles.statusPill}${isLooking ? ` ${styles.statusPillOn}` : ""}`}
-                    >
-                      {isLooking ? t("games.search.statusOn") : t("games.search.statusOff")}
-                    </span>
-                  </div>
-                  <button
-                    aria-pressed={isLooking}
-                    className={isLooking ? "button-secondary" : "button-primary"}
-                    disabled={lookingBusy}
-                    onClick={() => void handleToggleLooking()}
-                    type="button"
-                  >
-                    {lookingBusy
-                      ? t("games.search.toggleLookingBusy")
-                      : isLooking
-                        ? t("games.search.stopLooking")
-                        : t("games.search.startLooking")}
-                  </button>
-                </div>
-              ) : (
-                <div className={styles.controlBlock}>
-                  <div className={styles.controlHead}>
-                    <h2 className={styles.panelTitle}>{t("games.search.rolesNeededTitle")}</h2>
-                    <button
-                      aria-expanded={rolesLegendOpen}
-                      className={styles.rolesExpandBtn}
-                      onClick={() => setRolesLegendOpen((open) => !open)}
-                      type="button"
-                    >
-                      {rolesLegendOpen
-                        ? t("games.search.rolesCollapse")
-                        : t("games.search.rolesExpand")}
-                    </button>
-                  </div>
-                  <div
-                    className={styles.roleChipPick}
-                    role="group"
-                    aria-label={t("games.search.rolesNeededTitle")}
-                  >
-                    {ROLE_POSITIONS.map((role) => {
-                      const claimed = claimedRoles.has(role);
-                      const selected = effectiveRecruitedRoles.includes(role);
-                      return (
-                        <button
-                          aria-pressed={selected}
-                          className={`${styles.roleChipBtn}${selected ? ` ${styles.roleChipBtnActive}` : ""}${
-                            claimed ? ` ${styles.roleChipBtnClaimed}` : ""
-                          }`}
-                          disabled={isLooking || lookingBusy || claimed}
-                          key={`recruit-role-${role}`}
-                          onClick={() => toggleRecruitedRole(role)}
-                          title={`${role} · ${getDotaPositionLabel(role, t)}`}
-                          type="button"
-                        >
-                          {role}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className={styles.controlHint}>{t("games.search.rolesNeededHelp")}</p>
-                  {rolesLegendOpen ? (
-                    <ul className={styles.roleLegend}>
-                      {ROLE_POSITIONS.map((role) => (
-                        <li key={`role-legend-${role}`}>
-                          <strong>{role}</strong>
-                          <span>{getDotaPositionLabel(role, t)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  <p className={styles.slotsMeta}>
-                    {t("games.search.rolesNeededCount", {
-                      count: String(
-                        effectiveRecruitedRoles.length > 0
-                          ? effectiveRecruitedRoles.length
-                          : selectableRecruitRoles.length
-                      ),
-                      current: String(selectedParty?.memberCount ?? 0),
-                      max: String(slotMax)
-                    })}
-                  </p>
-                  <div className={styles.controlHead}>
-                    <h2 className={styles.panelTitle}>{t("games.search.statusTitle")}</h2>
-                    <span
-                      className={`${styles.statusPill}${isLooking ? ` ${styles.statusPillOn}` : ""}`}
-                    >
-                      {isLooking ? t("games.search.statusOn") : t("games.search.statusOff")}
-                    </span>
-                  </div>
-                  {isLooking && selectedParty ? (
-                    <p className={styles.controlHint}>
-                      {t("games.search.recruitLookingAs", {
-                        name: selectedParty.name,
-                        needed: String(effectiveRecruitedRoles.length)
-                      })}
-                    </p>
-                  ) : null}
-                  <button
-                    aria-pressed={isLooking}
-                    className={isLooking ? "button-secondary" : "button-primary"}
-                    disabled={lookingBusy || selectedPartyFull}
-                    onClick={() => void handleToggleLooking()}
-                    type="button"
-                  >
-                    {lookingBusy
-                      ? t("games.search.toggleLookingBusy")
-                      : isLooking
-                        ? t("games.search.stopRecruitLooking")
-                        : t("games.search.startRecruitLooking")}
-                  </button>
-                </div>
-              )}
 
               <Link className={styles.profileLink} href={myDotaProfile.href}>
                 {t("games.search.openProfileCta")}
@@ -1112,10 +1086,12 @@ export function GamesSearchView() {
                 <button
                   className={`button-primary ${styles.emptyCta}`}
                   disabled={lookingBusy}
-                  onClick={() => void handleToggleLooking()}
+                  onClick={() => void handleIntentAction("join")}
                   type="button"
                 >
-                  {lookingBusy ? t("games.search.toggleLookingBusy") : t("games.search.toggleLooking")}
+                  {lookingBusy
+                    ? t("games.search.toggleLookingBusy")
+                    : t("games.search.startLooking")}
                 </button>
               ) : (
                 <p className={styles.waitingInviteText}>{t("games.search.invitesWaiting")}</p>
@@ -1133,7 +1109,12 @@ export function GamesSearchView() {
                   : `/dota/${player.slug}`;
 
                 return (
-                <li className={styles.card} key={player.slug}>
+                <li
+                  className={`${styles.card}${
+                    invitePickerSlug === player.slug ? ` ${styles.cardInviteOpen}` : ""
+                  }`}
+                  key={player.slug}
+                >
                   <div className={styles.cardTop}>
                     <Link
                       aria-label={t("games.search.openRoster")}
@@ -1504,16 +1485,21 @@ export function GamesSearchView() {
             <p className={styles.tipLead}>{t("games.search.tipLead")}</p>
           </section>
         </aside>
+        </div>
+
+        {cinematicMode === "active" ? (
+          <GamesSearchCinematic
+            onComplete={handleCinematicComplete}
+            onPrepared={handleCinematicPrepared}
+            onVisualPhase={setCinematicVisualPhase}
+          />
+        ) : null}
       </div>
 
       <GamesSearchOnboarding
-        controlsRef={controlsRef}
-        feedRef={feedRef}
-        intentMode={intentMode}
-        onClose={() => setCoachOpen(false)}
-        onIntentPick={setIntentMode}
+        onClose={closeCoach}
         open={coachOpen}
-        railRef={railRef}
+        targetRef={intentCoachRef}
       />
 
       {gateSlug ? (

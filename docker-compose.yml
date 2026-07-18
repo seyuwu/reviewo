@@ -91,6 +91,29 @@ services:
     volumes:
       - waitlist_bot_data:/data
 
+  welcome-flow-bot:
+    image: reviewo-welcome-flow-bot:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: apps/welcome-flow-bot/Dockerfile
+    restart: unless-stopped
+    profiles:
+      - welcome-flow
+    networks:
+      - reviewo
+    environment:
+      WELCOME_FLOW_BOT_TOKEN: ${WELCOME_FLOW_BOT_TOKEN:-}
+      WELCOME_FLOW_CHANNEL_URL: ${WELCOME_FLOW_CHANNEL_URL:-https://t.me/opiniagames}
+      WELCOME_FLOW_ADMIN_IDS: ${WELCOME_FLOW_ADMIN_IDS:-}
+      WELCOME_FLOW_DATABASE_PATH: ${WELCOME_FLOW_DATABASE_PATH:-/data/welcome_flow.db}
+      WELCOME_FLOW_DELAY_MIN: ${WELCOME_FLOW_DELAY_MIN:-6}
+      WELCOME_FLOW_DELAY_MAX: ${WELCOME_FLOW_DELAY_MAX:-18}
+      WELCOME_FLOW_COOLDOWN_DAYS: ${WELCOME_FLOW_COOLDOWN_DAYS:-30}
+      WELCOME_FLOW_HOURLY_CAP: ${WELCOME_FLOW_HOURLY_CAP:-40}
+      WELCOME_FLOW_TEMPLATES_PATH: ${WELCOME_FLOW_TEMPLATES_PATH:-}
+    volumes:
+      - welcome_flow_bot_data:/data
+
   postgres:
     image: ${POSTGRES_IMAGE:-postgres:17-alpine}
     restart: unless-stopped
@@ -141,6 +164,7 @@ volumes:
   redis_data:
   minio_data:
   waitlist_bot_data:
+  welcome_flow_bot_data:
 
 networks:
   reviewo:

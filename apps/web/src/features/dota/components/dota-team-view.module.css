@@ -17,7 +17,15 @@
 .rosterColumn {
   display: grid;
   gap: 1rem;
+  grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.95fr);
   min-width: 0;
+}
+
+.rosterColumnWithApps {
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(17rem, 1fr)
+    minmax(17rem, 1fr);
 }
 
 .header {
@@ -30,7 +38,73 @@
   box-shadow: var(--shadow-card);
   display: grid;
   gap: 0.55rem;
+  grid-column: 1;
+  grid-row: 1;
   padding: 1.25rem;
+}
+
+.applicationsPanel {
+  align-self: start;
+  backdrop-filter: blur(16px);
+  background:
+    radial-gradient(circle at 12% 0%, rgb(109 74 255 / 14%), transparent 42%),
+    var(--games-glass, rgb(18 22 32 / 76%));
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  grid-column: 2;
+  grid-row: 1;
+  max-height: min(100%, 28rem);
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.9rem;
+}
+
+.rosterAux {
+  align-content: start;
+  display: grid;
+  gap: 0.75rem;
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.rosterColumnWithApps .rosterAux {
+  grid-column: 3;
+}
+
+.rosterAux .invitePanel {
+  padding: 0.8rem;
+}
+
+.rosterAux .inviteFriendList,
+.rosterAux .friendList {
+  max-height: 8rem;
+  overflow: auto;
+}
+
+.rosterAux .inviteFriendRow {
+  grid-template-columns: 1fr;
+}
+
+.rosterAux .inviteRoleRow {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.rosterAux .inviteSearch {
+  min-width: 0;
+  width: 100%;
+}
+
+.rosterFeedback,
+.visitorFeedback,
+.slots,
+.candidatesPanel {
+  grid-column: 1 / -1;
 }
 
 .eyebrow {
@@ -302,6 +376,226 @@
   display: grid;
   gap: 0.65rem;
   padding: 1rem;
+}
+
+.candidatesPanel {
+  backdrop-filter: blur(16px);
+  background:
+    radial-gradient(circle at 50% 120%, rgb(109 74 255 / 16%), transparent 48%),
+    var(--games-glass, rgb(18 22 32 / 76%));
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.8rem;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.applicationsHead h2 {
+  align-items: center;
+  display: inline-flex;
+  font-size: 1rem;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.applicationsHint,
+.applicationsEmpty {
+  color: var(--color-text-muted);
+  flex: 0 0 auto;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.applicationsList {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  max-height: 16rem;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 0.1rem 0 0;
+}
+
+.applicationCard {
+  background: rgb(0 0 0 / 22%);
+  border: 1px solid rgb(147 130 255 / 16%);
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.7rem;
+}
+
+.applicationCopy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.applicationCopy a,
+.applicationCopy strong {
+  color: inherit;
+  font-size: 0.88rem;
+  font-weight: 750;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.applicationCopy span,
+.applicationMeta {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.applicationActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.applicationActions button {
+  flex: 1 1 auto;
+  min-height: 2.1rem;
+}
+
+.candidatesHead {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.candidatesHead h2 {
+  font-size: 1rem;
+  margin: 0.15rem 0 0;
+}
+
+.candidatesEyebrow {
+  color: var(--color-accent-strong);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.candidatesRefresh {
+  align-items: center;
+  appearance: none;
+  background: rgb(109 74 255 / 12%);
+  border: 1px solid rgb(147 130 255 / 28%);
+  border-radius: 0.65rem;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.65rem;
+}
+
+.candidatesRefresh:hover:not(:disabled) {
+  background: rgb(109 74 255 / 22%);
+}
+
+.candidatesRefresh:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.candidatesRefresh span {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.candidatesRefreshSpinning {
+  animation: candidates-refresh-spin 700ms linear infinite;
+}
+
+.candidatesGrid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.candidateCard {
+  background: rgb(0 0 0 / 20%);
+  border: 1px solid rgb(147 130 255 / 18%);
+  border-radius: 0.8rem;
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.75rem;
+}
+
+.candidateIdentity {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.candidateIdentity a {
+  color: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidateIdentity span,
+.candidatesEmpty,
+.candidatesQueue {
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.candidateRoles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.candidateRoles button {
+  appearance: none;
+  background: linear-gradient(135deg, #7557ff, #5d3fd3);
+  border: 1px solid rgb(196 181 253 / 24%);
+  border-radius: 0.5rem;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 750;
+  min-height: 1.9rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.candidateRoles button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.candidatesSuccess {
+  color: #86efac;
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+@keyframes candidates-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .invitePanelHead {
@@ -594,15 +888,17 @@
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card-lg);
   box-shadow: var(--shadow-card);
+  box-sizing: border-box;
   display: grid;
   gap: 0.65rem;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  height: calc(100vh - 5.5rem);
+  height: calc(100dvh - 7.5rem);
   margin-block: 0;
-  max-height: none;
+  max-height: calc(100dvh - 7.5rem);
+  overflow: hidden;
   padding: 0.9rem;
   position: sticky;
-  top: 1rem;
+  top: 5.25rem;
 }
 
 .chatHead {
@@ -623,12 +919,15 @@
 }
 
 .chatMessages {
+  align-content: start;
   display: grid;
   gap: 0.5rem;
-  align-content: start;
   min-height: 0;
   overflow: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
   padding-right: 0.15rem;
+  scroll-behavior: auto;
 }
 
 .dotaIdButton {
@@ -682,9 +981,10 @@
 
 .chatForm {
   align-items: stretch;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  flex-shrink: 0;
   gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .chatForm input {
@@ -693,7 +993,6 @@
   border-radius: 0.85rem;
   box-sizing: border-box;
   color: var(--color-text);
-  flex: 1 1 14rem;
   font: inherit;
   margin: 0;
   min-height: 2.85rem;
@@ -713,9 +1012,9 @@
 
 .chatForm button {
   align-self: stretch;
-  flex: 0 0 auto;
   margin: 0;
   min-height: 2.85rem;
+  min-width: 7rem;
   white-space: nowrap;
 }
 
@@ -725,22 +1024,60 @@
   }
 
   .rosterColumn {
+    grid-template-columns: 1fr;
     order: 1;
+    padding-bottom: min(12rem, 28vh);
+  }
+
+  .header {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .applicationsPanel {
+    grid-column: 1;
+    grid-row: 2;
+    max-height: min(16rem, 40vh);
+  }
+
+  .rosterAux {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .rosterColumnWithApps .rosterAux {
+    grid-column: 1;
+  }
+
+  .rosterFeedback,
+  .slots,
+  .visitorFeedback,
+  .candidatesPanel {
+    grid-column: 1;
+  }
+
+  .candidatesPanel {
+    position: relative;
+    z-index: 1;
   }
 
   .chatPanel {
     bottom: 0.65rem;
     box-shadow: 0 -16px 40px rgb(0 0 0 / 42%);
-    height: min(22rem, 42vh);
+    height: min(16rem, 36vh);
     margin-block: 0;
-    max-height: none;
+    max-height: min(16rem, 36vh);
     order: 2;
     position: sticky;
     top: auto;
-    z-index: 8;
+    z-index: 3;
   }
 
   .slots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .candidatesGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -752,6 +1089,10 @@
 
 @media (max-width: 560px) {
   .slots {
+    grid-template-columns: 1fr;
+  }
+
+  .candidatesGrid {
     grid-template-columns: 1fr;
   }
 
@@ -769,10 +1110,16 @@
   }
 
   .chatForm {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .chatForm button {
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .candidatesRefreshSpinning {
+    animation: none;
   }
 }

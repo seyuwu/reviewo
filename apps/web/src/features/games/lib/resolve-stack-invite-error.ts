@@ -3,6 +3,7 @@ import type { TranslateFn } from "@reviewo/i18n";
 import { isApiError, readApiErrorMessage } from "../../../lib/api/read-api-error";
 
 const STACK_ERROR_MESSAGES: Record<string, string> = {
+  "Captain needs a Dota profile to recruit": "dota.team.recruitNeedProfile",
   "Invite already pending": "games.search.error.invitePending",
   "Pick a role to apply for": "games.search.error.pickRole",
   "Player is no longer recruiting for a party": "games.search.error.recruitEnded",
@@ -62,6 +63,7 @@ export function resolveInviteDecisionError(error: unknown, t: TranslateFn): stri
 
   if (
     apiMessage === "Only the captain can accept this application" ||
+    apiMessage === "Only the captain or a sub-captain can accept this application" ||
     apiMessage === "Only the invitee can accept this invite"
   ) {
     return t("games.search.error.inviteForbidden");

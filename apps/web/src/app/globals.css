@@ -98,6 +98,78 @@ body {
   background: rgb(11 14 20 / 82%);
   border-bottom-color: rgb(147 130 255 / 14%);
   box-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 10px 36px rgb(0 0 0 / 28%);
+  transition:
+    background-color 650ms ease,
+    border-color 650ms ease,
+    box-shadow 650ms ease;
+}
+
+[data-product="games"] .app-chrome--cinematic-hidden {
+  background: transparent;
+  border-bottom-color: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+[data-product="games"] .app-chrome-inner--games > * {
+  transition:
+    filter 520ms cubic-bezier(0.18, 0.8, 0.22, 1),
+    opacity 520ms cubic-bezier(0.18, 0.8, 0.22, 1);
+}
+
+[data-product="games"] .app-chrome--cinematic-hidden .app-chrome-inner--games > * {
+  filter: blur(7px);
+  opacity: 0;
+}
+
+[data-product="games"] .app-chrome--cinematic-hidden .app-chrome-main {
+  filter: none;
+  opacity: 1;
+}
+
+[data-product="games"] .app-chrome--cinematic-hidden .app-chrome-tools {
+  filter: none;
+  opacity: 1;
+}
+
+[data-product="games"] .app-chrome--cinematic-revealed .app-chrome-brand {
+  transition-delay: 220ms;
+}
+
+[data-product="games"] .app-chrome-tools > * {
+  transition:
+    filter 520ms cubic-bezier(0.18, 0.8, 0.22, 1),
+    opacity 520ms cubic-bezier(0.18, 0.8, 0.22, 1),
+    transform 520ms cubic-bezier(0.18, 0.8, 0.22, 1);
+}
+
+[data-product="games"] .app-chrome--cinematic-hidden .app-chrome-tools > * {
+  filter: blur(6px);
+  opacity: 0;
+  transform: translateY(-0.45rem);
+}
+
+[data-product="games"]
+  .app-chrome--cinematic-hidden
+  .app-chrome-tools
+  > .app-chrome-auth {
+  transform: none;
+}
+
+[data-product="games"] .app-chrome--cinematic-revealed .app-chrome-tools > :first-child {
+  transition-delay: 900ms;
+}
+
+[data-product="games"] .app-chrome--cinematic-revealed .app-chrome-tools > :nth-child(2) {
+  transition-delay: 1100ms;
+}
+
+[data-product="games"] .app-chrome--cinematic-revealed .app-chrome-tools > :nth-child(3) {
+  transition-delay: 1250ms;
+}
+
+[data-product="games"] .app-chrome--cinematic-revealed .app-chrome-tools > .app-chrome-auth {
+  transition-delay: 40ms;
 }
 
 [data-product="games"] .app-chrome-nav-link {
@@ -127,6 +199,140 @@ body {
   left: 0.55rem;
   position: absolute;
   right: 0.55rem;
+}
+
+[data-product="games"] .app-chrome-nav-link--cinematic-target {
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-product="games"] .app-chrome-nav > * {
+  transition:
+    filter 520ms cubic-bezier(0.18, 0.8, 0.22, 1),
+    opacity 520ms cubic-bezier(0.18, 0.8, 0.22, 1),
+    transform 520ms cubic-bezier(0.18, 0.8, 0.22, 1);
+}
+
+[data-product="games"] .app-chrome-nav--cinematic-hidden > * {
+  filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.45rem) scale(0.97);
+}
+
+[data-product="games"] .app-chrome-nav--cinematic-hidden > [data-cinematic-profile-target] {
+  transform: none;
+}
+
+[data-product="games"] .app-chrome-nav--cinematic-revealed > :first-child {
+  transition-delay: 420ms;
+}
+
+[data-product="games"] .app-chrome-nav--cinematic-revealed > :nth-child(2) {
+  transition-delay: 580ms;
+}
+
+[data-product="games"] .app-chrome-nav--cinematic-revealed > :nth-child(3) {
+  transition-delay: 740ms;
+}
+
+[data-product="games"] .app-chrome-nav--cinematic-revealed > :nth-child(4) {
+  transition-delay: 900ms;
+}
+
+[data-product="games"] .app-chrome-nav--cinematic-revealed > :nth-child(5) {
+  transition-delay: 1060ms;
+}
+
+[data-product="games"]
+  .app-chrome-nav--cinematic-revealed
+  > [data-cinematic-profile-target] {
+  transition-delay: 80ms;
+}
+
+.app-chrome-nav-profile-slot {
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-product="games"] .app-chrome-nav-link--cinematic-arrived {
+  animation: games-profile-arrived 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  position: relative;
+}
+
+.app-chrome-nav-created-badge {
+  animation: games-created-badge 1.4s ease both;
+  background: var(--color-accent);
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgb(93 63 211 / 30%);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  left: 50%;
+  line-height: 1;
+  padding: 0.3rem 0.45rem;
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  transform: translateX(-50%);
+  z-index: 80;
+}
+
+@keyframes games-profile-arrived {
+  0% {
+    transform: scale(1);
+  }
+
+  55% {
+    transform: scale(1.01);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes games-created-badge {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -0.2rem);
+  }
+
+  18%,
+  72% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -0.15rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-product="games"] .app-chrome,
+  [data-product="games"] .app-chrome-inner--games > *,
+  [data-product="games"] .app-chrome-tools > * {
+    transition-duration: 1ms;
+    transition-delay: 0ms !important;
+  }
+
+  [data-product="games"] .app-chrome-nav > * {
+    transition-duration: 1ms;
+    transition-delay: 0ms !important;
+  }
+
+  [data-product="games"] .app-chrome-nav-link--cinematic-arrived {
+    animation: none;
+  }
+
+  .app-chrome-nav-created-badge {
+    animation: none;
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 [data-product="games"] .product-brand-switcher-trigger {
@@ -881,6 +1087,143 @@ button:disabled {
   background: var(--color-primary-soft);
   color: var(--color-text-muted);
   font-weight: 650;
+}
+
+.games-rosters-menu {
+  position: relative;
+}
+
+.games-rosters-menu-portal {
+  display: contents;
+}
+
+.games-rosters-menu-panel-wrap {
+  left: 0;
+  max-width: min(18rem, calc(100vw - 1.25rem));
+  min-width: max(100%, 11.5rem);
+  opacity: 0;
+  padding: 0.35rem 0 0;
+  pointer-events: none;
+  position: fixed;
+  top: 100%;
+  transform: translateY(-4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 140ms ease;
+  visibility: hidden;
+  z-index: 40;
+}
+
+.games-rosters-menu.is-open .games-rosters-menu-panel-wrap,
+.games-rosters-menu-panel-wrap.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.games-rosters-menu-panel {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 28px rgb(15 23 42 / 12%);
+  display: grid;
+  gap: 0.2rem;
+  overflow: hidden;
+  padding: 0.35rem;
+}
+
+.games-rosters-menu-list {
+  display: grid;
+  gap: 0.1rem;
+  list-style: none;
+  margin: 0;
+  max-height: 14rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0;
+}
+
+.games-rosters-menu-more {
+  border-radius: 0.45rem;
+  color: var(--color-text-muted);
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 650;
+  padding: 0.35rem 0.55rem;
+  text-decoration: none;
+}
+
+.games-rosters-menu-more:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.games-rosters-menu-item {
+  align-items: center;
+  border-radius: 0.5rem;
+  color: var(--color-primary);
+  display: flex;
+  gap: 0.45rem;
+  justify-content: space-between;
+  padding: 0.45rem 0.6rem;
+  text-decoration: none;
+}
+
+.games-rosters-menu-item:hover {
+  background: var(--color-primary-soft);
+}
+
+.games-rosters-menu-item-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.games-rosters-menu-item-kind {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.games-rosters-menu-empty {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+}
+
+.games-rosters-menu-footer {
+  border-top: 1px solid var(--color-card-border);
+  display: grid;
+  gap: 0.05rem;
+  margin-top: 0.15rem;
+  padding-top: 0.25rem;
+}
+
+.games-rosters-menu-footer-link {
+  border-radius: 0.45rem;
+  color: var(--color-text-muted);
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 650;
+  padding: 0.4rem 0.55rem;
+  text-decoration: none;
+}
+
+.games-rosters-menu-footer-link:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 #home-search {

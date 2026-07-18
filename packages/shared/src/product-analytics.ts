@@ -30,7 +30,11 @@ export const ANALYTICS_CTA_KEYS = [
   "games_waitlist_telegram_join",
   "games_waitlist_invite_click",
   "games_waitlist_invite_visit",
-  "games_waitlist_create_profile_click"
+  "games_waitlist_create_profile_click",
+  "games_search_start_join",
+  "games_search_start_recruit",
+  "games_search_stop",
+  "games_party_create_from_search"
 ] as const;
 
 export type AnalyticsCtaKey = (typeof ANALYTICS_CTA_KEYS)[number];

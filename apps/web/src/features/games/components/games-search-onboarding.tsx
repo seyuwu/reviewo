@@ -3,113 +3,87 @@
 import { useCallback, useEffect, useLayoutEffect, useState, type RefObject } from "react";
 
 import { useTranslation } from "../../i18n/locale-provider";
-import type { IntentMode } from "./games-search-onboarding-types";
 import styles from "./games-search-onboarding.module.css";
 
-export const GAMES_SEARCH_COACH_SEEN_KEY = "opinia.gamesSearchCoachSeen";
+export const GAMES_SEARCH_COACH_SEEN_KEY = "opinia.gamesSearchCoachSeen.v2";
 
-type CoachStep = "intent" | "controls" | "feed" | "rail";
-
-interface SpotlightRect {
-  height: number;
+interface CoachPosition {
   left: number;
+  side: "below" | "left" | "right";
   top: number;
-  width: number;
 }
 
 interface GamesSearchOnboardingProps {
-  controlsRef: RefObject<HTMLElement | null>;
-  feedRef: RefObject<HTMLDivElement | null>;
-  intentMode: IntentMode;
-  onIntentPick: (mode: IntentMode) => void;
-  open: boolean;
-  railRef: RefObject<HTMLElement | null>;
   onClose: () => void;
+  open: boolean;
+  targetRef: RefObject<HTMLDivElement | null>;
 }
 
-function readSpotlight(el: HTMLElement | null): SpotlightRect | null {
-  if (!el) {
-    return null;
-  }
-
-  const rect = el.getBoundingClientRect();
-
-  if (rect.width < 8 || rect.height < 8) {
-    return null;
-  }
-
-  const pad = 8;
-
-  return {
-    height: rect.height + pad * 2,
-    left: rect.left - pad,
-    top: rect.top - pad,
-    width: rect.width + pad * 2
-  };
+export function gamesSearchCoachSeenKey(userId: string): string {
+  return `${GAMES_SEARCH_COACH_SEEN_KEY}:${userId}`;
 }
 
 export function GamesSearchOnboarding({
-  controlsRef,
-  feedRef,
-  intentMode,
   onClose,
-  onIntentPick,
   open,
-  railRef
+  targetRef
 }: GamesSearchOnboardingProps) {
   const t = useTranslation();
-  const [step, setStep] = useState<CoachStep>("intent");
-  const [spotlight, setSpotlight] = useState<SpotlightRect | null>(null);
+  const [position, setPosition] = useState<CoachPosition | null>(null);
 
-  const finish = useCallback(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(GAMES_SEARCH_COACH_SEEN_KEY, "1");
-    }
-
-    onClose();
-  }, [onClose]);
-
-  const activeTarget =
-    step === "controls" ? controlsRef : step === "feed" ? feedRef : step === "rail" ? railRef : null;
-
-  const syncSpotlight = useCallback(() => {
-    if (!open || !activeTarget) {
-      setSpotlight(null);
+  const syncPosition = useCallback(() => {
+    const target = targetRef.current;
+    if (!open || !target) {
+      setPosition(null);
       return;
     }
 
-    setSpotlight(readSpotlight(activeTarget.current));
-  }, [activeTarget, open]);
+    const rect = target.getBoundingClientRect();
+    const cardWidth = Math.min(286, window.innerWidth - 24);
+    const gap = 14;
+
+    if (rect.right + gap + cardWidth <= window.innerWidth - 12) {
+      setPosition({
+        left: rect.right + gap,
+        side: "right",
+        top: Math.max(12, rect.top + 8)
+      });
+      return;
+    }
+
+    if (rect.left - gap - cardWidth >= 12) {
+      setPosition({
+        left: rect.left - gap - cardWidth,
+        side: "left",
+        top: Math.max(12, rect.top + 8)
+      });
+      return;
+    }
+
+    setPosition({
+      left: Math.max(12, Math.min(rect.left, window.innerWidth - cardWidth - 12)),
+      side: "below",
+      top: Math.min(window.innerHeight - 170, rect.bottom + gap)
+    });
+  }, [open, targetRef]);
 
   useLayoutEffect(() => {
-    syncSpotlight();
-
-    if (step !== "intent" && activeTarget?.current) {
-      activeTarget.current.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-      window.setTimeout(syncSpotlight, 320);
-    }
-  }, [activeTarget, step, syncSpotlight]);
+    syncPosition();
+  }, [syncPosition]);
 
   useEffect(() => {
-    if (!open || step === "intent") {
+    if (!open) {
       return;
     }
 
-    function handleResize() {
-      syncSpotlight();
-    }
-
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("scroll", handleResize, true);
-
-    const intervalId = window.setInterval(syncSpotlight, 500);
+    window.addEventListener("resize", syncPosition);
+    window.addEventListener("scroll", syncPosition, true);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("scroll", handleResize, true);
-      window.clearInterval(intervalId);
+      window.removeEventListener("resize", syncPosition);
+      window.removeEventListener("scroll", syncPosition, true);
     };
-  }, [open, step, syncSpotlight]);
+  }, [open, syncPosition]);
 
   useEffect(() => {
     if (!open) {
@@ -118,128 +92,49 @@ export function GamesSearchOnboarding({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        finish();
+        onClose();
       }
     }
 
     document.addEventListener("keydown", handleKeyDown);
 
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [finish, open]);
+  }, [onClose, open]);
 
-  if (!open) {
+  if (!open || !position) {
     return null;
   }
 
+  const sideClass =
+    position.side === "right"
+      ? styles.cardRight
+      : position.side === "left"
+        ? styles.cardLeft
+        : styles.cardBelow;
+
   return (
-    <div className={styles.root} role="dialog" aria-modal="true" aria-label={t("games.search.coach.title")}>
-      {step === "intent" || !spotlight ? <div className={styles.dim} /> : null}
-
-      {spotlight ? (
-        <div
-          className={styles.spotlight}
-          style={{
-            height: spotlight.height,
-            left: spotlight.left,
-            top: spotlight.top,
-            width: spotlight.width
-          }}
-        />
-      ) : null}
-
-      {step === "intent" ? (
-        <div className={styles.centerCard}>
-          <p className={styles.eyebrow}>{t("games.search.coach.eyebrow")}</p>
-          <h2 className={styles.title}>{t("games.search.coach.intentTitle")}</h2>
-          <p className={styles.lead}>{t("games.search.coach.intentLead")}</p>
-          <div className={styles.choiceRow}>
-            <button
-              className={styles.choice}
-              onClick={() => {
-                onIntentPick("recruit");
-                setStep("controls");
-              }}
-              type="button"
-            >
-              <strong>{t("games.search.coach.choiceRecruit")}</strong>
-              <span>{t("games.search.coach.choiceRecruitHint")}</span>
-            </button>
-            <button
-              className={styles.choice}
-              onClick={() => {
-                onIntentPick("join");
-                setStep("controls");
-              }}
-              type="button"
-            >
-              <strong>{t("games.search.coach.choiceJoin")}</strong>
-              <span>{t("games.search.coach.choiceJoinHint")}</span>
-            </button>
-          </div>
-          <button className={styles.skip} onClick={finish} type="button">
-            {t("games.search.coach.skip")}
-          </button>
-        </div>
-      ) : (
-        <div
-          className={`${styles.tipCard} ${
-            step === "controls" ? styles.tipBesideLeft : step === "rail" ? styles.tipBesideRight : styles.tipCenter
-          }`}
-          style={
-            spotlight
-              ? step === "controls"
-                ? { top: Math.max(12, spotlight.top), left: Math.min(window.innerWidth - 320, spotlight.left + spotlight.width + 16) }
-                : step === "rail"
-                  ? {
-                      top: Math.max(12, spotlight.top),
-                      left: Math.max(12, spotlight.left - 320)
-                    }
-                  : {
-                      top: Math.min(window.innerHeight - 200, spotlight.top + spotlight.height + 16),
-                      left: "50%",
-                      transform: "translateX(-50%)"
-                    }
-              : undefined
-          }
+    <div className={styles.root}>
+      <aside
+        aria-label={t("games.search.coach.title")}
+        className={`${styles.card} ${sideClass}`}
+        role="dialog"
+        style={{ left: position.left, top: position.top }}
+      >
+        <button
+          aria-label={t("common.close")}
+          className={styles.close}
+          onClick={onClose}
+          type="button"
         >
-          <p className={styles.eyebrow}>
-            {step === "controls"
-              ? t("games.search.coach.stepControlsEyebrow")
-              : step === "feed"
-                ? t("games.search.coach.stepFeedEyebrow")
-                : t("games.search.coach.stepRailEyebrow")}
-          </p>
-          <p className={styles.tipBody}>
-            {step === "controls"
-              ? t("games.search.coach.stepControlsBody")
-              : step === "feed"
-                ? intentMode === "join"
-                  ? t("games.search.coach.stepFeedJoin")
-                  : t("games.search.coach.stepFeedRecruit")
-                : t("games.search.coach.stepRailBody")}
-          </p>
-          <div className={styles.tipActions}>
-            <button className={styles.skip} onClick={finish} type="button">
-              {t("games.search.coach.skip")}
-            </button>
-            {step === "controls" ? (
-              <button className="button-primary" onClick={() => setStep("feed")} type="button">
-                {t("games.search.coach.next")}
-              </button>
-            ) : null}
-            {step === "feed" ? (
-              <button className="button-primary" onClick={() => setStep("rail")} type="button">
-                {t("games.search.coach.next")}
-              </button>
-            ) : null}
-            {step === "rail" ? (
-              <button className="button-primary" onClick={finish} type="button">
-                {t("games.search.coach.done")}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      )}
+          ×
+        </button>
+        <p className={styles.eyebrow}>{t("games.search.coach.quickStart")}</p>
+        <h2 className={styles.title}>{t("games.search.coach.intentTitle")}</h2>
+        <p className={styles.lead}>{t("games.search.coach.intentQuickLead")}</p>
+        <button className={styles.done} onClick={onClose} type="button">
+          {t("games.search.coach.done")}
+        </button>
+      </aside>
     </div>
   );
 }

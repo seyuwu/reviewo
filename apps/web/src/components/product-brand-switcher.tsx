@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent
+} from "react";
 
 import { useTranslation } from "../features/i18n/locale-provider";
 import {
@@ -19,6 +26,7 @@ interface ProductBrandSwitcherProps {
 
 export function ProductBrandSwitcher({ mode }: ProductBrandSwitcherProps) {
   const t = useTranslation();
+  const pathname = usePathname();
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -171,10 +179,20 @@ export function ProductBrandSwitcher({ mode }: ProductBrandSwitcherProps) {
     }
   }
 
-  function handleBrandHomeClick() {
+  function handleBrandHomeClick(event: ReactMouseEvent<HTMLAnchorElement>) {
     markSeen();
+    suppressUntilLeaveRef.current = true;
     setOpen(false);
     clearCloseTimer();
+
+    if (peekTimerRef.current !== null) {
+      window.clearTimeout(peekTimerRef.current);
+      peekTimerRef.current = null;
+    }
+
+    if (pathname === homeHref) {
+      event.preventDefault();
+    }
   }
 
   const brandLabel = mode === "games" ? t("web.vertical.gamesBrand") : t("brand.name");

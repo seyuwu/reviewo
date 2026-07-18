@@ -2,153 +2,169 @@
   inset: 0;
   pointer-events: none;
   position: fixed;
-  z-index: 60;
+  z-index: 70;
 }
 
-.dim {
-  background: rgb(4 6 12 / 58%);
-  inset: 0;
-  pointer-events: auto;
-  position: absolute;
-}
-
-.spotlight {
-  border: 1px solid rgb(167 139 250 / 55%);
+.card {
+  animation: coach-card-enter 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  backdrop-filter: blur(18px);
+  background:
+    radial-gradient(circle at 88% 0%, rgb(109 74 255 / 24%), transparent 10rem),
+    var(--games-glass-strong, rgb(22 26 38 / 95%));
+  border: 1px solid rgb(167 139 250 / 34%);
   border-radius: 1rem;
   box-shadow:
-    0 0 0 9999px rgb(4 6 12 / 58%),
-    0 0 0 1px rgb(167 139 250 / 25%),
-    0 12px 40px rgb(109 74 255 / 25%);
-  pointer-events: none;
-  position: fixed;
-  z-index: 61;
-}
-
-.centerCard,
-.tipCard {
-  backdrop-filter: blur(16px);
-  background: var(--games-glass-strong, rgb(22 26 38 / 94%));
-  border: 1px solid var(--color-card-border);
-  border-radius: 1.1rem;
-  box-shadow: 0 20px 50px rgb(0 0 0 / 45%);
+    0 1px 0 rgb(255 255 255 / 7%) inset,
+    0 18px 48px rgb(0 0 0 / 42%),
+    0 0 36px rgb(109 74 255 / 12%);
   display: grid;
-  gap: 0.75rem;
-  max-width: min(28rem, calc(100vw - 2rem));
-  padding: 1.15rem 1.2rem;
+  gap: 0.5rem;
+  padding: 0.9rem 2.5rem 0.9rem 1rem;
   pointer-events: auto;
   position: fixed;
-  z-index: 62;
+  width: min(17.875rem, calc(100vw - 1.5rem));
 }
 
-.centerCard {
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(32rem, calc(100vw - 2rem));
+.card::before {
+  background: var(--games-glass-strong, rgb(22 26 38 / 95%));
+  border-color: rgb(167 139 250 / 34%);
+  content: "";
+  height: 0.7rem;
+  position: absolute;
+  transform: rotate(45deg);
+  width: 0.7rem;
 }
 
-.tipBesideLeft,
-.tipBesideRight,
-.tipCenter {
-  width: min(18.5rem, calc(100vw - 1.5rem));
+.cardRight::before {
+  border-bottom: 1px solid;
+  border-left: 1px solid;
+  left: -0.4rem;
+  top: 1.5rem;
+}
+
+.cardLeft::before {
+  border-right: 1px solid;
+  border-top: 1px solid;
+  right: -0.4rem;
+  top: 1.5rem;
+}
+
+.cardBelow::before {
+  border-left: 1px solid;
+  border-top: 1px solid;
+  left: 1.5rem;
+  top: -0.4rem;
+}
+
+.close {
+  align-items: center;
+  appearance: none;
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 1rem;
+  height: 1.7rem;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 0.65rem;
+  top: 0.65rem;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+  width: 1.7rem;
+}
+
+.close:hover,
+.close:focus-visible {
+  background: rgb(255 255 255 / 10%);
+  color: var(--color-text);
 }
 
 .eyebrow {
-  color: var(--color-accent-strong, #a78bfa);
-  font-size: 0.7rem;
+  color: #a78bfa;
+  font-size: 0.65rem;
   font-weight: 800;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
   margin: 0;
   text-transform: uppercase;
 }
 
 .title {
-  font-size: 1.35rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
   margin: 0;
 }
 
-.lead,
-.tipBody {
+.lead {
   color: var(--color-text-muted);
-  font-size: 0.9rem;
+  font-size: 0.78rem;
   line-height: 1.45;
   margin: 0;
 }
 
-.choiceRow {
-  display: grid;
-  gap: 0.55rem;
-}
-
-.choice {
+.done {
   appearance: none;
-  background: rgb(255 255 255 / 4%);
-  border: 1px solid rgb(147 130 255 / 28%);
-  border-radius: 0.85rem;
-  color: inherit;
+  background: rgb(109 74 255 / 16%);
+  border: 1px solid rgb(167 139 250 / 30%);
+  border-radius: 0.6rem;
+  color: #ddd6fe;
   cursor: pointer;
-  display: grid;
-  gap: 0.2rem;
-  justify-items: start;
-  padding: 0.8rem 0.9rem;
-  text-align: left;
+  font-size: 0.74rem;
+  font-weight: 750;
+  justify-self: start;
+  margin-top: 0.15rem;
+  min-height: 2rem;
+  padding: 0.35rem 0.7rem;
   transition:
-    background-color 140ms ease,
-    border-color 140ms ease;
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
-.choice:hover,
-.choice:focus-visible {
-  background: rgb(109 74 255 / 18%);
-  border-color: rgb(167 139 250 / 48%);
-}
-
-.choice strong {
-  font-size: 0.95rem;
-}
-
-.choice span {
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
-  line-height: 1.35;
-}
-
-.tipActions {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: flex-end;
-}
-
-.skip {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 650;
-  padding: 0.35rem 0.45rem;
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-}
-
-.skip:hover {
-  color: var(--color-text);
+.done:hover,
+.done:focus-visible {
+  background: rgb(109 74 255 / 26%);
+  transform: translateY(-1px);
 }
 
 @media (max-width: 760px) {
-  .tipBesideLeft,
-  .tipBesideRight,
-  .tipCenter {
-    left: 50% !important;
-    right: auto !important;
+  .card {
+    bottom: 0.75rem;
+    left: 0.75rem !important;
+    right: 0.75rem;
     top: auto !important;
-    bottom: 1rem;
-    transform: translateX(-50%);
-    width: min(22rem, calc(100vw - 1.5rem));
+    transform-origin: bottom center;
+    width: auto;
+  }
+
+  .card::before {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation-duration: 1ms;
+  }
+
+  .done {
+    transition-duration: 1ms;
+  }
+}
+
+@keyframes coach-card-enter {
+  from {
+    filter: blur(5px);
+    opacity: 0;
+    transform: translateY(0.65rem) scale(0.96);
+  }
+
+  to {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }

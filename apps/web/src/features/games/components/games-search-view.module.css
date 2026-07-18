@@ -1,7 +1,37 @@
 .page {
   display: grid;
   gap: 1.1rem;
+  isolation: isolate;
+  min-height: calc(100dvh - 6.25rem);
+  position: relative;
   width: 100%;
+}
+
+.page::before {
+  animation: search-ambient-enter 900ms ease-out both;
+  background:
+    linear-gradient(180deg, rgb(5 7 15 / 22%), rgb(5 7 15 / 46%)),
+    radial-gradient(ellipse at center, transparent 22%, rgb(3 5 12 / 34%) 92%),
+    url("/games/search-ambient-bg.webp") center center / cover no-repeat;
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: -2;
+}
+
+.page::after {
+  animation: search-ambient-breathe 11s ease-in-out infinite alternate;
+  background: radial-gradient(
+    ellipse at 50% 88%,
+    rgb(109 74 255 / 17%),
+    transparent 48%
+  );
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: -1;
 }
 
 .header {
@@ -9,6 +39,13 @@
   display: grid;
   gap: 1rem;
   grid-template-columns: minmax(0, 1fr) minmax(14rem, 1.2fr);
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease;
+}
+
+.headerCinematicHidden {
+  display: none;
 }
 
 .headerCopy {
@@ -36,6 +73,47 @@
   display: grid;
   gap: 1rem;
   grid-template-columns: minmax(16rem, 19rem) minmax(0, 1fr) minmax(16rem, 19rem);
+}
+
+.searchStage {
+  min-height: clamp(34rem, 72vh, 48rem);
+  position: relative;
+}
+
+.searchStageCinematic {
+  min-height: max(34rem, calc(100dvh - 7rem));
+}
+
+.layoutCinematic {
+  min-height: clamp(34rem, 72vh, 48rem);
+  pointer-events: none;
+}
+
+.layoutCinematic > .sidebar:first-child,
+.layoutCinematic > .main,
+.layoutCinematic > .sidebar:last-child {
+  filter: blur(8px);
+  opacity: 0;
+  transform: translateY(12px) scale(0.97);
+  transform-origin: top center;
+  transition:
+    filter 560ms cubic-bezier(0.18, 0.8, 0.22, 1),
+    opacity 560ms cubic-bezier(0.18, 0.8, 0.22, 1),
+    transform 560ms cubic-bezier(0.18, 0.8, 0.22, 1);
+}
+
+.layoutCinematic > .sidebar:first-child {
+  filter: none;
+  transform: none;
+  transition: opacity 420ms cubic-bezier(0.18, 0.8, 0.22, 1);
+}
+
+.layoutCinematic.layoutShowLeft > .sidebar:first-child,
+.layoutCinematic.layoutShowFeed > .main,
+.layoutCinematic.layoutShowRail > .sidebar:last-child {
+  filter: blur(0);
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 .sidebar,
@@ -164,18 +242,53 @@
   margin: 0;
 }
 
-.recruitLine {
-  color: #bbf7d0;
-  font-size: 0.8rem;
-  font-weight: 650;
-  line-height: 1.35;
-  margin: 0;
-}
-
 .controlDivider {
   background: var(--color-card-border);
   height: 1px;
   margin: 0.05rem 0;
+}
+
+.searchProfileSummary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.75rem;
+}
+
+.searchProfileMmr {
+  align-items: baseline;
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.searchProfileMmr span {
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.searchProfileMmr strong {
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.searchProfileRoles {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.searchProfileRoles span {
+  align-items: center;
+  background: rgb(109 74 255 / 18%);
+  border: 1px solid rgb(109 74 255 / 42%);
+  border-radius: 0.45rem;
+  color: #ddd6fe;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 750;
+  min-height: 1.55rem;
+  padding: 0.2rem 0.45rem;
 }
 
 .modeList {
@@ -221,157 +334,33 @@
   box-shadow: 0 0 0 1px rgb(109 74 255 / 18%), 0 10px 28px rgb(93 63 211 / 18%);
 }
 
-.modeCard:disabled,
-.modeCardLocked {
+.modeCardActive span {
+  color: #c4b5fd;
+}
+
+.modeCardActive:hover {
+  background: rgb(248 113 113 / 10%);
+  border-color: rgb(248 113 113 / 40%);
+  box-shadow: 0 0 0 1px rgb(248 113 113 / 10%);
+}
+
+.modeCard:disabled {
   cursor: not-allowed;
   opacity: 0.58;
 }
 
-.modeCard:disabled:hover,
-.modeCardLocked:hover {
+.modeCard:disabled:hover {
   background: rgb(255 255 255 / 3.5%);
   border-color: var(--color-card-border);
 }
 
-.modeCardActive:disabled,
-.modeCardActive.modeCardLocked {
+.modeCardActive:disabled {
   opacity: 0.85;
 }
 
-.modeCardActive:disabled:hover,
-.modeCardActive.modeCardLocked:hover {
+.modeCardActive:disabled:hover {
   background: rgb(109 74 255 / 14%);
   border-color: rgb(109 74 255 / 55%);
-}
-
-.statusPill {
-  background: rgb(255 255 255 / 6%);
-  border-radius: 999px;
-  color: var(--color-text-muted);
-  font-size: 0.72rem;
-  font-weight: 750;
-  letter-spacing: 0.02em;
-  padding: 0.28rem 0.55rem;
-}
-
-.statusPillOn {
-  background: var(--color-success-soft, rgb(74 222 128 / 14%));
-  color: var(--color-success, #4ade80);
-}
-
-.stepper {
-  align-items: center;
-  display: inline-flex;
-  gap: 0.65rem;
-}
-
-.stepperBtn {
-  align-items: center;
-  background: rgb(255 255 255 / 6%);
-  border: 1px solid var(--color-card-border);
-  border-radius: 0.7rem;
-  color: inherit;
-  display: inline-flex;
-  font-size: 1.15rem;
-  font-weight: 700;
-  height: 2.35rem;
-  justify-content: center;
-  width: 2.35rem;
-}
-
-.stepperBtn:disabled {
-  opacity: 0.4;
-}
-
-.stepperValue {
-  font-size: 1.35rem;
-  font-weight: 800;
-  min-width: 1.5rem;
-  text-align: center;
-}
-
-.radioList {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.radioListLocked {
-  opacity: 0.62;
-  pointer-events: none;
-}
-
-.radioItem {
-  align-items: center;
-  background: rgb(255 255 255 / 3%);
-  border: 1px solid transparent;
-  border-radius: 0.75rem;
-  cursor: pointer;
-  display: flex;
-  gap: 0.55rem;
-  padding: 0.55rem 0.65rem;
-}
-
-.radioItem:has(input:checked) {
-  background: rgb(109 74 255 / 12%);
-  border-color: rgb(109 74 255 / 35%);
-}
-
-.radioItem input {
-  accent-color: var(--color-accent);
-}
-
-.radioItem span {
-  font-size: 0.86rem;
-  font-weight: 650;
-}
-
-.slots {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.slot {
-  align-items: center;
-  background: rgb(255 255 255 / 4%);
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 0.55rem;
-  color: rgb(180 188 204 / 55%);
-  display: inline-flex;
-  font-size: 0.72rem;
-  font-weight: 800;
-  height: 1.85rem;
-  justify-content: center;
-  line-height: 1;
-  min-width: 1.85rem;
-  padding: 0 0.2rem;
-}
-
-.slotFilled {
-  background: rgb(109 74 255 / 28%);
-  border-color: rgb(167 139 250 / 55%);
-  color: #ede9fe;
-}
-
-.slotNeeded {
-  background: rgb(74 222 128 / 14%);
-  border-color: rgb(74 222 128 / 48%);
-  box-shadow: inset 0 0 0 1px rgb(74 222 128 / 12%);
-  color: #bbf7d0;
-}
-
-.slotIdle {
-  opacity: 0.45;
-}
-
-.slotsMeta {
-  color: var(--color-text-muted);
-  flex: 1 1 100%;
-  font-size: 0.78rem;
-  font-weight: 650;
-  line-height: 1.35;
-  margin-top: 0.1rem;
 }
 
 .promoPanel {
@@ -457,6 +446,11 @@
   list-style: none;
   overflow: visible;
   padding: 1rem 1.05rem;
+  position: relative;
+}
+
+.cardInviteOpen {
+  z-index: 30;
 }
 
 .cardTop {
@@ -739,20 +733,23 @@
 }
 
 .invitePopover {
-  background: rgb(18 22 32 / 96%);
+  background: rgb(18 22 32 / 98%);
   border: 1px solid var(--color-card-border);
   border-radius: 0.85rem;
   box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
   display: grid;
   gap: 0.25rem;
   margin-top: 0.4rem;
+  max-height: min(18rem, 50vh);
   max-width: min(16rem, 78vw);
   min-width: 11.5rem;
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 0.45rem;
   position: absolute;
   right: 0;
   top: 100%;
-  z-index: 5;
+  z-index: 40;
 }
 
 .invitePopoverTitle {
@@ -1048,6 +1045,11 @@
     grid-template-columns: 1fr;
   }
 
+  .searchStage,
+  .layoutCinematic {
+    min-height: 39rem;
+  }
+
   .layout > .sidebar:last-of-type {
     grid-template-columns: 1fr;
   }
@@ -1084,5 +1086,45 @@
   .badge {
     grid-column: 2;
     justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page::before,
+  .page::after {
+    animation: none;
+  }
+
+  .header,
+  .layoutCinematic > .sidebar:first-child,
+  .layoutCinematic > .main,
+  .layoutCinematic > .sidebar:last-child {
+    transition-duration: 1ms;
+  }
+}
+
+@keyframes search-ambient-enter {
+  from {
+    filter: blur(8px);
+    opacity: 0;
+    transform: scale(1.025);
+  }
+
+  to {
+    filter: blur(0);
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes search-ambient-breathe {
+  from {
+    opacity: 0.55;
+    transform: translateY(1.5%) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(-1%) scale(1.04);
   }
 }
