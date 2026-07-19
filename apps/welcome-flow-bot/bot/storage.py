@@ -204,15 +204,27 @@ class WelcomeFlowStorage:
     ) -> None:
         connection = self._get_connection()
         now = current_timestamp()
-        meta_json = json.dumps(meta, ensure_ascii=False) if meta else None
+        payload = dict(meta) if meta else {}
 
         with self._lock:
+            user_id = telegram_user_id
+            if user_id is not None:
+                exists = connection.execute(
+                    "SELECT 1 FROM users WHERE telegram_user_id = ? LIMIT 1",
+                    (user_id,),
+                ).fetchone()
+                if exists is None:
+                    # Avoid FOREIGN KEY failure when event races ahead of upsert.
+                    payload.setdefault("orphan_telegram_user_id", user_id)
+                    user_id = None
+
+            meta_json = json.dumps(payload, ensure_ascii=False) if payload else None
             connection.execute(
                 """
                 INSERT INTO events (telegram_user_id, event_type, created_at, meta)
                 VALUES (?, ?, ?, ?)
                 """,
-                (telegram_user_id, event_type, now, meta_json),
+                (user_id, event_type, now, meta_json),
             )
             connection.commit()
 

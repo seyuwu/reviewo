@@ -1,5 +1,6 @@
 export interface CurrentUserProfile {
   avatarUrl: string | null;
+  discordLinked?: boolean;
   displayName: string;
   email: string | null;
   id: string;

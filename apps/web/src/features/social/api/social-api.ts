@@ -96,6 +96,32 @@ export function renameGameParty(
   });
 }
 
+export function updatePartyJoinMode(
+  slug: string,
+  joinMode: "OPEN" | "CONFIRM",
+  accessToken: string
+): Promise<GameParty> {
+  return apiRequest<GameParty>(`/social/parties/${encodeURIComponent(slug)}/join-mode`, {
+    body: { joinMode },
+    headers: authHeaders(accessToken),
+    method: "PATCH"
+  });
+}
+
+export function extendGameParty(slug: string, accessToken: string): Promise<GameParty> {
+  return apiRequest<GameParty>(`/social/parties/${encodeURIComponent(slug)}/extend`, {
+    headers: authHeaders(accessToken),
+    method: "POST"
+  });
+}
+
+export function extendPartyDiscordVoice(slug: string, accessToken: string): Promise<GameParty> {
+  return apiRequest<GameParty>(`/social/parties/${encodeURIComponent(slug)}/discord-voice/extend`, {
+    headers: authHeaders(accessToken),
+    method: "POST"
+  });
+}
+
 export function fetchGameParty(slug: string, accessToken?: string): Promise<GameParty> {
   return apiRequest<GameParty>(`/social/parties/${encodeURIComponent(slug)}`, {
     ...(accessToken ? { headers: authHeaders(accessToken) } : {})
@@ -228,6 +254,30 @@ export function createPartyJoinToken(
       method: "POST"
     }
   );
+}
+
+export function ensurePartyDiscordVoice(
+  slug: string,
+  accessToken: string,
+  intent: "join" | "share" = "share"
+): Promise<{
+  channelId: string;
+  expiresAt?: string | null;
+  guildId: string;
+  inviteUrl: string;
+  movedToVoice?: boolean;
+}> {
+  const query = intent === "join" ? "?intent=join" : "?intent=share";
+  return apiRequest<{
+    channelId: string;
+    expiresAt?: string | null;
+    guildId: string;
+    inviteUrl: string;
+    movedToVoice?: boolean;
+  }>(`/social/parties/${encodeURIComponent(slug)}/discord-voice${query}`, {
+    headers: authHeaders(accessToken),
+    method: "POST"
+  });
 }
 
 export function joinPartyByToken(token: string, accessToken: string): Promise<GameParty> {

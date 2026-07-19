@@ -1,9 +1,15 @@
-import { HttpStatus, Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable, Logger, OnModuleInit, HttpException } from "@nestjs/common";
+import type { GamePartyInvite, GamePartyMember } from "#prisma/client";
 import {
   DOTA_ATTRIBUTE_KEYS,
   DOTA_PARTY_INVITE_TTL_HOURS,
   DOTA_PARTY_SIZE,
   DOTA_PARTY_VERTICAL,
+  DOTA_TEAM_DISCORD_VOICE_EXTEND_HOURS,
+  DOTA_TEAM_DISCORD_VOICE_MAX_LIFETIME_HOURS,
+  DOTA_TEAM_DISCORD_VOICE_TTL_HOURS,
+  DOTA_TEMP_PARTY_EXTEND_HOURS,
+  DOTA_TEMP_PARTY_MAX_LIFETIME_HOURS,
   DOTA_TEMP_PARTY_TTL_HOURS,
   DOTA_VERTICAL,
   generateDotaPartyName,
@@ -11,12 +17,14 @@ import {
   isDotaPositionRole,
   isDotaRedFlagKey,
   type DotaPositionRole,
+  type GamePartyJoinMode,
   type GamePartyKind
 } from "@reviewo/shared";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
+import { AuthService } from "../../auth/services/auth.service.js";
 import { JwtTokenService } from "../../auth/services/jwt-token.service.js";
 import { EntitiesRepository } from "../../entities/repositories/entities.repository.js";
 import { createSlug } from "../../entities/services/entity-slug.js";
@@ -39,11 +47,14 @@ import {
   PARTY_REALTIME_PUBLISHER,
   type PartyRealtimePublisher
 } from "../party-realtime.types.js";
+import { DiscordVoiceService } from "./discord-voice.service.js";
+import type { PartyDiscordVoiceResponseDto } from "../dto/game-party-response.dto.js";
 
 const INVITE_FLAG_LIMIT = 3;
 const PARTY_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
 const TERMINAL_INVITE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const INVITE_TTL_MS = DOTA_PARTY_INVITE_TTL_HOURS * 60 * 60 * 1000;
+const DISCORD_VOICE_READY_SYSTEM_MESSAGE = "__system__:discord_voice_ready";
 
 
 @Injectable()
@@ -51,6 +62,8 @@ export class GamePartiesService implements OnModuleInit {
   private readonly logger = new Logger(GamePartiesService.name);
 
   constructor(
+    private readonly authService: AuthService,
+    private readonly discordVoiceService: DiscordVoiceService,
     private readonly entityAttributesRepository: EntityAttributesRepository,
     private readonly entityQualityConfirmationsRepository: EntityQualityConfirmationsRepository,
     private readonly entitiesRepository: EntitiesRepository,
@@ -160,6 +173,117 @@ export class GamePartiesService implements OnModuleInit {
     return this.toPartyResponse(updated, currentUser.id);
   }
 
+  async updateJoinMode(
+    slug: string,
+    joinMode: GamePartyJoinMode,
+    currentUser: AuthenticatedUser
+  ): Promise<GamePartyResponseDto> {
+    const party = await this.requireManagerParty(slug, currentUser.id);
+
+    if (party.joinMode === joinMode) {
+      return this.toPartyResponse(party, currentUser.id);
+    }
+
+    await this.gamePartiesRepository.updatePartyJoinMode(party.id, joinMode);
+    const updated = await this.gamePartiesRepository.findById(party.id);
+
+    if (!updated) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Team was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    return this.toPartyResponse(updated, currentUser.id);
+  }
+
+  async extendParty(slug: string, currentUser: AuthenticatedUser): Promise<GamePartyResponseDto> {
+    const party = await this.requireMemberParty(slug, currentUser.id);
+
+    if (party.kind !== "PARTY" || !party.expiresAt) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Only temporary parties can be extended",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    const membership = party.members.find((member) => member.userId === currentUser.id);
+    const canExtend =
+      party.ownerUserId === currentUser.id ||
+      membership?.role === "OFFICER" ||
+      membership?.role === "OWNER";
+
+    if (!canExtend) {
+      throw createAppException({
+        code: AppErrorCode.Forbidden,
+        message: "Only the captain or officers can extend this party",
+        statusCode: HttpStatus.FORBIDDEN
+      });
+    }
+
+    const now = Date.now();
+    const maxExpiresAt = new Date(
+      party.createdAt.getTime() + DOTA_TEMP_PARTY_MAX_LIFETIME_HOURS * 60 * 60 * 1000
+    );
+    const base = Math.max(party.expiresAt.getTime(), now);
+    const proposed = new Date(base + DOTA_TEMP_PARTY_EXTEND_HOURS * 60 * 60 * 1000);
+    const nextExpiresAt = proposed.getTime() > maxExpiresAt.getTime() ? maxExpiresAt : proposed;
+
+    if (nextExpiresAt.getTime() <= party.expiresAt.getTime() + 60_000) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Party already reached the maximum lifetime",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    let nextInviteUrl: string | undefined;
+
+    if (party.discordChannelId && this.discordVoiceService.isConfigured()) {
+      try {
+        nextInviteUrl = await this.discordVoiceService.createInvite(party.discordChannelId, {
+          maxAgeSeconds: Math.max(60, Math.floor((nextExpiresAt.getTime() - now) / 1000)),
+          maxUses: 0
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to refresh Discord invite on extend for ${party.slug}: ${
+            error instanceof Error ? error.message : "unknown"
+          }`
+        );
+      }
+    }
+
+    const extended = await this.gamePartiesRepository.updatePartyExpiry(
+      party.id,
+      nextExpiresAt,
+      party.expiresAt,
+      nextInviteUrl
+    );
+
+    if (!extended) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "Party expiry was already updated",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
+
+    const updated = await this.gamePartiesRepository.findById(party.id);
+
+    if (!updated) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Team was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    return this.toPartyResponse(updated, currentUser.id);
+  }
+
   async getPartyBySlug(slug: string, viewerUserId?: string): Promise<GamePartyResponseDto> {
     const party = await this.gamePartiesRepository.findByVerticalAndSlug(DOTA_PARTY_VERTICAL, slug);
 
@@ -173,11 +297,17 @@ export class GamePartiesService implements OnModuleInit {
 
     if (this.isExpired(party)) {
       await this.purgeExpiredParty(party);
-      throw createAppException({
-        code: AppErrorCode.NotFound,
-        message: "Team was not found",
-        statusCode: HttpStatus.NOT_FOUND
-      });
+      const kept = await this.gamePartiesRepository.findById(party.id);
+
+      if (!kept || this.isExpired(kept)) {
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Team was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+
+      return this.toPartyResponse(kept, viewerUserId);
     }
 
     return this.toPartyResponse(party, viewerUserId);
@@ -223,19 +353,31 @@ export class GamePartiesService implements OnModuleInit {
     const inviteeMeta = await this.loadInviteeMeta(inviteeUserIds);
 
     for (const invite of invites) {
-      const partyExpired =
+      let partyExpired =
         invite.party.kind === "PARTY" &&
         invite.party.expiresAt !== null &&
         invite.party.expiresAt.getTime() <= now;
+
+      if (partyExpired) {
+        const purged = await this.purgeExpiredParty({
+          discordChannelId: null,
+          expiresAt: invite.party.expiresAt,
+          id: invite.party.id,
+          kind: invite.party.kind,
+          ownerUserId: invite.party.ownerUserId
+        });
+
+        if (!purged) {
+          partyExpired = false;
+        }
+      }
+
       const full = invite.party._count.members >= invite.party.maxMembers;
       const inviteStale =
         invite.status === "PENDING" && invite.createdAt.getTime() < inviteTtlCutoff;
 
       if (invite.status === "PENDING" && (partyExpired || full || inviteStale)) {
         await this.gamePartiesRepository.updateInviteStatus(invite.id, "CANCELLED");
-        if (partyExpired) {
-          await this.purgeExpiredParty(invite.party);
-        }
         continue;
       }
 
@@ -247,19 +389,31 @@ export class GamePartiesService implements OnModuleInit {
     const outgoingInvites = [];
 
     for (const invite of outgoing) {
-      const partyExpired =
+      let partyExpired =
         invite.party.kind === "PARTY" &&
         invite.party.expiresAt !== null &&
         invite.party.expiresAt.getTime() <= now;
+
+      if (partyExpired) {
+        const purged = await this.purgeExpiredParty({
+          discordChannelId: null,
+          expiresAt: invite.party.expiresAt,
+          id: invite.party.id,
+          kind: invite.party.kind,
+          ownerUserId: invite.party.ownerUserId
+        });
+
+        if (!purged) {
+          partyExpired = false;
+        }
+      }
+
       const full = invite.party._count.members >= invite.party.maxMembers;
       const inviteStale =
         invite.status === "PENDING" && invite.createdAt.getTime() < inviteTtlCutoff;
 
       if (invite.status === "PENDING" && (partyExpired || full || inviteStale)) {
         await this.gamePartiesRepository.updateInviteStatus(invite.id, "CANCELLED");
-        if (partyExpired) {
-          await this.purgeExpiredParty(invite.party);
-        }
         continue;
       }
 
@@ -406,12 +560,26 @@ export class GamePartiesService implements OnModuleInit {
       });
     }
 
-    const invite = await this.gamePartiesRepository.createInvite({
-      inviteeUserId: input.userId,
-      inviterUserId: currentUser.id,
-      partyId: party.id,
-      positionRole
-    });
+    let invite: GamePartyInvite;
+
+    try {
+      invite = await this.gamePartiesRepository.createInvite({
+        inviteeUserId: input.userId,
+        inviterUserId: currentUser.id,
+        partyId: party.id,
+        positionRole
+      });
+    } catch (error) {
+      if (isPrismaErrorCode(error, "P2002")) {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "Invite already pending",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
+
+      throw error;
+    }
 
     const meta = await this.loadInviteeMeta([invitee.id]);
 
@@ -448,13 +616,9 @@ export class GamePartiesService implements OnModuleInit {
 
     const party = await this.gamePartiesRepository.findById(invite.partyId);
 
-    if (!party || this.isExpired(party)) {
+    if (!party) {
       if (invite.status === "PENDING") {
         await this.gamePartiesRepository.updateInviteStatus(invite.id, "CANCELLED");
-      }
-
-      if (party && this.isExpired(party)) {
-        await this.purgeExpiredParty(party);
       }
 
       throw createAppException({
@@ -462,6 +626,26 @@ export class GamePartiesService implements OnModuleInit {
         message: "Team was not found",
         statusCode: HttpStatus.NOT_FOUND
       });
+    }
+
+    if (this.isExpired(party)) {
+      await this.purgeExpiredParty(party);
+      const kept = await this.gamePartiesRepository.findById(party.id);
+
+      if (!kept || this.isExpired(kept)) {
+        if (invite.status === "PENDING") {
+          await this.gamePartiesRepository.updateInviteStatus(invite.id, "CANCELLED");
+        }
+
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Team was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+
+      // Fall through with kept party after occupancy extend.
+      return this.acceptInvite(inviteId, currentUser);
     }
 
     const isApplication = invite.kind === "APPLICATION";
@@ -515,13 +699,42 @@ export class GamePartiesService implements OnModuleInit {
       }
     }
 
-    const { closedInvites, member: joined } = await this.gamePartiesRepository.acceptInviteAtomically({
-      inviteId: invite.id,
-      maxMembers: party.maxMembers,
-      partyId: party.id,
-      positionRole: invite.positionRole,
-      userId: joiningUserId
-    });
+    let closedInvites: GamePartyInvite[] = [];
+    let joined: GamePartyMember | null = null;
+
+    try {
+      const accepted = await this.gamePartiesRepository.acceptInviteAtomically({
+        inviteId: invite.id,
+        maxMembers: party.maxMembers,
+        partyId: party.id,
+        positionRole: invite.positionRole,
+        userId: joiningUserId
+      });
+      closedInvites = accepted.closedInvites;
+      joined = accepted.member;
+
+      if (accepted.staleInvite) {
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Invite was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      if (error instanceof Error && error.message === "INVITE_NO_LONGER_PENDING") {
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Invite was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+
+      throw error;
+    }
 
     if (!joined) {
       // Role/full race: closedInvites already collected inside the transaction.
@@ -761,28 +974,98 @@ export class GamePartiesService implements OnModuleInit {
         });
       }
 
-      invite = await this.inviteWithoutFriendshipCheck(
-        recruitSlug,
-        currentUser.id,
-        { id: targetUserId } as AuthenticatedUser,
-        {
-          inviteKind: "APPLICATION",
-          positionRole: resolvedPosition
-        }
-      );
-      inviteDirection = "incoming";
-      const loaded = await this.loadPartyResponse(recruitParty.id, currentUser.id);
+      if (recruitParty.joinMode === "OPEN") {
+        await this.assertNoActiveMembershipOfKind(currentUser.id, recruitParty.kind);
 
-      if (!loaded) {
-        throw createAppException({
-          code: AppErrorCode.NotFound,
-          message: "Team was not found",
-          statusCode: HttpStatus.NOT_FOUND
+        const joined = await this.gamePartiesRepository.addMemberAtomically({
+          maxMembers: recruitParty.maxMembers,
+          partyId: recruitParty.id,
+          positionRole: resolvedPosition,
+          userId: currentUser.id
         });
-      }
 
-      partyResponse = loaded;
-      await this.clearLookingForUser(currentUser.id);
+        if (!joined) {
+          const closed = await this.gamePartiesRepository.closePendingInvitesForPosition(
+            recruitParty.id,
+            resolvedPosition,
+            { status: "CANCELLED" }
+          );
+          await this.emitAutoClosedNotifications(closed, recruitParty);
+          throw createAppException({
+            code: AppErrorCode.Conflict,
+            message: "This role is already taken",
+            statusCode: HttpStatus.CONFLICT
+          });
+        }
+
+        const closedSameRole = await this.gamePartiesRepository.closePendingInvitesForPosition(
+          recruitParty.id,
+          resolvedPosition,
+          { status: "CANCELLED" }
+        );
+        await this.emitAutoClosedNotifications(closedSameRole, recruitParty);
+
+        await this.clearLookingForUser(currentUser.id);
+        await this.refreshRecruitLookingAttributes(recruitParty.ownerUserId, recruitParty.id);
+
+        const loaded = await this.loadPartyResponse(recruitParty.id, currentUser.id);
+
+        if (!loaded) {
+          throw createAppException({
+            code: AppErrorCode.NotFound,
+            message: "Team was not found",
+            statusCode: HttpStatus.NOT_FOUND
+          });
+        }
+
+        if (loaded.members.length >= loaded.maxMembers) {
+          const closedFull = await this.gamePartiesRepository.cancelPendingInvitesForParty(loaded.id);
+          await this.emitAutoClosedNotifications(closedFull, recruitParty);
+        }
+
+        const joiner = await this.usersRepository.findById(currentUser.id);
+        invite = this.toInviteDto(
+          {
+            createdAt: new Date(),
+            id: `open-join-${recruitParty.id}-${currentUser.id}`,
+            invitee: {
+              displayName: joiner?.displayName ?? currentUser.displayName,
+              id: currentUser.id
+            },
+            inviteeUserId: currentUser.id,
+            kind: "APPLICATION",
+            positionRole: resolvedPosition,
+            status: "ACCEPTED"
+          },
+          "incoming",
+          recruitParty
+        );
+        inviteDirection = "incoming";
+        partyResponse = loaded;
+      } else {
+        invite = await this.inviteWithoutFriendshipCheck(
+          recruitSlug,
+          currentUser.id,
+          { id: targetUserId } as AuthenticatedUser,
+          {
+            inviteKind: "APPLICATION",
+            positionRole: resolvedPosition
+          }
+        );
+        inviteDirection = "incoming";
+        const loaded = await this.loadPartyResponse(recruitParty.id, currentUser.id);
+
+        if (!loaded) {
+          throw createAppException({
+            code: AppErrorCode.NotFound,
+            message: "Team was not found",
+            statusCode: HttpStatus.NOT_FOUND
+          });
+        }
+
+        partyResponse = loaded;
+        await this.clearLookingForUser(currentUser.id);
+      }
     } else if (fromPartySlug) {
       const owned = await this.requireManagerParty(fromPartySlug, currentUser.id);
       const loaded = await this.loadPartyResponse(owned.id, currentUser.id);
@@ -857,7 +1140,10 @@ export class GamePartiesService implements OnModuleInit {
   async joinByToken(
     token: string,
     currentUser: AuthenticatedUser
-  ): Promise<GamePartyResponseDto> {
+  ): Promise<{
+    application: GamePartyInviteDto | null;
+    party: GamePartyResponseDto;
+  }> {
     const verified = this.jwtTokenService.verifyPartyJoinToken(token);
 
     if (!verified) {
@@ -880,17 +1166,27 @@ export class GamePartiesService implements OnModuleInit {
 
     if (this.isExpired(party)) {
       await this.purgeExpiredParty(party);
-      throw createAppException({
-        code: AppErrorCode.NotFound,
-        message: "Team was not found",
-        statusCode: HttpStatus.NOT_FOUND
-      });
+      const kept = await this.gamePartiesRepository.findById(party.id);
+
+      if (!kept || this.isExpired(kept)) {
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Team was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+
+      // Occupancy auto-extend kept the party — continue join against fresh row.
+      return this.joinByToken(token, currentUser);
     }
 
     const alreadyMember = party.members.some((member) => member.userId === currentUser.id);
 
     if (alreadyMember) {
-      return this.toPartyResponse(party, currentUser.id);
+      return {
+        application: null,
+        party: await this.toPartyResponse(party, currentUser.id)
+      };
     }
 
     await this.assertNoActiveMembershipOfKind(currentUser.id, party.kind);
@@ -903,6 +1199,33 @@ export class GamePartiesService implements OnModuleInit {
         message: "This team is already full",
         statusCode: HttpStatus.CONFLICT
       });
+    }
+
+    // CONFIRM: join link creates an application; managers accept before membership.
+    if (party.joinMode === "CONFIRM") {
+      const existingInvite = await this.gamePartiesRepository.findPendingInvite(
+        party.id,
+        currentUser.id
+      );
+
+      if (existingInvite) {
+        return {
+          application: null,
+          party: await this.toPartyResponse(party, currentUser.id)
+        };
+      }
+
+      const application = await this.inviteWithoutFriendshipCheck(
+        party.slug,
+        currentUser.id,
+        { id: party.ownerUserId } as AuthenticatedUser,
+        { inviteKind: "APPLICATION" }
+      );
+
+      return {
+        application,
+        party: await this.toPartyResponse(party, currentUser.id)
+      };
     }
 
     const joined = await this.gamePartiesRepository.addMemberAtomically({
@@ -942,7 +1265,10 @@ export class GamePartiesService implements OnModuleInit {
 
     await this.refreshRecruitLookingAttributes(updated.ownerUserId, updated.id);
 
-    return this.toPartyResponse(updated, currentUser.id);
+    return {
+      application: null,
+      party: await this.toPartyResponse(updated, currentUser.id)
+    };
   }
 
   private async inviteWithoutFriendshipCheck(
@@ -1035,13 +1361,27 @@ export class GamePartiesService implements OnModuleInit {
       });
     }
 
-    const invite = await this.gamePartiesRepository.createInvite({
-      inviteeUserId: targetUserId,
-      inviteKind: options?.inviteKind ?? "INVITE",
-      inviterUserId: currentUser.id,
-      partyId: party.id,
-      positionRole
-    });
+    let invite: GamePartyInvite;
+
+    try {
+      invite = await this.gamePartiesRepository.createInvite({
+        inviteeUserId: targetUserId,
+        inviteKind: options?.inviteKind ?? "INVITE",
+        inviterUserId: currentUser.id,
+        partyId: party.id,
+        positionRole
+      });
+    } catch (error) {
+      if (isPrismaErrorCode(error, "P2002")) {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "Invite already pending",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
+
+      throw error;
+    }
 
     const meta = await this.loadInviteeMeta([invitee.id]);
 
@@ -1131,7 +1471,16 @@ export class GamePartiesService implements OnModuleInit {
 
     if (membership.role === "OWNER") {
       if (this.isExpired(party)) {
-        await this.purgeExpiredParty(party);
+        const purged = await this.purgeExpiredParty(party);
+
+        if (!purged) {
+          throw createAppException({
+            code: AppErrorCode.Conflict,
+            message: "Party was extended because Discord voice is still occupied",
+            statusCode: HttpStatus.CONFLICT
+          });
+        }
+
         return { ok: true };
       }
 
@@ -1143,11 +1492,13 @@ export class GamePartiesService implements OnModuleInit {
         });
       }
 
+      await this.assertDiscordVoiceRemoved(party.discordChannelId);
       await this.gamePartiesRepository.deleteParty(party.id);
       await this.clearLookingForUser(currentUser.id);
       return { ok: true };
     }
 
+    await this.revokeDiscordVoiceAccessForUser(party.discordChannelId, currentUser.id);
     await this.gamePartiesRepository.removeMember(party.id, currentUser.id);
 
     if (!this.isExpired(party)) {
@@ -1177,15 +1528,407 @@ export class GamePartiesService implements OnModuleInit {
     }
 
     if (this.isExpired(party)) {
-      await this.purgeExpiredParty(party);
+      const purged = await this.purgeExpiredParty(party);
+
+      if (!purged) {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "Party was extended because Discord voice is still occupied",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
+
       return { ok: true };
     }
 
     const closed = await this.gamePartiesRepository.cancelPendingInvitesForParty(party.id);
     await this.emitAutoClosedNotifications(closed, party);
+    await this.assertDiscordVoiceRemoved(party.discordChannelId);
     await this.gamePartiesRepository.deleteParty(party.id);
     await this.clearLookingForUser(currentUser.id);
     return { ok: true };
+  }
+
+  async ensureDiscordVoice(
+    slug: string,
+    currentUser: AuthenticatedUser,
+    intent: "join" | "share" = "share"
+  ): Promise<{
+    chatMessage: GamePartyChatMessageDto | null;
+    party: GamePartyResponseDto;
+    voice: PartyDiscordVoiceResponseDto;
+  }> {
+    if (!this.discordVoiceService.isConfigured()) {
+      throw createAppException({
+        code: AppErrorCode.ServiceUnavailable,
+        message: "Discord voice is not configured",
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE
+      });
+    }
+
+    let party = await this.requireMemberParty(slug, currentUser.id);
+
+    // Drop expired team/party voice before recreating.
+    if (
+      party.discordChannelId &&
+      party.discordVoiceExpiresAt &&
+      party.discordVoiceExpiresAt.getTime() <= Date.now()
+    ) {
+      const discordGone = await this.deleteDiscordVoiceIfPresent(party.discordChannelId);
+
+      if (!discordGone) {
+        throw createAppException({
+          code: AppErrorCode.ServiceUnavailable,
+          message: "Could not recycle Discord voice channel",
+          statusCode: HttpStatus.SERVICE_UNAVAILABLE
+        });
+      }
+
+      await this.gamePartiesRepository.clearDiscordVoice(party.id);
+      const refreshed = await this.gamePartiesRepository.findById(party.id);
+
+      if (!refreshed) {
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Team was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+
+      party = refreshed;
+    }
+
+    // Backfill TTL on older team voices created before expiresAt existed.
+    if (
+      party.kind === "TEAM" &&
+      party.discordChannelId &&
+      !party.discordVoiceExpiresAt
+    ) {
+      const backfillExpires = new Date(
+        (party.discordVoiceCreatedAt?.getTime() ?? Date.now()) +
+          DOTA_TEAM_DISCORD_VOICE_TTL_HOURS * 60 * 60 * 1000
+      );
+      await this.gamePartiesRepository.updateDiscordVoiceExpiry(
+        party.id,
+        backfillExpires,
+        null
+      );
+      const withExpiry = await this.gamePartiesRepository.findById(party.id);
+
+      if (withExpiry) {
+        party = withExpiry;
+      }
+    }
+
+    let channelId = party.discordChannelId;
+    let shareInviteUrl = party.discordInviteUrl;
+    let chatMessage: GamePartyChatMessageDto | null = null;
+    let responseParty = party;
+    const voiceExpiresAt = this.resolveNewDiscordVoiceExpiresAt(party);
+
+    if (!channelId) {
+      try {
+        const created = await this.discordVoiceService.createPartyVoice({
+          maxAgeSeconds: this.remainingPartyTtlSeconds(voiceExpiresAt),
+          name: party.name
+        });
+
+        const voiceCreatedAt = new Date();
+        const claimed = await this.gamePartiesRepository.claimDiscordVoice(party.id, {
+          discordChannelId: created.channelId,
+          discordInviteUrl: created.inviteUrl,
+          discordVoiceCreatedAt: voiceCreatedAt,
+          discordVoiceExpiresAt: voiceExpiresAt
+        });
+
+        if (!claimed) {
+          await this.discordVoiceService.deleteChannel(created.channelId);
+          const latest = await this.gamePartiesRepository.findById(party.id);
+
+          if (!latest?.discordChannelId) {
+            throw createAppException({
+              code: AppErrorCode.ServiceUnavailable,
+              message: "Could not create Discord voice channel",
+              statusCode: HttpStatus.SERVICE_UNAVAILABLE
+            });
+          }
+
+          channelId = latest.discordChannelId;
+          shareInviteUrl = latest.discordInviteUrl;
+          responseParty = latest;
+        } else {
+          channelId = created.channelId;
+          shareInviteUrl = created.inviteUrl;
+          const full = await this.gamePartiesRepository.findById(party.id);
+
+          if (!full) {
+            throw createAppException({
+              code: AppErrorCode.NotFound,
+              message: "Team was not found",
+              statusCode: HttpStatus.NOT_FOUND
+            });
+          }
+
+          responseParty = full;
+          const systemChat = await this.gamePartiesRepository.createChatMessage({
+            message: DISCORD_VOICE_READY_SYSTEM_MESSAGE,
+            partyId: party.id,
+            userId: currentUser.id
+          });
+          chatMessage = this.toChatMessageDto(systemChat);
+        }
+      } catch (error) {
+        if (error instanceof HttpException) {
+          throw error;
+        }
+
+        this.logger.error(
+          error instanceof Error ? error.message : "Discord voice create failed",
+          error instanceof Error ? error.stack : undefined
+        );
+        throw createAppException({
+          code: AppErrorCode.ServiceUnavailable,
+          message: "Could not create Discord voice channel",
+          statusCode: HttpStatus.SERVICE_UNAVAILABLE
+        });
+      }
+    }
+
+    if (!channelId) {
+      throw createAppException({
+        code: AppErrorCode.ServiceUnavailable,
+        message: "Could not create Discord voice channel",
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE
+      });
+    }
+
+    try {
+      await this.discordVoiceService.ensureVoiceChannelAcl(channelId);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to ensure Discord voice ACL for ${channelId}: ${
+          error instanceof Error ? error.message : "unknown"
+        }`
+      );
+    }
+
+    if (!shareInviteUrl) {
+      try {
+        const inviteTtl = this.discordVoiceInviteTtlSeconds(responseParty);
+        shareInviteUrl = await this.discordVoiceService.createInvite(channelId, {
+          maxAgeSeconds: inviteTtl,
+          maxUses: 0
+        });
+        await this.gamePartiesRepository.updateDiscordVoice(responseParty.id, {
+          discordChannelId: channelId,
+          discordInviteUrl: shareInviteUrl,
+          discordVoiceCreatedAt: responseParty.discordVoiceCreatedAt ?? new Date(),
+          discordVoiceExpiresAt:
+            responseParty.discordVoiceExpiresAt ??
+            this.resolveNewDiscordVoiceExpiresAt(responseParty)
+        });
+        const refreshed = await this.gamePartiesRepository.findById(responseParty.id);
+
+        if (refreshed) {
+          responseParty = refreshed;
+        }
+      } catch (error) {
+        if (error instanceof HttpException) {
+          throw error;
+        }
+
+        this.logger.error(
+          error instanceof Error ? error.message : "Discord share invite failed",
+          error instanceof Error ? error.stack : undefined
+        );
+        throw createAppException({
+          code: AppErrorCode.ServiceUnavailable,
+          message: "Could not create Discord voice invite",
+          statusCode: HttpStatus.SERVICE_UNAVAILABLE
+        });
+      }
+    }
+
+    let inviteUrl = shareInviteUrl;
+    const guildId = this.discordVoiceService.getGuildId();
+    let movedToVoice = false;
+
+    if (intent === "join") {
+      const discordUserId = await this.authService.getDiscordUserId(currentUser.id);
+
+      if (!discordUserId) {
+        throw createAppException({
+          code: AppErrorCode.DiscordNotLinked,
+          message: "Link your Discord account to join party voice",
+          statusCode: HttpStatus.FORBIDDEN
+        });
+      }
+
+      // Member overwrite is required now that @everyone is denied CONNECT.
+      // Bot role must sit above target members (Manage Channels + hierarchy).
+      try {
+        await this.discordVoiceService.grantMemberVoiceAccess(channelId, discordUserId);
+      } catch (grantError) {
+        this.logger.error(
+          `Discord grant voice access failed for ${discordUserId} on ${channelId}: ${
+            grantError instanceof Error ? grantError.message : "unknown"
+          }`
+        );
+        throw createAppException({
+          code: AppErrorCode.ServiceUnavailable,
+          message:
+            "Could not grant Discord voice access. Raise the bot role above members and ensure Manage Channels.",
+          statusCode: HttpStatus.SERVICE_UNAVAILABLE
+        });
+      }
+
+      movedToVoice = await this.discordVoiceService.tryMoveMemberToVoice(
+        channelId,
+        discordUserId
+      );
+
+      try {
+        inviteUrl = await this.discordVoiceService.createJoinInvite(channelId);
+      } catch (joinInviteError) {
+        // Fall back to multi-use share invite if one-shot invite fails.
+        this.logger.warn(
+          `Discord one-shot join invite failed for ${channelId}, using share invite: ${
+            joinInviteError instanceof Error ? joinInviteError.message : "unknown"
+          }`
+        );
+        inviteUrl = shareInviteUrl;
+      }
+
+      if (!inviteUrl) {
+        throw createAppException({
+          code: AppErrorCode.ServiceUnavailable,
+          message: "Could not create Discord voice invite",
+          statusCode: HttpStatus.SERVICE_UNAVAILABLE
+        });
+      }
+    }
+
+    return {
+      chatMessage,
+      party: await this.toPartyResponse(responseParty, currentUser.id),
+      voice: {
+        channelId,
+        expiresAt: responseParty.discordVoiceExpiresAt?.toISOString() ?? null,
+        guildId,
+        inviteUrl,
+        movedToVoice
+      }
+    };
+  }
+
+  async extendDiscordVoice(
+    slug: string,
+    currentUser: AuthenticatedUser
+  ): Promise<GamePartyResponseDto> {
+    const party = await this.requireMemberParty(slug, currentUser.id);
+
+    if (party.kind !== "TEAM") {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Only team Discord voice can be extended separately",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    if (!party.discordChannelId || !party.discordVoiceExpiresAt || !party.discordVoiceCreatedAt) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "No active Discord voice to extend",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    if (!this.isPartyManager(party, currentUser.id)) {
+      throw createAppException({
+        code: AppErrorCode.Forbidden,
+        message: "Only the captain or officers can extend Discord voice",
+        statusCode: HttpStatus.FORBIDDEN
+      });
+    }
+
+    const now = Date.now();
+    const maxExpiresAt = new Date(
+      party.discordVoiceCreatedAt.getTime() +
+        DOTA_TEAM_DISCORD_VOICE_MAX_LIFETIME_HOURS * 60 * 60 * 1000
+    );
+    const base = Math.max(party.discordVoiceExpiresAt.getTime(), now);
+    const proposed = new Date(base + DOTA_TEAM_DISCORD_VOICE_EXTEND_HOURS * 60 * 60 * 1000);
+    const nextExpiresAt = proposed.getTime() > maxExpiresAt.getTime() ? maxExpiresAt : proposed;
+
+    if (nextExpiresAt.getTime() <= party.discordVoiceExpiresAt.getTime() + 60_000) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Discord voice already reached the maximum lifetime",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    let nextInviteUrl: string | undefined;
+
+    if (this.discordVoiceService.isConfigured()) {
+      try {
+        nextInviteUrl = await this.discordVoiceService.createInvite(party.discordChannelId, {
+          maxAgeSeconds: Math.max(60, Math.floor((nextExpiresAt.getTime() - now) / 1000)),
+          maxUses: 0
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to refresh Discord invite on voice extend for ${party.slug}: ${
+            error instanceof Error ? error.message : "unknown"
+          }`
+        );
+      }
+    }
+
+    const extended = await this.gamePartiesRepository.updateDiscordVoiceExpiry(
+      party.id,
+      nextExpiresAt,
+      party.discordVoiceExpiresAt,
+      nextInviteUrl
+    );
+
+    if (!extended) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "Discord voice expiry was already updated",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
+
+    const updated = await this.gamePartiesRepository.findById(party.id);
+
+    if (!updated) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Team was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    return this.toPartyResponse(updated, currentUser.id);
+  }
+
+  private resolveNewDiscordVoiceExpiresAt(party: {
+    expiresAt: Date | null;
+    kind: GamePartyKind;
+  }): Date {
+    if (party.kind === "PARTY" && party.expiresAt) {
+      return party.expiresAt;
+    }
+
+    return new Date(Date.now() + DOTA_TEAM_DISCORD_VOICE_TTL_HOURS * 60 * 60 * 1000);
+  }
+
+  private discordVoiceInviteTtlSeconds(party: {
+    discordVoiceExpiresAt: Date | null;
+    expiresAt: Date | null;
+  }): number {
+    return this.remainingPartyTtlSeconds(party.discordVoiceExpiresAt ?? party.expiresAt);
   }
 
   async listChatMessages(
@@ -1218,6 +1961,14 @@ export class GamePartiesService implements OnModuleInit {
       throw createAppException({
         code: AppErrorCode.ValidationError,
         message: "Message cannot be empty",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    if (trimmed.startsWith("__system__:")) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Invalid message",
         statusCode: HttpStatus.BAD_REQUEST
       });
     }
@@ -1289,6 +2040,7 @@ export class GamePartiesService implements OnModuleInit {
       });
     }
 
+    await this.revokeDiscordVoiceAccessForUser(party.discordChannelId, targetUserId);
     await this.gamePartiesRepository.removeMember(party.id, targetUserId);
     await this.refreshRecruitLookingAttributes(party.ownerUserId, party.id);
     return this.getPartyBySlug(slug, currentUser.id);
@@ -1344,24 +2096,47 @@ export class GamePartiesService implements OnModuleInit {
 
     if (this.isExpired(full)) {
       await this.purgeExpiredParty(full);
-      return null;
+      const refreshed = await this.gamePartiesRepository.findById(full.id);
+
+      if (!refreshed || this.isExpired(refreshed)) {
+        return null;
+      }
+
+      return this.toPartyResponse(refreshed, viewerUserId);
     }
 
     return this.toPartyResponse(full, viewerUserId);
   }
 
+  /** @returns true when the party row was deleted */
   private async purgeExpiredParty(party: {
+    discordChannelId?: string | null;
     expiresAt: Date | null;
     id: string;
     kind: GamePartyKind;
     ownerUserId: string;
-  }): Promise<void> {
-    if (!this.isExpired(party)) {
-      return;
+  }): Promise<boolean> {
+    const full = await this.gamePartiesRepository.findById(party.id);
+
+    if (!full || !this.isExpired(full)) {
+      return false;
+    }
+
+    if (await this.autoExtendWhileVoiceOccupied(full.id)) {
+      return false;
     }
 
     try {
-      await this.gamePartiesRepository.deleteParty(party.id);
+      const discordGone = await this.deleteDiscordVoiceIfPresent(full.discordChannelId ?? null);
+
+      if (!discordGone) {
+        this.logger.warn(
+          `Expired party ${full.id}: Discord channel ${full.discordChannelId} still present; keeping party row for retry`
+        );
+        return false;
+      }
+
+      await this.gamePartiesRepository.deleteParty(full.id);
     } catch (error) {
       if (isPrismaErrorCode(error, "P2025")) {
         // Already deleted concurrently.
@@ -1370,15 +2145,164 @@ export class GamePartiesService implements OnModuleInit {
       }
     }
 
-    await this.clearLookingForUser(party.ownerUserId);
+    await this.clearLookingForUser(full.ownerUserId);
+    return true;
+  }
+
+  /**
+   * If party Discord voice still has linked members connected, bump TTL by +3h
+   * (no max-lifetime cap — do not kick people mid-call).
+   */
+  private async autoExtendWhileVoiceOccupied(partyId: string): Promise<boolean> {
+    const party = await this.gamePartiesRepository.findById(partyId);
+
+    if (!party?.discordChannelId || !this.discordVoiceService.isConfigured()) {
+      return false;
+    }
+
+    const discordUserIds = (
+      await Promise.all(
+        party.members.map((member) => this.authService.getDiscordUserId(member.userId))
+      )
+    ).filter((id): id is string => Boolean(id));
+
+    const occupied = await this.discordVoiceService.isVoiceChannelOccupied(
+      party.discordChannelId,
+      discordUserIds
+    );
+
+    if (!occupied) {
+      return false;
+    }
+
+    const now = Date.now();
+    const extendMs = DOTA_TEMP_PARTY_EXTEND_HOURS * 60 * 60 * 1000;
+    let nextInviteUrl: string | undefined;
+
+    try {
+      const inviteTtlSeconds = Math.max(60, Math.floor(extendMs / 1000));
+      nextInviteUrl = await this.discordVoiceService.createInvite(party.discordChannelId, {
+        maxAgeSeconds: inviteTtlSeconds,
+        maxUses: 0
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to refresh Discord invite on occupancy extend for ${party.slug}: ${
+          error instanceof Error ? error.message : "unknown"
+        }`
+      );
+    }
+
+    if (party.kind === "PARTY" && party.expiresAt) {
+      const nextExpiresAt = new Date(Math.max(party.expiresAt.getTime(), now) + extendMs);
+      await this.gamePartiesRepository.setPartyExpiry(party.id, nextExpiresAt, nextInviteUrl);
+    } else if (party.discordVoiceExpiresAt) {
+      const nextVoiceExpiresAt = new Date(
+        Math.max(party.discordVoiceExpiresAt.getTime(), now) + extendMs
+      );
+      await this.gamePartiesRepository.setDiscordVoiceExpiry(
+        party.id,
+        nextVoiceExpiresAt,
+        nextInviteUrl
+      );
+    } else {
+      const nextVoiceExpiresAt = new Date(now + extendMs);
+      await this.gamePartiesRepository.setDiscordVoiceExpiry(
+        party.id,
+        nextVoiceExpiresAt,
+        nextInviteUrl
+      );
+    }
+
+    this.logger.log(
+      `Auto-extended ${party.slug} by ${DOTA_TEMP_PARTY_EXTEND_HOURS}h — Discord voice still occupied`
+    );
+
+    try {
+      const refreshed = await this.gamePartiesRepository.findById(party.id);
+
+      if (refreshed) {
+        this.partyRealtimeService.broadcastPartyUpdated(
+          await this.toPartyResponse(refreshed)
+        );
+      }
+    } catch {
+      // Broadcast best-effort.
+    }
+
+    return true;
   }
 
   private async runCleanupSafely(): Promise<void> {
     try {
-      const expired = await this.gamePartiesRepository.deleteExpiredParties();
+      // Discord first, then DB — avoids orphan channels when process dies mid-cleanup.
+      const expired = await this.gamePartiesRepository.findExpiredParties();
+      const expiredPartyIds: string[] = [];
+      let occupancyExtended = 0;
 
       for (const party of expired) {
+        if (await this.autoExtendWhileVoiceOccupied(party.id)) {
+          occupancyExtended += 1;
+          continue;
+        }
+
+        const discordGone = await this.deleteDiscordVoiceIfPresent(party.discordChannelId);
+
+        if (!discordGone) {
+          this.logger.warn(
+            `Expired party ${party.slug}: Discord channel ${party.discordChannelId} still present; keeping party row for retry`
+          );
+          continue;
+        }
+
+        expiredPartyIds.push(party.id);
         await this.clearLookingForUser(party.ownerUserId);
+      }
+
+      if (expiredPartyIds.length > 0) {
+        await this.gamePartiesRepository.deletePartiesByIds(expiredPartyIds);
+      }
+
+      const now = new Date();
+      const legacyCreatedBefore = new Date(
+        now.getTime() - DOTA_TEAM_DISCORD_VOICE_MAX_LIFETIME_HOURS * 60 * 60 * 1000
+      );
+      const expiredVoices = await this.gamePartiesRepository.listExpiredDiscordVoices(
+        now,
+        legacyCreatedBefore
+      );
+
+      let clearedVoices = 0;
+
+      for (const voice of expiredVoices) {
+        // Temporary parties handled above; only TEAM voices here.
+        if (voice.kind === "PARTY") {
+          continue;
+        }
+
+        if (await this.autoExtendWhileVoiceOccupied(voice.id)) {
+          occupancyExtended += 1;
+          continue;
+        }
+
+        const discordGone = await this.deleteDiscordVoiceIfPresent(voice.discordChannelId);
+
+        if (!discordGone) {
+          this.logger.warn(
+            `Expired Discord voice for ${voice.slug}: channel ${voice.discordChannelId} still present; will retry next cleanup`
+          );
+          continue;
+        }
+
+        await this.gamePartiesRepository.clearDiscordVoice(voice.id);
+        clearedVoices += 1;
+
+        try {
+          const updated = await this.getPartyBySlug(voice.slug);
+          this.partyRealtimeService.broadcastPartyUpdated(updated);
+        } catch {
+          // Party deleted concurrently or already gone.
+        }
       }
 
       const stalePending = await this.gamePartiesRepository.cancelStalePendingInvites(
@@ -1389,9 +2313,15 @@ export class GamePartiesService implements OnModuleInit {
         new Date(Date.now() - TERMINAL_INVITE_RETENTION_MS)
       );
 
-      if (expired.length > 0 || stalePending > 0 || staleInvites > 0) {
+      if (
+        expiredPartyIds.length > 0 ||
+        clearedVoices > 0 ||
+        occupancyExtended > 0 ||
+        stalePending > 0 ||
+        staleInvites > 0
+      ) {
         this.logger.log(
-          `Party cleanup removed ${expired.length} expired parties, cancelled ${stalePending} stale pending invites, and deleted ${staleInvites} terminal invites`
+          `Party cleanup removed ${expiredPartyIds.length} expired parties, ${clearedVoices} expired Discord voices, occupancy-extended ${occupancyExtended}, cancelled ${stalePending} stale pending invites, and deleted ${staleInvites} terminal invites`
         );
       }
     } catch (error) {
@@ -1400,6 +2330,52 @@ export class GamePartiesService implements OnModuleInit {
         error instanceof Error ? error.stack : undefined
       );
     }
+  }
+
+  private async deleteDiscordVoiceIfPresent(channelId: string | null | undefined): Promise<boolean> {
+    if (!channelId) {
+      return true;
+    }
+
+    return this.discordVoiceService.deleteChannel(channelId);
+  }
+
+  /** Delete Discord voice before removing the party row — never leave orphan channels. */
+  private async assertDiscordVoiceRemoved(channelId: string | null | undefined): Promise<void> {
+    const discordGone = await this.deleteDiscordVoiceIfPresent(channelId);
+
+    if (!discordGone) {
+      throw createAppException({
+        code: AppErrorCode.ServiceUnavailable,
+        message: "Could not delete Discord voice channel; try again",
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE
+      });
+    }
+  }
+
+  private async revokeDiscordVoiceAccessForUser(
+    channelId: string | null | undefined,
+    userId: string
+  ): Promise<void> {
+    if (!channelId || !this.discordVoiceService.isConfigured()) {
+      return;
+    }
+
+    const discordUserId = await this.authService.getDiscordUserId(userId);
+
+    if (!discordUserId) {
+      return;
+    }
+
+    await this.discordVoiceService.revokeMemberVoiceAccess(channelId, discordUserId);
+  }
+
+  private remainingPartyTtlSeconds(expiresAt: Date | null): number {
+    if (!expiresAt) {
+      return DOTA_TEMP_PARTY_TTL_HOURS * 60 * 60;
+    }
+
+    return Math.max(60, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
   }
 
   private async assertNoActiveMembershipOfKind(userId: string, kind: GamePartyKind): Promise<void> {
@@ -1653,16 +2629,44 @@ export class GamePartiesService implements OnModuleInit {
           (member) => member.userId === viewerUserId && member.role === "OFFICER"
         )
     );
+    const isMember = Boolean(
+      viewerUserId && party.members.some((member) => member.userId === viewerUserId)
+    );
+    const maxExpiresAtMs =
+      party.createdAt.getTime() + DOTA_TEMP_PARTY_MAX_LIFETIME_HOURS * 60 * 60 * 1000;
+    const canExtendParty =
+      party.kind === "PARTY" &&
+      party.expiresAt !== null &&
+      (isOwner || isOfficer) &&
+      party.expiresAt.getTime() < maxExpiresAtMs - 60_000;
+
+    const voiceCreatedAt = party.discordVoiceCreatedAt;
+    const voiceExpiresAt = party.discordVoiceExpiresAt;
+    const voiceMaxExpiresAtMs = voiceCreatedAt
+      ? voiceCreatedAt.getTime() + DOTA_TEAM_DISCORD_VOICE_MAX_LIFETIME_HOURS * 60 * 60 * 1000
+      : 0;
+    const canExtendDiscordVoice =
+      party.kind === "TEAM" &&
+      Boolean(party.discordChannelId) &&
+      voiceExpiresAt !== null &&
+      voiceCreatedAt !== null &&
+      (isOwner || isOfficer) &&
+      voiceExpiresAt.getTime() < voiceMaxExpiresAtMs - 60_000;
 
     return {
+      canExtendDiscordVoice,
+      canExtendParty,
       canManageParty: isOwner || isOfficer,
+      // Multi-use Discord invites must not leak on public party pages / watchers.
+      discordInviteUrl: isMember ? (party.discordInviteUrl ?? null) : null,
+      discordVoiceAvailable: this.discordVoiceService.isConfigured(),
+      discordVoiceExpiresAt: voiceExpiresAt?.toISOString() ?? null,
       expiresAt: party.expiresAt?.toISOString() ?? null,
       id: party.id,
-      isMember: viewerUserId
-        ? party.members.some((member) => member.userId === viewerUserId)
-        : false,
+      isMember,
       isOfficer,
       isOwner,
+      joinMode: party.joinMode === "OPEN" ? "OPEN" : "CONFIRM",
       kind: party.kind,
       maxMembers: party.maxMembers,
       memberCount: members.length,

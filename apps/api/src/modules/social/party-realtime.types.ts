@@ -1,3 +1,5 @@
+import type { GamePartyResponseDto } from "./dto/game-party-response.dto.js";
+
 export const PARTY_REALTIME_PUBLISHER = Symbol("PARTY_REALTIME_PUBLISHER");
 
 export type PartyNotificationType =
@@ -27,6 +29,22 @@ export interface PartyNotificationPayload {
   type: PartyNotificationType;
 }
 
+export type FriendNotificationType = "friend_request" | "friend_accepted";
+
+export interface FriendNotificationPayload {
+  request: {
+    createdAt: string;
+    direction: "incoming" | "outgoing";
+    id: string;
+    otherUser: {
+      displayName: string;
+      dotaSlug: string | null;
+      id: string;
+    };
+  };
+  type: FriendNotificationType;
+}
+
 export interface PartyRecruitUpdatedPayload {
   looking: boolean;
   partyId?: string;
@@ -36,5 +54,7 @@ export interface PartyRecruitUpdatedPayload {
 
 export interface PartyRealtimePublisher {
   broadcastPartyRecruitUpdated(payload: PartyRecruitUpdatedPayload): void;
+  broadcastPartyUpdated(party: GamePartyResponseDto): void;
+  emitFriendNotification(userId: string, payload: FriendNotificationPayload): void;
   emitPartyNotification(userId: string, payload: PartyNotificationPayload): void;
 }

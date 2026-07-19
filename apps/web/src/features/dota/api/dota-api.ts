@@ -117,6 +117,7 @@ export interface DotaLfgHit {
   claimedRoles?: string[];
   desiredSize: number | null;
   greenFlags: DotaLfgFlag[];
+  joinMode?: "OPEN" | "CONFIRM";
   memberCount: number | null;
   mmr: string | null;
   ownerUserId: string;

@@ -16,6 +16,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint . && corepack pnpm -r --if-present lint",
     "test": "corepack pnpm -r --if-present test",
+    "test:e2e": "corepack pnpm --filter @reviewo/e2e test",
     "typecheck": "tsc -p tsconfig.json --noEmit && corepack pnpm -r --if-present typecheck"
   },
   "engines": {

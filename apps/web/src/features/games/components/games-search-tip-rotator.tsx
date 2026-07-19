@@ -38,7 +38,7 @@ const TIP_BODY: Record<TipId, MessageKey> = {
 const ROTATE_MS = 5_500;
 const FADE_MS = 400;
 
-export function GamesSearchTipRotator() {
+export function GamesSearchTipRotator({ embedded = false }: { embedded?: boolean }) {
   const t = useTranslation();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -111,7 +111,7 @@ export function GamesSearchTipRotator() {
   return (
     <aside
       aria-label={t("games.search.tipRotator.label")}
-      className={styles.root}
+      className={`${styles.root}${embedded ? ` ${styles.embedded}` : ""}`}
       onBlur={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onMouseEnter={() => setPaused(true)}

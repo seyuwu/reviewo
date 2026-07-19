@@ -313,11 +313,13 @@ export class GamePartiesRepository {
 
   /**
    * Atomically add a member if capacity remains.
-   * Returns the existing membership when already present, or null when the party is full.
+   * Returns the existing membership when already present, or null when the party is full
+   * (or the position role is already taken).
    */
   addMemberAtomically(input: {
     maxMembers: number;
     partyId: string;
+    positionRole?: string | null;
     userId: string;
   }): Promise<GamePartyMember | null> {
     return this.prismaService.$transaction(async (tx) => {
@@ -344,9 +346,25 @@ export class GamePartiesRepository {
         return alreadyMember;
       }
 
+      const positionRole = input.positionRole ?? null;
+
+      if (positionRole) {
+        const taken = await tx.gamePartyMember.findFirst({
+          where: {
+            partyId: input.partyId,
+            positionRole
+          }
+        });
+
+        if (taken) {
+          return null;
+        }
+      }
+
       return tx.gamePartyMember.create({
         data: {
           partyId: input.partyId,
+          positionRole,
           role: "MEMBER",
           userId: input.userId
         }
@@ -365,11 +383,31 @@ export class GamePartiesRepository {
     userId: string;
     maxMembers: number;
     positionRole?: string | null;
-  }): Promise<{ closedInvites: GamePartyInvite[]; member: GamePartyMember | null }> {
+  }): Promise<{
+    closedInvites: GamePartyInvite[];
+    member: GamePartyMember | null;
+    staleInvite: boolean;
+  }> {
     return this.prismaService.$transaction(async (tx) => {
       await tx.$executeRaw`
         SELECT id FROM social.game_parties WHERE id = ${input.partyId}::uuid FOR UPDATE
       `;
+      await tx.$executeRaw`
+        SELECT id FROM social.game_party_invites WHERE id = ${input.inviteId}::uuid FOR UPDATE
+      `;
+
+      const inviteRow = await tx.gamePartyInvite.findUnique({
+        where: { id: input.inviteId }
+      });
+
+      if (
+        !inviteRow ||
+        inviteRow.partyId !== input.partyId ||
+        inviteRow.inviteeUserId !== input.userId ||
+        inviteRow.status !== "PENDING"
+      ) {
+        return { closedInvites: [], member: null, staleInvite: true };
+      }
 
       const memberCount = await tx.gamePartyMember.count({
         where: { partyId: input.partyId }
@@ -391,7 +429,8 @@ export class GamePartiesRepository {
         });
         return {
           closedInvites: pending.map((invite) => ({ ...invite, status: "CANCELLED" as const })),
-          member: null
+          member: null,
+          staleInvite: false
         };
       }
 
@@ -403,11 +442,14 @@ export class GamePartiesRepository {
       });
 
       if (alreadyMember) {
-        await tx.gamePartyInvite.update({
-          where: { id: input.inviteId },
-          data: { status: "ACCEPTED" }
+        await tx.gamePartyInvite.updateMany({
+          data: { status: "ACCEPTED" },
+          where: {
+            id: input.inviteId,
+            status: "PENDING"
+          }
         });
-        return { closedInvites: [], member: alreadyMember };
+        return { closedInvites: [], member: alreadyMember, staleInvite: false };
       }
 
       const positionRole = input.positionRole ?? null;
@@ -441,7 +483,8 @@ export class GamePartiesRepository {
               ...invite,
               status: "CANCELLED" as const
             })),
-            member: null
+            member: null,
+            staleInvite: false
           };
         }
       }
@@ -455,10 +498,18 @@ export class GamePartiesRepository {
         }
       });
 
-      await tx.gamePartyInvite.update({
-        where: { id: input.inviteId },
-        data: { status: "ACCEPTED" }
+      const accepted = await tx.gamePartyInvite.updateMany({
+        data: { status: "ACCEPTED" },
+        where: {
+          id: input.inviteId,
+          status: "PENDING"
+        }
       });
+
+      if (accepted.count === 0) {
+        // Concurrent decline/cancel won — roll back by aborting transaction via throw.
+        throw new Error("INVITE_NO_LONGER_PENDING");
+      }
 
       const closedInvites: GamePartyInvite[] = [];
 
@@ -508,7 +559,7 @@ export class GamePartiesRepository {
         }
       }
 
-      return { closedInvites, member };
+      return { closedInvites, member, staleInvite: false };
     });
   }
 
@@ -770,13 +821,25 @@ export class GamePartiesRepository {
 
   /**
    * Hard-delete temporary parties past TTL (members/invites/chat cascade).
-   * Returns deleted rows so callers can clear LFG for those owners.
+   * Prefer deleting Discord channels first via the service, then call this.
    */
-  async deleteExpiredParties(
+  async findExpiredParties(
     now = new Date()
-  ): Promise<Array<{ id: string; ownerUserId: string; slug: string }>> {
-    const expired = await this.prismaService.gameParty.findMany({
+  ): Promise<
+    Array<{
+      discordChannelId: string | null;
+      discordVoiceExpiresAt: Date | null;
+      expiresAt: Date | null;
+      id: string;
+      ownerUserId: string;
+      slug: string;
+    }>
+  > {
+    return this.prismaService.gameParty.findMany({
       select: {
+        discordChannelId: true,
+        discordVoiceExpiresAt: true,
+        expiresAt: true,
         id: true,
         ownerUserId: true,
         slug: true
@@ -786,18 +849,196 @@ export class GamePartiesRepository {
         kind: "PARTY"
       }
     });
+  }
+
+  async deletePartiesByIds(partyIds: string[]): Promise<number> {
+    if (partyIds.length === 0) {
+      return 0;
+    }
+
+    const result = await this.prismaService.gameParty.deleteMany({
+      where: {
+        id: { in: partyIds }
+      }
+    });
+
+    return result.count;
+  }
+
+  /**
+   * @deprecated Prefer findExpiredParties + Discord delete + deletePartiesByIds.
+   * Kept for any external callers; deletes DB rows before Discord cleanup.
+   */
+  async deleteExpiredParties(
+    now = new Date()
+  ): Promise<Array<{ discordChannelId: string | null; id: string; ownerUserId: string; slug: string }>> {
+    const expired = await this.findExpiredParties(now);
 
     if (expired.length === 0) {
       return [];
     }
 
-    await this.prismaService.gameParty.deleteMany({
+    await this.deletePartiesByIds(expired.map((party) => party.id));
+    return expired;
+  }
+
+  updateDiscordVoice(
+    partyId: string,
+    input: {
+      discordChannelId: string;
+      discordInviteUrl: string;
+      discordVoiceCreatedAt: Date;
+      discordVoiceExpiresAt: Date | null;
+    }
+  ): Promise<GameParty> {
+    return this.prismaService.gameParty.update({
+      data: {
+        discordChannelId: input.discordChannelId,
+        discordInviteUrl: input.discordInviteUrl,
+        discordVoiceCreatedAt: input.discordVoiceCreatedAt,
+        discordVoiceExpiresAt: input.discordVoiceExpiresAt
+      },
+      where: { id: partyId }
+    });
+  }
+
+  /** Returns true when this caller claimed the empty discord voice slot. */
+  async claimDiscordVoice(
+    partyId: string,
+    input: {
+      discordChannelId: string;
+      discordInviteUrl: string;
+      discordVoiceCreatedAt: Date;
+      discordVoiceExpiresAt: Date | null;
+    }
+  ): Promise<boolean> {
+    const result = await this.prismaService.gameParty.updateMany({
+      data: {
+        discordChannelId: input.discordChannelId,
+        discordInviteUrl: input.discordInviteUrl,
+        discordVoiceCreatedAt: input.discordVoiceCreatedAt,
+        discordVoiceExpiresAt: input.discordVoiceExpiresAt
+      },
       where: {
-        id: { in: expired.map((party) => party.id) }
+        discordChannelId: null,
+        id: partyId
       }
     });
 
-    return expired;
+    return result.count > 0;
+  }
+
+  async clearDiscordVoice(partyId: string): Promise<void> {
+    await this.prismaService.gameParty.update({
+      data: {
+        discordChannelId: null,
+        discordInviteUrl: null,
+        discordVoiceCreatedAt: null,
+        discordVoiceExpiresAt: null
+      },
+      where: { id: partyId }
+    });
+  }
+
+  async listExpiredDiscordVoices(
+    now: Date,
+    legacyCreatedBefore?: Date
+  ): Promise<
+    Array<{
+      discordChannelId: string;
+      discordVoiceExpiresAt: Date | null;
+      id: string;
+      kind: GamePartyKind;
+      slug: string;
+    }>
+  > {
+    const rows = await this.prismaService.gameParty.findMany({
+      select: {
+        discordChannelId: true,
+        discordVoiceExpiresAt: true,
+        id: true,
+        kind: true,
+        slug: true
+      },
+      where: {
+        discordChannelId: { not: null },
+        OR: [
+          { discordVoiceExpiresAt: { lte: now } },
+          ...(legacyCreatedBefore
+            ? [
+                {
+                  discordVoiceCreatedAt: { lte: legacyCreatedBefore },
+                  discordVoiceExpiresAt: null
+                }
+              ]
+            : [])
+        ]
+      }
+    });
+
+    return rows.flatMap((row) =>
+      row.discordChannelId
+        ? [
+            {
+              discordChannelId: row.discordChannelId,
+              discordVoiceExpiresAt: row.discordVoiceExpiresAt,
+              id: row.id,
+              kind: row.kind,
+              slug: row.slug
+            }
+          ]
+        : []
+    );
+  }
+
+  /** Non-CAS expiry bump (cleanup auto-extend while voice occupied). */
+  setPartyExpiry(
+    partyId: string,
+    expiresAt: Date,
+    discordInviteUrl?: string | null
+  ): Promise<GameParty> {
+    return this.prismaService.gameParty.update({
+      data: {
+        expiresAt,
+        discordVoiceExpiresAt: expiresAt,
+        ...(discordInviteUrl !== undefined ? { discordInviteUrl } : {})
+      },
+      where: { id: partyId }
+    });
+  }
+
+  setDiscordVoiceExpiry(
+    partyId: string,
+    discordVoiceExpiresAt: Date,
+    discordInviteUrl?: string | null
+  ): Promise<GameParty> {
+    return this.prismaService.gameParty.update({
+      data: {
+        discordVoiceExpiresAt,
+        ...(discordInviteUrl !== undefined ? { discordInviteUrl } : {})
+      },
+      where: { id: partyId }
+    });
+  }
+
+  async updateDiscordVoiceExpiry(
+    partyId: string,
+    discordVoiceExpiresAt: Date,
+    expectedExpiresAt: Date | null,
+    discordInviteUrl?: string | null
+  ): Promise<boolean> {
+    const result = await this.prismaService.gameParty.updateMany({
+      data: {
+        discordVoiceExpiresAt,
+        ...(discordInviteUrl !== undefined ? { discordInviteUrl } : {})
+      },
+      where: {
+        discordVoiceExpiresAt: expectedExpiresAt,
+        id: partyId
+      }
+    });
+
+    return result.count > 0;
   }
 
   /** Drop terminal invite rows older than the cutoff (PENDING kept). */
@@ -817,6 +1058,37 @@ export class GamePartiesRepository {
       data: { name },
       where: { id: partyId }
     });
+  }
+
+  updatePartyJoinMode(
+    partyId: string,
+    joinMode: "OPEN" | "CONFIRM"
+  ): Promise<GameParty> {
+    return this.prismaService.gameParty.update({
+      data: { joinMode },
+      where: { id: partyId }
+    });
+  }
+
+  async updatePartyExpiry(
+    partyId: string,
+    expiresAt: Date,
+    expectedExpiresAt: Date,
+    discordInviteUrl?: string | null
+  ): Promise<boolean> {
+    const result = await this.prismaService.gameParty.updateMany({
+      data: {
+        expiresAt,
+        discordVoiceExpiresAt: expiresAt,
+        ...(discordInviteUrl !== undefined ? { discordInviteUrl } : {})
+      },
+      where: {
+        expiresAt: expectedExpiresAt,
+        id: partyId
+      }
+    });
+
+    return result.count > 0;
   }
 
   createChatMessage(input: {

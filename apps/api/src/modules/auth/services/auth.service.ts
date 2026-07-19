@@ -13,10 +13,12 @@ import { AuthRepository } from "../repositories/auth.repository.js";
 import { AuthResponseDto } from "../dto/auth-response.dto.js";
 import { ChangePasswordDto } from "../dto/change-password.dto.js";
 import { ClaimEmailDto } from "../dto/claim-email.dto.js";
+import type { CurrentUserDto } from "../dto/current-user.dto.js";
 import { LoginDto } from "../dto/login.dto.js";
 import { RecoverAccountResponseDto } from "../dto/recover-account-response.dto.js";
 import { RegisterDto } from "../dto/register.dto.js";
 import { UpdateCurrentUserDto } from "../dto/update-current-user.dto.js";
+import { DiscordOauthService } from "./discord-oauth.service.js";
 import { JwtTokenService } from "./jwt-token.service.js";
 import { PasswordHasherService } from "./password-hasher.service.js";
 
@@ -25,6 +27,7 @@ export class AuthService {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly configService: ConfigService<EnvironmentVariables, true>,
+    private readonly discordOauthService: DiscordOauthService,
     private readonly jwtTokenService: JwtTokenService,
     private readonly passwordHasherService: PasswordHasherService,
     private readonly prismaService: PrismaService,
@@ -68,7 +71,7 @@ export class AuthService {
 
       void this.productAnalyticsService?.recordRegistration().catch(() => undefined);
 
-      return this.createAuthResponse(user);
+      return await this.createAuthResponse(user);
     } catch (error) {
       if (this.authRepository.isUniqueConstraintError(error)) {
         throw createEmailAlreadyExistsException();
@@ -97,7 +100,7 @@ export class AuthService {
     void this.productAnalyticsService?.recordRegistration().catch(() => undefined);
 
     return {
-      auth: this.createAuthResponse(user),
+      auth: await this.createAuthResponse(user),
       recoveryToken,
       recoveryUrl: this.buildRecoveryUrl(recoveryToken),
       user
@@ -140,7 +143,7 @@ export class AuthService {
       await this.authRepository.createRecoveryToken(existing.userId, nextRecoveryTokenHash, transaction);
     });
 
-    const auth = this.createAuthResponse(toAuthenticatedUser(existing.user));
+    const auth = await this.createAuthResponse(toAuthenticatedUser(existing.user));
 
     return {
       ...auth,
@@ -205,6 +208,146 @@ export class AuthService {
 
   createCurrentUserResponse(user: AuthenticatedUser): AuthenticatedUser {
     return user;
+  }
+
+  async getCurrentUserDto(user: AuthenticatedUser): Promise<CurrentUserDto> {
+    const discord = await this.authRepository.findDiscordIdentityByUserId(user.id);
+
+    return {
+      avatarUrl: user.avatarUrl,
+      discordLinked: Boolean(discord),
+      displayName: user.displayName,
+      email: user.email,
+      id: user.id,
+      role: user.role,
+      status: user.status,
+      username: user.username
+    };
+  }
+
+  async getDiscordUserId(userId: string): Promise<string | null> {
+    const identity = await this.authRepository.findDiscordIdentityByUserId(userId);
+    return identity?.providerUserId ?? null;
+  }
+
+  isDiscordOauthConfigured(): boolean {
+    return this.discordOauthService.isConfigured();
+  }
+
+  buildDiscordLinkRedirectUrl(
+    currentUser: AuthenticatedUser,
+    returnToRaw?: string,
+    returnOriginRaw?: string
+  ): string {
+    if (!this.discordOauthService.isConfigured()) {
+      throw createAppException({
+        code: AppErrorCode.ServiceUnavailable,
+        message: "Discord linking is not configured",
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE
+      });
+    }
+
+    const returnTo = sanitizeReturnTo(returnToRaw);
+    const returnOrigin = sanitizeReturnOrigin(
+      returnOriginRaw,
+      this.configService.get("CORS_ALLOWED_ORIGINS", { infer: true })
+    );
+    const state = this.jwtTokenService.signDiscordLinkState(currentUser.id, returnTo, returnOrigin);
+    return this.discordOauthService.buildAuthorizeUrl(state);
+  }
+
+  async completeDiscordLink(code: string, state: string): Promise<string> {
+    if (!this.discordOauthService.isConfigured()) {
+      throw createAppException({
+        code: AppErrorCode.ServiceUnavailable,
+        message: "Discord linking is not configured",
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE
+      });
+    }
+
+    const verified = this.jwtTokenService.verifyDiscordLinkState(state);
+
+    if (!verified) {
+      throw createAppException({
+        code: AppErrorCode.Unauthorized,
+        message: "Discord link state is invalid or expired",
+        statusCode: HttpStatus.UNAUTHORIZED
+      });
+    }
+
+    let discordUser: { id: string };
+
+    try {
+      discordUser = await this.discordOauthService.exchangeCode(code);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "unknown";
+      console.warn(`[discord-oauth] code exchange failed: ${detail}`);
+      throw createAppException({
+        code: AppErrorCode.BadRequest,
+        message: "Could not complete Discord authorization",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    const existingForDiscord = await this.authRepository.findDiscordIdentityByDiscordUserId(
+      discordUser.id
+    );
+
+    if (existingForDiscord && existingForDiscord.userId !== verified.userId) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "This Discord account is already linked to another user",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
+
+    const existingForUser = await this.authRepository.findDiscordIdentityByUserId(verified.userId);
+
+    if (existingForUser) {
+      if (existingForUser.providerUserId !== discordUser.id) {
+        await this.authRepository.deleteDiscordIdentityByUserId(verified.userId);
+        await this.authRepository.createDiscordIdentity(verified.userId, discordUser.id);
+      }
+    } else if (!existingForDiscord) {
+      await this.authRepository.createDiscordIdentity(verified.userId, discordUser.id);
+    }
+
+    return this.buildWebRedirect(verified.returnTo, verified.returnOrigin, "linked");
+  }
+
+  resolveDiscordLinkFailureRedirect(state?: string, reason = "error"): string {
+    const verified = state ? this.jwtTokenService.verifyDiscordLinkState(state) : null;
+    const returnTo = verified?.returnTo ?? "/";
+    const returnOrigin =
+      verified?.returnOrigin ??
+      this.configService.get("CORS_ALLOWED_ORIGINS", { infer: true })[0] ??
+      "http://localhost:3001";
+
+    return this.buildWebRedirect(
+      returnTo,
+      returnOrigin.replace(/\/$/, ""),
+      "error",
+      sanitizeDiscordFailureReason(reason)
+    );
+  }
+
+  async unlinkDiscord(currentUser: AuthenticatedUser): Promise<CurrentUserDto> {
+    await this.authRepository.deleteDiscordIdentityByUserId(currentUser.id);
+    return this.getCurrentUserDto(currentUser);
+  }
+
+  private buildWebRedirect(
+    returnTo: string,
+    returnOrigin: string,
+    discordStatus: "linked" | "error",
+    reason?: string
+  ): string {
+    const url = new URL(sanitizeReturnTo(returnTo), `${returnOrigin.replace(/\/$/, "")}/`);
+    url.searchParams.set("discord", discordStatus);
+    if (discordStatus === "error" && reason) {
+      url.searchParams.set("discordReason", reason.slice(0, 64));
+    }
+    return url.toString();
   }
 
   async updateCurrentUserProfile(
@@ -311,13 +454,52 @@ export class AuthService {
     return `${base}/recover/${token}`;
   }
 
-  createAuthResponse(user: AuthenticatedUser): AuthResponseDto {
+  async createAuthResponse(user: AuthenticatedUser): Promise<AuthResponseDto> {
     return {
       accessToken: this.jwtTokenService.signAccessToken(user.id),
       expiresIn: this.configService.get("JWT_ACCESS_TOKEN_TTL_SECONDS", { infer: true }),
       tokenType: "Bearer",
-      user
+      user: await this.getCurrentUserDto(user)
     };
+  }
+}
+
+function sanitizeReturnTo(returnToRaw?: string): string {
+  const fallback = "/";
+  if (!returnToRaw) {
+    return fallback;
+  }
+
+  const trimmed = returnToRaw.trim();
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.includes("://")) {
+    return fallback;
+  }
+
+  return trimmed.slice(0, 512) || fallback;
+}
+
+function sanitizeReturnOrigin(returnOriginRaw: string | undefined, allowedOrigins: string[]): string {
+  const fallback = allowedOrigins[0]?.replace(/\/$/, "") ?? "http://localhost:3001";
+  if (!returnOriginRaw) {
+    return fallback;
+  }
+
+  try {
+    const url = new URL(returnOriginRaw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return fallback;
+    }
+
+    const origin = url.origin;
+    const allowed = new Set(allowedOrigins.map((item) => item.replace(/\/$/, "")));
+
+    if (allowed.has(origin) || process.env["NODE_ENV"] === "development") {
+      return origin;
+    }
+
+    return fallback;
+  } catch {
+    return fallback;
   }
 }
 
@@ -371,4 +553,16 @@ function createInvalidRecoveryTokenException(): Error {
     message: "Invalid or expired recovery link",
     statusCode: HttpStatus.UNAUTHORIZED
   });
+}
+
+const SAFE_DISCORD_FAILURE_REASONS = new Set([
+  "access_denied",
+  "denied",
+  "error",
+  "exchange"
+]);
+
+function sanitizeDiscordFailureReason(reason: string): string {
+  const normalized = reason.trim().toLowerCase().slice(0, 64);
+  return SAFE_DISCORD_FAILURE_REASONS.has(normalized) ? normalized : "error";
 }

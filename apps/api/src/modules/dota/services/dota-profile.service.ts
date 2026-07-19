@@ -239,6 +239,7 @@ export class DotaProfileService {
           let memberCount = candidate.memberCount;
           let claimedRoles: string[] = [];
           let mmr = candidate.mmr;
+          let joinMode: "OPEN" | "CONFIRM" = "CONFIRM";
 
           if (candidate.partySlug) {
             const party = await this.gamePartiesRepository.findByVerticalAndSlug(
@@ -274,6 +275,7 @@ export class DotaProfileService {
               return null;
             }
 
+            joinMode = party.joinMode === "OPEN" ? "OPEN" : "CONFIRM";
             const claimed = new Set(
               party.members
                 .map((member) => member.positionRole)
@@ -315,6 +317,7 @@ export class DotaProfileService {
             claimedRoles,
             desiredSize,
             greenFlags: pickTopFlags(qualities, isDotaGreenFlagKey),
+            joinMode,
             memberCount,
             mmr,
             ownerUserId: candidate.ownerUserId,

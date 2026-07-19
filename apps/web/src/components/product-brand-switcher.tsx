@@ -247,6 +247,14 @@ export function ProductBrandSwitcher({ mode }: ProductBrandSwitcherProps) {
           >
             {t("web.vertical.games")}
           </Link>
+          <Link
+            className="product-brand-menu-item product-brand-menu-item--quiet"
+            href="/privacy"
+            onClick={handleSelect}
+            role="menuitem"
+          >
+            {t("web.nav.privacy")}
+          </Link>
         </div>
       </div>
     </div>

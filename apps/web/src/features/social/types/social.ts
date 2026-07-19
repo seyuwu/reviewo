@@ -62,12 +62,18 @@ export interface GamePartyInvite {
 }
 
 export interface GameParty {
+  canExtendDiscordVoice?: boolean;
+  canExtendParty?: boolean;
   canManageParty?: boolean;
+  discordInviteUrl?: string | null;
+  discordVoiceAvailable?: boolean;
+  discordVoiceExpiresAt?: string | null;
   expiresAt: string | null;
   id: string;
   isMember: boolean;
   isOfficer?: boolean;
   isOwner: boolean;
+  joinMode?: "OPEN" | "CONFIRM";
   kind: GamePartyKind;
   maxMembers: number;
   memberCount: number;

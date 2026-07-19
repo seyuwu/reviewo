@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import type { DotaFriendshipStatus } from "@reviewo/shared";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
@@ -14,6 +14,10 @@ import type {
   FriendshipRequestsResponseDto,
   FriendsListResponseDto
 } from "../dto/friendship-response.dto.js";
+import {
+  PARTY_REALTIME_PUBLISHER,
+  type PartyRealtimePublisher
+} from "../party-realtime.types.js";
 import { FriendshipsRepository } from "../repositories/friendships.repository.js";
 
 @Injectable()
@@ -22,6 +26,8 @@ export class FriendshipsService {
     private readonly entitiesRepository: EntitiesRepository,
     private readonly friendshipsRepository: FriendshipsRepository,
     private readonly jwtTokenService: JwtTokenService,
+    @Inject(PARTY_REALTIME_PUBLISHER)
+    private readonly partyRealtimeService: PartyRealtimePublisher,
     private readonly usersRepository: UsersRepository
   ) {}
 
@@ -129,7 +135,36 @@ export class FriendshipsService {
 
     try {
       const friendship = await this.friendshipsRepository.createPending(currentUser.id, input.userId);
-      return this.toRequestDto(friendship.id, currentUser.id, input.userId, "outgoing", friendship.createdAt);
+      const outgoing = await this.toRequestDto(
+        friendship.id,
+        currentUser.id,
+        input.userId,
+        "outgoing",
+        friendship.createdAt
+      );
+      const incoming = await this.toRequestDto(
+        friendship.id,
+        input.userId,
+        currentUser.id,
+        "incoming",
+        friendship.createdAt
+      );
+
+      this.partyRealtimeService.emitFriendNotification(input.userId, {
+        request: {
+          createdAt: incoming.createdAt,
+          direction: "incoming",
+          id: incoming.id,
+          otherUser: {
+            displayName: incoming.otherUser.displayName,
+            dotaSlug: incoming.otherUser.dotaSlug,
+            id: incoming.otherUser.id
+          }
+        },
+        type: "friend_request"
+      });
+
+      return outgoing;
     } catch {
       const raced = await this.friendshipsRepository.findBetweenUsers(currentUser.id, input.userId);
 
@@ -206,7 +241,23 @@ export class FriendshipsService {
     }
 
     const friendship = await this.friendshipsRepository.ensureAccepted(inviterUserId, currentUser.id);
-    return this.toFriendUserDto(inviterUserId, friendship.id);
+    const friend = await this.toFriendUserDto(inviterUserId, friendship.id);
+
+    this.partyRealtimeService.emitFriendNotification(inviterUserId, {
+      request: {
+        createdAt: new Date().toISOString(),
+        direction: "outgoing",
+        id: friendship.id,
+        otherUser: {
+          displayName: currentUser.displayName,
+          dotaSlug: null,
+          id: currentUser.id
+        }
+      },
+      type: "friend_accepted"
+    });
+
+    return friend;
   }
 
   async acceptRequest(requestId: string, currentUser: AuthenticatedUser): Promise<FriendUserDto> {
@@ -229,7 +280,23 @@ export class FriendshipsService {
     }
 
     await this.friendshipsRepository.updateStatus(friendship.id, "ACCEPTED");
-    return this.toFriendUserDto(friendship.requesterId, friendship.id);
+    const friend = await this.toFriendUserDto(friendship.requesterId, friendship.id);
+
+    this.partyRealtimeService.emitFriendNotification(friendship.requesterId, {
+      request: {
+        createdAt: new Date().toISOString(),
+        direction: "outgoing",
+        id: friendship.id,
+        otherUser: {
+          displayName: currentUser.displayName,
+          dotaSlug: null,
+          id: currentUser.id
+        }
+      },
+      type: "friend_accepted"
+    });
+
+    return friend;
   }
 
   async declineRequest(requestId: string, currentUser: AuthenticatedUser): Promise<{ ok: true }> {

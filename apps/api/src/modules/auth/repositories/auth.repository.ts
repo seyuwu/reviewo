@@ -84,6 +84,55 @@ export class AuthRepository {
     });
   }
 
+  async createDiscordIdentity(
+    userId: string,
+    discordUserId: string,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<UserAuthIdentity> {
+    return client.userAuthIdentity.create({
+      data: {
+        passwordHash: null,
+        provider: "discord",
+        providerUserId: discordUserId,
+        userId
+      }
+    });
+  }
+
+  async findDiscordIdentityByUserId(userId: string): Promise<UserAuthIdentity | null> {
+    return this.prismaService.userAuthIdentity.findFirst({
+      where: {
+        provider: "discord",
+        userId
+      }
+    });
+  }
+
+  async findDiscordIdentityByDiscordUserId(
+    discordUserId: string
+  ): Promise<EmailIdentityWithUser | null> {
+    return this.prismaService.userAuthIdentity.findUnique({
+      include: {
+        user: true
+      },
+      where: {
+        provider_providerUserId: {
+          provider: "discord",
+          providerUserId: discordUserId
+        }
+      }
+    });
+  }
+
+  async deleteDiscordIdentityByUserId(userId: string): Promise<void> {
+    await this.prismaService.userAuthIdentity.deleteMany({
+      where: {
+        provider: "discord",
+        userId
+      }
+    });
+  }
+
   async updateEmailIdentity(
     id: string,
     input: {

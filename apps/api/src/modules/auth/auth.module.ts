@@ -8,6 +8,7 @@ import { JwtAuthGuard } from "./guards/jwt-auth.guard.js";
 import { OptionalJwtAuthGuard } from "./guards/optional-jwt-auth.guard.js";
 import { AuthRepository } from "./repositories/auth.repository.js";
 import { AuthService } from "./services/auth.service.js";
+import { DiscordOauthService } from "./services/discord-oauth.service.js";
 import { JwtTokenService } from "./services/jwt-token.service.js";
 import { PasswordHasherService } from "./services/password-hasher.service.js";
 
@@ -19,6 +20,7 @@ import { PasswordHasherService } from "./services/password-hasher.service.js";
     AdminGuard,
     AuthRepository,
     AuthService,
+    DiscordOauthService,
     JwtAuthGuard,
     OptionalJwtAuthGuard,
     JwtTokenService,

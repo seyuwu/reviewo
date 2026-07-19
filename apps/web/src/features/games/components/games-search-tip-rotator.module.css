@@ -10,6 +10,16 @@
   padding: 0.75rem 0.9rem 0.65rem;
 }
 
+.embedded {
+  backdrop-filter: none;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  grid-template-rows: minmax(4.2rem, auto) auto;
+  min-height: 0;
+  padding: 0;
+}
+
 .slide {
   display: grid;
   gap: 0.25rem;

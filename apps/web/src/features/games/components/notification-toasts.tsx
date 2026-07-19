@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { useTranslation } from "../../i18n/locale-provider";
+import { isDiscordInviteUrl, openDiscordInvite } from "../../social/lib/discord-invite";
 import { useNotificationToasts } from "../lib/use-notification-toasts";
 import styles from "./notification-toasts.module.css";
 
@@ -21,7 +22,7 @@ export function NotificationToastsHost() {
           <>
             <strong className={styles.title}>{toast.title}</strong>
             {toast.body ? <span className={styles.body}>{toast.body}</span> : null}
-            {toast.href && toast.ctaLabel ? (
+            {(toast.href || toast.actionEvent) && toast.ctaLabel ? (
               <span className={styles.cta}>{toast.ctaLabel}</span>
             ) : null}
           </>
@@ -29,10 +30,41 @@ export function NotificationToastsHost() {
 
         return (
           <div className={styles.card} key={toast.id} role="status">
-            {toast.href ? (
-              <Link className={styles.content} href={toast.href} onClick={() => dismiss(toast.id)}>
+            {toast.actionEvent ? (
+              <button
+                className={styles.content}
+                onClick={() => {
+                  dismiss(toast.id);
+                  window.dispatchEvent(
+                    new CustomEvent(toast.actionEvent!, { detail: { tab: "requests" } })
+                  );
+                }}
+                type="button"
+              >
                 {body}
-              </Link>
+              </button>
+            ) : toast.href ? (
+              toast.href.startsWith("http://") || toast.href.startsWith("https://") ? (
+                <a
+                  className={styles.content}
+                  href={toast.href}
+                  onClick={(event) => {
+                    dismiss(toast.id);
+                    if (toast.href && isDiscordInviteUrl(toast.href)) {
+                      event.preventDefault();
+                      openDiscordInvite(toast.href);
+                    }
+                  }}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  {body}
+                </a>
+              ) : (
+                <Link className={styles.content} href={toast.href} onClick={() => dismiss(toast.id)}>
+                  {body}
+                </Link>
+              )
             ) : (
               <div className={styles.content}>{body}</div>
             )}

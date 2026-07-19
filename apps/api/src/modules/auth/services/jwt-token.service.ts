@@ -30,6 +30,15 @@ interface PartyJoinTokenPayload {
   sub: string;
 }
 
+interface DiscordLinkTokenPayload {
+  exp: number;
+  iat: number;
+  purpose: "discord_link";
+  returnOrigin: string;
+  returnTo: string;
+  sub: string;
+}
+
 export interface VerifiedAccessToken {
   userId: string;
 }
@@ -43,11 +52,20 @@ export interface VerifiedPartyJoinToken {
   slug: string;
 }
 
+export interface VerifiedDiscordLinkToken {
+  returnOrigin: string;
+  returnTo: string;
+  userId: string;
+}
+
 /** Friend-invite share links remain valid for 30 days. */
 const FRIEND_INVITE_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 /** Party auto-join share links remain valid for 7 days. */
 const PARTY_JOIN_TTL_SECONDS = 60 * 60 * 24 * 7;
+
+/** Discord OAuth CSRF state TTL. */
+const DISCORD_LINK_TTL_SECONDS = 60 * 10;
 
 @Injectable()
 export class JwtTokenService {
@@ -103,6 +121,27 @@ export class JwtTokenService {
       purpose: "party_join",
       slug,
       sub: partyId
+    };
+    const encodedHeader = encodeJson(header);
+    const encodedPayload = encodeJson(payload);
+    const signature = this.sign(`${encodedHeader}.${encodedPayload}`);
+
+    return `${encodedHeader}.${encodedPayload}.${signature}`;
+  }
+
+  signDiscordLinkState(userId: string, returnTo: string, returnOrigin: string): string {
+    const nowSeconds = getCurrentUnixSeconds();
+    const header: JwtHeader = {
+      alg: "HS256",
+      typ: "JWT"
+    };
+    const payload: DiscordLinkTokenPayload = {
+      exp: nowSeconds + DISCORD_LINK_TTL_SECONDS,
+      iat: nowSeconds,
+      purpose: "discord_link",
+      returnOrigin,
+      returnTo,
+      sub: userId
     };
     const encodedHeader = encodeJson(header);
     const encodedPayload = encodeJson(payload);
@@ -227,6 +266,43 @@ export class JwtTokenService {
     };
   }
 
+  verifyDiscordLinkState(token: string): VerifiedDiscordLinkToken | null {
+    const parts = token.split(".");
+
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    const [encodedHeader, encodedPayload, encodedSignature] = parts;
+
+    if (!encodedHeader || !encodedPayload || !encodedSignature) {
+      return null;
+    }
+
+    const expectedSignature = this.sign(`${encodedHeader}.${encodedPayload}`);
+
+    if (!safeEqual(encodedSignature, expectedSignature)) {
+      return null;
+    }
+
+    const header = decodeJson(encodedHeader);
+    const payload = decodeJson(encodedPayload);
+
+    if (!isJwtHeader(header) || !isDiscordLinkTokenPayload(payload)) {
+      return null;
+    }
+
+    if (payload.exp <= getCurrentUnixSeconds()) {
+      return null;
+    }
+
+    return {
+      returnOrigin: payload.returnOrigin,
+      returnTo: payload.returnTo,
+      userId: payload.sub
+    };
+  }
+
   private sign(value: string): string {
     const secret = this.configService.get("JWT_SECRET", { infer: true });
 
@@ -310,6 +386,36 @@ function isPartyJoinTokenPayload(value: unknown): value is PartyJoinTokenPayload
     typeof candidate.slug === "string" &&
     candidate.slug.length > 0
   );
+}
+
+function isDiscordLinkTokenPayload(value: unknown): value is DiscordLinkTokenPayload {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<DiscordLinkTokenPayload>;
+
+  return (
+    candidate.purpose === "discord_link" &&
+    typeof candidate.exp === "number" &&
+    typeof candidate.iat === "number" &&
+    typeof candidate.sub === "string" &&
+    candidate.sub.length > 0 &&
+    typeof candidate.returnTo === "string" &&
+    candidate.returnTo.startsWith("/") &&
+    !candidate.returnTo.startsWith("//") &&
+    typeof candidate.returnOrigin === "string" &&
+    isAllowedHttpOrigin(candidate.returnOrigin)
+  );
+}
+
+function isAllowedHttpOrigin(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") && url.origin === value;
+  } catch {
+    return false;
+  }
 }
 
 function getCurrentUnixSeconds(): number {

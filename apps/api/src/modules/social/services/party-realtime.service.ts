@@ -1,10 +1,12 @@
 import { Injectable } from "@nestjs/common";
 
 import type {
+  FriendNotificationPayload,
   PartyNotificationPayload,
   PartyRealtimePublisher,
   PartyRecruitUpdatedPayload
 } from "../party-realtime.types.js";
+import type { GamePartyResponseDto } from "../dto/game-party-response.dto.js";
 import { GamePartyGateway } from "../gateways/game-party.gateway.js";
 
 /**
@@ -19,7 +21,15 @@ export class PartyRealtimeService implements PartyRealtimePublisher {
     this.gamePartyGateway.emitPartyNotification(userId, payload);
   }
 
+  emitFriendNotification(userId: string, payload: FriendNotificationPayload): void {
+    this.gamePartyGateway.emitFriendNotification(userId, payload);
+  }
+
   broadcastPartyRecruitUpdated(payload: PartyRecruitUpdatedPayload): void {
     this.gamePartyGateway.broadcastPartyRecruitUpdated(payload);
+  }
+
+  broadcastPartyUpdated(party: GamePartyResponseDto): void {
+    this.gamePartyGateway.broadcastPartyUpdated(party);
   }
 }

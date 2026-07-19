@@ -1036,6 +1036,14 @@ enum GamePartyVisibility {
   @@schema("social")
 }
 
+enum GamePartyJoinMode {
+  OPEN
+  CONFIRM
+
+  @@map("game_party_join_mode")
+  @@schema("social")
+}
+
 enum GamePartyMemberRole {
   OWNER
   OFFICER
@@ -1088,8 +1096,13 @@ model GameParty {
   ownerUserId   String              @map("owner_user_id") @db.Uuid
   kind          GamePartyKind       @default(TEAM)
   visibility    GamePartyVisibility @default(PUBLIC)
+  joinMode      GamePartyJoinMode   @default(CONFIRM) @map("join_mode")
   maxMembers    Int                 @default(5) @map("max_members")
   expiresAt     DateTime?           @map("expires_at") @db.Timestamptz(6)
+  discordChannelId String?          @map("discord_channel_id") @db.VarChar(32)
+  discordInviteUrl String?          @map("discord_invite_url") @db.VarChar(256)
+  discordVoiceCreatedAt DateTime?   @map("discord_voice_created_at") @db.Timestamptz(6)
+  discordVoiceExpiresAt DateTime?   @map("discord_voice_expires_at") @db.Timestamptz(6)
   createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
   owner         User                @relation("GamePartyOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)

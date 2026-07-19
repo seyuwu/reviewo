@@ -8,6 +8,12 @@ import { playNotificationSound } from "../../games/lib/play-notification-sound";
 import { useNotificationToasts } from "../../games/lib/use-notification-toasts";
 import { useTranslation } from "../../i18n/locale-provider";
 import {
+  dispatchFriendNotificationEvent,
+  friendNotificationToastId,
+  OPEN_FRIENDS_DOCK_EVENT,
+  type FriendNotificationPayload
+} from "../lib/friend-notifications";
+import {
   connectPartyNotificationsSocket,
   dispatchPartyNotificationEvent,
   partyNotificationToastId,
@@ -34,6 +40,46 @@ export function usePartyNotifications(): void {
     }
 
     let connection: PartyNotificationsSocketConnection | null = null;
+
+    function handleFriendPayload(payload: FriendNotificationPayload): void {
+      const toastId = friendNotificationToastId(payload.type, payload.request.id);
+
+      dispatchFriendNotificationEvent({
+        ...payload,
+        openDock: payload.type === "friend_request",
+        toastId
+      });
+
+      if (toastedIdsRef.current.has(toastId)) {
+        return;
+      }
+
+      toastedIdsRef.current.add(toastId);
+      playNotificationSound();
+
+      if (payload.type === "friend_request") {
+        pushToast({
+          actionEvent: OPEN_FRIENDS_DOCK_EVENT,
+          body: t("web.toast.friendRequestBody", {
+            name: payload.request.otherUser.displayName
+          }),
+          ctaLabel: t("web.toast.openFriends"),
+          id: toastId,
+          title: t("web.toast.friendRequest")
+        });
+        return;
+      }
+
+      pushToast({
+        actionEvent: OPEN_FRIENDS_DOCK_EVENT,
+        body: t("web.toast.friendAcceptedBody", {
+          name: payload.request.otherUser.displayName
+        }),
+        ctaLabel: t("web.toast.openFriends"),
+        id: toastId,
+        title: t("web.toast.friendAccepted")
+      });
+    }
 
     function handlePayload(payload: PartyNotificationPayload): void {
       const toastId = partyNotificationToastId(payload.type, payload.invite.id);
@@ -124,7 +170,7 @@ export function usePartyNotifications(): void {
       }
     }
 
-    connection = connectPartyNotificationsSocket(accessToken, handlePayload);
+    connection = connectPartyNotificationsSocket(accessToken, handlePayload, handleFriendPayload);
 
     return () => {
       connection?.disconnect();

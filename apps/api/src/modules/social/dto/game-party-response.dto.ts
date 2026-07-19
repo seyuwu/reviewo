@@ -1,4 +1,4 @@
-import type { GamePartyKind } from "@reviewo/shared";
+import type { GamePartyJoinMode, GamePartyKind } from "@reviewo/shared";
 
 export class GamePartyMemberDto {
   displayName!: string;
@@ -37,11 +37,23 @@ export class GamePartyInviteDto {
 export class GamePartyResponseDto {
   /** Captain or sub-captain: recruit, apps, invites, kick members. */
   canManageParty!: boolean;
+  /** Captain/officer can add another extend window before max lifetime. */
+  canExtendParty!: boolean;
+  /** Captain/officer can extend temporary team Discord voice before max lifetime. */
+  canExtendDiscordVoice!: boolean;
+  /** Invite URL when a Discord voice was created for this party. */
+  discordInviteUrl!: string | null;
+  /** True when Discord voice integration is configured on the server. */
+  discordVoiceAvailable!: boolean;
+  /** When temporary Discord voice (esp. team) will be deleted. */
+  discordVoiceExpiresAt!: string | null;
   expiresAt!: string | null;
   id!: string;
   isMember!: boolean;
   isOfficer!: boolean;
   isOwner!: boolean;
+  /** OPEN = instant LFG join; CONFIRM = application required. */
+  joinMode!: GamePartyJoinMode;
   kind!: GamePartyKind;
   maxMembers!: number;
   memberCount!: number;
@@ -52,6 +64,16 @@ export class GamePartyResponseDto {
   slug!: string;
   vertical!: string;
   visibility!: "PUBLIC" | "PRIVATE";
+}
+
+export class PartyDiscordVoiceResponseDto {
+  channelId!: string;
+  guildId!: string;
+  inviteUrl!: string;
+  /** When this Discord voice channel will be deleted (team voice TTL / party expiry). */
+  expiresAt!: string | null;
+  /** True when bot moved the user into the voice channel (already on this guild voice). */
+  movedToVoice!: boolean;
 }
 
 export class MyPartiesResponseDto {

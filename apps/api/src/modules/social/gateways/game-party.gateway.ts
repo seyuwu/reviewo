@@ -22,7 +22,8 @@ import type {
 } from "../dto/game-party-response.dto.js";
 import type {
   PartyNotificationPayload,
-  PartyRecruitUpdatedPayload
+  PartyRecruitUpdatedPayload,
+  FriendNotificationPayload
 } from "../party-realtime.types.js";
 import { GamePartiesService } from "../services/game-parties.service.js";
 
@@ -272,8 +273,11 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   broadcastPartyUpdated(party: GamePartyResponseDto): void {
     this.server.to(partyRoomName(party.id)).emit("party_updated", party);
-    // Visitors on the team page watch party_view — keep their roster in sync too.
-    this.server.to(partyViewRoomName(party.slug)).emit("party_updated", party);
+    // Visitors watch party_view — never leak multi-use Discord invites there.
+    this.server.to(partyViewRoomName(party.slug)).emit("party_updated", {
+      ...party,
+      discordInviteUrl: null
+    });
   }
 
   broadcastPartyRecruitUpdated(payload: PartyRecruitUpdatedPayload): void {
@@ -286,6 +290,10 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   emitPartyNotification(userId: string, payload: PartyNotificationPayload): void {
     this.server.to(userRoomName(userId)).emit("party_notification", payload);
+  }
+
+  emitFriendNotification(userId: string, payload: FriendNotificationPayload): void {
+    this.server.to(userRoomName(userId)).emit("friend_notification", payload);
   }
 }
 

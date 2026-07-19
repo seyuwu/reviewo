@@ -1,5 +1,6 @@
 :root {
   color-scheme: light;
+  --friends-dock-clearance: 3.5rem;
   --color-accent: #8b5cf6;
   --color-accent-strong: #7c3aed;
   --color-accent-rose: #ec4899;
@@ -350,9 +351,21 @@ body {
   box-shadow: 0 18px 48px rgb(0 0 0 / 45%);
 }
 
+[data-product="games"] .games-rosters-menu-panel {
+  background: rgb(16 18 28 / 96%);
+  backdrop-filter: blur(18px);
+  border-color: rgb(147 130 255 / 22%);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 55%);
+}
+
 [data-product="games"] .product-brand-menu-item:hover,
 [data-product="games"] .product-brand-menu-item.is-active {
   background: rgb(109 74 255 / 16%);
+}
+
+[data-product="games"] .product-brand-menu-item--quiet {
+  border-top-color: rgb(147 130 255 / 16%);
+  color: #8b93a7;
 }
 
 [data-product="games"] .app-chrome-user {
@@ -398,10 +411,6 @@ body {
 
 [data-product="games"] .app-nav-button {
   color: #9aa3b5;
-}
-
-[data-product="games"] .site-footer {
-  border-top-color: rgb(147 130 255 / 12%);
 }
 
 [data-product="games"] .signed-in-box {
@@ -1087,6 +1096,15 @@ button:disabled {
   background: var(--color-primary-soft);
   color: var(--color-text-muted);
   font-weight: 650;
+}
+
+.product-brand-menu-item--quiet {
+  border-top: 1px solid var(--color-card-border);
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  margin-top: 0.2rem;
+  padding-top: 0.7rem;
 }
 
 .games-rosters-menu {
@@ -6020,32 +6038,6 @@ h1 {
 .discovery-window-tab.is-active {
   background: var(--color-primary-soft);
   border-color: rgb(139 92 246 / 40%);
-}
-
-.site-footer {
-  border-top: 1px solid var(--color-card-border);
-  margin-top: 2rem;
-  padding: 1rem var(--entity-page-gutter, 1.35rem) 1.5rem;
-}
-
-.site-footer-inner {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  margin-inline: auto;
-  max-width: none;
-  width: 100%;
-}
-
-.site-footer-link {
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.site-footer-link:hover {
-  color: var(--color-primary);
 }
 
 .growth-modal-backdrop {

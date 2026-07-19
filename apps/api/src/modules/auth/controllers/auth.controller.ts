@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 
 import { CurrentUser } from "../../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
@@ -116,13 +116,113 @@ export class AuthController {
       }
     ]);
 
-    return this.authService.claimEmail(user, input);
+    return this.authService.getCurrentUserDto(await this.authService.claimEmail(user, input));
   }
 
   @Get("me")
   @UseGuards(JwtAuthGuard)
-  getCurrentUser(@CurrentUser() user: AuthenticatedUser): CurrentUserDto {
-    return this.authService.createCurrentUserResponse(user);
+  async getCurrentUser(@CurrentUser() user: AuthenticatedUser): Promise<CurrentUserDto> {
+    return this.authService.getCurrentUserDto(user);
+  }
+
+  @Get("discord/link")
+  @UseGuards(JwtAuthGuard)
+  async getDiscordLinkUrl(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query("returnTo") returnTo: string | undefined,
+    @Query("returnOrigin") returnOrigin: string | undefined,
+    @Req() request: RequestLike
+  ): Promise<{ url: string }> {
+    await this.apiRateLimiterService.assertWithinLimits([
+      {
+        key: user.id,
+        limit: 10,
+        message: "Too many Discord link attempts from this account",
+        namespace: "auth:discord-link:user",
+        windowSeconds: 60 * 60
+      },
+      {
+        key: resolveRequestIp(request),
+        limit: 30,
+        message: "Too many Discord link attempts from this network",
+        namespace: "auth:discord-link:ip",
+        windowSeconds: 60 * 60
+      }
+    ]);
+
+    return {
+      url: this.authService.buildDiscordLinkRedirectUrl(user, returnTo, returnOrigin)
+    };
+  }
+
+  @Get("discord/callback")
+  async discordCallback(
+    @Query("code") code: string | undefined,
+    @Query("state") state: string | undefined,
+    @Query("error") oauthError: string | undefined,
+    @Res() response: { redirect: (url: string) => void }
+  ): Promise<void> {
+    const codeValue = Array.isArray(code) ? code[0] : code;
+    const stateValue = Array.isArray(state) ? state[0] : state;
+    const oauthErrorValue = Array.isArray(oauthError) ? oauthError[0] : oauthError;
+
+    if (oauthErrorValue || !codeValue || !stateValue) {
+      console.warn(
+        `[discord-oauth] callback rejected: error=${oauthErrorValue ?? "none"} code=${Boolean(codeValue)} state=${Boolean(stateValue)}`
+      );
+      response.redirect(
+        this.authService.resolveDiscordLinkFailureRedirect(stateValue, oauthErrorValue ?? "denied")
+      );
+      return;
+    }
+
+    try {
+      const redirectTo = await this.authService.completeDiscordLink(codeValue, stateValue);
+      response.redirect(redirectTo);
+    } catch (error) {
+      const responseBody =
+        error && typeof error === "object" && "getResponse" in error
+          ? (error as { getResponse: () => unknown }).getResponse()
+          : null;
+      const message =
+        responseBody &&
+        typeof responseBody === "object" &&
+        responseBody !== null &&
+        "message" in responseBody &&
+        typeof (responseBody as { message: unknown }).message === "string"
+          ? (responseBody as { message: string }).message
+          : error instanceof Error
+            ? error.message
+            : "unknown";
+      console.warn(`[discord-oauth] callback failed: ${message}`);
+      response.redirect(this.authService.resolveDiscordLinkFailureRedirect(stateValue, "exchange"));
+    }
+  }
+
+  @Delete("discord")
+  @UseGuards(JwtAuthGuard)
+  async unlinkDiscord(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestLike
+  ): Promise<CurrentUserDto> {
+    await this.apiRateLimiterService.assertWithinLimits([
+      {
+        key: user.id,
+        limit: 10,
+        message: "Too many Discord unlink attempts from this account",
+        namespace: "auth:discord-unlink:user",
+        windowSeconds: 60 * 60
+      },
+      {
+        key: resolveRequestIp(request),
+        limit: 30,
+        message: "Too many Discord unlink attempts from this network",
+        namespace: "auth:discord-unlink:ip",
+        windowSeconds: 60 * 60
+      }
+    ]);
+
+    return this.authService.unlinkDiscord(user);
   }
 
   @Patch("me")
@@ -149,7 +249,8 @@ export class AuthController {
       }
     ]);
 
-    return this.authService.updateCurrentUserProfile(user, input);
+    const updated = await this.authService.updateCurrentUserProfile(user, input);
+    return this.authService.getCurrentUserDto(updated);
   }
 
   @Post("me/avatar")
@@ -176,7 +277,8 @@ export class AuthController {
       }
     ]);
 
-    return this.authService.updateCurrentUserAvatar(user, input.imageDataUrl);
+    const updated = await this.authService.updateCurrentUserAvatar(user, input.imageDataUrl);
+    return this.authService.getCurrentUserDto(updated);
   }
 
   @Post("change-password")

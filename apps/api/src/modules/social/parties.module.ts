@@ -10,6 +10,7 @@ import { PartiesController } from "./controllers/parties.controller.js";
 import { FriendshipsModule } from "./friendships.module.js";
 import { GamePartyGateway } from "./gateways/game-party.gateway.js";
 import { GamePartiesRepository } from "./repositories/game-parties.repository.js";
+import { DiscordVoiceService } from "./services/discord-voice.service.js";
 import { GamePartiesService } from "./services/game-parties.service.js";
 import { PartyRealtimeService } from "./services/party-realtime.service.js";
 import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
@@ -21,18 +22,20 @@ import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
     GamePartyGateway,
     GamePartiesRepository,
     PartyRealtimeService,
+    DiscordVoiceService,
     PARTY_REALTIME_PUBLISHER
   ],
   imports: [
     AuthModule,
     forwardRef(() => DotaModule),
     EntitiesModule,
-    FriendshipsModule,
+    forwardRef(() => FriendshipsModule),
     GamesLaunchModule,
     RateLimitingModule,
     UsersModule
   ],
   providers: [
+    DiscordVoiceService,
     GamePartiesRepository,
     GamePartiesService,
     GamePartyGateway,

@@ -51,3 +51,28 @@ export function updateCurrentUserAvatar(
     method: "POST"
   });
 }
+
+export function getDiscordLinkUrl(
+  accessToken: string,
+  returnTo: string,
+  returnOrigin: string = typeof window !== "undefined" ? window.location.origin : ""
+): Promise<{ url: string }> {
+  const params = new URLSearchParams({
+    returnOrigin,
+    returnTo
+  });
+  return apiRequest<{ url: string }>(`/auth/discord/link?${params.toString()}`, {
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    }
+  });
+}
+
+export function unlinkDiscord(accessToken: string): Promise<CurrentUserProfile> {
+  return apiRequest<CurrentUserProfile>("/auth/discord", {
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    },
+    method: "DELETE"
+  });
+}

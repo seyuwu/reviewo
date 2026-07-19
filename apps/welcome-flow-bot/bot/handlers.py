@@ -17,7 +17,14 @@ from .replies import (
 )
 from .states import ContactStates
 from .storage import IncomingUser, WelcomeFlowStorage
-from .welcome_flow import confirmed_for, process_incoming_dm, resolve_start_source
+from .welcome_flow import (
+    confirmed_for,
+    is_business_owner,
+    mark_human_handled,
+    process_incoming_dm,
+    remember_business_owner,
+    resolve_start_source,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -26,6 +33,8 @@ router = Router(name="welcome_flow")
 
 @router.business_connection()
 async def handle_business_connection(connection: BusinessConnection) -> None:
+    remember_business_owner(connection.user.id)
+
     status = "enabled" if connection.is_enabled else "disabled"
     can_reply = None
     if connection.rights is not None:
@@ -34,8 +43,9 @@ async def handle_business_connection(connection: BusinessConnection) -> None:
         can_reply = connection.can_reply
 
     logger.info(
-        "Business connection %s user_chat_id=%s can_reply=%s",
+        "Business connection %s owner=%s user_chat_id=%s can_reply=%s",
         status,
+        connection.user.id,
         connection.user_chat_id,
         can_reply,
     )
@@ -56,7 +66,28 @@ async def handle_business_message(
     rate_limiter: HourlyRateLimiter,
     state: FSMContext,
 ) -> None:
-    if message.from_user is None:
+    if message.from_user is None or message.chat is None:
+        return
+
+    # Private business DM: customer → from_user.id == chat.id.
+    # Your reply → from_user.id != chat.id → cancel pending auto-welcome.
+    if message.from_user.id != message.chat.id:
+        peer_id = message.chat.id
+        mark_human_handled(peer_id)
+        # Peer may never have written first — upsert before FK event insert.
+        storage.upsert_user(
+            IncomingUser(
+                telegram_user_id=peer_id,
+                username=message.chat.username,
+                first_name=message.chat.first_name,
+            ),
+            source="human_skip",
+        )
+        storage.add_event("human_skip", peer_id, {"reason": "owner_replied"})
+        logger.info("Owner replied in chat %s — auto-welcome suppressed", peer_id)
+        return
+
+    if is_business_owner(message.from_user.id):
         return
 
     current = await state.get_state()

@@ -768,6 +768,13 @@ export function GamesSearchView() {
         positionRole
       );
 
+      if (stacked.invite.status === "ACCEPTED" || stacked.party.isMember) {
+        setStackMessage(t("dota.team.joinSuccess"));
+        void Promise.all([refreshList({ quiet: true }), refreshParties()]);
+        router.push(`/dota/teams/${stacked.party.slug}`);
+        return;
+      }
+
       if (stacked.invite.direction === "incoming") {
         setStackMessage(
           stacked.invite.inviteKind === "APPLICATION"
@@ -903,19 +910,7 @@ export function GamesSearchView() {
 
   return (
     <section className={styles.page}>
-      <header
-        className={`${styles.header}${
-          cinematicMode !== "done" || cinematicProfileReady
-            ? ` ${styles.headerCinematicHidden}`
-            : ""
-        }`}
-      >
-        <div className={styles.headerCopy}>
-          <h1 className={styles.title}>{t("games.search.pageTitle")}</h1>
-          <p className={styles.lead}>{t("games.search.pageLead")}</p>
-        </div>
-        <GamesSearchTipRotator />
-      </header>
+      <h1 className="sr-only">{t("games.search.pageTitle")}</h1>
 
       <div
         className={`${styles.searchStage}${
@@ -1143,14 +1138,37 @@ export function GamesSearchView() {
                           : `${formatDotaMmr(player.mmr)} MMR`}
                       </p>
                       {isRecruitParty ? (
+                        <p
+                          className={`${styles.joinModeStatus}${
+                            (player.joinMode ?? "CONFIRM") === "OPEN"
+                              ? ` ${styles.joinModeStatusOpen}`
+                              : ` ${styles.joinModeStatusConfirm}`
+                          }`}
+                        >
+                          {(player.joinMode ?? "CONFIRM") === "OPEN"
+                            ? t("games.search.joinModeOpen")
+                            : t("games.search.joinModeConfirm")}
+                        </p>
+                      ) : null}
+                      {isRecruitParty ? (
                         <p className={styles.recruitCaptain}>
                           {t("games.search.recruitCardCaptain", { name: player.title })}
                         </p>
                       ) : null}
                     </div>
-                    <span className={styles.badge}>
+                    <span
+                      className={`${styles.badge}${
+                        isRecruitParty
+                          ? (player.joinMode ?? "CONFIRM") === "OPEN"
+                            ? ` ${styles.badgeJoinOpen}`
+                            : ` ${styles.badgeJoinConfirm}`
+                          : ""
+                      }`}
+                    >
                       {isRecruitParty
-                        ? t("games.search.recruitCardBadge")
+                        ? (player.joinMode ?? "CONFIRM") === "OPEN"
+                          ? t("games.search.joinModeOpenShort")
+                          : t("games.search.joinModeConfirmShort")
                         : t("games.search.lookingBadge")}
                     </span>
                   </div>
@@ -1230,9 +1248,13 @@ export function GamesSearchView() {
                           >
                             {stackBusySlug === busyKey
                               ? t("games.search.stackBusy")
-                              : t("games.search.applyForRole", {
-                                  role: `${role} ${getDotaPositionLabel(role, t)}`
-                                })}
+                              : (player.joinMode ?? "CONFIRM") === "OPEN"
+                                ? t("games.search.joinForRole", {
+                                    role: `${role} ${getDotaPositionLabel(role, t)}`
+                                  })
+                                : t("games.search.applyForRole", {
+                                    role: `${role} ${getDotaPositionLabel(role, t)}`
+                                  })}
                           </button>
                         );
                       })}
@@ -1481,8 +1503,7 @@ export function GamesSearchView() {
           </section>
 
           <section className={`${styles.panel} ${styles.tipPanel}`}>
-            <p className={styles.tipTitle}>{t("games.search.tipTitle")}</p>
-            <p className={styles.tipLead}>{t("games.search.tipLead")}</p>
+            <GamesSearchTipRotator embedded />
           </section>
         </aside>
         </div>

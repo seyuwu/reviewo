@@ -21,6 +21,7 @@ import {
   PARTY_NOTIFICATION_EVENT,
   type PartyNotificationEventDetail
 } from "../features/social/lib/party-notifications-socket";
+import { FRIEND_REQUEST_NOTIFICATION_EVENT, type FriendNotificationEventDetail } from "../features/social/lib/friend-notifications";
 import type { FriendshipRequest, GamePartyInvite } from "../features/social/types/social";
 import { OpiniaIcon } from "./opinia-icon";
 import styles from "./header-notifications.module.css";
@@ -112,32 +113,50 @@ export function HeaderNotifications() {
           trackedInvites.map((invite) => [invite.id, invite.status] as const)
         );
 
+        let playedSound = false;
+
+        function notifyOnce() {
+          if (!playedSound) {
+            playNotificationSound();
+            playedSound = true;
+          }
+        }
+
+        function pushToastOnce(
+          eventId: string,
+          toast: Parameters<typeof pushToast>[0]
+        ): void {
+          if (toastedEventIdsRef.current.has(eventId)) {
+            return;
+          }
+
+          toastedEventIdsRef.current.add(eventId);
+          notifyOnce();
+          pushToast({ ...toast, id: eventId });
+        }
+
+        const knownFriends = knownFriendIdsRef.current;
+
+        if (knownFriends) {
+          for (const request of friends.incoming) {
+            if (!knownFriends.has(request.id)) {
+              pushToastOnce(`friend-new-${request.id}`, {
+                body: t("web.toast.friendRequestBody", {
+                  name: request.otherUser.displayName
+                }),
+                ctaLabel: t("web.toast.openFriends"),
+                href: "/games/community",
+                title: t("web.toast.friendRequest")
+              });
+              window.dispatchEvent(new CustomEvent(FRIEND_REQUEST_NOTIFICATION_EVENT));
+            }
+          }
+        }
+
         const knownParties = knownPartyInviteIdsRef.current;
         const knownStatuses = knownPartyInviteStatusRef.current;
 
         if (knownParties && knownStatuses) {
-          let playedSound = false;
-
-          function notifyOnce() {
-            if (!playedSound) {
-              playNotificationSound();
-              playedSound = true;
-            }
-          }
-
-          function pushToastOnce(
-            eventId: string,
-            toast: Parameters<typeof pushToast>[0]
-          ): void {
-            if (toastedEventIdsRef.current.has(eventId)) {
-              return;
-            }
-
-            toastedEventIdsRef.current.add(eventId);
-            notifyOnce();
-            pushToast({ ...toast, id: eventId });
-          }
-
           for (const invite of incomingPending) {
             if (invite.inviteKind === "INVITE" && !knownParties.has(invite.id)) {
               pushToastOnce(`invite-new-${invite.id}`, {
@@ -344,13 +363,49 @@ export function HeaderNotifications() {
       void loadNotifications({ force: true });
     }
 
+    function handleFriendNotification(event: Event) {
+      const detail = (event as CustomEvent<FriendNotificationEventDetail>).detail;
+
+      if (detail?.toastId) {
+        toastedEventIdsRef.current.add(detail.toastId);
+      }
+
+      if (detail?.type === "friend_request" && detail.request) {
+        setIncomingFriends((current) => {
+          if (current.some((item) => item.id === detail.request.id)) {
+            return current;
+          }
+
+          return [
+            {
+              createdAt: detail.request.createdAt,
+              direction: "incoming",
+              id: detail.request.id,
+              otherUser: {
+                displayName: detail.request.otherUser.displayName,
+                dotaSlug: detail.request.otherUser.dotaSlug,
+                friendshipId: detail.request.id,
+                id: detail.request.otherUser.id
+              }
+            },
+            ...current
+          ];
+        });
+        knownFriendIdsRef.current?.add(detail.request.id);
+      }
+
+      void loadNotifications({ force: true });
+    }
+
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener(PARTY_NOTIFICATION_EVENT, handlePartyNotification);
+    window.addEventListener(FRIEND_REQUEST_NOTIFICATION_EVENT, handleFriendNotification);
 
     return () => {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener(PARTY_NOTIFICATION_EVENT, handlePartyNotification);
+      window.removeEventListener(FRIEND_REQUEST_NOTIFICATION_EVENT, handleFriendNotification);
     };
   }, [authSession?.accessToken, loadNotifications, open]);
 

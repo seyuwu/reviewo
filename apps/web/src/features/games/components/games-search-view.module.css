@@ -508,6 +508,20 @@
   margin: 0;
 }
 
+.joinModeStatus {
+  font-size: 0.78rem;
+  font-weight: 650;
+  margin: 0.15rem 0 0;
+}
+
+.joinModeStatusOpen {
+  color: #86efac;
+}
+
+.joinModeStatusConfirm {
+  color: #fde68a;
+}
+
 .badge {
   background: var(--color-accent-soft);
   border-radius: 999px;
@@ -517,6 +531,16 @@
   line-height: 1;
   padding: 0.4rem 0.55rem;
   white-space: nowrap;
+}
+
+.badgeJoinOpen {
+  background: rgb(34 197 94 / 16%);
+  color: #86efac;
+}
+
+.badgeJoinConfirm {
+  background: rgb(234 179 8 / 16%);
+  color: #fde68a;
 }
 
 .cardMeta {
@@ -943,19 +967,6 @@
   background:
     radial-gradient(circle at 100% 0%, rgb(109 74 255 / 22%), transparent 55%),
     var(--games-glass, rgb(18 22 32 / 72%));
-}
-
-.tipTitle {
-  font-size: 0.88rem;
-  font-weight: 750;
-  margin: 0;
-}
-
-.tipLead {
-  color: var(--color-text-muted);
-  font-size: 0.82rem;
-  line-height: 1.45;
-  margin: 0;
 }
 
 .launchField {

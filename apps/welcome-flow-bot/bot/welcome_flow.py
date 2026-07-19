@@ -18,6 +18,28 @@ logger = logging.getLogger(__name__)
 _inflight_users: set[int] = set()
 _inflight_lock = asyncio.Lock()
 
+# Business account owners (from business_connection updates).
+_business_owner_ids: set[int] = set()
+# Peers where owner already replied manually — skip / cancel auto-welcome.
+_human_handled_users: set[int] = set()
+
+
+def remember_business_owner(owner_user_id: int) -> None:
+    _business_owner_ids.add(owner_user_id)
+
+
+def is_business_owner(user_id: int) -> bool:
+    return user_id in _business_owner_ids
+
+
+def mark_human_handled(peer_user_id: int) -> None:
+    """Owner replied in this chat — do not auto-welcome this peer."""
+    _human_handled_users.add(peer_user_id)
+
+
+def is_human_handled(user_id: int) -> bool:
+    return user_id in _human_handled_users
+
 
 async def process_incoming_dm(
     message: Message,
@@ -42,6 +64,11 @@ async def process_incoming_dm(
     storage.upsert_user(incoming, source)
     storage.add_event("dm_received", user_id, {"source": source})
 
+    if is_human_handled(user_id):
+        storage.add_event("human_skip", user_id)
+        logger.info("Human skip for user %s (owner already chatting)", user_id)
+        return
+
     if not storage.can_send_welcome(user_id, settings.cooldown_days):
         storage.add_event("cooldown_skip", user_id)
         logger.info("Cooldown skip for user %s", user_id)
@@ -62,6 +89,12 @@ async def process_incoming_dm(
 
         delay = random.uniform(settings.delay_min_seconds, settings.delay_max_seconds)
         await asyncio.sleep(delay)
+
+        # Owner may have answered during delay — abort auto-welcome.
+        if is_human_handled(user_id):
+            storage.add_event("human_skip", user_id)
+            logger.info("Human skip after delay for user %s", user_id)
+            return
 
         # Re-check cooldown after delay in case of parallel updates.
         if not storage.can_send_welcome(user_id, settings.cooldown_days):

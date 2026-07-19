@@ -17,6 +17,7 @@ import { isGamesModePath, isGamesProductMode } from "../features/games/lib/games
 import { NotificationToastsProvider } from "../features/games/lib/use-notification-toasts";
 import { LocaleSwitcher } from "../features/i18n/locale-switcher";
 import { useTranslation } from "../features/i18n/locale-provider";
+import { FriendsDock } from "../features/social/components/friends-dock";
 import { usePartyNotifications } from "../features/social/hooks/use-party-notifications";
 import { HeaderActivityNav } from "./header-activity-nav";
 import { HeaderChromeSearch } from "./header-chrome-search";
@@ -25,7 +26,6 @@ import { HeaderNotifications } from "./header-notifications";
 import { HeaderRostersMenu } from "./header-rosters-menu";
 import { HeaderStatusIndicators } from "./header-status-indicators";
 import { ProductBrandSwitcher } from "./product-brand-switcher";
-import { SiteFooter } from "./site-footer";
 
 interface AppChromeProps {
   children: ReactNode;
@@ -191,7 +191,7 @@ export function AppChrome({ children }: AppChromeProps) {
           </div>
         </header>
         {children}
-        <SiteFooter />
+        {hideChromeForCinematic ? null : <FriendsDock />}
         <NotificationToastsHost />
       </div>
     </NotificationToastsProvider>

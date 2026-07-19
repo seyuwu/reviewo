@@ -11,6 +11,7 @@ import {
 } from "react";
 
 export interface NotificationToastItem {
+  actionEvent?: string;
   body?: string;
   ctaLabel?: string;
   href?: string;

@@ -1,6 +1,7 @@
 import { io, type Socket } from "socket.io-client";
 
 import { publicEnv } from "../../../lib/config/public-env";
+import type { FriendNotificationPayload } from "./friend-notifications";
 import type { GamePartyInvite } from "../types/social";
 
 export type PartyNotificationType =
@@ -53,7 +54,8 @@ export interface PartyNotificationsSocketConnection {
 
 export function connectPartyNotificationsSocket(
   accessToken: string,
-  onEvent: (payload: PartyNotificationPayload) => void
+  onEvent: (payload: PartyNotificationPayload) => void,
+  onFriendEvent?: (payload: FriendNotificationPayload) => void
 ): PartyNotificationsSocketConnection {
   const socket: Socket = io(`${publicEnv.apiBaseUrl}/parties`, {
     auth: { token: accessToken },
@@ -70,6 +72,14 @@ export function connectPartyNotificationsSocket(
     }
 
     onEvent(payload);
+  });
+
+  socket.on("friend_notification", (payload: FriendNotificationPayload) => {
+    if (!payload?.request?.id || !payload.type) {
+      return;
+    }
+
+    onFriendEvent?.(payload);
   });
 
   return {

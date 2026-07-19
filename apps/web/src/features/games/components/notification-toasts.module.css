@@ -22,11 +22,18 @@
 }
 
 .content {
+  appearance: none;
+  background: transparent;
+  border: 0;
   color: inherit;
+  cursor: pointer;
   display: grid;
+  font: inherit;
   gap: 0.2rem;
   padding: 0.75rem 0.85rem;
+  text-align: left;
   text-decoration: none;
+  width: 100%;
 }
 
 .title {

@@ -4,6 +4,8 @@ const watchPollIntervalMs = Number(process.env.WATCHPACK_POLLING_INTERVAL ?? "10
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {
+  // Playwright and some clients hit 127.0.0.1; Next 16 blocks /_next/* cross-origin by default.
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
   webpack: (config, { dev }) => {
     if (dev && process.env.WATCHPACK_POLLING === "true") {
       config.watchOptions = {

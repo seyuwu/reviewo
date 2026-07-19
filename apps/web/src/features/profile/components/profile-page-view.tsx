@@ -2,7 +2,7 @@
 
 import type { TranslateFn } from "@reviewo/i18n";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -15,6 +15,8 @@ import { isGamesProductMode, safeInternalNextPath } from "../../games/lib/games-
 import {
   changeCurrentUserPassword,
   getCurrentUserProfile,
+  getDiscordLinkUrl,
+  unlinkDiscord,
   updateCurrentUserAvatar,
   updateCurrentUserProfile
 } from "../api/profile";
@@ -29,6 +31,7 @@ type ProfileFlowState = "loading" | "guest" | "authenticated";
 export function ProfilePageView() {
   const t = useTranslation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { authSession, isAuthSessionLoaded, signOut, storeAuthSession, updateAuthSession } =
     useAuthSession();
@@ -38,6 +41,16 @@ export function ProfilePageView() {
   useEffect(() => {
     setHostname(window.location.hostname);
   }, []);
+
+  useEffect(() => {
+    const discord = searchParams.get("discord");
+    if (!discord || !accessToken) {
+      return;
+    }
+
+    void queryClient.invalidateQueries({ queryKey: ["profile", "me", accessToken] });
+    router.replace("/profile", { scroll: false });
+  }, [accessToken, queryClient, router, searchParams]);
 
   const isGamesAuth = isGamesProductMode("/profile", hostname);
 
@@ -221,6 +234,9 @@ function ProfileDetails({
   const [passwordErrorMessage, setPasswordErrorMessage] = useState<string | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarErrorMessage, setAvatarErrorMessage] = useState<string | null>(null);
+  const [discordBusy, setDiscordBusy] = useState(false);
+  const [discordErrorMessage, setDiscordErrorMessage] = useState<string | null>(null);
+  const [discordStatusMessage, setDiscordStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setDisplayName(profile.displayName);
@@ -330,6 +346,37 @@ function ProfileDetails({
       setAvatarErrorMessage(t("web.profile.avatarError"));
     } finally {
       setAvatarBusy(false);
+    }
+  }
+
+  async function handleDiscordLink() {
+    setDiscordBusy(true);
+    setDiscordErrorMessage(null);
+    setDiscordStatusMessage(null);
+
+    try {
+      const returnTo = `${window.location.pathname}${window.location.search}` || "/";
+      const { url } = await getDiscordLinkUrl(accessToken, returnTo, window.location.origin);
+      window.location.assign(url);
+    } catch {
+      setDiscordErrorMessage(t("web.profile.discordLinkError"));
+      setDiscordBusy(false);
+    }
+  }
+
+  async function handleDiscordUnlink() {
+    setDiscordBusy(true);
+    setDiscordErrorMessage(null);
+    setDiscordStatusMessage(null);
+
+    try {
+      const updated = await unlinkDiscord(accessToken);
+      onProfileUpdated(updated);
+      setDiscordStatusMessage(t("web.profile.discordUnlinked"));
+    } catch {
+      setDiscordErrorMessage(t("web.profile.discordUnlinkError"));
+    } finally {
+      setDiscordBusy(false);
     }
   }
 
@@ -492,6 +539,32 @@ function ProfileDetails({
         </button>
         <FormFeedback errorMessage={passwordErrorMessage} statusMessage={passwordStatusMessage} />
       </form>
+
+      <div className="profile-fields">
+        <p className="result-type">{t("web.profile.discordEyebrow")}</p>
+        <strong>{t("web.profile.discordTitle")}</strong>
+        <p className="muted-copy">{t("web.profile.discordHint")}</p>
+        {profile.discordLinked ? (
+          <button
+            className="secondary-button"
+            disabled={discordBusy}
+            onClick={() => void handleDiscordUnlink()}
+            type="button"
+          >
+            {discordBusy ? t("common.loadingEllipsis") : t("web.profile.discordUnlink")}
+          </button>
+        ) : (
+          <button
+            className="primary-button"
+            disabled={discordBusy}
+            onClick={() => void handleDiscordLink()}
+            type="button"
+          >
+            {discordBusy ? t("common.loadingEllipsis") : t("web.profile.discordLink")}
+          </button>
+        )}
+        <FormFeedback errorMessage={discordErrorMessage} statusMessage={discordStatusMessage} />
+      </div>
 
       <div className="profile-actions">
         <Link className="primary-link" href="/">

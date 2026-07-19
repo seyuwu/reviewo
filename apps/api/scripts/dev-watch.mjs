@@ -82,21 +82,32 @@ function hasSnapshotChanged(previous, next) {
 
 function stopServer() {
   if (!serverProcess) {
-    return;
+    return Promise.resolve();
   }
 
   const processToStop = serverProcess;
   serverProcess = null;
 
-  try {
-    processToStop.kill("SIGKILL");
-  } catch {
-    // Process may already be gone.
-  }
+  return new Promise((resolve) => {
+    const done = () => {
+      // Give the OS a moment to release :3000 after SIGKILL (avoids EADDRINUSE).
+      setTimeout(resolve, 400);
+    };
+
+    processToStop.once("exit", done);
+
+    try {
+      processToStop.kill("SIGKILL");
+    } catch {
+      done();
+    }
+
+    setTimeout(done, 2000);
+  });
 }
 
-function startServer() {
-  stopServer();
+async function startServer() {
+  await stopServer();
 
   serverProcess = spawn("node", ["dist/main.js"], {
     cwd: apiRoot,
@@ -119,10 +130,10 @@ async function rebuild() {
 
   try {
     await run("corepack", ["pnpm", "exec", "tsc", "-p", "tsconfig.json"]);
-    startServer();
+    await startServer();
   } catch (error) {
     console.error("[dev-watch] build failed:", error instanceof Error ? error.message : error);
-    stopServer();
+    await stopServer();
   }
 
   building = false;
@@ -145,13 +156,11 @@ async function watchSourceFiles(previousSnapshot) {
 }
 
 process.on("SIGINT", () => {
-  stopServer();
-  process.exit(0);
+  void stopServer().finally(() => process.exit(0));
 });
 
 process.on("SIGTERM", () => {
-  stopServer();
-  process.exit(0);
+  void stopServer().finally(() => process.exit(0));
 });
 
 await run("corepack", ["pnpm", "db:generate"]);
