@@ -74,7 +74,11 @@ export class DotaController {
   }
 
   @Get("lfg")
-  async listLookingPlayers(@Query() query: ListDotaLfgQueryDto): Promise<DotaLfgListResponseDto> {
+  @UseGuards(OptionalJwtAuthGuard)
+  async listLookingPlayers(
+    @Query() query: ListDotaLfgQueryDto,
+    @CurrentUser() currentUser?: AuthenticatedUser
+  ): Promise<DotaLfgListResponseDto> {
     const searchLive = await this.gamesLaunchService.isSearchLive();
 
     if (!searchLive) {
@@ -83,7 +87,8 @@ export class DotaController {
 
     return this.dotaProfileService.listLookingPlayers({
       ...(query.roles ? { roles: query.roles } : {}),
-      ...(query.server ? { server: query.server } : {})
+      ...(query.server ? { server: query.server } : {}),
+      ...(currentUser?.id ? { viewerUserId: currentUser.id } : {})
     });
   }
 

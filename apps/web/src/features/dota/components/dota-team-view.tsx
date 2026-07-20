@@ -25,6 +25,7 @@ import {
 import { useNotificationToasts } from "../../games/lib/use-notification-toasts";
 import { copyTextToClipboard } from "../../growth/lib/share-urls";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
+import type { AuthResponse } from "../../auth/types/auth";
 import { useTranslation } from "../../i18n/locale-provider";
 import { getDiscordLinkUrl } from "../../profile/api/profile";
 import { openDiscordPartyVoice } from "../../social/lib/discord-invite";
@@ -34,8 +35,10 @@ import {
   setDotaLfgLooking,
   type DotaLfgHit
 } from "../api/dota-api";
+import { trackDotaEvent } from "../lib/analytics";
 import {
   acceptPartyInvite,
+  claimPartySeat,
   createGameParty,
   createPartyJoinToken,
   declinePartyInvite,
@@ -84,10 +87,17 @@ import {
   getDotaPositionLabel,
   getDotaRedFlagLabel
 } from "../lib/labels";
-import { buildDotaTeamUrl, copyDotaTeamJoinUrl } from "../lib/share";
+import { buildDotaTeamUrl } from "../lib/share";
+import {
+  buildPartyShortDisplayUrl,
+  copyDotaPartyInviteMessage,
+  reportPartyLinkOpen
+} from "../lib/party-invite";
+import { PartyAuthSheet } from "./party-auth-sheet";
 import styles from "./dota-team-view.module.css";
 
 const PENDING_PARTY_JOIN_KEY = "opinia.pendingPartyJoin";
+const PENDING_PARTY_CLAIM_KEY = "opinia.pendingPartyClaim";
 const PENDING_DISCORD_VOICE_JOIN_KEY = "opinia.pendingDiscordVoiceJoin";
 const PENDING_DISCORD_VOICE_JOIN_LOCK_PREFIX = "opinia.discordVoiceJoinLock:";
 const ROLE_POSITIONS = ["1", "2", "3", "4", "5"] as const satisfies readonly DotaPositionRole[];
@@ -167,6 +177,11 @@ function matchingRecruitRoles(
 function lookLikeJoinToken(value: string | null): value is string {
   if (!value) {
     return false;
+  }
+
+  // Short opaque join codes from Redis share links.
+  if (!value.includes(".")) {
+    return /^[A-Za-z0-9_-]{6,16}$/.test(value);
   }
 
   const parts = value.split(".");
@@ -263,6 +278,10 @@ function resolveChatDisplayText(
     return { isSystem: true, text: t("dota.team.system.discord_voice_ready") };
   }
 
+  if (message === "__system__:party_safety") {
+    return { isSystem: true, text: t("dota.team.system.party_safety") };
+  }
+
   return { isSystem: false, text: message };
 }
 
@@ -281,6 +300,21 @@ function mergeChatMessages(
   }
 
   return [...byId.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
+
+/** Drop join/created query without App Router remount (SSR resets isMember=false). */
+function stripTeamPageQuery(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  if (![...url.searchParams.keys()].length) {
+    return;
+  }
+
+  url.search = "";
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.hash}`);
 }
 
 function applyLivePartyUpdate(
@@ -306,14 +340,20 @@ function applyLivePartyUpdate(
   );
   const isMember = incoming.members.some((member) => member.userId === viewerUserId);
 
+  // party_view broadcasts set discordInviteUrl=null for everyone — members must keep
+  // the last known invite while voice is still active (expiresAt present).
+  let discordInviteUrl: string | null = incoming.discordInviteUrl ?? null;
+
+  if (!discordInviteUrl && isMember) {
+    discordInviteUrl = incoming.discordVoiceExpiresAt
+      ? current.discordInviteUrl ?? null
+      : null;
+  }
+
   return {
     ...incoming,
     canManageParty: isOwner || isOfficer,
-    // Members also receive party_view updates with invite stripped — keep last known
-    // while voice is still active (expiresAt present). Clear once voice is gone.
-    discordInviteUrl:
-      incoming.discordInviteUrl ??
-      (isMember && incoming.discordVoiceExpiresAt ? current.discordInviteUrl ?? null : null),
+    discordInviteUrl,
     isMember,
     isOfficer,
     isOwner
@@ -348,17 +388,15 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   const t = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { authSession, isAuthSessionLoaded } = useAuthSession();
+  const { authSession, isAuthSessionLoaded, storeAuthSession } = useAuthSession();
   const { push: pushToast } = useNotificationToasts();
   const [party, setParty] = useState(initialParty);
   const canManageParty = Boolean(
     party.isOwner || party.isOfficer || party.canManageParty
   );
-  const [expiryInfo, setExpiryInfo] = useState(() =>
-    formatRemainingExpiry(initialParty.expiresAt, t)
-  );
-  const [voiceExpiryInfo, setVoiceExpiryInfo] = useState(() =>
-    formatRemainingVoiceExpiry(initialParty.discordVoiceExpiresAt, t)
+  const [expiryInfo, setExpiryInfo] = useState<ReturnType<typeof formatRemainingExpiry>>(null);
+  const [voiceExpiryInfo, setVoiceExpiryInfo] = useState<ReturnType<typeof formatRemainingVoiceExpiry>>(
+    null
   );
   const [renameEditing, setRenameEditing] = useState(false);
   const [extendHintDismissed, setExtendHintDismissed] = useState(false);
@@ -367,6 +405,15 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [inviteHint, setInviteHint] = useState(false);
+  const [authSheetOpen, setAuthSheetOpen] = useState(false);
+  const [claimIntentRole, setClaimIntentRole] = useState<DotaPositionRole | null>(null);
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [inviteUrl, setInviteUrl] = useState(() => buildDotaTeamUrl(initialParty.slug));
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [linkOpenCount, setLinkOpenCount] = useState(() =>
+    typeof initialParty.linkOpenCount === "number" ? initialParty.linkOpenCount : 0
+  );
   const [pending, setPending] = useState(false);
   const [discordVoiceBusy, setDiscordVoiceBusy] = useState(false);
   const [discordVoiceCopied, setDiscordVoiceCopied] = useState(false);
@@ -374,6 +421,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   const [friendBusyId, setFriendBusyId] = useState<string | null>(null);
   const [outgoingFriendIds, setOutgoingFriendIds] = useState<Set<string>>(() => new Set());
   const knownDiscordInviteRef = useRef(initialParty.discordInviteUrl ?? null);
+  const discordVoiceReadyToastedRef = useRef(Boolean(initialParty.discordInviteUrl));
   const [chatMessages, setChatMessages] = useState<GamePartyChatMessage[]>([]);
   const [chatDraft, setChatDraft] = useState("");
   const [chatError, setChatError] = useState<string | null>(null);
@@ -408,9 +456,16 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   const [joinMessage, setJoinMessage] = useState<string | null>(null);
   const [copiedDotaIdUserId, setCopiedDotaIdUserId] = useState<string | null>(null);
   const joinHandledRef = useRef(false);
+  const createdLandingHandledRef = useRef(false);
+  const chatInFlightRef = useRef(false);
+  const visitorClaimInFlightRef = useRef(false);
+  /** Bumped on local mutations so in-flight softSync cannot overwrite fresher roster. */
+  const partyMutationEpochRef = useRef(0);
+  const claimInFlightRef = useRef(false);
   const partySocketRef = useRef<PartySocketConnection | null>(null);
   const canManagePartyRef = useRef(canManageParty);
   const chatMessagesRef = useRef<HTMLDivElement | null>(null);
+  const chatMessageCountRef = useRef(0);
   const shouldStickChatToBottomRef = useRef(true);
   const pendingChatScrollToBottomRef = useRef(false);
   const joinTokenFromUrl = lookLikeJoinToken(searchParams.get("join"))
@@ -579,24 +634,59 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
           JSON.stringify({ slug: party.slug, token })
         );
       }
-      setError(t("dota.team.joinNeedAuth"));
+      // Don't auto-open profile sheet — guest must click claim CTA first.
+      setError(null);
       return;
+    }
+
+    let claimRole: DotaPositionRole | null = null;
+    if (typeof window !== "undefined") {
+      try {
+        const claimRaw = window.sessionStorage.getItem(PENDING_PARTY_CLAIM_KEY);
+        const parsed = claimRaw
+          ? (JSON.parse(claimRaw) as { role?: DotaPositionRole; slug?: string })
+          : null;
+        if (parsed?.slug === party.slug && parsed.role) {
+          claimRole = parsed.role;
+        }
+      } catch {
+        claimRole = null;
+      }
     }
 
     joinHandledRef.current = true;
     setPending(true);
     setError(null);
 
-    void joinPartyByToken(token, authSession.accessToken)
+    void joinPartyByToken(token, authSession.accessToken, claimRole ?? undefined)
       .then((updated) => {
         if (typeof window !== "undefined") {
           window.sessionStorage.removeItem(PENDING_PARTY_JOIN_KEY);
+          window.sessionStorage.removeItem(PENDING_PARTY_CLAIM_KEY);
         }
+        setClaimIntentRole(null);
         setParty(updated);
         setJoinMessage(
           updated.isMember ? t("dota.team.joinSuccess") : t("games.search.applicationSent")
         );
-        router.replace(`/dota/teams/${updated.slug}`);
+        trackDotaEvent(updated.isMember ? "party_joined" : "party_applied", {
+          ...(claimRole ? { role: claimRole } : {}),
+          slug: updated.slug
+        });
+        setAuthSheetOpen(false);
+        // Avoid router.replace remount — SSR party has isMember=false and wipes chat.
+        stripTeamPageQuery();
+        if (updated.isMember) {
+          void fetchPartyChatMessages(updated.slug, authSession.accessToken)
+            .then((page) => {
+              pendingChatScrollToBottomRef.current = true;
+              shouldStickChatToBottomRef.current = true;
+              setChatMessages((current) => mergeChatMessages(current, page.messages));
+            })
+            .catch(() => {
+              // Socket join / refreshLiveState will retry.
+            });
+        }
       })
       .catch(() => {
         joinHandledRef.current = false;
@@ -610,7 +700,6 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
     isAuthSessionLoaded,
     joinTokenFromUrl,
     party.slug,
-    router,
     t
   ]);
 
@@ -620,12 +709,26 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
     }
 
     let cancelled = false;
+    const accessToken = authSession.accessToken;
+    const viewerUserId = authSession.userId;
 
-    void fetchGameParty(initialParty.slug, authSession.accessToken)
-      .then((refreshed) => {
-        if (!cancelled) {
-          setParty((current) => applyLivePartyUpdate(current, refreshed, authSession.userId));
-          setRenameDraft(refreshed.name);
+    // Party + chat in parallel — don't wait for isMember flip before loading history.
+    void Promise.all([
+      fetchGameParty(initialParty.slug, accessToken),
+      fetchPartyChatMessages(initialParty.slug, accessToken).catch(() => null)
+    ])
+      .then(([refreshed, chatPage]) => {
+        if (cancelled) {
+          return;
+        }
+
+        setParty((current) => applyLivePartyUpdate(current, refreshed, viewerUserId));
+        setRenameDraft(refreshed.name);
+
+        if (chatPage && refreshed.isMember) {
+          pendingChatScrollToBottomRef.current = true;
+          shouldStickChatToBottomRef.current = true;
+          setChatMessages((current) => mergeChatMessages(current, chatPage.messages));
         }
       })
       .catch(() => {
@@ -636,6 +739,10 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       cancelled = true;
     };
   }, [authSession?.accessToken, authSession?.userId, initialParty.slug]);
+
+  useEffect(() => {
+    chatMessageCountRef.current = chatMessages.length;
+  }, [chatMessages]);
 
   useEffect(() => {
     if (!authSession?.accessToken || !party.isMember) {
@@ -674,7 +781,11 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
 
   useEffect(() => {
     if (!authSession?.accessToken || !party.isMember) {
-      setChatMessages([]);
+      // Only clear when logged out. SSR starts isMember=false — wiping here races the
+      // auth party+chat prefetch and blanks history for someone who just joined.
+      if (isAuthSessionLoaded && !authSession?.accessToken) {
+        setChatMessages([]);
+      }
       if (!canManageParty) {
         setApplications([]);
       }
@@ -722,17 +833,25 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       }
 
       lastSoftSyncAtRef.current = now;
+      partySocketRef.current?.ensureJoined();
+      const epochAtStart = partyMutationEpochRef.current;
 
       try {
-        const [nextParty, lfg, myParties] = await Promise.all([
+        const socketReady = partySocketRef.current?.isReady() ?? false;
+        const needChatHttp = !socketReady || chatMessageCountRef.current === 0;
+        const [nextParty, lfg, myParties, chatPage] = await Promise.all([
           fetchGameParty(party.slug, authSession.accessToken),
           fetchDotaLfg(),
           canManagePartyRef.current
             ? fetchMyParties(authSession.accessToken)
+            : Promise.resolve(null),
+          // Always pull history if socket not ready OR chat still empty after join.
+          needChatHttp
+            ? fetchPartyChatMessages(party.slug, authSession.accessToken)
             : Promise.resolve(null)
         ]);
 
-        if (cancelled) {
+        if (cancelled || partyMutationEpochRef.current !== epochAtStart) {
           return;
         }
 
@@ -757,6 +876,10 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
           setIsRecruitLooking(false);
           setRecruitRoles([]);
         }
+
+        if (chatPage) {
+          setChatMessages((current) => mergeChatMessages(current, chatPage.messages));
+        }
       } catch {
         // Keep previous live state on transient failures.
       }
@@ -771,7 +894,8 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
           if (!cancelled) {
             pendingChatScrollToBottomRef.current = true;
             shouldStickChatToBottomRef.current = true;
-            setChatMessages(messages);
+            // Merge — don't replace, so a late empty/partial ack cannot wipe HTTP prefetch.
+            setChatMessages((current) => mergeChatMessages(current, messages));
           }
         },
         onNewMessage: (message) => {
@@ -794,7 +918,15 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
             const previousInvite = knownDiscordInviteRef.current;
             const nextInvite = nextParty.discordInviteUrl ?? null;
 
-            if (nextInvite && nextInvite !== previousInvite) {
+            // Only toast once when voice first appears (null → url). Ignore re-broadcasts /
+            // invite URL refreshes and party_view payloads that strip the invite.
+            if (
+              nextInvite &&
+              !previousInvite &&
+              !discordVoiceReadyToastedRef.current
+            ) {
+              discordVoiceReadyToastedRef.current = true;
+              knownDiscordInviteRef.current = nextInvite;
               pushToast({
                 body: t("dota.team.discordVoiceReadyBody"),
                 ctaLabel: t("dota.team.discordVoiceJoin"),
@@ -802,13 +934,18 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                 id: `discord-voice-ready-${nextParty.id}`,
                 title: t("dota.team.discordVoiceReadyToast")
               });
+            } else if (nextInvite) {
+              knownDiscordInviteRef.current = nextInvite;
+            } else if (
+              nextParty.discordVoiceExpiresAt == null &&
+              nextParty.discordInviteUrl == null
+            ) {
+              // Voice fully gone (explicit clear), allow a future ready toast.
+              knownDiscordInviteRef.current = null;
+              discordVoiceReadyToastedRef.current = false;
             }
 
-            setParty((current) => {
-              const merged = applyLivePartyUpdate(current, nextParty, viewerUserId);
-              knownDiscordInviteRef.current = merged.discordInviteUrl ?? null;
-              return merged;
-            });
+            setParty((current) => applyLivePartyUpdate(current, nextParty, viewerUserId));
 
             if (canManagePartyRef.current) {
               refreshApplications();
@@ -849,6 +986,8 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
         return;
       }
 
+      const epochAtStart = partyMutationEpochRef.current;
+
       try {
         const [nextParty, chatPage, myParties, lfg] = await Promise.all([
           fetchGameParty(party.slug, authSession.accessToken),
@@ -859,7 +998,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
           fetchDotaLfg()
         ]);
 
-        if (cancelled) {
+        if (cancelled || partyMutationEpochRef.current !== epochAtStart) {
           return;
         }
 
@@ -1031,6 +1170,21 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
 
         setParty((current) => applyLivePartyUpdate(current, nextParty, viewerUserId));
       },
+      onConnected: () => {
+        if (cancelled) {
+          return;
+        }
+
+        void fetchGameParty(party.slug, authSession?.accessToken)
+          .then((nextParty) => {
+            if (!cancelled) {
+              setParty((current) => applyLivePartyUpdate(current, nextParty, viewerUserId));
+            }
+          })
+          .catch(() => {
+            // Socket updates remain the fallback.
+          });
+      },
       onRecruitUpdated: (payload) => {
         if (cancelled) {
           return;
@@ -1135,6 +1289,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
 
     void loadVisitorRecruitRoles();
     void loadViewerInvite();
+    void softSyncVisitor();
 
     function handleVisibility(): void {
       if (document.visibilityState === "visible") {
@@ -1236,9 +1391,19 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
     role
   }));
   const unassignedMembers = party.members.filter((member) => !member.positionRole);
+  const guestCanClaimSeats = !party.isMember && party.openSlots > 0;
   const myMembership = authSession?.userId
     ? party.members.find((member) => member.userId === authSession.userId) ?? null
     : null;
+  const averageMmr = (() => {
+    const values = party.members
+      .map((member) => Number(member.mmr))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    if (values.length === 0) {
+      return null;
+    }
+    return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+  })();
   const recruitRoleKey = effectiveRecruitRoles.join(",");
   const partyMemberUserKey = party.members.map((member) => member.userId).sort().join(",");
 
@@ -1262,7 +1427,10 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
             ROLE_POSITIONS.includes(role as DotaPositionRole)
           );
         const memberUserIds = new Set(partyMemberUserKey.split(",").filter(Boolean));
-        const response = await fetchDotaLfg({ roles: openRoles });
+        const response = await fetchDotaLfg({
+          roles: openRoles,
+          ...(authSession?.accessToken ? { accessToken: authSession.accessToken } : {})
+        });
         const candidates = response.results.filter(
           (candidate) =>
             !candidate.partySlug &&
@@ -1339,6 +1507,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
         (party.discordInviteUrl || party.canExtendDiscordVoice)
       ) {
         knownDiscordInviteRef.current = null;
+        discordVoiceReadyToastedRef.current = false;
         setParty((current) => {
           if (!current.discordInviteUrl && !current.canExtendDiscordVoice) {
             return current;
@@ -1398,32 +1567,214 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
 
   const kindLabel =
     party.kind === "PARTY" ? t("dota.team.kindParty") : t("dota.team.kindTeam");
+  const captainMember =
+    party.members.find((member) => member.role === "OWNER") ??
+    party.members.find((member) => member.userId === party.ownerUserId) ??
+    null;
+  const seatsLeft = Math.max(0, party.maxMembers - party.memberCount);
+  const seatsLeftLabel =
+    seatsLeft === 0
+      ? t("dota.team.seatsFull")
+      : seatsLeft === 1
+        ? t("dota.team.seatsLeftOne")
+        : seatsLeft < 5
+          ? t("dota.team.seatsLeft", { count: String(seatsLeft) })
+          : t("dota.team.seatsLeftMany", { count: String(seatsLeft) });
 
-  async function handleShare() {
-    setError(null);
+  useEffect(() => {
+    if (party.isMember) {
+      if (typeof party.linkOpenCount === "number") {
+        setLinkOpenCount(party.linkOpenCount);
+      }
+      return;
+    }
 
+    trackDotaEvent("party_landing_view", { slug: party.slug });
+    void reportPartyLinkOpen(party.slug, authSession?.accessToken ?? undefined);
+  }, [authSession?.accessToken, party.isMember, party.linkOpenCount, party.slug]);
+
+  useEffect(() => {
+    if (createdLandingHandledRef.current) {
+      return;
+    }
+
+    if (searchParams.get("created") === "1" && party.isMember && authSession?.accessToken) {
+      createdLandingHandledRef.current = true;
+      trackDotaEvent("party_created", { kind: party.kind, slug: party.slug });
+      void handleShare().then(() => {
+        stripTeamPageQuery();
+      });
+    }
+    // Intentionally once on created landing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authSession?.accessToken, party.isMember, party.slug]);
+
+  function neededRolesForInvite(): DotaPositionRole[] {
+    const claimed = new Set(
+      party.members
+        .map((member) => member.positionRole)
+        .filter((role): role is DotaPositionRole => Boolean(role))
+    );
+    return ROLE_POSITIONS.filter((role) => !claimed.has(role));
+  }
+
+  function rolesForInvite(): DotaPositionRole[] {
+    if (isRecruitLooking && effectiveRecruitRoles.length > 0) {
+      return [...effectiveRecruitRoles].sort();
+    }
+
+    return neededRolesForInvite();
+  }
+
+  async function prepareInviteToken(): Promise<string | null> {
     if (!authSession?.accessToken || !party.isMember) {
-      const ok = await copyTextToClipboard(buildDotaTeamUrl(party.slug));
-      setCopied(ok);
+      return null;
+    }
 
-      if (ok) {
+    const { code, token } = await createPartyJoinToken(party.slug, authSession.accessToken);
+    const inviteCredential = code || token;
+    setInviteToken(inviteCredential);
+    return inviteCredential;
+  }
+
+  async function handleShareWallCopy(): Promise<boolean> {
+    try {
+      const token =
+        inviteToken ??
+        (authSession?.accessToken && party.isMember ? await prepareInviteToken() : null);
+      const result = await copyDotaPartyInviteMessage(party, token, t, rolesForInvite());
+      setInviteMessage(result.message);
+      setInviteUrl(result.url);
+      setCopied(result.ok);
+      if (result.ok) {
+        trackDotaEvent("party_invite_copied", { slug: party.slug });
         window.setTimeout(() => setCopied(false), 1800);
       }
+      return result.ok;
+    } catch {
+      setError(t("dota.team.inviteError"));
+      return false;
+    }
+  }
 
+  async function handleShare() {
+    const ok = await handleShareWallCopy();
+    if (ok) {
+      setInviteHint(true);
+      window.setTimeout(() => setInviteHint(false), 4500);
+    }
+
+    if (!canManageParty || lookingBusy) {
+      return;
+    }
+
+    // Already recruiting some roles — only copy invite, don't expand search to all empty slots.
+    if (isRecruitLooking && effectiveRecruitRoles.length > 0) {
+      return;
+    }
+
+    const emptyRoles = ROLE_POSITIONS.filter((role) => !claimedRoles.has(role));
+    if (emptyRoles.length === 0) {
+      return;
+    }
+
+    await syncRecruitLooking(emptyRoles);
+  }
+
+  function openClaimAuth(role: DotaPositionRole | null) {
+    setClaimIntentRole(role);
+    if (typeof window !== "undefined" && role) {
+      window.sessionStorage.setItem(
+        PENDING_PARTY_CLAIM_KEY,
+        JSON.stringify({ role, slug: party.slug })
+      );
+    }
+    trackDotaEvent("party_seat_intent", {
+      ...(role ? { role } : {}),
+      slug: party.slug
+    });
+    setAuthSheetOpen(true);
+  }
+
+  async function resumeClaimAfterAuth(accessToken: string) {
+    let role = claimIntentRole;
+    if (!role && typeof window !== "undefined") {
+      try {
+        const raw = window.sessionStorage.getItem(PENDING_PARTY_CLAIM_KEY);
+        const parsed = raw ? (JSON.parse(raw) as { role?: DotaPositionRole; slug?: string }) : null;
+        if (parsed?.slug === party.slug && parsed.role) {
+          role = parsed.role;
+        }
+      } catch {
+        role = null;
+      }
+    }
+
+    if (!role) {
+      setAuthSheetOpen(false);
       return;
     }
 
     try {
-      const { token } = await createPartyJoinToken(party.slug, authSession.accessToken);
-      const ok = await copyDotaTeamJoinUrl(party.slug, token);
-      setCopied(ok);
-
-      if (ok) {
-        window.setTimeout(() => setCopied(false), 1800);
+      await fetchMyDotaProfile(accessToken);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        // Sheet creates short Dota profile (MMR + roles); keep it open.
+        setAuthSheetOpen(true);
+        return;
       }
-    } catch {
-      setError(t("dota.team.inviteError"));
     }
+
+    setAuthSheetOpen(false);
+    setClaimIntentRole(null);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(PENDING_PARTY_CLAIM_KEY);
+    }
+    await handleVisitorApply(role, accessToken);
+  }
+
+  function handlePartyAuthSuccess(authResponse: AuthResponse) {
+    storeAuthSession(authResponse);
+    const token = authResponse.accessToken;
+    if (!token) {
+      setAuthSheetOpen(false);
+      return;
+    }
+
+    const pendingRaw =
+      typeof window !== "undefined" ? window.sessionStorage.getItem(PENDING_PARTY_JOIN_KEY) : null;
+    if (pendingRaw || joinTokenFromUrl) {
+      setAuthSheetOpen(false);
+      return;
+    }
+
+    void resumeClaimAfterAuth(token);
+  }
+
+  async function handleGuestClaim(role: DotaPositionRole) {
+    if (viewerInvite?.positionRole === role && authSession?.accessToken) {
+      trackDotaEvent("party_seat_intent", { role, slug: party.slug });
+      await handleAcceptViewerInvite();
+      return;
+    }
+
+    if (!authSession?.accessToken) {
+      openClaimAuth(role);
+      return;
+    }
+
+    trackDotaEvent("party_seat_intent", { role, slug: party.slug });
+
+    try {
+      await fetchMyDotaProfile(authSession.accessToken);
+    } catch (profileError) {
+      if (profileError instanceof ApiError && profileError.status === 404) {
+        openClaimAuth(role);
+        return;
+      }
+    }
+
+    await handleVisitorApply(role);
   }
 
   async function handleDiscordVoice(
@@ -1481,6 +1832,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       if (!hadShareUrl) {
         const share = await ensurePartyDiscordVoice(party.slug, authSession.accessToken, "share");
         knownDiscordInviteRef.current = share.inviteUrl;
+        discordVoiceReadyToastedRef.current = true;
         setParty((current) => ({
           ...current,
           discordInviteUrl: share.inviteUrl,
@@ -1894,38 +2246,57 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
     }
   }
 
-  async function handleVisitorApply(role: DotaPositionRole) {
-    if (!authSession?.accessToken || party.isMember || visitorApplyBusyRole) {
+  async function handleVisitorApply(role: DotaPositionRole, accessTokenOverride?: string) {
+    const accessToken = accessTokenOverride ?? authSession?.accessToken;
+    if (
+      !accessToken ||
+      party.isMember ||
+      visitorApplyBusyRole ||
+      visitorClaimInFlightRef.current
+    ) {
       return;
     }
 
-    const captain =
-      party.members.find((member) => member.userId === party.ownerUserId) ??
-      party.members.find((member) => member.role === "OWNER") ??
-      null;
-    const captainSlug = captain?.dotaSlug;
-
-    if (!captainSlug) {
-      setVisitorApplyError(t("games.search.error.playerNotFound"));
-      return;
-    }
-
+    visitorClaimInFlightRef.current = true;
+    partyMutationEpochRef.current += 1;
     setVisitorApplyBusyRole(role);
     setVisitorApplyError(null);
 
     try {
-      const result = await stackWithPlayer(captainSlug, authSession.accessToken, undefined, role);
-      if (result.party.isMember || result.invite.status === "ACCEPTED") {
-        setParty((current) => applyLivePartyUpdate(current, result.party, authSession.userId));
+      const updated = await claimPartySeat(party.slug, role, accessToken);
+      partyMutationEpochRef.current += 1;
+      if (updated.isMember) {
+        setParty((current) =>
+          applyLivePartyUpdate(
+            current,
+            updated,
+            authSession?.userId ?? updated.members[0]?.userId
+          )
+        );
         setVisitorOpenRoles([]);
         setJoinMessage(t("dota.team.joinSuccess"));
+        trackDotaEvent("party_joined", { role, slug: party.slug });
+        void fetchPartyChatMessages(party.slug, accessToken)
+          .then((page) => {
+            pendingChatScrollToBottomRef.current = true;
+            shouldStickChatToBottomRef.current = true;
+            setChatMessages((current) => mergeChatMessages(current, page.messages));
+          })
+          .catch(() => {
+            // Member socket effect will load history.
+          });
       } else {
         setVisitorOpenRoles((current) => current.filter((item) => item !== role));
         setJoinMessage(t("games.search.applicationSent"));
+        trackDotaEvent("party_applied", { role, slug: party.slug });
+        setParty((current) =>
+          applyLivePartyUpdate(current, updated, authSession?.userId ?? undefined)
+        );
       }
     } catch (applyError) {
       setVisitorApplyError(resolveStackInviteError(applyError, t));
     } finally {
+      visitorClaimInFlightRef.current = false;
       setVisitorApplyBusyRole(null);
     }
   }
@@ -1943,6 +2314,21 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       setParty(joined);
       setViewerInvite(null);
       setJoinMessage(t("dota.team.joinSuccess"));
+      trackDotaEvent("party_joined", {
+        ...(viewerInvite.positionRole ? { role: viewerInvite.positionRole } : {}),
+        slug: joined.slug
+      });
+      if (joined.isMember) {
+        void fetchPartyChatMessages(joined.slug, authSession.accessToken)
+          .then((page) => {
+            pendingChatScrollToBottomRef.current = true;
+            shouldStickChatToBottomRef.current = true;
+            setChatMessages((current) => mergeChatMessages(current, page.messages));
+          })
+          .catch(() => {
+            // Member socket effect will load history.
+          });
+      }
     } catch (acceptError) {
       setViewerInviteError(resolveInviteDecisionError(acceptError, t));
     } finally {
@@ -1969,37 +2355,78 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   }
 
   async function handleClaimSlot(role: DotaPositionRole) {
-    if (!authSession?.accessToken || !party.isMember || pending) {
+    if (!authSession?.accessToken || !party.isMember || claimInFlightRef.current) {
       return;
     }
 
+    claimInFlightRef.current = true;
+    partyMutationEpochRef.current += 1;
     setPending(true);
     setError(null);
 
+    const viewerId = authSession.userId;
+    // Optimistic: show seat occupied immediately; softSync cannot clobber (epoch).
+    setParty((current) => ({
+      ...current,
+      members: current.members.map((member) => {
+        if (member.userId === viewerId) {
+          return { ...member, positionRole: role };
+        }
+        if (member.positionRole === role) {
+          return { ...member, positionRole: null };
+        }
+        return member;
+      })
+    }));
+    setRecruitRoles((current) => {
+      const next = current.filter((item) => item !== role);
+      if (next.length === 0) {
+        setIsRecruitLooking(false);
+      }
+      return next;
+    });
+
     try {
       const updated = await updatePartyMemberPosition(party.slug, role, authSession.accessToken);
-      setParty((current) => applyLivePartyUpdate(current, updated, authSession.userId));
-    } catch {
-      setError(t("dota.team.claimError"));
+      partyMutationEpochRef.current += 1;
+      setParty((current) => applyLivePartyUpdate(current, updated, viewerId));
+    } catch (claimError) {
+      partyMutationEpochRef.current += 1;
+      setError(
+        claimError instanceof ApiError
+          ? resolveStackInviteError(claimError, t)
+          : t("dota.team.claimError")
+      );
+      try {
+        const refreshed = await fetchGameParty(party.slug, authSession.accessToken);
+        setParty((current) => applyLivePartyUpdate(current, refreshed, viewerId));
+      } catch {
+        // Keep optimistic state if refresh fails.
+      }
     } finally {
+      claimInFlightRef.current = false;
       setPending(false);
     }
   }
 
   async function handleClearSlot() {
-    if (!authSession?.accessToken || !party.isMember || pending) {
+    if (!authSession?.accessToken || !party.isMember || claimInFlightRef.current) {
       return;
     }
 
+    claimInFlightRef.current = true;
+    partyMutationEpochRef.current += 1;
     setPending(true);
     setError(null);
 
     try {
       const updated = await updatePartyMemberPosition(party.slug, null, authSession.accessToken);
+      partyMutationEpochRef.current += 1;
       setParty((current) => applyLivePartyUpdate(current, updated, authSession.userId));
     } catch {
       setError(t("dota.team.claimError"));
     } finally {
+      claimInFlightRef.current = false;
       setPending(false);
     }
   }
@@ -2035,7 +2462,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       return;
     }
 
-    if ((party.joinMode ?? "CONFIRM") === nextMode) {
+    if ((party.joinMode ?? "OPEN") === nextMode) {
       return;
     }
 
@@ -2055,13 +2482,20 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   async function handleSendChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!authSession?.accessToken || chatDraft.trim().length === 0) {
+    if (
+      !authSession?.accessToken ||
+      chatDraft.trim().length === 0 ||
+      chatPending ||
+      chatInFlightRef.current
+    ) {
       return;
     }
 
     const text = chatDraft.trim();
+    chatInFlightRef.current = true;
     setChatPending(true);
     setChatError(null);
+    setChatDraft("");
 
     try {
       let created: GamePartyChatMessage | null = null;
@@ -2076,27 +2510,38 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
 
       if (!created) {
         created = await sendPartyChatMessage(party.slug, text, authSession.accessToken);
+        // HTTP path means socket likely out of room — rejoin so we receive replies.
+        partySocketRef.current?.ensureJoined();
       }
 
       requestChatScrollToBottom();
       setChatMessages((current) => mergeChatMessages(current, [created!]));
-      setChatDraft("");
     } catch {
+      setChatDraft(text);
       setChatError(t("dota.team.chatSendError"));
     } finally {
+      chatInFlightRef.current = false;
       setChatPending(false);
     }
   }
 
   return (
     <section className={styles.page}>
+      <div aria-hidden className={styles.pageBackdrop}>
+        <img
+          alt=""
+          className={styles.pageBackdropArt}
+          src="/dota/idle/party-slots-arena.png"
+        />
+        <div className={styles.pageBackdropVeil} />
+      </div>
       <div className={styles.workspace}>
         <div
           className={styles.rosterColumn}
         >
-          <header className={styles.header}>
-            <div className={styles.headerTop}>
-              <div className={styles.headerCopy}>
+          <header className={styles.hero}>
+            <div className={styles.heroTop}>
+              <div className={styles.heroCopy}>
                 <p className={styles.eyebrow}>{kindLabel}</p>
                 {canManageParty && renameEditing ? (
                   <form className={styles.renameForm} onSubmit={handleRename}>
@@ -2153,14 +2598,21 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                     ) : null}
                   </div>
                 )}
-                <p className={styles.lead}>
-                  {t("dota.team.lead", {
-                    current: String(party.memberCount),
-                    max: String(party.maxMembers)
-                  })}
-                </p>
+                {captainMember ? (
+                  <p className={styles.captainRow}>
+                    <span aria-hidden>👑</span>
+                    {t("dota.team.captainLabel")} ·{" "}
+                    {captainMember.dotaSlug ? (
+                      <Link href={`/dota/${captainMember.dotaSlug}`}>{captainMember.displayName}</Link>
+                    ) : (
+                      <strong>{captainMember.displayName}</strong>
+                    )}
+                    {captainMember.mmr ? (
+                      <span className={styles.captainMeta}> · ≈ {captainMember.mmr} MMR</span>
+                    ) : null}
+                  </p>
+                ) : null}
               </div>
-
               {unassignedMembers.length > 0 ? (
                 <section className={styles.unassignedPanel}>
                   <div className={styles.unassignedHead}>
@@ -2230,132 +2682,136 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
               ) : null}
             </div>
 
-            {canManageParty && party.openSlots > 0 ? (
-              <div className={styles.joinModeBlock}>
-                <p className={styles.joinModeLabel}>{t("dota.team.joinModeLabel")}</p>
-                <div
-                  aria-label={t("dota.team.joinModeLabel")}
-                  className={styles.joinModeCards}
-                  role="group"
-                >
+            <div className={styles.statusStrip}>
+              <div className={styles.statusBlock}>
+                <p className={styles.statusValue}>
+                  {t("dota.team.playersCount", {
+                    current: String(party.memberCount),
+                    max: String(party.maxMembers)
+                  })}
+                </p>
+                <div aria-hidden className={styles.progressDots}>
+                  {Array.from({ length: party.maxMembers }, (_, index) => (
+                    <span
+                      className={`${styles.progressDot}${
+                        index < party.memberCount ? ` ${styles.progressDotOn}` : ""
+                      }`}
+                      key={`dot-${index}`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className={`${styles.statusBlock} ${styles.seatsBlock}`}>
+                <p className={styles.seatsLeft}>{seatsLeftLabel}</p>
+              </div>
+
+              {canManageParty && party.openSlots > 0 ? (
+                <div className={styles.statusBlock}>
+                  <p className={styles.statusLabel}>{t("dota.team.joinModeLabel")}</p>
                   <button
-                    aria-pressed={(party.joinMode ?? "CONFIRM") === "OPEN"}
-                    className={`${styles.joinModeCard}${
-                      (party.joinMode ?? "CONFIRM") === "OPEN"
-                        ? ` ${styles.joinModeCardOpen}`
-                        : ""
-                    }`}
+                    className={styles.joinModeSelect}
                     disabled={joinModeBusy}
-                    onClick={() => void handleJoinModeChange("OPEN")}
+                    onClick={() =>
+                      void handleJoinModeChange(
+                        (party.joinMode ?? "OPEN") === "OPEN" ? "CONFIRM" : "OPEN"
+                      )
+                    }
                     type="button"
                   >
-                    <span aria-hidden="true" className={styles.joinModeIconOpen}>
-                      <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
-                        <path
-                          d="M13 2 4 14h7l-1 8 10-14h-7l0-6Z"
-                          fill="currentColor"
-                        />
-                      </svg>
+                    <span>
+                      {(party.joinMode ?? "OPEN") === "OPEN"
+                        ? `⚡ ${t("dota.team.joinModeOpen")}`
+                        : `🛡 ${t("dota.team.joinModeConfirm")}`}
                     </span>
-                    <span className={styles.joinModeCopy}>
-                      <strong>{t("dota.team.joinModeOpen")}</strong>
-                      <em>{t("dota.team.joinModeOpenHint")}</em>
-                    </span>
+                    <span aria-hidden>▾</span>
                   </button>
+                  {joinModeError ? <p className={styles.joinModeError}>{joinModeError}</p> : null}
+                </div>
+              ) : (
+                <div className={styles.statusBlock}>
+                  <p className={styles.statusLabel}>{t("dota.team.joinModeLabel")}</p>
+                  <p className={styles.statusValue}>
+                    {(party.joinMode ?? "OPEN") === "OPEN"
+                      ? `⚡ ${t("dota.team.joinModeOpen")}`
+                      : `🛡 ${t("dota.team.joinModeConfirm")}`}
+                  </p>
+                </div>
+              )}
+
+              {expiryInfo ? (
+                <div className={styles.statusBlock}>
+                  <p className={styles.statusLabel}>{t("dota.team.timeLeftLabel")}</p>
+                  <div className={styles.timerRow}>
+                    <p
+                      className={`${styles.statusValue}${
+                        expiryInfo.urgent ? ` ${styles.expiryUrgent}` : ""
+                      }`}
+                    >
+                      {expiryInfo.label}
+                    </p>
+                    {party.canExtendParty ? (
+                      <button
+                        className={styles.extendChip}
+                        disabled={extendBusy}
+                        onClick={() => void handleExtendParty()}
+                        type="button"
+                      >
+                        {extendBusy
+                          ? t("common.loadingEllipsis")
+                          : t("dota.team.extendCta", {
+                              hours: String(DOTA_TEMP_PARTY_EXTEND_HOURS)
+                            })}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {authSession &&
+              party.isMember &&
+              party.discordVoiceAvailable &&
+              canManageParty ? (
+                <div className={`${styles.statusBlock} ${styles.voiceBlock}`}>
+                  <p className={styles.statusLabel}>{t("dota.team.discordVoiceReady")}</p>
                   <button
-                    aria-pressed={(party.joinMode ?? "CONFIRM") === "CONFIRM"}
-                    className={`${styles.joinModeCard}${
-                      (party.joinMode ?? "CONFIRM") === "CONFIRM"
-                        ? ` ${styles.joinModeCardConfirm}`
-                        : ""
-                    }`}
-                    disabled={joinModeBusy}
-                    onClick={() => void handleJoinModeChange("CONFIRM")}
+                    className={styles.voiceJoinBtn}
+                    disabled={discordVoiceBusy}
+                    onClick={() => void handleDiscordVoice("open")}
                     type="button"
                   >
-                    <span aria-hidden="true" className={styles.joinModeIconConfirm}>
-                      <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
-                        <path
-                          d="M12 3 5 6v5c0 4.5 2.9 8.5 7 10 4.1-1.5 7-5.5 7-10V6l-7-3Z"
-                          fill="currentColor"
-                          opacity="0.95"
-                        />
-                      </svg>
-                    </span>
-                    <span className={styles.joinModeCopy}>
-                      <strong>{t("dota.team.joinModeConfirm")}</strong>
-                      <em>{t("dota.team.joinModeConfirmHint")}</em>
-                    </span>
+                    {discordVoiceBusy
+                      ? t("common.loadingEllipsis")
+                      : party.discordInviteUrl
+                        ? t("dota.team.discordVoiceJoin")
+                        : t("dota.team.discordVoiceCreate")}
                   </button>
                 </div>
-                {joinModeError ? <p className={styles.joinModeError}>{joinModeError}</p> : null}
-              </div>
-            ) : null}
-            {expiryInfo ? (
-              <div className={styles.expiryRow}>
-                <p className={`${styles.lead}${expiryInfo.urgent ? ` ${styles.expiryUrgent}` : ""}`}>
-                  {expiryInfo.label}
-                </p>
-                {party.canExtendParty ? (
-                  <button
-                    className={`${styles.extendButton}${
-                      expiryInfo.urgent ||
-                      (Boolean(party.discordInviteUrl) && expiryInfo.msLeft <= 60 * 60_000)
-                        ? ` ${styles.extendButtonUrgent}`
-                        : ""
-                    }`}
-                    disabled={extendBusy}
-                    onClick={() => void handleExtendParty()}
-                    type="button"
-                  >
-                    {extendBusy
-                      ? t("dota.team.extendBusy")
-                      : t("dota.team.extendCta", {
-                          hours: String(DOTA_TEMP_PARTY_EXTEND_HOURS)
-                        })}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-            {party.canExtendParty &&
-            party.discordInviteUrl &&
-            expiryInfo &&
-            expiryInfo.msLeft <= 60 * 60_000 &&
-            !extendHintDismissed ? (
-              <p className={styles.extendHint}>
-                <span>{t("dota.team.extendWhileVoiceHint")}</span>
-                <button
-                  className={styles.hintDismiss}
-                  onClick={() => {
-                    setExtendHintDismissed(true);
-                    try {
-                      window.sessionStorage.setItem(`party-extend-hint:${party.slug}`, "1");
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                  type="button"
-                >
-                  ×
-                </button>
-              </p>
-            ) : null}
+              ) : null}
+            </div>
+
             {joinMessage ? <p className={styles.lead}>{joinMessage}</p> : null}
             {canManageParty && pendingApplications.length > 0 ? (
               <p className={styles.appsHint}>
                 {t("dota.team.appsOnSlotsHint", { count: String(pendingApplications.length) })}
               </p>
             ) : null}
-            <div className={styles.actions}>
+            {party.memberCount <= 1 && canManageParty ? (
+              <p className={styles.nobodyJoined}>{t("dota.team.nobodyJoinedYet")}</p>
+            ) : null}
+
+            <div className={styles.findPlayersWrap}>
               {viewerInvite && !party.isMember ? (
-                <>
+                <div className={styles.findPlayersRow}>
                   <button
-                    className={styles.actionPrimary}
+                    className={styles.findPlayersBtn}
                     disabled={viewerInviteBusy}
                     onClick={() => void handleAcceptViewerInvite()}
                     type="button"
                   >
-                    {viewerInviteBusy ? t("common.loadingEllipsis") : t("dota.team.acceptInvite")}
+                    <span className={styles.findPlayersLabel}>
+                      {viewerInviteBusy ? t("common.loadingEllipsis") : t("dota.team.acceptInvite")}
+                    </span>
                   </button>
                   <button
                     className={styles.actionSecondary}
@@ -2365,103 +2821,43 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                   >
                     {t("dota.team.declineInvite")}
                   </button>
-                </>
-              ) : (
-                <button
-                  className={styles.actionPrimary}
-                  onClick={() => void handleShare()}
-                  type="button"
-                >
-                  <span aria-hidden="true" className={styles.actionIcon}>
-                    🔗
-                  </span>
-                  {copied ? t("dota.team.copied") : t("dota.team.inviteCta")}
-                </button>
-              )}
-              {authSession && party.isMember && party.discordVoiceAvailable ? (
+                </div>
+              ) : party.isMember ? (
                 <>
                   <button
-                    className={styles.actionSecondary}
-                    disabled={discordVoiceBusy}
-                    onClick={() => void handleDiscordVoice("open")}
+                    className={styles.findPlayersBtn}
+                    onClick={() => void handleShare()}
                     type="button"
                   >
-                    <span aria-hidden="true" className={styles.actionIcon}>
-                      🔊
+                    <span className={styles.findPlayersLabel}>
+                      <span aria-hidden>👥</span>
+                      {copied ? t("dota.team.copied") : t("dota.team.inviteCta")}
                     </span>
-                    {discordVoiceBusy
-                      ? t("common.loadingEllipsis")
-                      : party.discordInviteUrl
-                        ? t("dota.team.discordVoiceJoin")
-                        : t("dota.team.discordVoiceCreate")}
+                    {linkOpenCount > 0 ? (
+                      <span className={styles.findPlayersOpens}>
+                        {linkOpenCount === 1
+                          ? t("dota.team.linkOpensOne", { count: String(linkOpenCount) })
+                          : t("dota.team.linkOpens", { count: String(linkOpenCount) })}
+                      </span>
+                    ) : null}
                   </button>
-                  {party.discordInviteUrl ? (
-                    <button
-                      className={styles.actionSecondary}
-                      disabled={discordVoiceBusy}
-                      onClick={() => void handleDiscordVoice("copy")}
-                      type="button"
-                    >
-                      {discordVoiceCopied
-                        ? t("dota.team.discordVoiceCopied")
-                        : t("dota.team.discordVoiceCopy")}
-                    </button>
+                  {inviteHint ? (
+                    <p className={styles.inviteCopiedHint}>{t("dota.team.shareWallSendHint")}</p>
                   ) : null}
                 </>
-              ) : null}
-              {authSession && party.isMember ? (
-                <button
-                  className={styles.actionLeave}
-                  disabled={pending}
-                  onClick={() => void handleLeave()}
-                  type="button"
-                >
-                  <span aria-hidden="true" className={styles.actionIcon}>
-                    ⎋
+              ) : (
+                <p className={styles.findPlayersHint}>{t("dota.team.ghostHere")}</p>
+              )}
+              {party.isMember ? (
+                <p className={styles.findPlayersHint}>
+                  {t("dota.team.findPlayersHint")}
+                  <span aria-hidden className={styles.findPlayersArrow}>
+                    →
                   </span>
-                  {party.isOwner && party.members.length > 1
-                    ? t("games.community.disbandRoster")
-                    : t("dota.team.leave")}
-                </button>
-              ) : null}
-              {!authSession && joinTokenFromUrl ? (
-                <Link className={styles.actionSecondary} href="/dota/create">
-                  {t("games.search.createCta")}
-                </Link>
+                </p>
               ) : null}
             </div>
-            {authSession && party.isMember && party.discordVoiceAvailable ? (
-              <p className={styles.discordVoiceHint}>
-                {party.kind === "TEAM"
-                  ? t("dota.team.discordVoiceHintTeam")
-                  : t("dota.team.discordVoiceHint")}
-              </p>
-            ) : null}
-            {party.kind === "TEAM" && voiceExpiryInfo && party.discordInviteUrl ? (
-              <div className={styles.expiryRow}>
-                <p
-                  className={`${styles.lead}${voiceExpiryInfo.urgent ? ` ${styles.expiryUrgent}` : ""}`}
-                >
-                  {voiceExpiryInfo.label}
-                </p>
-                {party.canExtendDiscordVoice ? (
-                  <button
-                    className={`${styles.extendButton}${
-                      voiceExpiryInfo.urgent ? ` ${styles.extendButtonUrgent}` : ""
-                    }`}
-                    disabled={extendVoiceBusy}
-                    onClick={() => void handleExtendDiscordVoice()}
-                    type="button"
-                  >
-                    {extendVoiceBusy
-                      ? t("common.loadingEllipsis")
-                      : t("dota.team.discordVoiceExtendCta", {
-                          hours: String(DOTA_TEAM_DISCORD_VOICE_EXTEND_HOURS)
-                        })}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
+
             {viewerInvite && !party.isMember ? (
               <p className={styles.viewerInviteHint}>
                 {viewerInvite.positionRole
@@ -2474,18 +2870,26 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
             {viewerInviteError ? <FormFeedback errorMessage={viewerInviteError} /> : null}
           </header>
 
-          {(lookingError || applicationError) && canManageParty ? (
+          {(lookingError || applicationError || error) && (canManageParty || party.isMember) ? (
             <div className={styles.rosterFeedback}>
-              <FormFeedback errorMessage={lookingError ?? applicationError} />
+              <FormFeedback errorMessage={error ?? lookingError ?? applicationError} />
             </div>
           ) : null}
 
           <div className={styles.slots}>
-            {positionSlots.map(({ apps, member, recruiting, role }) => (
+            {positionSlots.map(({ apps, member, recruiting, role }) => {
+              const isGuestClaimable = !member && guestCanClaimSeats;
+              const isGhostSeat = isGuestClaimable;
+              const isInvitedSeat = viewerInvite?.positionRole === role && !party.isMember;
+
+              return (
           <article
             className={`${styles.slot}${member ? "" : ` ${styles.slotEmpty}`}${
               recruiting ? ` ${styles.slotRecruiting}` : ""
+            }${isGhostSeat ? ` ${styles.slotGhost}` : ""}${
+              appsPanelRole === role ? ` ${styles.slotAppsOpen}` : ""
             }`}
+            data-role={role}
             key={`pos-${role}`}
           >
             <span className={styles.slotRole}>
@@ -2521,16 +2925,20 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                   ) : null}
                 </span>
                 {member.dotaAccountId ? (
-                  <button
-                    className={styles.dotaIdButton}
-                    onClick={() => void handleCopyMemberDotaId(member.userId, member.dotaAccountId!)}
-                    title={t("dota.profile.dotaIdCopyHint")}
-                    type="button"
-                  >
-                    {copiedDotaIdUserId === member.userId
-                      ? t("dota.team.memberDotaIdCopied")
-                      : t("dota.team.memberDotaId", { id: member.dotaAccountId })}
-                  </button>
+                  <div className={styles.slotIdRow}>
+                    <button
+                      className={styles.dotaIdButton}
+                      onClick={() =>
+                        void handleCopyMemberDotaId(member.userId, member.dotaAccountId!)
+                      }
+                      title={t("dota.profile.dotaIdCopyHint")}
+                      type="button"
+                    >
+                      {copiedDotaIdUserId === member.userId
+                        ? t("dota.team.memberDotaIdCopied")
+                        : t("dota.team.memberDotaId", { id: member.dotaAccountId })}
+                    </button>
+                  </div>
                 ) : null}
                 <div className={styles.slotActions}>
                   {myMembership?.userId === member.userId ? (
@@ -2563,37 +2971,44 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                       </button>
                     )
                   ) : null}
-                  {canManageParty &&
-                  member.role !== "OWNER" &&
-                  (party.isOwner || member.role === "MEMBER") ? (
-                    <button
-                      className={styles.kickButton}
-                      disabled={pending}
-                      onClick={() => void handleKick(member.userId)}
-                      type="button"
-                    >
-                      {t("dota.team.kick")}
-                    </button>
-                  ) : null}
-                  {party.isOwner && member.role === "MEMBER" ? (
-                    <button
-                      className={styles.kickButton}
-                      disabled={pending}
-                      onClick={() => void handleToggleOfficer(member.userId, true)}
-                      type="button"
-                    >
-                      {t("dota.team.makeOfficer")}
-                    </button>
-                  ) : null}
-                  {party.isOwner && member.role === "OFFICER" ? (
-                    <button
-                      className={styles.kickButton}
-                      disabled={pending}
-                      onClick={() => void handleToggleOfficer(member.userId, false)}
-                      type="button"
-                    >
-                      {t("dota.team.removeOfficer")}
-                    </button>
+                  {(canManageParty &&
+                    member.role !== "OWNER" &&
+                    (party.isOwner || member.role === "MEMBER")) ||
+                  (party.isOwner &&
+                    (member.role === "MEMBER" || member.role === "OFFICER")) ? (
+                    <div className={styles.slotManageRow}>
+                      {canManageParty &&
+                      (party.isOwner || member.role === "MEMBER") ? (
+                        <button
+                          className={styles.kickButton}
+                          disabled={pending}
+                          onClick={() => void handleKick(member.userId)}
+                          type="button"
+                        >
+                          {t("dota.team.kick")}
+                        </button>
+                      ) : null}
+                      {party.isOwner && member.role === "MEMBER" ? (
+                        <button
+                          className={styles.officerButton}
+                          disabled={pending}
+                          onClick={() => void handleToggleOfficer(member.userId, true)}
+                          type="button"
+                        >
+                          {t("dota.team.makeOfficer")}
+                        </button>
+                      ) : null}
+                      {party.isOwner && member.role === "OFFICER" ? (
+                        <button
+                          className={styles.officerButton}
+                          disabled={pending}
+                          onClick={() => void handleToggleOfficer(member.userId, false)}
+                          type="button"
+                        >
+                          {t("dota.team.removeOfficer")}
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               </>
@@ -2601,25 +3016,36 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
               <>
                 {canManageParty ? (
                   <>
-                    <div className={styles.slotAvatarEmpty} aria-hidden="true">
-                      +
-                    </div>
-                    <strong>
-                      {recruiting ? t("dota.team.slotFreeLooking") : t("dota.team.openSlot")}
-                    </strong>
+                    {recruiting ? (
+                      <p className={styles.slotLookingCopy}>
+                        <span className={styles.slotLookingText}>
+                          {t("dota.team.slotLookingForSeat")}
+                        </span>
+                        <span aria-hidden="true" className={styles.slotLookingDots} />
+                      </p>
+                    ) : (
+                      <>
+                        <div className={styles.slotAvatarEmpty} aria-hidden="true">
+                          +
+                        </div>
+                        <strong>{t("dota.team.openSlot")}</strong>
+                      </>
+                    )}
                     <div className={styles.slotActions}>
                       {party.isMember ? (
                         <button
-                          className={styles.slotPrimaryBtn}
-                          disabled={pending || lookingBusy}
+                          className={`${styles.slotPrimaryBtn} ${styles.slotWantRoleBtn}`}
+                          disabled={pending}
                           onClick={() => void handleClaimSlot(role)}
                           type="button"
                         >
-                          {t("dota.team.claimSlot")}
+                          {t("dota.team.wantThisRole")}
                         </button>
                       ) : null}
                       <button
-                        className={styles.slotSecondaryBtn}
+                        className={`${styles.slotSecondaryBtn} ${styles.slotFindBtn}${
+                          recruiting ? ` ${styles.slotFindBtnActive}` : ""
+                        }`}
                         disabled={lookingBusy || (party.isOwner && hasDotaProfile === false)}
                         onClick={() => void handleToggleRecruitRole(role)}
                         type="button"
@@ -2656,6 +3082,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                           <div className={styles.slotAppsPanel} role="dialog">
                             <p className={styles.slotAppsPanelTitle}>
                               {t("dota.team.slotAppsTitle")}
+                              <span className={styles.slotAppsPanelCount}>{apps.length}</span>
                             </p>
                             <ul className={styles.slotApps}>
                               {apps.map((invite) => (
@@ -2727,42 +3154,47 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                           </div>
                         ) : null}
                       </div>
-                    ) : recruiting ? (
-                      <p className={styles.slotWaiting}>{t("dota.team.slotWaitingApps")}</p>
                     ) : null}
                   </>
                 ) : party.isMember ? (
                   <>
-                    <div className={styles.slotAvatarEmpty} aria-hidden="true">
-                      +
-                    </div>
-                    <strong>
-                      {recruiting ? t("dota.team.slotFreeLooking") : t("dota.team.openSlot")}
-                    </strong>
+                    {recruiting ? (
+                      <p className={styles.slotLookingCopy}>
+                        <span className={styles.slotLookingText}>
+                          {t("dota.team.slotLookingForSeat")}
+                        </span>
+                        <span aria-hidden="true" className={styles.slotLookingDots} />
+                      </p>
+                    ) : (
+                      <>
+                        <div className={styles.slotAvatarEmpty} aria-hidden="true">
+                          +
+                        </div>
+                        <strong>{t("dota.team.openSlot")}</strong>
+                      </>
+                    )}
                     <button
-                      className={styles.slotPrimaryBtn}
+                      className={`${styles.slotPrimaryBtn} ${styles.slotWantRoleBtn}`}
                       disabled={pending}
                       onClick={() => void handleClaimSlot(role)}
                       type="button"
                     >
-                      {t("dota.team.claimSlot")}
+                      {t("dota.team.wantThisRole")}
                     </button>
                   </>
-                ) : visitorOpenRoles.includes(role) ||
-                  (viewerInvite?.positionRole === role && !party.isMember) ? (
+                ) : isGuestClaimable ? (
                   <>
-                    <div className={styles.slotAvatarEmpty} aria-hidden="true">
-                      +
+                    <div
+                      aria-hidden="true"
+                      className={`${styles.slotAvatarEmpty} ${styles.slotAvatarGhost}`}
+                    >
+                      ?
                     </div>
                     <strong>
-                      {viewerInvite?.positionRole === role
-                        ? t("dota.team.invitedSlot")
-                        : (party.joinMode ?? "CONFIRM") === "OPEN"
-                          ? t("dota.team.joinModeOpen")
-                          : t("dota.team.joinModeConfirmStatus")}
+                      {isInvitedSeat ? t("dota.team.invitedSlot") : t("dota.team.ghostHere")}
                     </strong>
                     <span className={styles.slotMeta}>
-                      {viewerInvite?.positionRole === role
+                      {isInvitedSeat
                         ? t("dota.team.youWereInvitedRole", {
                             role: `${role} ${getDotaPositionLabel(role, t)}`
                           })
@@ -2770,39 +3202,29 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                             roles: `${role} ${getDotaPositionLabel(role, t)}`
                           })}
                     </span>
-                    {authSession && viewerInvite?.positionRole === role ? (
-                      <button
-                        className={styles.slotPrimaryBtn}
-                        disabled={viewerInviteBusy}
-                        onClick={() => void handleAcceptViewerInvite()}
-                        type="button"
-                      >
-                        {viewerInviteBusy
-                          ? t("common.loadingEllipsis")
-                          : t("dota.team.acceptInvite")}
-                      </button>
-                    ) : authSession ? (
-                      <button
-                        className={styles.slotPrimaryBtn}
-                        disabled={visitorApplyBusyRole === role || Boolean(viewerInvite)}
-                        onClick={() => void handleVisitorApply(role)}
-                        type="button"
-                      >
-                        {visitorApplyBusyRole === role
-                          ? t("games.search.stackBusy")
-                          : (party.joinMode ?? "CONFIRM") === "OPEN"
-                            ? t("dota.team.joinForOpenRole", {
-                                role: `${role} ${getDotaPositionLabel(role, t)}`
-                              })
-                            : t("dota.team.applyForOpenRole", {
-                                role: `${role} ${getDotaPositionLabel(role, t)}`
-                              })}
-                      </button>
-                    ) : (
-                      <Link className={styles.slotSecondaryBtn} href="/dota/create">
-                        {t("games.search.createCta")}
-                      </Link>
-                    )}
+                    <button
+                      className={`${styles.slotPrimaryBtn}${
+                        !isInvitedSeat && (party.joinMode ?? "OPEN") === "OPEN"
+                          ? ` ${styles.slotClaimOpenBtn}`
+                          : ""
+                      }`}
+                      disabled={
+                        visitorApplyBusyRole !== null ||
+                        viewerInviteBusy ||
+                        (Boolean(viewerInvite) && viewerInvite?.positionRole !== role)
+                      }
+                      onClick={() => void handleGuestClaim(role)}
+                      type="button"
+                    >
+                      {visitorApplyBusyRole !== null ||
+                      (viewerInviteBusy && viewerInvite?.positionRole === role)
+                        ? t("common.loadingEllipsis")
+                        : isInvitedSeat
+                          ? t("dota.team.acceptInvite")
+                          : (party.joinMode ?? "OPEN") === "OPEN"
+                            ? t("dota.team.claimSeatOpen")
+                            : t("dota.team.claimSeatConfirm")}
+                    </button>
                   </>
                 ) : (
                   <>
@@ -2816,7 +3238,8 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
               </>
             )}
           </article>
-        ))}
+              );
+            })}
       </div>
 
       {visitorApplyError && !party.isMember ? (
@@ -2826,7 +3249,21 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       ) : null}
 
       {canManageParty ? (
-          <section className={styles.candidatesPanel}>
+          <section
+            className={`${styles.candidatesPanel}${
+              !isRecruitLooking || visibleRecruitCandidates.length === 0
+                ? ` ${styles.candidatesPanelEmpty}`
+                : ""
+            }`}
+          >
+            {!isRecruitLooking || visibleRecruitCandidates.length === 0 ? (
+              <img
+                alt=""
+                aria-hidden
+                className={styles.candidatesPanelBg}
+                src="/dota/party-candidates-bg.png"
+              />
+            ) : null}
             <div className={styles.candidatesHead}>
               <div>
                 <p className={styles.candidatesEyebrow}>{t("dota.team.candidatesEyebrow")}</p>
@@ -2851,16 +3288,19 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
               </button>
             </div>
 
-            {!isRecruitLooking ? (
-              <p className={styles.candidatesEmpty}>
-                {t(
-                  party.kind === "PARTY"
-                    ? "dota.team.candidatesIdleParty"
-                    : "dota.team.candidatesIdleTeam"
-                )}
-              </p>
-            ) : visibleRecruitCandidates.length === 0 ? (
-              <p className={styles.candidatesEmpty}>{t("dota.team.candidatesEmpty")}</p>
+            {!isRecruitLooking || visibleRecruitCandidates.length === 0 ? (
+              <div className={styles.candidatesEmptyState}>
+                <div className={styles.candidatesEmptyCopy}>
+                  <p className={styles.candidatesEmpty}>{t("dota.team.candidatesEmptyCta")}</p>
+                  <button
+                    className={styles.findPlayersBtnSmall}
+                    onClick={() => void handleShare()}
+                    type="button"
+                  >
+                    👥 {t("dota.team.inviteCta")}
+                  </button>
+                </div>
+              </div>
             ) : (
               <div className={styles.candidatesGrid}>
                 {visibleRecruitCandidates.map((candidate) => {
@@ -2975,10 +3415,47 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
             ) : null}
             {recruitCandidateError ? <FormFeedback errorMessage={recruitCandidateError} /> : null}
           </section>
+      ) : party.isMember && party.discordVoiceAvailable ? (
+          <section
+            aria-label={t("dota.team.discordVoiceReady")}
+            className={`${styles.candidatesPanel} ${styles.candidatesPanelEmpty} ${styles.memberVoicePanel}`}
+          >
+            <img
+              alt=""
+              aria-hidden
+              className={styles.candidatesPanelBg}
+              src="/dota/party-candidates-bg.png"
+            />
+            <div className={styles.memberVoiceState}>
+              <p className={styles.memberVoiceLabel}>{t("dota.team.discordVoiceReady")}</p>
+              <button
+                className={styles.memberVoiceJoinBtn}
+                disabled={discordVoiceBusy || !authSession?.accessToken}
+                onClick={() => void handleDiscordVoice("open")}
+                type="button"
+              >
+                {discordVoiceBusy
+                  ? t("common.loadingEllipsis")
+                  : party.discordInviteUrl
+                    ? t("dota.team.discordVoiceJoin")
+                    : t("dota.team.discordVoiceCreate")}
+              </button>
+              {voiceExpiryInfo ? (
+                <p
+                  className={`${styles.memberVoiceMeta}${
+                    voiceExpiryInfo.urgent ? ` ${styles.expiryUrgent}` : ""
+                  }`}
+                >
+                  {voiceExpiryInfo.label}
+                </p>
+              ) : null}
+            </div>
+          </section>
       ) : null}
         </div>
 
         {party.isMember ? (
+          <div className={styles.sideColumn}>
           <aside className={styles.chatPanel} aria-label={t("dota.team.chatTitle")}>
             <div className={styles.chatHead}>
               <div className={styles.chatHeadTop}>
@@ -3039,6 +3516,84 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
             </form>
             {chatError ? <FormFeedback errorMessage={chatError} /> : null}
           </aside>
+
+          <aside
+            className={`${styles.quickInvite}${inviteHint ? ` ${styles.quickInvitePulse}` : ""}`}
+            aria-label={t("dota.team.quickInviteTitle")}
+          >
+            <p className={styles.quickInviteEyebrow}>{t("dota.team.quickInviteTitle")}</p>
+            <div className={styles.quickInviteUrlRow}>
+              <code>{buildPartyShortDisplayUrl(party.slug, inviteToken)}</code>
+              <button
+                className={styles.quickInviteCopy}
+                onClick={() => void handleShareWallCopy()}
+                type="button"
+              >
+                {copied ? "✓" : "⧉"}
+              </button>
+            </div>
+            <p className={styles.quickInviteOr}>{t("dota.team.quickInviteOrApp")}</p>
+            <div className={styles.quickInviteChannels}>
+              <button
+                className={styles.quickChannel}
+                onClick={() => {
+                  trackDotaEvent("party_invite_open_discord", { slug: party.slug });
+                  void handleShareWallCopy().then((ok) => {
+                    if (ok) {
+                      window.open("https://discord.com/app", "_blank", "noopener,noreferrer");
+                    }
+                  });
+                }}
+                type="button"
+              >
+                <span aria-hidden className={styles.quickChannelIcon}>
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09c-.01-.02-.04-.03-.07-.03c-1.5.26-2.93.71-4.27 1.33c-.01 0-.02.01-.03.02c-2.72 4.07-3.47 8.03-3.1 11.95c0 .02.01.04.03.05c1.8 1.32 3.53 2.12 5.24 2.65c.03.01.06 0 .07-.02c.4-.55.76-1.13 1.07-1.74c.02-.04 0-.08-.04-.09c-.57-.22-1.11-.48-1.64-.78c-.04-.02-.04-.08-.01-.11c.11-.08.22-.17.33-.25c.02-.02.05-.02.07-.01c3.44 1.57 7.15 1.57 10.55 0c.02-.01.05-.01.07.01c.11.09.22.17.33.26c.04.03.04.09-.01.11c-.52.31-1.07.56-1.64.78c-.04.01-.05.06-.04.09c.32.61.68 1.19 1.07 1.74c.02.02.05.03.08.02c1.72-.53 3.45-1.33 5.25-2.65c.02-.01.03-.03.03-.05c.44-4.53-.73-8.46-3.1-11.95c-.01-.01-.02-.02-.04-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12c0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12c0 1.17-.83 2.12-1.89 2.12z" />
+                  </svg>
+                </span>
+                Discord
+              </button>
+              <a
+                className={styles.quickChannel}
+                href={`https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent(inviteMessage || party.name)}`}
+                onClick={() =>
+                  trackDotaEvent("party_invite_share_channel", {
+                    channel: "telegram",
+                    slug: party.slug
+                  })
+                }
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                <span aria-hidden className={styles.quickChannelIcon}>
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 6.82l-1.55 7.31c-.12.53-.43.66-.87.41l-2.4-1.77l-1.16 1.12c-.13.13-.24.24-.49.24l.17-2.43l4.42-4c.19-.17-.04-.27-.3-.1l-5.46 3.44l-2.35-.74c-.51-.16-.52-.51.11-.76l9.18-3.54c.42-.17.8.1.66.72z" />
+                  </svg>
+                </span>
+                Telegram
+              </a>
+              <a
+                className={styles.quickChannel}
+                href={`https://vk.com/share.php?url=${encodeURIComponent(inviteUrl)}`}
+                onClick={() =>
+                  trackDotaEvent("party_invite_share_channel", {
+                    channel: "vk",
+                    slug: party.slug
+                  })
+                }
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                <span aria-hidden className={styles.quickChannelIcon}>
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.785 16.5h.94s.285-.032.43-.192c.135-.147.13-.424.13-.424s-.018-1.292.58-1.483c.59-.188 1.347 1.25 2.148 1.804c.606.42 1.067.328 1.067.328l2.145-.03s1.12-.07.59-.95c-.043-.072-.31-.655-1.596-1.854c-1.348-1.256-1.167-1.053.456-3.227c.988-1.325 1.383-2.134 1.26-2.48c-.118-.33-.845-.243-.845-.243l-2.414.015s-.18-.025-.312.055c-.128.078-.21.26-.21.26s-.378 1.005-.88 1.86c-1.06 1.803-1.485 1.898-1.658 1.786c-.402-.26-.301-1.046-.301-1.604c0-1.743.264-2.47-.514-2.66c-.258-.063-.448-.105-1.107-.112c-.847-.009-1.564.003-1.97.203c-.27.134-.478.432-.351.449c.157.021.512.096.701.353c.244.332.235 1.077.235 1.077s.14 2.05-.327 2.305c-.32.175-.76-.182-1.704-1.815c-.483-.836-.848-1.76-.848-1.76s-.07-.173-.196-.266c-.152-.112-.365-.148-.365-.148l-2.293.015s-.344.01-.47.16c-.112.132-.009.405-.009.405s1.78 4.165 3.795 6.265c1.848 1.926 3.944 1.8 3.944 1.8z" />
+                  </svg>
+                </span>
+                VK
+              </a>
+            </div>
+          </aside>
+          </div>
         ) : (
           <aside className={styles.chatPanel} aria-label={t("dota.team.chatTitle")}>
             <div className={styles.chatHead}>
@@ -3049,7 +3604,55 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
         )}
       </div>
 
-      {error ? <FormFeedback errorMessage={error} /> : null}
+      <footer className={styles.metaFooter}>
+        <p className={styles.metaLine}>
+          {party.kind === "PARTY" ? kindLabel : kindLabel}
+          {expiryInfo ? ` · ${expiryInfo.label}` : ""}
+          {averageMmr != null
+            ? ` · ${t("dota.team.avgMmr", { mmr: String(averageMmr) })}`
+            : ` · ${t("dota.team.avgMmrUnknown")}`}
+        </p>
+        {authSession && party.isMember ? (
+          <button
+            className={styles.leaveFooterBtn}
+            disabled={pending}
+            onClick={() => void handleLeave()}
+            type="button"
+          >
+            <span aria-hidden className={styles.leaveFooterIcon}>
+              <svg fill="none" viewBox="0 0 24 24">
+                <path
+                  d="M10 7V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-2"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.8"
+                />
+                <path
+                  d="M15 12H3m0 0 3-3m-3 3 3 3"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.8"
+                />
+              </svg>
+            </span>
+            {party.isOwner && party.members.length > 1
+              ? t("games.community.disbandRoster")
+              : t("dota.team.leave")}
+          </button>
+        ) : null}
+      </footer>
+
+      <PartyAuthSheet
+        onAuthSuccess={handlePartyAuthSuccess}
+        onClose={() => {
+          setAuthSheetOpen(false);
+          setClaimIntentRole(null);
+        }}
+        open={authSheetOpen}
+        preferredRole={claimIntentRole}
+      />
 
       <p className={styles.canonicalHint}>
         {t(
@@ -3087,7 +3690,7 @@ export function DotaCreateTeamForm({ onCreated }: DotaCreateTeamFormProps) {
     try {
       const party = await createGameParty(kind, authSession.accessToken);
       onCreated?.(party);
-      router.push(`/dota/teams/${party.slug}`);
+      router.push(`/dota/teams/${party.slug}?created=1`);
     } catch {
       setError(t("dota.team.createError"));
       setPending(false);

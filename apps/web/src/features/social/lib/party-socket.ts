@@ -24,6 +24,7 @@ export type PartySocketHandlersRef = {
 
 export interface PartySocketConnection {
   disconnect: () => void;
+  ensureJoined: () => void;
   isReady: () => boolean;
   sendMessage: (message: string) => Promise<GamePartyChatMessage>;
 }
@@ -33,6 +34,7 @@ export interface PartyWatchSocketConnection {
 }
 
 const JOIN_ROOM_TIMEOUT_MS = 10_000;
+const JOIN_RETRY_MS = 2_500;
 const SEND_MESSAGE_TIMEOUT_MS = 8_000;
 
 function readHandlers(handlersRef: PartySocketHandlersRef): PartySocketHandlers {
@@ -62,36 +64,72 @@ export function connectPartySocket(
   handlersRef: PartySocketHandlersRef
 ): PartySocketConnection {
   let hasJoinedRoom = false;
+  let joinInFlight = false;
   let joinTimeout: number | undefined;
+  let joinRetryTimeout: number | undefined;
+  let disposed = false;
 
   const clearJoinTimeout = (): void => {
     if (joinTimeout !== undefined) {
       window.clearTimeout(joinTimeout);
-      joinTimeout = undefined;
     }
+    joinTimeout = undefined;
+  };
+
+  const clearJoinRetry = (): void => {
+    if (joinRetryTimeout !== undefined) {
+      window.clearTimeout(joinRetryTimeout);
+    }
+    joinRetryTimeout = undefined;
+  };
+
+  const scheduleJoinRetry = (socket: Socket): void => {
+    if (disposed || hasJoinedRoom || joinRetryTimeout !== undefined) {
+      return;
+    }
+
+    joinRetryTimeout = window.setTimeout(() => {
+      joinRetryTimeout = undefined;
+      if (!disposed && socket.connected && !hasJoinedRoom) {
+        joinRoom(socket);
+      }
+    }, JOIN_RETRY_MS);
   };
 
   const joinRoom = (socket: Socket): void => {
+    if (disposed || !socket.connected || joinInFlight) {
+      return;
+    }
+
+    joinInFlight = true;
     hasJoinedRoom = false;
     clearJoinTimeout();
+    clearJoinRetry();
 
     joinTimeout = window.setTimeout(() => {
+      joinInFlight = false;
       hasJoinedRoom = false;
       readHandlers(handlersRef).onDisconnect?.();
+      scheduleJoinRetry(socket);
     }, JOIN_ROOM_TIMEOUT_MS);
 
     socket.emit("join", { limit: 50, partySlug }, (response: unknown) => {
       clearJoinTimeout();
+      joinInFlight = false;
+
+      if (disposed) {
+        return;
+      }
 
       if (!isJoinAck(response)) {
         hasJoinedRoom = false;
         readHandlers(handlersRef).onDisconnect?.();
+        scheduleJoinRetry(socket);
         return;
       }
 
       hasJoinedRoom = true;
-      // Also join party_view so roster updates arrive even if chat room membership flaps.
-      socket.emit("watch", { partySlug });
+      clearJoinRetry();
       readHandlers(handlersRef).onPartyUpdated?.(response.party);
       readHandlers(handlersRef).onMessages?.(response.messages, response.nextCursor ?? null);
     });
@@ -112,14 +150,18 @@ export function connectPartySocket(
 
   socket.on("disconnect", () => {
     hasJoinedRoom = false;
+    joinInFlight = false;
     clearJoinTimeout();
+    clearJoinRetry();
     readHandlers(handlersRef).onDisconnect?.();
   });
 
   socket.on("connect_error", () => {
     hasJoinedRoom = false;
+    joinInFlight = false;
     clearJoinTimeout();
     readHandlers(handlersRef).onDisconnect?.();
+    scheduleJoinRetry(socket);
   });
 
   socket.on("new_message", (message: GamePartyChatMessage) => {
@@ -140,8 +182,11 @@ export function connectPartySocket(
 
   return {
     disconnect: () => {
+      disposed = true;
       clearJoinTimeout();
+      clearJoinRetry();
       hasJoinedRoom = false;
+      joinInFlight = false;
 
       if (socket.connected) {
         socket.emit("leave");
@@ -149,6 +194,18 @@ export function connectPartySocket(
 
       socket.off();
       socket.disconnect();
+    },
+    ensureJoined: () => {
+      if (disposed || hasJoinedRoom) {
+        return;
+      }
+
+      if (socket.connected) {
+        joinRoom(socket);
+        return;
+      }
+
+      socket.connect();
     },
     isReady: () => socket.connected && hasJoinedRoom,
     sendMessage: (message: string) =>
@@ -185,6 +242,7 @@ export function connectPartyWatchSocket(
   partySlug: string,
   accessToken: string | null,
   handlers: {
+    onConnected?: () => void;
     onPartyUpdated?: (party: GameParty) => void;
     onRecruitUpdated: (payload: PartyRecruitUpdated) => void;
   }
@@ -200,6 +258,7 @@ export function connectPartyWatchSocket(
 
   const watch = (): void => {
     socket.emit("watch", { partySlug });
+    handlers.onConnected?.();
   };
 
   socket.on("connect", watch);

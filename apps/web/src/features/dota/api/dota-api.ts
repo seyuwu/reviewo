@@ -137,6 +137,7 @@ export interface DotaLfgListResponse {
 }
 
 export function fetchDotaLfg(input?: {
+  accessToken?: string;
   roles?: string[];
   server?: string;
 }): Promise<DotaLfgListResponse> {
@@ -152,7 +153,15 @@ export function fetchDotaLfg(input?: {
 
   const query = params.toString();
 
-  return apiRequest<DotaLfgListResponse>(`/dota/profiles/lfg${query ? `?${query}` : ""}`);
+  return apiRequest<DotaLfgListResponse>(`/dota/profiles/lfg${query ? `?${query}` : ""}`, {
+    ...(input?.accessToken
+      ? {
+          headers: {
+            authorization: `Bearer ${input.accessToken}`
+          }
+        }
+      : {})
+  });
 }
 
 export function setDotaLfgLooking(

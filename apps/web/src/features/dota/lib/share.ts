@@ -41,11 +41,23 @@ export function buildDotaTeamUrl(slug: string): string {
   return dotaAbsoluteUrl(`/dota/teams/${slug}`).toString();
 }
 
-/** Signed join link: opening while signed in auto-adds the viewer to the party. */
+export function buildDotaTeamOgImageUrl(slug: string): string {
+  return dotaAbsoluteUrl(`/og/dota/teams/${slug}`).toString();
+}
+
+/** Short join link: /j/{code}. Legacy JWT still accepted as ?join= for old shares. */
 export function buildDotaTeamJoinUrl(slug: string, joinToken: string): string {
+  if (isShortPartyJoinCode(joinToken)) {
+    return dotaAbsoluteUrl(`/j/${joinToken}`).toString();
+  }
+
   const url = dotaAbsoluteUrl(`/dota/teams/${slug}`);
   url.searchParams.set("join", joinToken);
   return url.toString();
+}
+
+export function isShortPartyJoinCode(value: string): boolean {
+  return /^[A-Za-z0-9_-]{6,16}$/.test(value) && !value.includes(".");
 }
 
 export function buildDotaShareText(

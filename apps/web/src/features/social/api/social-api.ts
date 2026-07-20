@@ -128,6 +128,19 @@ export function fetchGameParty(slug: string, accessToken?: string): Promise<Game
   });
 }
 
+export function recordPartyLinkOpen(
+  slug: string,
+  accessToken?: string
+): Promise<{ linkOpenCount: number }> {
+  return apiRequest<{ linkOpenCount: number }>(
+    `/social/parties/${encodeURIComponent(slug)}/link-open`,
+    {
+      ...(accessToken ? { headers: authHeaders(accessToken) } : {}),
+      method: "POST"
+    }
+  );
+}
+
 export function fetchMyParties(accessToken: string): Promise<MyPartiesResponse> {
   return apiRequest<MyPartiesResponse>("/social/parties/me", {
     headers: authHeaders(accessToken)
@@ -246,8 +259,8 @@ export function stackWithPlayer(
 export function createPartyJoinToken(
   slug: string,
   accessToken: string
-): Promise<{ token: string }> {
-  return apiRequest<{ token: string }>(
+): Promise<{ code: string; token: string }> {
+  return apiRequest<{ code: string; token: string }>(
     `/social/parties/${encodeURIComponent(slug)}/join-token`,
     {
       headers: authHeaders(accessToken),
@@ -280,9 +293,28 @@ export function ensurePartyDiscordVoice(
   });
 }
 
-export function joinPartyByToken(token: string, accessToken: string): Promise<GameParty> {
+export function joinPartyByToken(
+  token: string,
+  accessToken: string,
+  positionRole?: "1" | "2" | "3" | "4" | "5"
+): Promise<GameParty> {
   return apiRequest<GameParty>("/social/parties/join", {
-    body: { token },
+    body: {
+      token,
+      ...(positionRole ? { positionRole } : {})
+    },
+    headers: authHeaders(accessToken),
+    method: "POST"
+  });
+}
+
+export function claimPartySeat(
+  slug: string,
+  positionRole: "1" | "2" | "3" | "4" | "5",
+  accessToken: string
+): Promise<GameParty> {
+  return apiRequest<GameParty>(`/social/parties/${encodeURIComponent(slug)}/claim`, {
+    body: { positionRole },
     headers: authHeaders(accessToken),
     method: "POST"
   });

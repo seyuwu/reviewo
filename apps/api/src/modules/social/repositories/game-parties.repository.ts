@@ -150,7 +150,8 @@ export class GamePartiesRepository {
         include: {
           party: true
         },
-        orderBy: { joinedAt: "desc" },
+        // Oldest join first — newest memberships render at the bottom of roster lists.
+        orderBy: { joinedAt: "asc" },
         where: {
           party: {
             kind: "PARTY",
@@ -166,7 +167,7 @@ export class GamePartiesRepository {
       include: {
         party: true
       },
-      orderBy: { joinedAt: "desc" },
+      orderBy: { joinedAt: "asc" },
       where: {
         party: {
           kind: "TEAM",
@@ -223,6 +224,24 @@ export class GamePartiesRepository {
     });
   }
 
+  hasDeclinedPartyInvite(
+    partyId: string,
+    inviteeUserId: string,
+    kind: "INVITE" | "APPLICATION" = "INVITE"
+  ): Promise<boolean> {
+    return this.prismaService.gamePartyInvite
+      .findFirst({
+        where: {
+          inviteeUserId,
+          kind,
+          partyId,
+          status: "DECLINED"
+        },
+        select: { id: true }
+      })
+      .then((row) => row !== null);
+  }
+
   findInviteById(id: string): Promise<GamePartyInvite | null> {
     return this.prismaService.gamePartyInvite.findUnique({
       where: { id }
@@ -237,6 +256,36 @@ export class GamePartiesRepository {
       where: { id },
       data: { status }
     });
+  }
+
+  /**
+   * CAS decline: only PENDING → DECLINED. Returns false if invite was already resolved.
+   */
+  async declinePendingInvite(id: string): Promise<boolean> {
+    const result = await this.prismaService.gamePartyInvite.updateMany({
+      where: {
+        id,
+        status: "PENDING"
+      },
+      data: { status: "DECLINED" }
+    });
+
+    return result.count > 0;
+  }
+
+  /**
+   * CAS cancel: only PENDING → CANCELLED. Returns false if invite was already resolved.
+   */
+  async cancelPendingInvite(id: string): Promise<boolean> {
+    const result = await this.prismaService.gamePartyInvite.updateMany({
+      where: {
+        id,
+        status: "PENDING"
+      },
+      data: { status: "CANCELLED" }
+    });
+
+    return result.count > 0;
   }
 
   /**
@@ -313,26 +362,67 @@ export class GamePartiesRepository {
 
   /**
    * Atomically add a member if capacity remains.
-   * Returns the existing membership when already present, or null when the party is full
-   * (or the position role is already taken).
+   * Returns existing membership when already present; otherwise ok/reason for callers.
    */
   addMemberAtomically(input: {
     maxMembers: number;
     partyId: string;
     positionRole?: string | null;
     userId: string;
-  }): Promise<GamePartyMember | null> {
+  }): Promise<
+    | { cancelledApplications: GamePartyInvite[]; member: GamePartyMember; ok: true }
+    | { ok: false; reason: "full" | "role_taken" | "already_on_other_team" | "party_gone" }
+  > {
     return this.prismaService.$transaction(async (tx) => {
+      // Serialize joins for this user so concurrent accepts cannot both keep foreign applications.
       await tx.$executeRaw`
-        SELECT id FROM social.game_parties WHERE id = ${input.partyId}::uuid FOR UPDATE
+        SELECT pg_advisory_xact_lock(
+          hashtext(${`${input.userId}:dota-party-join`})
+        )
       `;
+
+      const partyRows = await tx.$queryRaw<Array<{ kind: string; vertical: string }>>`
+        SELECT kind::text AS kind, vertical
+        FROM social.game_parties
+        WHERE id = ${input.partyId}::uuid
+        FOR UPDATE
+      `;
+      const partyMeta = partyRows[0];
+
+      if (!partyMeta) {
+        return { ok: false as const, reason: "party_gone" as const };
+      }
+
+      if (partyMeta.kind === "TEAM") {
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtext(${`${input.userId}:TEAM:${partyMeta.vertical}`})
+          )
+        `;
+
+        const otherTeam = await tx.gamePartyMember.findFirst({
+          where: {
+            partyId: { not: input.partyId },
+            party: {
+              kind: "TEAM",
+              vertical: partyMeta.vertical
+            },
+            userId: input.userId
+          },
+          select: { id: true }
+        });
+
+        if (otherTeam) {
+          return { ok: false as const, reason: "already_on_other_team" as const };
+        }
+      }
 
       const memberCount = await tx.gamePartyMember.count({
         where: { partyId: input.partyId }
       });
 
       if (memberCount >= input.maxMembers) {
-        return null;
+        return { ok: false as const, reason: "full" as const };
       }
 
       const alreadyMember = await tx.gamePartyMember.findFirst({
@@ -343,7 +433,11 @@ export class GamePartiesRepository {
       });
 
       if (alreadyMember) {
-        return alreadyMember;
+        const cancelledApplications = await this.cancelOtherPendingApplicationsForInvitee(
+          tx,
+          input.userId
+        );
+        return { cancelledApplications, member: alreadyMember, ok: true as const };
       }
 
       const positionRole = input.positionRole ?? null;
@@ -357,11 +451,11 @@ export class GamePartiesRepository {
         });
 
         if (taken) {
-          return null;
+          return { ok: false as const, reason: "role_taken" as const };
         }
       }
 
-      return tx.gamePartyMember.create({
+      const member = await tx.gamePartyMember.create({
         data: {
           partyId: input.partyId,
           positionRole,
@@ -369,6 +463,13 @@ export class GamePartiesRepository {
           userId: input.userId
         }
       });
+
+      const cancelledApplications = await this.cancelOtherPendingApplicationsForInvitee(
+        tx,
+        input.userId
+      );
+
+      return { cancelledApplications, member, ok: true as const };
     });
   }
 
@@ -386,12 +487,29 @@ export class GamePartiesRepository {
   }): Promise<{
     closedInvites: GamePartyInvite[];
     member: GamePartyMember | null;
+    reason?: "full" | "role_taken" | "already_on_other_team";
     staleInvite: boolean;
   }> {
     return this.prismaService.$transaction(async (tx) => {
+      // User lock first (before party) — consistent order avoids deadlocks with addMemberAtomically.
       await tx.$executeRaw`
-        SELECT id FROM social.game_parties WHERE id = ${input.partyId}::uuid FOR UPDATE
+        SELECT pg_advisory_xact_lock(
+          hashtext(${`${input.userId}:dota-party-join`})
+        )
       `;
+
+      const partyRows = await tx.$queryRaw<Array<{ kind: string; vertical: string }>>`
+        SELECT kind::text AS kind, vertical
+        FROM social.game_parties
+        WHERE id = ${input.partyId}::uuid
+        FOR UPDATE
+      `;
+      const partyMeta = partyRows[0];
+
+      if (!partyMeta) {
+        return { closedInvites: [], member: null, staleInvite: true };
+      }
+
       await tx.$executeRaw`
         SELECT id FROM social.game_party_invites WHERE id = ${input.inviteId}::uuid FOR UPDATE
       `;
@@ -407,6 +525,35 @@ export class GamePartiesRepository {
         inviteRow.status !== "PENDING"
       ) {
         return { closedInvites: [], member: null, staleInvite: true };
+      }
+
+      if (partyMeta.kind === "TEAM") {
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtext(${`${input.userId}:TEAM:${partyMeta.vertical}`})
+          )
+        `;
+
+        const otherTeam = await tx.gamePartyMember.findFirst({
+          where: {
+            partyId: { not: input.partyId },
+            party: {
+              kind: "TEAM",
+              vertical: partyMeta.vertical
+            },
+            userId: input.userId
+          },
+          select: { id: true }
+        });
+
+        if (otherTeam) {
+          return {
+            closedInvites: [],
+            member: null,
+            reason: "already_on_other_team" as const,
+            staleInvite: false
+          };
+        }
       }
 
       const memberCount = await tx.gamePartyMember.count({
@@ -430,6 +577,7 @@ export class GamePartiesRepository {
         return {
           closedInvites: pending.map((invite) => ({ ...invite, status: "CANCELLED" as const })),
           member: null,
+          reason: "full" as const,
           staleInvite: false
         };
       }
@@ -449,7 +597,16 @@ export class GamePartiesRepository {
             status: "PENDING"
           }
         });
-        return { closedInvites: [], member: alreadyMember, staleInvite: false };
+        const cancelledApplications = await this.cancelOtherPendingApplicationsForInvitee(
+          tx,
+          input.userId,
+          input.inviteId
+        );
+        return {
+          closedInvites: cancelledApplications,
+          member: alreadyMember,
+          staleInvite: false
+        };
       }
 
       const positionRole = input.positionRole ?? null;
@@ -484,6 +641,7 @@ export class GamePartiesRepository {
               status: "CANCELLED" as const
             })),
             member: null,
+            reason: "role_taken" as const,
             staleInvite: false
           };
         }
@@ -559,7 +717,49 @@ export class GamePartiesRepository {
         }
       }
 
+      const cancelledApplications = await this.cancelOtherPendingApplicationsForInvitee(
+        tx,
+        input.userId,
+        input.inviteId
+      );
+      closedInvites.push(...cancelledApplications);
+
       return { closedInvites, member, staleInvite: false };
+    });
+  }
+
+  /**
+   * Kick member + join-block + cancel their pending invites in one locked transaction.
+   */
+  async kickMemberAtomically(partyId: string, userId: string): Promise<void> {
+    await this.prismaService.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        SELECT id FROM social.game_parties WHERE id = ${partyId}::uuid FOR UPDATE
+      `;
+
+      await tx.gamePartyMember.deleteMany({
+        where: {
+          partyId,
+          userId
+        }
+      });
+
+      await tx.$executeRaw`
+        INSERT INTO social.game_party_join_blocks (id, party_id, user_id, created_at)
+        VALUES (gen_random_uuid(), ${partyId}::uuid, ${userId}::uuid, NOW())
+        ON CONFLICT (party_id, user_id) DO NOTHING
+      `;
+
+      await tx.gamePartyInvite.updateMany({
+        where: {
+          inviteeUserId: userId,
+          partyId,
+          status: "PENDING"
+        },
+        data: {
+          status: "CANCELLED"
+        }
+      });
     });
   }
 
@@ -570,6 +770,99 @@ export class GamePartiesRepository {
         userId
       }
     });
+  }
+
+  async upsertJoinBlock(partyId: string, userId: string): Promise<void> {
+    await this.prismaService.$executeRaw`
+      INSERT INTO social.game_party_join_blocks (id, party_id, user_id, created_at)
+      VALUES (gen_random_uuid(), ${partyId}::uuid, ${userId}::uuid, NOW())
+      ON CONFLICT (party_id, user_id) DO NOTHING
+    `;
+  }
+
+  async deleteJoinBlock(partyId: string, userId: string): Promise<void> {
+    await this.prismaService.$executeRaw`
+      DELETE FROM social.game_party_join_blocks
+      WHERE party_id = ${partyId}::uuid AND user_id = ${userId}::uuid
+    `;
+  }
+
+  async findJoinBlock(partyId: string, userId: string): Promise<{ id: string } | null> {
+    const rows = await this.prismaService.$queryRaw<Array<{ id: string }>>`
+      SELECT id::text AS id
+      FROM social.game_party_join_blocks
+      WHERE party_id = ${partyId}::uuid AND user_id = ${userId}::uuid
+      LIMIT 1
+    `;
+
+    return rows[0] ?? null;
+  }
+
+  async listBlockedPartyIdsForUser(userId: string): Promise<string[]> {
+    const rows = await this.prismaService.$queryRaw<Array<{ party_id: string }>>`
+      SELECT party_id::text AS party_id
+      FROM social.game_party_join_blocks
+      WHERE user_id = ${userId}::uuid
+    `;
+
+    return rows.map((row) => row.party_id);
+  }
+
+  async listBlockedPartySlugsForUser(userId: string): Promise<string[]> {
+    const rows = await this.prismaService.$queryRaw<Array<{ slug: string }>>`
+      SELECT p.slug AS slug
+      FROM social.game_party_join_blocks b
+      INNER JOIN social.game_parties p ON p.id = b.party_id
+      WHERE b.user_id = ${userId}::uuid
+    `;
+
+    return rows.map((row) => row.slug);
+  }
+
+  cancelPendingInvitesForUser(
+    partyId: string,
+    userId: string
+  ): Promise<Prisma.BatchPayload> {
+    return this.prismaService.gamePartyInvite.updateMany({
+      where: {
+        inviteeUserId: userId,
+        partyId,
+        status: "PENDING"
+      },
+      data: {
+        status: "CANCELLED"
+      }
+    });
+  }
+
+  /**
+   * After a user joins any party: cancel their other PENDING APPLICATIONS (all parties).
+   * CAS on status=PENDING — concurrent accept of those invites loses and sees staleInvite.
+   */
+  private async cancelOtherPendingApplicationsForInvitee(
+    tx: Prisma.TransactionClient,
+    inviteeUserId: string,
+    exceptInviteId?: string
+  ): Promise<GamePartyInvite[]> {
+    const where = {
+      inviteeUserId,
+      kind: "APPLICATION" as const,
+      status: "PENDING" as const,
+      ...(exceptInviteId ? { id: { not: exceptInviteId } } : {})
+    };
+
+    const pending = await tx.gamePartyInvite.findMany({ where });
+
+    if (pending.length === 0) {
+      return [];
+    }
+
+    await tx.gamePartyInvite.updateMany({
+      data: { status: "CANCELLED" },
+      where
+    });
+
+    return pending.map((invite) => ({ ...invite, status: "CANCELLED" as const }));
   }
 
   async updateMemberPositionRole(
@@ -1110,6 +1403,19 @@ export class GamePartiesRepository {
           }
         }
       }
+    });
+  }
+
+  findChatMessageByExactText(
+    partyId: string,
+    message: string
+  ): Promise<GamePartyChatMessage | null> {
+    return this.prismaService.gamePartyChatMessage.findFirst({
+      where: {
+        message,
+        partyId
+      },
+      orderBy: { createdAt: "asc" }
     });
   }
 

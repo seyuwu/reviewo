@@ -15,6 +15,7 @@ export interface DotaProfile {
   mmr: string | null;
   ownerUserId: string | null;
   playIntent: string | null;
+  matchMode: "auto" | "manual" | null;
   progress: DotaProfileProgress;
   qualities: Record<string, number>;
   roles: string[];
@@ -30,6 +31,7 @@ export interface CreateDotaProfileInput {
   language?: string;
   mmr?: string;
   playIntent?: "fun" | "ranked" | "tournament";
+  matchMode?: "auto" | "manual";
   roles?: string[];
   server?: string;
   slug?: string;

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { DotaMatchMode } from "@reviewo/shared";
 
 import { OpiniaIcon } from "../../../components/opinia-icon";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
@@ -36,6 +37,7 @@ import type {
 import styles from "./games-search-cinematic.module.css";
 
 const ROLE_POSITIONS = ["1", "2", "3", "4", "5"] as const satisfies readonly DotaPositionRole[];
+const MATCH_MODE_STORAGE_KEY = "opinia.matchMode";
 
 interface PreparedContext {
   accessToken: string;
@@ -62,6 +64,8 @@ export function GamesSearchCinematic({
   const [questionnaireState, setQuestionnaireState] = useState<QuestionnaireState>("center");
   const [intentMode, setIntentMode] = useState<IntentMode>("join");
   const [selectedIntent, setSelectedIntent] = useState<IntentMode | null>(null);
+  const [matchMode, setMatchMode] = useState<DotaMatchMode | null>(null);
+  const [selectedMatchMode, setSelectedMatchMode] = useState<DotaMatchMode | null>(null);
   const [mmrFrom, setMmrFrom] = useState("");
   const [mmrTo, setMmrTo] = useState("");
   const [roles, setRoles] = useState<DotaPositionRole[]>([]);
@@ -93,13 +97,13 @@ export function GamesSearchCinematic({
   }, []);
 
   useEffect(() => {
-    if (phase !== "mmr" && phase !== "roles" && phase !== "recruitRoles") {
+    if (phase !== "mmr" && phase !== "roles" && phase !== "recruitRoles" && phase !== "matchMode") {
       return;
     }
 
     const frame = window.requestAnimationFrame(() => {
       questionnaireRef.current
-        ?.querySelector<HTMLElement>("input, button[aria-pressed]")
+        ?.querySelector<HTMLElement>("input, button[aria-pressed], button[type='button']")
         ?.focus();
     });
 
@@ -152,6 +156,23 @@ export function GamesSearchCinematic({
     void transitionToPhase("mmr", 480);
   }
 
+  function chooseMatchMode(nextMode: DotaMatchMode) {
+    if (selectedMatchMode || isBusy || stepTransitioningRef.current) {
+      return;
+    }
+
+    setSelectedMatchMode(nextMode);
+    setMatchMode(nextMode);
+    setError(null);
+    void (async () => {
+      await wait(480);
+      if (!mountedRef.current) {
+        return;
+      }
+      await prepareSearch(nextMode);
+    })();
+  }
+
   function submitMmr(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -178,7 +199,7 @@ export function GamesSearchCinematic({
       return;
     }
 
-    void prepareSearch();
+    void transitionToPhase("matchMode");
   }
 
   function submitRecruitRoles(event: FormEvent<HTMLFormElement>) {
@@ -190,7 +211,7 @@ export function GamesSearchCinematic({
       return;
     }
 
-    void prepareSearch();
+    void transitionToPhase("matchMode");
   }
 
   function toggleRole(
@@ -200,11 +221,11 @@ export function GamesSearchCinematic({
     setter((current) =>
       current.includes(role)
         ? current.filter((item) => item !== role)
-        : [...current, role].sort() as DotaPositionRole[]
+        : ([...current, role].sort() as DotaPositionRole[])
     );
   }
 
-  async function prepareSearch() {
+  async function prepareSearch(chosenMatchMode: DotaMatchMode) {
     if (
       stepTransitioningRef.current ||
       !mmr ||
@@ -223,7 +244,7 @@ export function GamesSearchCinematic({
     setError(null);
 
     try {
-      const prepared = preparedRef.current ?? (await createProfileAndSession());
+      const prepared = preparedRef.current ?? (await createProfileAndSession(chosenMatchMode));
       preparedRef.current = prepared;
 
       let party = prepared.party;
@@ -255,8 +276,13 @@ export function GamesSearchCinematic({
         await setDotaLfgLooking(true, prepared.accessToken);
       }
 
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(MATCH_MODE_STORAGE_KEY, chosenMatchMode);
+      }
+
       const result: GamesSearchCinematicResult = {
         intentMode,
+        matchMode: chosenMatchMode,
         mmr,
         party,
         profile: prepared.profile,
@@ -275,9 +301,8 @@ export function GamesSearchCinematic({
       await runCinematicSequence(result);
     } catch {
       if (mountedRef.current) {
-        const returnedToForm = await transitionToPhase(
-          intentMode === "recruit" ? "recruitRoles" : "roles"
-        );
+        setSelectedMatchMode(null);
+        const returnedToForm = await transitionToPhase("matchMode");
         if (returnedToForm && mountedRef.current) {
           setError(t("games.search.cinematic.prepareError"));
         }
@@ -285,13 +310,15 @@ export function GamesSearchCinematic({
     }
   }
 
-  async function createProfileAndSession(): Promise<PreparedContext> {
+  async function createProfileAndSession(chosenMatchMode: DotaMatchMode): Promise<PreparedContext> {
+    const profileInput = { matchMode: chosenMatchMode, mmr, roles };
+
     if (authSession?.accessToken) {
-      const profile = await createDotaProfile({ mmr, roles }, authSession.accessToken);
+      const profile = await createDotaProfile(profileInput, authSession.accessToken);
       return { accessToken: authSession.accessToken, party: null, profile };
     }
 
-    const response = await createGuestDotaProfile({ mmr, roles });
+    const response = await createGuestDotaProfile(profileInput);
     storeAuthSession({
       accessToken: response.accessToken,
       expiresIn: response.expiresIn,
@@ -545,11 +572,28 @@ export function GamesSearchCinematic({
         return 3;
       case "recruitRoles":
         return 4;
+      case "matchMode":
+        return intentMode === "recruit" ? 5 : 4;
       default:
-        return intentMode === "recruit" ? 4 : 3;
+        return intentMode === "recruit" ? 5 : 4;
     }
   }, [intentMode, phase]);
-  const totalSteps = intentMode === "recruit" ? 4 : 3;
+  const totalSteps = intentMode === "recruit" ? 5 : 4;
+
+  const readyTitle =
+    (matchMode ?? selectedMatchMode) === "auto"
+      ? t("games.search.cinematic.readyTitleAuto")
+      : t("games.search.cinematic.readyTitle");
+  const readySubtitle =
+    (matchMode ?? selectedMatchMode) === "auto"
+      ? intentMode === "recruit"
+        ? t("games.search.cinematic.readySubtitleAutoRecruit")
+        : t("games.search.cinematic.readySubtitleAuto")
+      : t("games.search.cinematic.readySubtitle");
+  const revealHint =
+    (matchMode ?? selectedMatchMode) === "auto"
+      ? t("games.search.cinematic.revealHintAuto")
+      : t("games.search.cinematic.revealHint");
 
   return (
     <div className={styles.root} data-phase={phase}>
@@ -671,11 +715,7 @@ export function GamesSearchCinematic({
             }} t={t} />
             <StepActions
               backLabel={t("games.search.cinematic.back")}
-              nextLabel={
-                intentMode === "recruit"
-                  ? t("games.search.cinematic.next")
-                  : t("games.search.cinematic.finish")
-              }
+              nextLabel={t("games.search.cinematic.next")}
               onBack={() => {
                 setError(null);
                 void transitionToPhase("mmr");
@@ -695,13 +735,88 @@ export function GamesSearchCinematic({
             }} t={t} />
             <StepActions
               backLabel={t("games.search.cinematic.back")}
-              nextLabel={t("games.search.cinematic.finish")}
+              nextLabel={t("games.search.cinematic.next")}
               onBack={() => {
                 setError(null);
                 void transitionToPhase("roles");
               }}
             />
           </form>
+        ) : null}
+
+        {phase === "matchMode" ? (
+          <div className={`${styles.stepBody} ${styles.matchModeStep}`}>
+            <p className={styles.eyebrow}>{t("games.search.cinematic.almostDone")}</p>
+            <h2 className={styles.title}>
+              {intentMode === "recruit"
+                ? t("games.search.cinematic.askMatchModeRecruit")
+                : t("games.search.cinematic.askMatchMode")}
+            </h2>
+            <p className={styles.lead}>
+              {intentMode === "recruit"
+                ? t("games.search.cinematic.askMatchModeRecruitHint")
+                : t("games.search.cinematic.askMatchModeHint")}
+            </p>
+            <div className={styles.intentChoices}>
+              <button
+                className={`${styles.intentChoice} ${
+                  selectedMatchMode === "auto" ? styles.intentChoiceActive : ""
+                } ${selectedMatchMode === "manual" ? styles.intentChoiceLeaving : ""}`}
+                disabled={Boolean(selectedMatchMode) || isBusy}
+                onClick={() => chooseMatchMode("auto")}
+                type="button"
+              >
+                <span aria-hidden className={styles.choiceIcon}>
+                  <OpiniaIcon className={styles.choiceIconSvg!} name="sparkle" />
+                </span>
+                <span className={styles.choiceCopy}>
+                  <strong>
+                    {intentMode === "recruit"
+                      ? t("games.search.cinematic.choiceMatchAutoRecruit")
+                      : t("games.search.cinematic.choiceMatchAuto")}
+                  </strong>
+                  <small>
+                    {intentMode === "recruit"
+                      ? t("games.search.cinematic.choiceMatchAutoRecruitHint")
+                      : t("games.search.cinematic.choiceMatchAutoHint")}
+                  </small>
+                </span>
+              </button>
+              <button
+                className={`${styles.intentChoice} ${
+                  selectedMatchMode === "manual" ? styles.intentChoiceActive : ""
+                } ${selectedMatchMode === "auto" ? styles.intentChoiceLeaving : ""}`}
+                disabled={Boolean(selectedMatchMode) || isBusy}
+                onClick={() => chooseMatchMode("manual")}
+                type="button"
+              >
+                <span aria-hidden className={styles.choiceIcon}>
+                  <OpiniaIcon className={styles.choiceIconSvg!} name="search" />
+                </span>
+                <span className={styles.choiceCopy}>
+                  <strong>
+                    {intentMode === "recruit"
+                      ? t("games.search.cinematic.choiceMatchManualRecruit")
+                      : t("games.search.cinematic.choiceMatchManual")}
+                  </strong>
+                  <small>
+                    {intentMode === "recruit"
+                      ? t("games.search.cinematic.choiceMatchManualRecruitHint")
+                      : t("games.search.cinematic.choiceMatchManualHint")}
+                  </small>
+                </span>
+              </button>
+            </div>
+            <StepActions
+              backLabel={t("games.search.cinematic.back")}
+              onBack={() => {
+                setSelectedMatchMode(null);
+                setMatchMode(null);
+                setError(null);
+                void transitionToPhase(intentMode === "recruit" ? "recruitRoles" : "roles");
+              }}
+            />
+          </div>
         ) : null}
 
         {phase === "creating" ? (
@@ -746,13 +861,13 @@ export function GamesSearchCinematic({
         >
           <div className={styles.confirmationReady}>
             <span aria-hidden className={styles.checkmark}>✓</span>
-            <h2>{t("games.search.cinematic.readyTitle")}</h2>
-            <p>{t("games.search.cinematic.readySubtitle")}</p>
+            <h2>{readyTitle}</h2>
+            <p>{readySubtitle}</p>
           </div>
           <div className={styles.confirmationProfile}>
             <p className={styles.revealLead}>{t("games.search.cinematic.revealLead")}</p>
             <h2>{t("games.search.cinematic.revealBody")}</h2>
-            <p>{t("games.search.cinematic.revealHint")}</p>
+            <p>{revealHint}</p>
           </div>
         </div>
       ) : null}
@@ -788,7 +903,7 @@ function RolePicker({ onToggle, roles, t }: RolePickerProps) {
 
 interface StepActionsProps {
   backLabel: string;
-  nextLabel: string;
+  nextLabel?: string;
   onBack: () => void;
 }
 
@@ -798,10 +913,12 @@ function StepActions({ backLabel, nextLabel, onBack }: StepActionsProps) {
       <button className={styles.backButton} onClick={onBack} type="button">
         {backLabel}
       </button>
-      <button className={styles.nextButton} type="submit">
-        {nextLabel}
-        <span aria-hidden>→</span>
-      </button>
+      {nextLabel ? (
+        <button className={styles.nextButton} type="submit">
+          {nextLabel}
+          <span aria-hidden>→</span>
+        </button>
+      ) : null}
     </div>
   );
 }

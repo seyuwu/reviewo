@@ -1,24 +1,40 @@
 .page {
+  background: #0b0e14;
+  color: #e8eaf4;
   display: grid;
-  gap: 0.65rem;
-  margin: 0 auto;
-  max-width: 90rem;
-  padding: clamp(0.55rem, 1.4vw, 0.9rem);
+  gap: 0.35rem;
+  grid-template-rows: auto auto;
+  height: auto;
+  isolation: isolate;
+  margin: 0;
+  max-height: none;
+  max-width: none;
+  min-height: 0;
+  overflow: visible;
+  padding: 0.35rem clamp(0.65rem, 1.6vw, 1.15rem) 0;
+  position: relative;
   width: 100%;
 }
 
 .workspace {
   align-items: start;
   display: grid;
-  gap: 0.75rem;
-  grid-template-columns: minmax(0, 1fr) minmax(16.5rem, 20rem);
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) minmax(15.5rem, 19.5rem);
+  height: auto;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .rosterColumn {
-  display: grid;
-  gap: 0.65rem;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  height: auto;
+  min-height: 0;
   min-width: 0;
+  overflow: visible;
 }
 
 .rosterColumnWithApps {
@@ -477,38 +493,187 @@
 }
 
 .slots {
+  align-items: stretch;
   display: grid;
   gap: 0.5rem;
+  grid-auto-rows: 1fr;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   overflow: visible;
+  position: relative;
+  z-index: 6;
 }
 
 .slot {
-  background: linear-gradient(180deg, rgb(28 32 46 / 95%), rgb(18 22 34 / 92%));
+  background: rgb(12 14 24 / 88%);
   border: 1px solid rgb(147 130 255 / 14%);
   border-radius: 0.85rem;
   box-shadow: 0 8px 20px rgb(0 0 0 / 18%);
-  display: grid;
-  gap: 0.25rem;
-  justify-items: stretch;
-  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.18rem;
+  height: 100%;
+  isolation: isolate;
+  min-height: 11.75rem;
   overflow: visible;
-  padding: 0.55rem 0.5rem 0.55rem;
+  padding: 0.45rem 0.4rem 0.45rem;
   position: relative;
   text-align: center;
+  transition:
+    border-color 180ms ease,
+    box-shadow 220ms ease;
+}
+
+.slot::before {
+  background-position: center 22%;
+  background-repeat: no-repeat;
+  background-size: cover;
+  border-radius: inherit;
+  content: "";
+  filter: saturate(1.2) brightness(1.05);
+  inset: 0;
+  opacity: 0.68;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 220ms ease, filter 220ms ease;
+  z-index: 0;
+}
+
+.slot::after {
+  background:
+    linear-gradient(
+      180deg,
+      rgb(18 12 36 / 28%) 0%,
+      rgb(12 10 24 / 58%) 42%,
+      rgb(8 8 18 / 86%) 100%
+    ),
+    radial-gradient(ellipse 90% 70% at 50% 18%, rgb(109 74 255 / 18%), transparent 62%);
+  border-radius: inherit;
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: background 220ms ease, box-shadow 220ms ease;
+  z-index: 0;
+}
+
+/* Occupied: art brighter + soft violet glow (not neon) */
+.slot:not(.slotEmpty) {
+  border-color: rgb(167 139 250 / 34%);
+  box-shadow:
+    0 8px 22px rgb(0 0 0 / 22%),
+    0 0 0 1px rgb(147 130 255 / 14%),
+    0 0 18px rgb(109 74 255 / 16%),
+    inset 0 0 22px rgb(109 74 255 / 7%);
+}
+
+.slot:not(.slotEmpty)::before {
+  filter: saturate(1.28) brightness(1.12);
+  opacity: 0.78;
+}
+
+.slot:not(.slotEmpty)::after {
+  background:
+    linear-gradient(
+      180deg,
+      rgb(18 12 36 / 22%) 0%,
+      rgb(12 10 24 / 52%) 40%,
+      rgb(8 8 18 / 84%) 100%
+    ),
+    radial-gradient(ellipse 95% 75% at 50% 12%, rgb(139 92 246 / 26%), transparent 64%);
+  box-shadow: inset 0 0 36px rgb(109 74 255 / 10%);
+}
+
+.slot[data-role="1"]::before {
+  background-image: url("/dota/slots/role-1-carry.jpg");
+  background-position: 52% 18%;
+}
+
+.slot[data-role="2"]::before {
+  background-image: url("/dota/slots/role-2-mid.jpg");
+  background-position: 48% 16%;
+}
+
+.slot[data-role="3"]::before {
+  background-image: url("/dota/slots/role-3-offlane.jpg");
+  background-position: 50% 14%;
+}
+
+.slot[data-role="4"]::before {
+  background-image: url("/dota/slots/role-4-support.jpg");
+  background-position: 55% 18%;
+}
+
+.slot[data-role="5"]::before {
+  background-image: url("/dota/slots/role-5-hard-support.jpg");
+  background-position: 50% 16%;
+}
+
+.slot > * {
+  position: relative;
+  z-index: 1;
 }
 
 .slotEmpty {
-  background: linear-gradient(180deg, rgb(24 28 40 / 70%), rgb(16 19 28 / 78%));
+  background: rgb(12 14 24 / 72%);
   border-style: dashed;
-  border-color: rgb(255 255 255 / 10%);
+  border-color: rgb(255 255 255 / 12%);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 14%);
+}
+
+.slotEmpty::before {
+  filter: saturate(1.15) brightness(1.02);
+  opacity: 0.58;
+}
+
+.slotEmpty::after {
+  background:
+    linear-gradient(
+      180deg,
+      rgb(18 12 36 / 36%) 0%,
+      rgb(12 10 24 / 62%) 50%,
+      rgb(8 8 18 / 86%) 100%
+    ),
+    radial-gradient(ellipse 90% 70% at 50% 18%, rgb(109 74 255 / 16%), transparent 62%);
+  box-shadow: none;
+}
+
+.slotGhost {
+  background: rgb(16 20 36 / 78%);
+  border-color: rgb(147 197 253 / 42%);
+  box-shadow: inset 0 0 0 1px rgb(147 197 253 / 12%);
+}
+
+.slotGhost::before {
+  opacity: 0.28;
+}
+
+.slotAvatarGhost {
+  background: rgb(147 197 253 / 14%);
+  border: 1px dashed rgb(147 197 253 / 55%);
+  color: rgb(186 214 255 / 90%);
+  font-size: 1.05rem;
+  font-weight: 700;
 }
 
 .slotRecruiting {
-  background: linear-gradient(180deg, rgb(48 36 88 / 55%), rgb(22 24 40 / 88%));
+  background: rgb(28 20 52 / 72%);
   border-color: rgb(109 74 255 / 48%);
   border-style: solid;
   box-shadow: inset 0 0 0 1px rgb(109 74 255 / 12%), 0 12px 28px rgb(91 53 232 / 12%);
+}
+
+.slotRecruiting::before {
+  opacity: 0.36;
+}
+
+.slotRecruiting::after {
+  background: linear-gradient(
+    180deg,
+    rgb(40 24 72 / 48%) 0%,
+    rgb(16 14 32 / 80%) 50%,
+    rgb(10 10 22 / 94%) 100%
+  );
 }
 
 .slotRole {
@@ -519,7 +684,6 @@
   font-weight: 800;
   gap: 0.35rem;
   justify-content: center;
-  justify-self: center;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -536,8 +700,8 @@
 }
 
 .slotAvatarWrap {
-  justify-self: center;
-  margin-top: 0.15rem;
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
   position: relative;
 }
 
@@ -556,12 +720,13 @@
   align-items: center;
   border-radius: 999px;
   display: inline-flex;
+  flex-shrink: 0;
   font-size: 0.9rem;
   font-weight: 800;
-  height: 2.35rem;
+  height: 2.25rem;
   justify-content: center;
   justify-self: center;
-  width: 2.35rem;
+  width: 2.25rem;
 }
 
 .slotAvatar {
@@ -578,9 +743,80 @@
   font-weight: 500;
 }
 
+/* Same footprint as avatar + strong label ? keeps empty recruiting cards aligned. */
+.slotLookingCopy {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.05rem;
+  justify-content: center;
+  justify-self: center;
+  margin: 0;
+  max-height: 3.2rem;
+  max-width: 100%;
+  min-height: 2.6rem;
+  overflow: hidden;
+  padding: 0 0.1rem;
+  width: 100%;
+}
+
+.slotLookingText {
+  color: #f8fafc;
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.08;
+  text-align: center;
+  text-shadow:
+    0 0 14px rgb(167 139 250 / 42%),
+    0 1px 0 rgb(0 0 0 / 35%);
+  text-wrap: balance;
+}
+
+.slotLookingDots {
+  color: #c4b5fd;
+  display: inline-block;
+  font-size: 1rem;
+  font-weight: 900;
+  height: 0.85rem;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  min-width: 1.1rem;
+  text-align: left;
+}
+
+.slotLookingDots::after {
+  animation: slotLookingEllipsis 1.35s steps(4, end) infinite;
+  content: "";
+}
+
+@keyframes slotLookingEllipsis {
+  0% {
+    content: "";
+  }
+
+  25% {
+    content: ".";
+  }
+
+  50% {
+    content: "..";
+  }
+
+  75%,
+  100% {
+    content: "...";
+  }
+}
+
 .slot strong {
-  font-size: 0.8rem;
-  line-height: 1.2;
+  font-size: 0.78rem;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .slot strong a {
@@ -590,8 +826,12 @@
 
 .slotMeta {
   color: var(--color-text-muted);
-  font-size: 0.68rem;
-  line-height: 1.25;
+  font-size: 0.64rem;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .slotMmr {
@@ -599,24 +839,75 @@
   font-weight: 700;
 }
 
-.slotActions {
+.slotIdRow {
+  align-items: center;
+  align-self: stretch;
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  margin-top: 0.15rem;
+  flex: 0 0 auto;
+  justify-content: center;
+  min-height: 0;
   width: 100%;
+}
+
+.slotIdRow .dotaIdButton {
+  font-size: 0.58rem;
+  margin-top: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0.12rem 0.35rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slotActions {
+  align-self: stretch;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: auto;
+  padding-top: 0.15rem;
+  position: relative;
+  width: 100%;
+  z-index: 2;
+}
+
+.slotManageRow {
+  display: flex;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.slotManageRow .kickButton {
+  flex: 0 0 auto;
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.slotManageRow .officerButton {
+  flex: 1 1 auto;
+  margin-top: 0;
+  min-width: 0;
+  padding-inline: 0.4rem;
 }
 
 .slotPrimaryBtn,
 .slotSecondaryBtn {
+  align-items: center;
   appearance: none;
   border-radius: 0.55rem;
   cursor: pointer;
+  display: inline-flex;
   font: inherit;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 750;
-  min-height: 1.85rem;
-  padding: 0.28rem 0.45rem;
+  justify-content: center;
+  line-height: 1.15;
+  min-height: 1.65rem;
+  pointer-events: auto;
+  position: relative;
+  z-index: 3;
+  padding: 0.22rem 0.4rem;
   text-align: center;
   text-decoration: none;
   width: 100%;
@@ -632,6 +923,64 @@
   filter: brightness(1.05);
 }
 
+.slotPrimaryBtn.slotWantRoleBtn {
+  background: rgb(34 197 94 / 14%);
+  border-color: rgb(74 222 128 / 38%);
+  box-shadow: 0 0 14px rgb(74 222 128 / 16%);
+  color: #4ade80;
+}
+
+.slotPrimaryBtn.slotWantRoleBtn:hover:not(:disabled) {
+  background: rgb(34 197 94 / 22%);
+  border-color: rgb(74 222 128 / 52%);
+  filter: none;
+}
+
+.slotPrimaryBtn.slotClaimOpenBtn {
+  animation: slotClaimPulse 2.2s ease-in-out infinite;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 52%, #059669 100%);
+  border: 1px solid rgb(134 239 172 / 58%);
+  box-shadow:
+    0 0 0 1px rgb(74 222 128 / 28%),
+    0 4px 18px rgb(34 197 94 / 45%),
+    0 0 28px rgb(74 222 128 / 24%);
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  min-height: 2rem;
+  padding: 0.35rem 0.55rem;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 22%);
+}
+
+.slotPrimaryBtn.slotClaimOpenBtn:hover:not(:disabled) {
+  animation: none;
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 52%, #16a34a 100%);
+  box-shadow:
+    0 0 0 1px rgb(134 239 172 / 48%),
+    0 6px 22px rgb(34 197 94 / 52%),
+    0 0 36px rgb(74 222 128 / 32%);
+  filter: none;
+  transform: translateY(-1px);
+}
+
+@keyframes slotClaimPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgb(74 222 128 / 28%),
+      0 4px 18px rgb(34 197 94 / 40%),
+      0 0 24px rgb(74 222 128 / 18%);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 1px rgb(134 239 172 / 42%),
+      0 4px 22px rgb(34 197 94 / 54%),
+      0 0 38px rgb(74 222 128 / 34%);
+  }
+}
+
 .slotSecondaryBtn {
   background: rgb(255 255 255 / 5%);
   border: 1px solid rgb(255 255 255 / 10%);
@@ -640,6 +989,30 @@
 
 .slotSecondaryBtn:hover:not(:disabled) {
   border-color: rgb(167 139 250 / 30%);
+}
+
+.slotSecondaryBtn.slotFindBtn {
+  background: rgb(56 189 248 / 12%);
+  border-color: rgb(56 189 248 / 36%);
+  box-shadow: 0 0 12px rgb(56 189 248 / 12%);
+  color: #38bdf8;
+}
+
+.slotSecondaryBtn.slotFindBtn:hover:not(:disabled) {
+  background: rgb(56 189 248 / 20%);
+  border-color: rgb(56 189 248 / 50%);
+}
+
+.slotSecondaryBtn.slotFindBtnActive {
+  background: rgb(251 191 36 / 14%);
+  border-color: rgb(251 191 36 / 42%);
+  box-shadow: 0 0 12px rgb(251 191 36 / 14%);
+  color: #fbbf24;
+}
+
+.slotSecondaryBtn.slotFindBtnActive:hover:not(:disabled) {
+  background: rgb(251 191 36 / 22%);
+  border-color: rgb(251 191 36 / 55%);
 }
 
 .slotPrimaryBtn:disabled,
@@ -657,13 +1030,23 @@
 
 .slotWaiting {
   color: var(--color-text-muted);
-  font-size: 0.68rem;
-  margin: 0.15rem 0 0;
+  flex: 0 0 auto;
+  font-size: 0.64rem;
+  margin: 0.05rem 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .slotAppsRoot {
   margin-top: 0.35rem;
   position: relative;
+  z-index: 2;
+}
+
+.slotAppsOpen {
+  position: relative;
+  z-index: 8;
 }
 
 .slotAppsTrigger {
@@ -685,42 +1068,86 @@
 }
 
 .slotAppsPanel {
-  background: var(--games-glass, rgb(18 22 32 / 96%));
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card-hover, 0 16px 40px rgb(0 0 0 / 45%));
-  display: grid;
+  background: #12161f;
+  border: 1px solid rgb(147 130 255 / 28%);
+  border-radius: 0.85rem;
+  box-shadow:
+    0 18px 48px rgb(0 0 0 / 72%),
+    0 0 0 1px rgb(0 0 0 / 35%);
+  display: flex;
+  flex-direction: column;
   gap: 0.55rem;
-  left: 0;
-  max-height: min(22rem, 55vh);
-  overflow: auto;
-  padding: 0.7rem;
+  isolation: isolate;
+  left: 50%;
+  max-height: min(28rem, 70vh);
+  overflow: hidden;
+  padding: 0.7rem 0.7rem 0.55rem;
   position: absolute;
   top: calc(100% + 0.35rem);
-  width: min(18rem, calc(100vw - 2rem));
-  z-index: 30;
+  transform: translateX(-50%);
+  width: min(22rem, calc(100vw - 1.5rem));
+  z-index: 40;
 }
 
 .slotAppsPanelTitle {
-  color: var(--color-text-muted);
+  align-items: center;
+  color: #c4b5fd;
+  display: flex;
+  flex: 0 0 auto;
   font-size: 0.72rem;
   font-weight: 800;
+  gap: 0.4rem;
   letter-spacing: 0.04em;
   margin: 0;
   text-transform: uppercase;
 }
 
+.slotAppsPanelCount {
+  align-items: center;
+  background: rgb(109 74 255 / 28%);
+  border-radius: 999px;
+  color: #ede9fe;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  justify-content: center;
+  min-width: 1.35rem;
+  padding: 0.1rem 0.4rem;
+}
+
 .slotApps {
   display: grid;
+  flex: 1 1 auto;
   gap: 0.45rem;
   list-style: none;
   margin: 0;
-  padding: 0;
+  max-height: min(22rem, 58vh);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 0.15rem 0.15rem 0;
+  scrollbar-color: rgb(147 130 255 / 55%) rgb(255 255 255 / 6%);
+  scrollbar-width: thin;
+}
+
+.slotApps::-webkit-scrollbar {
+  width: 0.45rem;
+}
+
+.slotApps::-webkit-scrollbar-thumb {
+  background: rgb(147 130 255 / 55%);
+  border-radius: 999px;
+}
+
+.slotApps::-webkit-scrollbar-track {
+  background: rgb(255 255 255 / 6%);
+  border-radius: 999px;
 }
 
 .slotApp {
-  background: rgb(0 0 0 / 22%);
-  border: 1px solid rgb(147 130 255 / 18%);
+  background: rgb(8 10 16);
+  border: 1px solid rgb(147 130 255 / 22%);
   border-radius: 0.7rem;
   display: grid;
   gap: 0.4rem;
@@ -782,12 +1209,8 @@
   padding: 0.3rem 0.55rem;
 }
 
-.slot:nth-child(n + 4) .slotAppsPanel {
-  left: auto;
-  right: 0;
-}
-
 .kickButton {
+  align-items: center;
   align-self: start;
   appearance: none;
   background: rgb(248 113 113 / 12%);
@@ -795,11 +1218,14 @@
   border-radius: 0.55rem;
   color: #fecaca;
   cursor: pointer;
+  display: inline-flex;
   font: inherit;
   font-size: 0.72rem;
   font-weight: 700;
+  justify-content: center;
+  line-height: 1.2;
   margin-top: 0.15rem;
-  padding: 0.35rem 0.55rem;
+  padding: 0.4rem 0.6rem;
 }
 
 .kickButton:hover:not(:disabled) {
@@ -808,6 +1234,35 @@
 }
 
 .kickButton:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.officerButton {
+  align-items: center;
+  appearance: none;
+  background: rgb(250 204 21 / 18%);
+  border: 1px solid rgb(250 204 21 / 55%);
+  border-radius: 0.55rem;
+  color: #fde68a;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  justify-content: center;
+  line-height: 1.2;
+  margin-top: 0.15rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.officerButton:hover:not(:disabled) {
+  background: rgb(250 204 21 / 28%);
+  border-color: rgb(250 204 21 / 75%);
+  color: #fef08a;
+}
+
+.officerButton:disabled {
   cursor: wait;
   opacity: 0.7;
 }
@@ -1425,28 +1880,30 @@
 }
 
 .chatPanel {
-  align-self: start;
-  backdrop-filter: blur(18px);
-  background: linear-gradient(180deg, rgb(24 28 42 / 94%), rgb(14 17 26 / 92%));
+  align-self: stretch;
+  backdrop-filter: blur(14px);
+  background: linear-gradient(180deg, rgb(20 22 36 / 90%), rgb(12 14 24 / 88%));
   border: 1px solid rgb(147 130 255 / 16%);
-  border-radius: 0.95rem;
-  box-shadow: 0 12px 32px rgb(0 0 0 / 24%);
+  border-radius: 0.85rem;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 24%);
   box-sizing: border-box;
-  display: grid;
-  gap: 0.5rem;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  /* Leave room for fixed FriendsDock tab at bottom-right. */
-  height: calc(100dvh - 5.5rem - var(--friends-dock-clearance, 3.5rem));
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 0.35rem;
+  height: auto;
   margin-block: 0;
-  max-height: calc(100dvh - 5.5rem - var(--friends-dock-clearance, 3.5rem));
+  max-height: none;
+  min-height: 0;
   overflow: hidden;
-  padding: 0.7rem;
-  position: sticky;
-  top: 4.25rem;
+  padding: 0.65rem;
+  position: relative;
+  top: auto;
 }
 
 .chatHead {
   display: grid;
+  flex-shrink: 0;
   gap: 0.25rem;
 }
 
@@ -1485,9 +1942,12 @@
 .chatMessages {
   align-content: start;
   display: grid;
+  flex: 1 1 0;
   gap: 0.55rem;
+  height: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overflow-anchor: none;
   overscroll-behavior: contain;
   padding-right: 0.15rem;
@@ -1502,10 +1962,8 @@
   cursor: pointer;
   font-size: 0.75rem;
   font-weight: 700;
-  justify-self: start;
-  margin-top: 0.15rem;
   padding: 0.28rem 0.5rem;
-  text-align: left;
+  text-align: center;
   width: fit-content;
 }
 
@@ -1587,14 +2045,14 @@
 }
 
 .unassignedRow {
-  align-items: center;
+  align-items: stretch;
   background: rgb(0 0 0 / 22%);
   border: 1px solid rgb(147 130 255 / 14%);
   border-radius: 0.7rem;
   display: flex;
   flex: 0 1 auto;
-  flex-wrap: wrap;
-  gap: 0.45rem;
+  flex-direction: column;
+  gap: 0.35rem;
   max-width: min(100%, 22rem);
   min-width: 11rem;
   padding: 0.35rem 0.45rem;
@@ -1603,9 +2061,10 @@
 .unassignedIdentity {
   align-items: center;
   display: flex;
-  flex: 1 1 7rem;
+  flex: 0 0 auto;
   gap: 0.4rem;
   min-width: 0;
+  width: 100%;
 }
 
 .unassignedAvatar {
@@ -1654,32 +2113,47 @@
 }
 
 .unassignedActions {
-  display: flex;
+  display: grid;
   flex-shrink: 0;
-  flex-wrap: wrap;
   gap: 0.25rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
 }
 
 .unassignedAction,
 .unassignedKick {
+  align-items: center;
   appearance: none;
   border-radius: 0.4rem;
+  box-sizing: border-box;
   cursor: pointer;
+  display: inline-flex;
   font: inherit;
   font-size: 0.62rem;
   font-weight: 750;
+  justify-content: center;
+  line-height: 1.15;
   min-height: 1.5rem;
-  padding: 0.15rem 0.35rem;
+  padding: 0.25rem 0.35rem;
+  text-align: center;
+  white-space: normal;
+  width: 100%;
+}
+
+.unassignedActions > :only-child {
+  grid-column: 1 / -1;
 }
 
 .unassignedAction {
-  background: rgb(109 74 255 / 14%);
-  border: 1px solid rgb(147 130 255 / 28%);
-  color: inherit;
+  background: rgb(250 204 21 / 18%);
+  border: 1px solid rgb(250 204 21 / 55%);
+  color: #fde68a;
 }
 
 .unassignedAction:hover:not(:disabled) {
-  background: rgb(109 74 255 / 22%);
+  background: rgb(250 204 21 / 28%);
+  border-color: rgb(250 204 21 / 75%);
+  color: #fef08a;
 }
 
 .unassignedKick {
@@ -1906,11 +2380,6 @@
   .candidateFlags {
     grid-template-columns: 1fr;
   }
-
-  .slot:nth-child(even) .slotAppsPanel {
-    left: auto;
-    right: 0;
-  }
 }
 
 @media (max-width: 560px) {
@@ -1933,6 +2402,7 @@
   .chatPanel {
     bottom: calc(0.4rem + var(--friends-dock-clearance, 3.5rem));
     height: min(16rem, 38vh);
+    max-height: min(16rem, 38vh);
   }
 
   .chatForm {
@@ -1963,6 +2433,1589 @@
 @media (prefers-reduced-motion: reduce) {
   .candidatesRefreshSpinning {
     animation: none;
+  }
+}
+
+
+/* ?? Command center hero (mockup) ?? */
+.hero {
+  backdrop-filter: blur(18px);
+  background:
+    radial-gradient(circle at 92% 8%, rgb(123 44 255 / 32%), transparent 42%),
+    linear-gradient(165deg, rgb(28 22 48 / 96%), rgb(12 14 24 / 94%));
+  border: 1px solid rgb(147 130 255 / 22%);
+  border-radius: 1.1rem;
+  box-shadow: 0 16px 40px rgb(0 0 0 / 35%), 0 0 40px rgb(109 74 255 / 12%);
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem 1.15rem 1.2rem;
+}
+
+.heroTop {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(5rem, 7.5rem);
+}
+
+.heroCopy h1 {
+  color: #fff;
+  font-size: clamp(1.55rem, 3vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.captainRow {
+  align-items: center;
+  color: rgb(190 196 220);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  gap: 0.25rem;
+  margin: 0.45rem 0 0;
+}
+
+.captainRow a,
+.captainRow strong {
+  color: #fff;
+}
+
+.captainMeta {
+  color: rgb(160 166 196);
+}
+
+.heroArt {
+  aspect-ratio: 1;
+  background:
+    radial-gradient(circle at 50% 40%, rgb(167 139 250 / 45%), transparent 62%),
+    linear-gradient(160deg, rgb(76 29 149 / 55%), rgb(15 12 28 / 10%));
+  border-radius: 1rem;
+  position: relative;
+}
+
+.heroArtGlow {
+  background: radial-gradient(circle, rgb(167 139 250 / 55%), transparent 70%);
+  filter: blur(18px);
+  inset: 10%;
+  position: absolute;
+}
+
+.statusStrip {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+}
+
+.statusBlock {
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid rgb(147 130 255 / 14%);
+  border-radius: 0.85rem;
+  padding: 0.7rem 0.8rem;
+}
+
+.statusLabel {
+  color: rgb(150 156 186);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+}
+
+.statusValue {
+  color: #f3f4ff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.progressDots {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0.45rem 0;
+}
+
+.progressDot {
+  background: rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  height: 0.55rem;
+  width: 0.55rem;
+}
+
+.progressDotOn {
+  background: #8b5cf6;
+  box-shadow: 0 0 10px rgb(139 92 246 / 70%);
+}
+
+.seatsLeft {
+  color: #c4b5fd;
+  font-size: 0.88rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.joinModeMini {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.joinModeMiniBtn {
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(147 130 255 / 18%);
+  border-radius: 0.55rem;
+  color: rgb(200 204 230);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+}
+
+.joinModeMiniOn {
+  background: rgb(139 92 246 / 22%);
+  border-color: rgb(139 92 246 / 45%);
+  color: #fff;
+}
+
+.timerRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.extendChip {
+  background: rgb(139 92 246 / 18%);
+  border: 1px solid rgb(139 92 246 / 35%);
+  border-radius: 999px;
+  color: #ddd6fe;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.28rem 0.55rem;
+}
+
+.voiceBlock {
+  background: rgb(88 101 242 / 18%);
+  border-color: rgb(129 140 248 / 42%);
+}
+
+.voiceBlock .statusLabel {
+  color: #c7d2fe;
+}
+
+.voiceJoinBtn {
+  background: linear-gradient(135deg, #8ea1ff, #5865f2 52%, #4752c4);
+  border: 1px solid rgb(199 210 254 / 72%);
+  border-radius: 0.65rem;
+  box-shadow:
+    0 0 22px rgb(88 101 242 / 48%),
+    0 8px 18px rgb(0 0 0 / 28%);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 800;
+  margin-top: 0.35rem;
+  min-height: 2.35rem;
+  padding: 0.55rem 0.75rem;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 28%);
+  transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  width: 100%;
+}
+
+.voiceJoinBtn:hover:not(:disabled) {
+  box-shadow:
+    0 0 28px rgb(88 101 242 / 58%),
+    0 10px 22px rgb(0 0 0 / 32%);
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.voiceJoinBtn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.nobodyJoined {
+  color: rgb(196 181 253);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.findPlayersWrap {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.findPlayersRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.findPlayersBtn,
+.findPlayersBtnSmall {
+  align-items: center;
+  background: linear-gradient(135deg, #9f6bff, #6d28d9 55%, #5b21b6);
+  border: 0;
+  border-radius: 0.95rem;
+  box-shadow: 0 0 32px rgb(123 44 255 / 45%), 0 12px 28px rgb(0 0 0 / 35%);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  font-size: 1.15rem;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 3.4rem;
+  padding: 0.95rem 1.15rem;
+  width: 100%;
+}
+
+.findPlayersBtnSmall {
+  font-size: 0.95rem;
+  justify-content: center;
+  min-height: 2.8rem;
+  width: auto;
+}
+
+.findPlayersLabel {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+}
+
+.findPlayersOpens {
+  color: rgb(226 214 255);
+  font-size: 0.8rem;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.findPlayersHint {
+  color: rgb(168 174 204);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.findPlayersArrow {
+  color: #a78bfa;
+  margin-left: 0.35rem;
+}
+
+.candidatesEmptyState {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+
+.candidatesGhost {
+  font-size: 2.5rem;
+  filter: drop-shadow(0 0 12px rgb(139 92 246 / 45%));
+}
+
+.sideColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: calc(100dvh - 7.25rem);
+  max-height: calc(100dvh - 7.25rem);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.quickInvite {
+  background:
+    radial-gradient(circle at 100% 0%, rgb(109 74 255 / 18%), transparent 55%),
+    rgb(16 18 30 / 92%);
+  border: 1px solid rgb(147 130 255 / 18%);
+  border-radius: 0.95rem;
+  flex-shrink: 0;
+  padding: 0.9rem;
+}
+
+.quickInviteEyebrow {
+  color: rgb(167 139 250);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.55rem;
+  text-transform: uppercase;
+}
+
+.quickInviteUrlRow {
+  align-items: center;
+  background: rgb(0 0 0 / 28%);
+  border: 1px solid rgb(147 130 255 / 16%);
+  border-radius: 0.65rem;
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.quickInviteUrlRow code {
+  color: #e8eaf8;
+  flex: 1;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quickInviteCopy {
+  background: transparent;
+  border: 0;
+  color: #c4b5fd;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.quickInviteOr {
+  color: rgb(150 156 186);
+  font-size: 0.75rem;
+  margin: 0.65rem 0 0.45rem;
+}
+
+.quickInviteChannels {
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quickChannel {
+  align-items: center;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(147 130 255 / 18%);
+  border-radius: 0.55rem;
+  color: #e8eaf4;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  gap: 0.3rem;
+  justify-content: center;
+  padding: 0.5rem 0.25rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.metaFooter {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-top: 0.35rem;
+}
+
+.metaLine {
+  color: rgb(140 146 172);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.leaveFooterBtn {
+  background: rgb(40 16 20 / 72%);
+  border: 1px solid rgb(248 113 113 / 45%);
+  border-radius: 0.7rem;
+  color: #fca5a5;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-left: auto;
+  padding: 0.55rem 0.85rem;
+  position: relative;
+  z-index: 2;
+}
+
+.page {
+  background: #0b0e14;
+  color: #e8eaf4;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  isolation: isolate;
+  margin: 0;
+  max-height: 100%;
+  max-width: none;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0.35rem clamp(0.65rem, 1.6vw, 1.15rem) 0;
+  position: relative;
+  width: 100%;
+}
+
+.pageBackdrop {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.pageBackdropVeil {
+  background: #0b0e14;
+  inset: 0;
+  position: absolute;
+}
+
+.pageBackdropArt {
+  display: none;
+}
+
+.workspace {
+  align-items: start;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) minmax(15.5rem, 19.5rem);
+  height: auto;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.rosterColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  height: auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: visible;
+}
+
+.rosterColumn > .hero,
+.rosterColumn > .slots,
+.rosterColumn > .rosterFeedback,
+.rosterColumn > .visitorFeedback {
+  flex: 0 0 auto;
+}
+
+.rosterColumn > .candidatesPanel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.rosterColumn > .candidatesPanelEmpty {
+  border-radius: 1rem;
+  margin-bottom: 0;
+}
+
+.rosterColumn > .memberVoicePanel {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 12rem;
+}
+
+.memberVoicePanel {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 12rem;
+  text-align: center;
+}
+
+.memberVoiceState {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  margin: auto;
+  max-width: 28rem;
+  padding: 1.25rem 1.1rem;
+  place-items: center;
+  position: relative;
+  text-align: center;
+  width: min(100%, 28rem);
+  z-index: 2;
+}
+
+.memberVoiceLabel {
+  color: rgb(196 181 253 / 88%);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.memberVoiceJoinBtn {
+  background: linear-gradient(135deg, #8ea1ff, #5865f2 52%, #4752c4);
+  border: 1px solid rgb(199 210 254 / 72%);
+  border-radius: 999px;
+  box-shadow:
+    0 0 28px rgb(88 101 242 / 52%),
+    0 12px 28px rgb(0 0 0 / 32%);
+  color: #fff;
+  cursor: pointer;
+  font-size: 1.08rem;
+  font-weight: 800;
+  min-height: 3.2rem;
+  padding: 0.9rem 1.45rem;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 28%);
+  transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  width: min(100%, 22rem);
+}
+
+.memberVoiceJoinBtn:hover:not(:disabled) {
+  box-shadow:
+    0 0 34px rgb(88 101 242 / 62%),
+    0 14px 30px rgb(0 0 0 / 34%);
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.memberVoiceJoinBtn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.memberVoiceMeta {
+  color: rgb(168 174 204);
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+/* ?? Command center hero (soft-masked art) ?? */
+.hero {
+  background: linear-gradient(155deg, rgb(24 18 44 / 96%), rgb(12 10 22 / 96%) 55%, rgb(10 8 18 / 97%));
+  border: 1px solid rgb(147 130 255 / 20%);
+  border-radius: 1rem;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 32%), 0 0 28px rgb(109 74 255 / 10%);
+  display: grid;
+  gap: 0.55rem;
+  overflow: hidden;
+  padding: 0.65rem 0.8rem 0.7rem;
+  position: relative;
+}
+
+.hero::before {
+  background:
+    radial-gradient(ellipse 70% 80% at 70% 45%, rgb(139 92 246 / 35%), transparent 68%),
+    url("/dota/party-hero-assassin.png") 70% 20% / cover no-repeat;
+  bottom: -8%;
+  content: "";
+  filter: saturate(1.2);
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, transparent 8%, black 42%, black 100%),
+    linear-gradient(180deg, transparent 0%, black 18%, black 82%, transparent 100%);
+  mask-image:
+    linear-gradient(90deg, transparent 0%, transparent 8%, black 42%, black 100%),
+    linear-gradient(180deg, transparent 0%, black 18%, black 82%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  opacity: 0.88;
+  pointer-events: none;
+  position: absolute;
+  right: -2%;
+  top: -8%;
+  width: min(52%, 26rem);
+  z-index: 0;
+}
+
+.hero::after {
+  background: linear-gradient(
+    90deg,
+    rgb(14 10 26 / 55%) 0%,
+    transparent 55%,
+    rgb(88 40 180 / 12%) 100%
+  );
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.heroTop {
+  align-items: start;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+  position: relative;
+  z-index: 1;
+}
+
+.heroCopy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.heroCopy h1 {
+  color: #fff;
+  font-size: clamp(1.2rem, 2.1vw, 1.55rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.15;
+}
+
+.captainRow {
+  align-items: center;
+  color: rgb(190 196 220);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  gap: 0.2rem;
+  margin: 0.25rem 0 0;
+}
+
+.captainRow a,
+.captainRow strong {
+  color: #fff;
+}
+
+.captainMeta {
+  color: rgb(160 166 196);
+}
+
+.heroArt,
+.heroArtImg,
+.heroArtGlow {
+  display: none;
+}
+
+.statusStrip {
+  align-items: stretch;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  position: relative;
+  z-index: 1;
+}
+
+.statusBlock {
+  background: rgb(8 10 20 / 72%);
+  border: 1px solid rgb(147 130 255 / 14%);
+  border-radius: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+}
+
+.statusLabel {
+  color: rgb(150 156 186);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.25rem;
+  text-transform: uppercase;
+}
+
+.statusValue {
+  color: #f3f4ff;
+  font-size: 0.84rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.progressDots {
+  display: flex;
+  gap: 0.28rem;
+  margin: 0.35rem 0 0;
+}
+
+.progressDot {
+  background: rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  height: 0.42rem;
+  width: 0.42rem;
+}
+
+.progressDotOn {
+  background: #8b5cf6;
+  box-shadow: 0 0 8px rgb(139 92 246 / 70%);
+}
+
+.seatsBlock {
+  justify-content: center;
+}
+
+.seatsLeft {
+  color: #c4b5fd;
+  font-size: clamp(0.82rem, 1.4vw, 0.98rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.joinModeMini {
+  display: none;
+}
+
+.joinModeMiniBtn {
+  display: none;
+}
+
+.joinModeMiniOn {
+  display: none;
+}
+
+.joinModeSelect {
+  align-items: center;
+  appearance: none;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(147 130 255 / 22%);
+  border-radius: 0.55rem;
+  color: #f3f4ff;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 700;
+  gap: 0.45rem;
+  justify-content: space-between;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.joinModeSelect:hover:not(:disabled) {
+  background: rgb(139 92 246 / 16%);
+  border-color: rgb(139 92 246 / 40%);
+}
+
+.joinModeSelect:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.timerRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.extendChip {
+  background: rgb(139 92 246 / 18%);
+  border: 1px solid rgb(139 92 246 / 35%);
+  border-radius: 999px;
+  color: #ddd6fe;
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.22rem 0.5rem;
+  white-space: nowrap;
+}
+
+.voiceBlock {
+  background: rgb(88 101 242 / 18%);
+  border-color: rgb(129 140 248 / 42%);
+}
+
+.voiceBlock .statusLabel {
+  color: #c7d2fe;
+}
+
+.voiceJoinBtn {
+  background: linear-gradient(135deg, #8ea1ff, #5865f2 52%, #4752c4);
+  border: 1px solid rgb(199 210 254 / 72%);
+  border-radius: 0.65rem;
+  box-shadow:
+    0 0 22px rgb(88 101 242 / 48%),
+    0 8px 18px rgb(0 0 0 / 28%);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 800;
+  margin-top: 0.15rem;
+  min-height: 2.2rem;
+  padding: 0.5rem 0.65rem;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 28%);
+  transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  width: 100%;
+}
+
+.voiceJoinBtn:hover:not(:disabled) {
+  box-shadow:
+    0 0 28px rgb(88 101 242 / 58%),
+    0 10px 22px rgb(0 0 0 / 32%);
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.voiceJoinBtn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.nobodyJoined {
+  color: rgb(196 181 253);
+  font-size: 0.78rem;
+  margin: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.findPlayersWrap {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: stretch;
+  position: relative;
+  text-align: center;
+  width: 100%;
+  z-index: 1;
+}
+
+.findPlayersRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: center;
+  width: 100%;
+}
+
+.findPlayersBtn,
+.findPlayersBtnSmall {
+  align-items: center;
+  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 42%, #6d28d9 100%);
+  border: 0;
+  border-radius: 999px;
+  box-shadow:
+    0 0 28px rgb(123 44 255 / 42%),
+    0 10px 22px rgb(0 0 0 / 28%),
+    inset 0 1px 0 rgb(255 255 255 / 18%);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  font-size: 1.08rem;
+  font-weight: 800;
+  justify-content: center;
+  letter-spacing: -0.01em;
+  min-height: 3.1rem;
+  padding: 0.7rem 1.35rem;
+  position: relative;
+  width: 100%;
+}
+
+.findPlayersBtnSmall {
+  font-size: 0.88rem;
+  min-height: 2.35rem;
+  padding: 0.45rem 1.1rem;
+  width: auto;
+}
+
+.findPlayersLabel {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  justify-content: center;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.findPlayersOpens {
+  background: rgb(0 0 0 / 28%);
+  border-radius: 999px;
+  color: rgb(236 226 255);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.28rem 0.65rem;
+  position: absolute;
+  right: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.findPlayersHint {
+  color: rgb(168 174 204);
+  font-size: 0.78rem;
+  margin: 0;
+  max-width: 28rem;
+}
+
+.inviteCopiedHint {
+  color: #c4b5fd;
+  font-size: 0.82rem;
+  font-weight: 650;
+  justify-self: center;
+  margin: 0;
+  max-width: 28rem;
+}
+
+.findPlayersArrow {
+  color: #a78bfa;
+  font-weight: 800;
+  margin-left: 0.35rem;
+}
+
+.heroTop > .unassignedPanel {
+  background: rgb(8 10 20 / 72%);
+  border: 1px solid rgb(147 130 255 / 18%);
+  border-radius: 0.7rem;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 22%);
+  flex: 1 1 14rem;
+  margin: 0;
+  max-height: none;
+  max-width: none;
+  min-width: 12rem;
+  overflow: auto;
+  padding: 0.4rem 0.55rem;
+  width: auto;
+}
+
+.heroTop > .unassignedPanel .unassignedHead {
+  margin-bottom: 0.25rem;
+}
+
+.heroTop > .unassignedPanel .unassignedList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-height: none;
+  overflow: visible;
+}
+
+.heroTop > .unassignedPanel .unassignedRow {
+  flex: 1 1 10rem;
+  max-width: none;
+  min-width: 9rem;
+  padding: 0.3rem 0.4rem;
+}
+
+.heroTop > .unassignedPanel .unassignedMeta {
+  display: block;
+}
+
+.heroTop > .unassignedPanel .unassignedActions {
+  gap: 0.2rem;
+}
+
+.heroTop > .unassignedPanel .unassignedAction,
+.heroTop > .unassignedPanel .unassignedKick {
+  font-size: 0.58rem;
+  min-height: 1.45rem;
+  padding: 0.22rem 0.3rem;
+}
+
+.slotAppsOpen {
+  position: relative;
+  z-index: 8;
+}
+
+.slots {
+  align-items: stretch;
+  gap: 0.5rem;
+  grid-auto-rows: 1fr;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  min-height: 0;
+  position: relative;
+  z-index: 6;
+}
+
+.slot {
+  background: rgb(12 14 24 / 88%);
+  border: 1px solid rgb(147 130 255 / 16%);
+  border-radius: 0.9rem;
+  gap: 0.18rem;
+  height: 100%;
+  min-height: 11.75rem;
+  overflow: visible;
+  padding: 0.45rem 0.4rem 0.45rem;
+}
+
+.slotEmpty {
+  background: rgb(12 14 24 / 72%);
+  border-color: rgb(255 255 255 / 12%);
+  border-style: dashed;
+}
+
+.slotGhost {
+  background: rgb(16 20 36 / 78%);
+  border-color: rgb(147 197 253 / 42%);
+  box-shadow: inset 0 0 0 1px rgb(147 197 253 / 12%);
+}
+
+.slotAvatarGhost {
+  background: rgb(147 197 253 / 14%);
+  border: 1px dashed rgb(147 197 253 / 55%);
+  color: rgb(186 214 255 / 90%);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.slotAvatar,
+.slotAvatarEmpty {
+  height: 2.25rem;
+  width: 2.25rem;
+}
+
+.slotRole {
+  font-size: 0.68rem;
+}
+
+.slot strong {
+  font-size: 0.8rem;
+}
+
+.slotMeta {
+  font-size: 0.68rem;
+}
+
+.slotPrimaryBtn,
+.slotSecondaryBtn {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-weight: 750;
+  justify-content: center;
+  line-height: 1.2;
+  padding: 0.38rem 0.45rem;
+}
+
+.slotPrimaryBtn {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  border: 0;
+  box-shadow: 0 4px 12px rgb(109 40 217 / 28%);
+  color: #fff;
+  width: 100%;
+}
+
+.slotPrimaryBtn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.slotPrimaryBtn.slotWantRoleBtn {
+  background: rgb(34 197 94 / 14%);
+  border: 1px solid rgb(74 222 128 / 38%);
+  box-shadow: 0 0 14px rgb(74 222 128 / 16%);
+  color: #4ade80;
+}
+
+.slotPrimaryBtn.slotWantRoleBtn:hover:not(:disabled) {
+  background: rgb(34 197 94 / 22%);
+  border-color: rgb(74 222 128 / 52%);
+  filter: none;
+}
+
+.slotPrimaryBtn.slotClaimOpenBtn {
+  animation: slotClaimPulse 2.2s ease-in-out infinite;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 52%, #059669 100%);
+  border: 1px solid rgb(134 239 172 / 58%);
+  box-shadow:
+    0 0 0 1px rgb(74 222 128 / 28%),
+    0 4px 18px rgb(34 197 94 / 45%),
+    0 0 28px rgb(74 222 128 / 24%);
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  min-height: 2.05rem;
+  padding: 0.42rem 0.55rem;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 22%);
+}
+
+.slotPrimaryBtn.slotClaimOpenBtn:hover:not(:disabled) {
+  animation: none;
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 52%, #16a34a 100%);
+  box-shadow:
+    0 0 0 1px rgb(134 239 172 / 48%),
+    0 6px 22px rgb(34 197 94 / 52%),
+    0 0 36px rgb(74 222 128 / 32%);
+  filter: none;
+  transform: translateY(-1px);
+}
+
+.slotSecondaryBtn {
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(147 130 255 / 22%);
+  color: #ddd6fe;
+  width: 100%;
+}
+
+.slotSecondaryBtn.slotFindBtn {
+  background: rgb(56 189 248 / 12%);
+  border-color: rgb(56 189 248 / 36%);
+  box-shadow: 0 0 12px rgb(56 189 248 / 12%);
+  color: #38bdf8;
+}
+
+.slotSecondaryBtn.slotFindBtn:hover:not(:disabled) {
+  background: rgb(56 189 248 / 20%);
+  border-color: rgb(56 189 248 / 50%);
+}
+
+.slotSecondaryBtn.slotFindBtnActive {
+  background: rgb(251 191 36 / 14%);
+  border-color: rgb(251 191 36 / 42%);
+  box-shadow: 0 0 12px rgb(251 191 36 / 14%);
+  color: #fbbf24;
+}
+
+.slotSecondaryBtn.slotFindBtnActive:hover:not(:disabled) {
+  background: rgb(251 191 36 / 22%);
+  border-color: rgb(251 191 36 / 55%);
+}
+
+.candidatesPanel {
+  backdrop-filter: blur(12px);
+  background: rgb(12 14 26 / 78%);
+  border: 1px solid rgb(147 130 255 / 14%);
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  max-height: none;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.6rem 0.8rem 0.7rem;
+  position: relative;
+}
+
+.candidatesPanelEmpty {
+  background: #0b0e14;
+  border: 1px solid rgb(147 130 255 / 16%);
+  border-radius: 1rem;
+  gap: 0;
+  isolation: isolate;
+  padding: 0;
+}
+
+.candidatesPanelBg {
+  display: block;
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  object-position: center;
+  position: absolute;
+  width: 100%;
+  z-index: 0;
+}
+
+.candidatesPanelEmpty::after {
+  background:
+    linear-gradient(
+      180deg,
+      rgb(11 14 20 / 82%) 0%,
+      rgb(11 14 20 / 35%) 30%,
+      rgb(11 14 20 / 45%) 70%,
+      #0b0e14 100%
+    ),
+    radial-gradient(ellipse 80% 70% at 50% 55%, rgb(109 74 255 / 18%), transparent 68%);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+.candidatesPanelEmpty .candidatesHead {
+  background: linear-gradient(180deg, rgb(10 8 18 / 75%), transparent);
+  margin: 0;
+  padding: 0.65rem 0.9rem 0.4rem;
+  position: relative;
+  z-index: 2;
+}
+
+.candidatesHead {
+  margin-bottom: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.candidatesHead h2 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.candidatesEyebrow {
+  font-size: 0.65rem;
+  margin: 0;
+}
+
+.candidatesEmptyState {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  padding: 1.25rem 1rem;
+  position: relative;
+  text-align: center;
+  width: 100%;
+  z-index: 2;
+}
+
+.candidatesEmptyArt {
+  display: none;
+}
+
+.candidatesEmptyState::after {
+  display: none;
+}
+
+.candidatesEmptyCopy {
+  background: rgb(10 8 18 / 58%);
+  border: 1px solid rgb(167 139 250 / 24%);
+  border-radius: 1rem;
+  box-shadow: 0 16px 36px rgb(0 0 0 / 42%);
+  display: grid;
+  gap: 0.7rem;
+  justify-items: center;
+  margin-inline: auto;
+  max-width: min(24rem, 92%);
+  padding: 1rem 1.15rem;
+  position: relative;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  width: min(24rem, 92%);
+}
+
+.candidatesGhost {
+  display: none;
+}
+
+.candidatesEmpty,
+.candidatesQueue {
+  color: rgb(230 232 248);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0;
+  max-width: 22rem;
+  text-align: center;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 65%);
+}
+
+.sideColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  height: calc(100dvh - 7.25rem);
+  max-height: calc(100dvh - 7.25rem);
+  min-height: 0;
+  overflow: hidden;
+  position: sticky;
+  top: 0.35rem;
+}
+
+.sideColumn .chatPanel {
+  flex: 1 1 0;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+}
+
+.chatPanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.65rem;
+  position: relative;
+}
+
+.chatHead {
+  flex-shrink: 0;
+  margin-bottom: 0.35rem;
+}
+
+.chatHead h2,
+.chatPanel h2 {
+  font-size: 0.85rem;
+}
+
+.chatHint {
+  display: none;
+}
+
+.chatMessages {
+  flex: 1 1 0;
+  height: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.chatForm {
+  flex-shrink: 0;
+  margin-top: 0.35rem;
+}
+
+.quickInvite {
+  background:
+    radial-gradient(circle at 100% 0%, rgb(109 74 255 / 18%), transparent 55%),
+    rgb(12 14 26 / 88%);
+  border: 1px solid rgb(147 130 255 / 18%);
+  border-radius: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.55rem 0.65rem;
+}
+
+.quickInvitePulse {
+  animation: quickInvitePulse 1.2s ease-out 2;
+  border-color: rgb(167 139 250 / 55%);
+  box-shadow: 0 0 0 1px rgb(167 139 250 / 25%), 0 8px 24px rgb(109 74 255 / 22%);
+}
+
+@keyframes quickInvitePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(167 139 250 / 0%);
+  }
+
+  40% {
+    box-shadow: 0 0 0 4px rgb(167 139 250 / 28%), 0 8px 24px rgb(109 74 255 / 28%);
+  }
+
+  100% {
+    box-shadow: 0 0 0 1px rgb(167 139 250 / 25%), 0 8px 24px rgb(109 74 255 / 22%);
+  }
+}
+
+.quickInviteEyebrow {
+  color: rgb(167 139 250);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+}
+
+.quickInviteUrlRow {
+  align-items: center;
+  background: rgb(0 0 0 / 28%);
+  border: 1px solid rgb(147 130 255 / 16%);
+  border-radius: 0.5rem;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.quickInviteUrlRow code {
+  color: #e8eaf8;
+  flex: 1;
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quickInviteCopy {
+  background: transparent;
+  border: 0;
+  color: #c4b5fd;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.quickInviteOr {
+  color: rgb(150 156 186);
+  font-size: 0.68rem;
+  margin: 0.4rem 0 0.3rem;
+}
+
+.quickInviteChannels {
+  display: grid;
+  gap: 0.3rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quickChannel {
+  align-items: center;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(147 130 255 / 18%);
+  border-radius: 0.45rem;
+  color: #e8eaf4;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 700;
+  gap: 0.28rem;
+  justify-content: center;
+  padding: 0.4rem 0.25rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.quickChannelIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 0.95rem;
+  width: 0.95rem;
+}
+
+.quickChannelIcon svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.metaFooter {
+  align-items: center;
+  background: #0b0e14;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: space-between;
+  margin-top: 0;
+  padding: 0.35rem 0.15rem calc(0.45rem + var(--friends-dock-clearance, 3.5rem));
+  position: relative;
+  z-index: 1;
+}
+
+.metaLine {
+  color: rgb(140 146 172);
+  font-size: 0.72rem;
+  margin: 0;
+}
+
+.leaveFooterBtn {
+  align-items: center;
+  background: rgb(40 16 20 / 72%);
+  border: 1px solid rgb(248 113 113 / 45%);
+  border-radius: 0.55rem;
+  color: #fca5a5;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  gap: 0.4rem;
+  margin-left: auto;
+  padding: 0.4rem 0.75rem;
+  position: relative;
+  z-index: 2;
+}
+
+.leaveFooterIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 0.95rem;
+  width: 0.95rem;
+}
+
+.leaveFooterIcon svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.canonicalHint {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .page {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .statusStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .slots {
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .rosterColumn {
+    grid-template-rows: auto;
+  }
+
+  .sideColumn {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    position: static;
+  }
+
+  .chatPanel,
+  .sideColumn .chatPanel {
+    flex: none;
+    height: min(18rem, 40vh);
+    max-height: min(18rem, 40vh);
+  }
+}
+
+@media (max-height: 820px) {
+  .hero {
+    gap: 0.4rem;
+    padding: 0.5rem 0.65rem 0.55rem;
+  }
+
+  .hero::before {
+    opacity: 0.78;
+    width: min(48%, 22rem);
+  }
+
+  .heroCopy h1 {
+    font-size: 1.15rem;
+  }
+
+  .statusBlock {
+    padding: 0.3rem 0.4rem;
+  }
+
+  .findPlayersBtn {
+    font-size: 0.95rem;
+    min-height: 2.55rem;
+    padding: 0.45rem 1rem;
+  }
+
+  .findPlayersHint,
+  .nobodyJoined {
+    display: none;
+  }
+
+  .slotSecondaryBtn {
+    display: none;
+  }
+
+  .heroTop > .unassignedPanel {
+    max-height: none;
+    max-width: none;
+  }
+}
+
+@media (max-height: 720px) {
+  .hero::before {
+    display: none;
+  }
+
+  .heroTop {
+    flex-wrap: wrap;
+  }
+
+  .heroTop > .unassignedPanel {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .statusStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

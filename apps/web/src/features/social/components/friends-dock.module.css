@@ -4,7 +4,8 @@
   justify-items: end;
   pointer-events: none;
   position: fixed;
-  right: max(1rem, env(safe-area-inset-right));
+  /* Leave room on far-right for party leave CTA */
+  right: max(11.5rem, calc(10rem + env(safe-area-inset-right)));
   z-index: 70;
 }
 
@@ -560,4 +561,10 @@
 [data-product="opinia"] .profile,
 [data-product="opinia"] .footer {
   border-color: rgb(124 58 237 / 10%);
+}
+
+@media (max-width: 720px) {
+  .root {
+    right: max(1rem, env(safe-area-inset-right));
+  }
 }

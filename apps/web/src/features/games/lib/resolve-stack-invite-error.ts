@@ -17,7 +17,11 @@ const STACK_ERROR_MESSAGES: Record<string, string> = {
   "This team is already full": "games.search.error.partyFull",
   "User already belongs to a Dota team": "games.search.error.alreadyOnTeam",
   "User is already on this team": "games.search.error.alreadyMember",
-  "You cannot stack with yourself": "games.search.error.selfInvite"
+  "You cannot stack with yourself": "games.search.error.selfInvite",
+  "You were removed from this party. Wait for a new invite to rejoin.":
+    "games.search.error.kickedNeedInvite",
+  "This player declined an invite to this party": "games.search.error.inviteDeclined",
+  "Your application to this party was declined": "games.search.error.applicationDeclined"
 };
 
 export function resolveStackInviteError(error: unknown, t: TranslateFn): string {

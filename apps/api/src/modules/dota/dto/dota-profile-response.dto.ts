@@ -15,6 +15,7 @@ export class DotaProfileResponseDto {
   mmr!: string | null;
   ownerUserId!: string | null;
   playIntent!: string | null;
+  matchMode!: "auto" | "manual" | null;
   progress!: DotaProfileProgressDto;
   qualities!: Record<string, number>;
   roles!: string[];

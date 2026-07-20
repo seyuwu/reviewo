@@ -11,9 +11,14 @@ function getServerApiBaseUrl(): string {
   return publicEnv.apiBaseUrl;
 }
 
-export async function serverApiRequest<TResponse>(path: string): Promise<TResponse> {
+export async function serverApiRequest<TResponse>(
+  path: string,
+  options?: { cache?: RequestCache; revalidate?: number }
+): Promise<TResponse> {
   const response = await fetch(new URL(path, getServerApiBaseUrl()), {
-    next: { revalidate: 60 }
+    ...(options?.cache
+      ? { cache: options.cache }
+      : { next: { revalidate: options?.revalidate ?? 60 } })
   });
 
   const responseBody = await parseResponseBody(response);

@@ -90,4 +90,8 @@ export class UpdateDotaProfileDto {
   @IsOptional()
   @IsIn(PLAY_INTENTS)
   playIntent?: (typeof PLAY_INTENTS)[number];
+
+  @IsOptional()
+  @IsIn(["auto", "manual"])
+  matchMode?: "auto" | "manual";
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { type DotaGreenFlagKey, type DotaRedFlagKey } from "@reviewo/shared";
+import { type DotaGreenFlagKey, type DotaMatchMode, type DotaRedFlagKey, isDotaMatchMode } from "@reviewo/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getOrCreateVisitorId } from "../../../lib/site-presence";
+import { isApiError, readApiErrorMessage } from "../../../lib/api/read-api-error";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import {
   fetchDiscoveryStats,
@@ -33,7 +34,8 @@ import {
   declinePartyInvite,
   disbandGameParty,
   fetchMyParties,
-  stackWithPlayer
+  stackWithPlayer,
+  updatePartyJoinMode
 } from "../../social/api/social-api";
 import { PARTY_NOTIFICATION_EVENT } from "../../social/lib/party-notifications-socket";
 import type { DotaPositionRole, GameParty, GamePartyInvite } from "../../social/types/social";
@@ -55,12 +57,23 @@ import { GamesSearchWaitlistView } from "./games-search-waitlist-view";
 
 const PENDING_STACK_KEY = "opinia.pendingStackSlug";
 const RECOMMENDATION_COUNT = 3;
-const REFRESH_MS = 15_000;
+const REFRESH_MS = 7_000;
+/** Same cadence while auto-match hunts — keeps LFG + join attempts in sync. */
+const AUTO_MATCH_REFRESH_MS = 7_000;
 /** Fallback when party_notification socket misses an event. */
 const INVITE_POLL_MS = 15_000;
 const OUTGOING_FLASH_MS = 3_500;
 const ONLINE_POLL_MS = 45_000;
 const ROLE_POSITIONS = ["1", "2", "3", "4", "5"] as const satisfies readonly DotaPositionRole[];
+
+function openRecruitRolesForHit(hit: DotaLfgHit): DotaPositionRole[] {
+  const claimed = new Set(hit.claimedRoles ?? []);
+
+  return hit.recruitedRoles.filter(
+    (role): role is DotaPositionRole =>
+      ROLE_POSITIONS.includes(role as DotaPositionRole) && !claimed.has(role)
+  );
+}
 
 function mmrMidpoint(mmr: string | null): number | null {
   const { from, to } = parseDotaMmrRange(mmr);
@@ -100,6 +113,105 @@ function rankByMmr(players: DotaLfgHit[], myMmr: string | null): DotaLfgHit[] {
 
     return left.title.localeCompare(right.title);
   });
+}
+
+/** Best recruiting party with a seat matching the user's roles (OPEN instant join or CONFIRM application). */
+function pickBestAutoJoinTarget(
+  players: DotaLfgHit[],
+  myRoles: DotaPositionRole[],
+  myMmr: string | null,
+  myUserId: string,
+  excludePartySlugs: ReadonlySet<string> = new Set()
+): { partySlug: string; role: DotaPositionRole; targetSlug: string } | null {
+  if (myRoles.length === 0) {
+    return null;
+  }
+
+  const myMid = mmrMidpoint(myMmr);
+  let best: { partySlug: string; role: DotaPositionRole; score: number; targetSlug: string } | null =
+    null;
+
+  for (const hit of players) {
+    if (!hit.partySlug || hit.ownerUserId === myUserId) {
+      continue;
+    }
+
+    if (excludePartySlugs.has(hit.partySlug)) {
+      continue;
+    }
+
+    const openRoles = openRecruitRolesForHit(hit).filter((role) => myRoles.includes(role));
+
+    if (openRoles.length === 0) {
+      continue;
+    }
+
+    const role = myRoles.find((item) => openRoles.includes(item)) ?? openRoles[0]!;
+    const theirMid = mmrMidpoint(hit.mmr);
+    let score = (hit.memberCount ?? 1) * 10;
+
+    if ((hit.joinMode ?? "OPEN") === "OPEN") {
+      score += 30;
+    }
+
+    if (myMid !== null && theirMid !== null) {
+      score -= Math.min(90, Math.abs(myMid - theirMid) / 40);
+    } else {
+      score -= 20;
+    }
+
+    if (!best || score > best.score) {
+      best = { partySlug: hit.partySlug, role, score, targetSlug: hit.slug };
+    }
+  }
+
+  return best ? { partySlug: best.partySlug, role: best.role, targetSlug: best.targetSlug } : null;
+}
+
+/** Best solo looking player for an open recruit seat (MMR-aware). */
+function pickBestAutoRecruitTarget(
+  players: DotaLfgHit[],
+  openRoles: DotaPositionRole[],
+  myMmr: string | null,
+  myUserId: string
+): { role: DotaPositionRole; targetSlug: string } | null {
+  if (openRoles.length === 0) {
+    return null;
+  }
+
+  const myMid = mmrMidpoint(myMmr);
+  let best: { role: DotaPositionRole; score: number; targetSlug: string } | null = null;
+
+  for (const hit of players) {
+    if (hit.partySlug || hit.ownerUserId === myUserId) {
+      continue;
+    }
+
+    const overlap = hit.roles.filter((role): role is DotaPositionRole =>
+      ROLE_POSITIONS.includes(role as DotaPositionRole) &&
+      openRoles.includes(role as DotaPositionRole)
+    );
+
+    if (overlap.length === 0) {
+      continue;
+    }
+
+    const role = openRoles.find((item) => overlap.includes(item)) ?? overlap[0]!;
+    const theirMid = mmrMidpoint(hit.mmr);
+    let score = 50;
+
+    if (myMid !== null && theirMid !== null) {
+      score -= Math.min(90, Math.abs(myMid - theirMid) / 40);
+    } else {
+      score -= 20;
+    }
+
+    if (!best || score > best.score) {
+      best = { role, score, targetSlug: hit.slug };
+    }
+  }
+
+  return best ? { role: best.role, targetSlug: best.targetSlug } : null;
 }
 
 function playerInitial(title: string): string {
@@ -167,9 +279,13 @@ export function GamesSearchView() {
   const [invites, setInvites] = useState<GamePartyInvite[]>([]);
   const [outgoingInvites, setOutgoingInvites] = useState<GamePartyInvite[]>([]);
   const [dismissedOutgoingIds, setDismissedOutgoingIds] = useState<Set<string>>(() => new Set());
+  const [rejectedApplicationPartySlugs, setRejectedApplicationPartySlugs] = useState<Set<string>>(
+    () => new Set()
+  );
   const flashScheduledRef = useRef(new Set<string>());
   const [selectedPartySlug, setSelectedPartySlug] = useState("");
   const [intentMode, setIntentMode] = useState<IntentMode>("join");
+  const [matchMode, setMatchMode] = useState<DotaMatchMode | null>(null);
   const [onlineNow, setOnlineNow] = useState<number | null>(null);
   const [batchIndex, setBatchIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -193,6 +309,8 @@ export function GamesSearchView() {
   const intentCoachRef = useRef<HTMLDivElement | null>(null);
   const feedRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
+  const autoMatchKeyRef = useRef<string | null>(null);
+  const autoMatchInFlightRef = useRef(false);
 
   const refreshList = useCallback(
     async (options?: { advanceBatch?: boolean; quiet?: boolean }) => {
@@ -203,7 +321,9 @@ export function GamesSearchView() {
       setLoadError(null);
 
       try {
-        const response = await fetchDotaLfg();
+        const response = await fetchDotaLfg(
+          authSession?.accessToken ? { accessToken: authSession.accessToken } : undefined
+        );
         setResults(response.results);
 
         if (options?.advanceBatch) {
@@ -226,7 +346,7 @@ export function GamesSearchView() {
         setHasLoadedOnce(true);
       }
     },
-    [t]
+    [authSession?.accessToken, t]
   );
 
   const refreshParties = useCallback(async () => {
@@ -255,7 +375,20 @@ export function GamesSearchView() {
       try {
         const profile = await fetchMyDotaProfile(authSession.accessToken);
         setMyMmr(profile.mmr);
-        setMyRoles(profile.roles as DotaPositionRole[]);
+        setMyRoles(
+          (profile.roles ?? []).filter((role): role is DotaPositionRole =>
+            ["1", "2", "3", "4", "5"].includes(role)
+          )
+        );
+        const profileMode = profile.matchMode;
+        if (profileMode && isDotaMatchMode(profileMode)) {
+          setMatchMode(profileMode);
+        } else if (typeof window !== "undefined") {
+          const stored = window.sessionStorage.getItem("opinia.matchMode");
+          if (stored && isDotaMatchMode(stored)) {
+            setMatchMode(stored);
+          }
+        }
       } catch {
         // Keep party/invite state even if profile refresh fails.
       }
@@ -364,14 +497,35 @@ export function GamesSearchView() {
       return;
     }
 
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        void refreshList({ quiet: true });
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [refreshList, searchLive]);
+
+  useEffect(() => {
+    if (!searchLive) {
+      return;
+    }
+
+    const intervalMs =
+      isLooking && matchMode === "auto" ? AUTO_MATCH_REFRESH_MS : REFRESH_MS;
+
     const intervalId = window.setInterval(() => {
       void refreshList({ quiet: true });
-    }, REFRESH_MS);
+    }, intervalMs);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [refreshList, searchLive]);
+  }, [isLooking, matchMode, refreshList, searchLive]);
 
   useEffect(() => {
     if (!searchLive) {
@@ -421,6 +575,24 @@ export function GamesSearchView() {
       }
 
       if (type === "declined" || type === "accepted" || type === "member_joined") {
+        if (
+          type === "declined" &&
+          invite.inviteKind === "APPLICATION" &&
+          invite.direction === "incoming" &&
+          invite.status === "DECLINED"
+        ) {
+          setRejectedApplicationPartySlugs((current) => {
+            if (current.has(invite.partySlug)) {
+              return current;
+            }
+
+            const next = new Set(current);
+            next.add(invite.partySlug);
+            return next;
+          });
+          autoMatchKeyRef.current = null;
+        }
+
         setInvites((current) => current.filter((item) => item.id !== invite.id));
         setOutgoingInvites((current) => current.filter((item) => item.id !== invite.id));
       }
@@ -497,6 +669,35 @@ export function GamesSearchView() {
     const managedSlugs = new Set(ownedParties.map((party) => party.slug));
     return results.find((player) => player.partySlug && managedSlugs.has(player.partySlug)) ?? null;
   }, [myDotaProfile.slug, ownedParties, results]);
+
+  const pendingApplicationPartySlugs = useMemo(() => {
+    const slugs = new Set<string>();
+    for (const invite of invites) {
+      if (
+        invite.inviteKind === "APPLICATION" &&
+        invite.status === "PENDING" &&
+        invite.direction === "incoming"
+      ) {
+        slugs.add(invite.partySlug);
+      }
+    }
+    return slugs;
+  }, [invites]);
+
+  const autoMatchExcludedPartySlugs = useMemo(() => {
+    const slugs = new Set(pendingApplicationPartySlugs);
+
+    for (const slug of rejectedApplicationPartySlugs) {
+      slugs.add(slug);
+    }
+
+    return slugs;
+  }, [pendingApplicationPartySlugs, rejectedApplicationPartySlugs]);
+
+  const autoMatchExcludedPartySlugsKey = useMemo(
+    () => [...autoMatchExcludedPartySlugs].sort().join(","),
+    [autoMatchExcludedPartySlugs]
+  );
 
   useEffect(() => {
     if (cinematicSearchPending) {
@@ -602,7 +803,10 @@ export function GamesSearchView() {
     (invite) => invite.status === "PENDING" || !dismissedOutgoingIds.has(invite.id)
   );
 
-  async function handleIntentAction(nextMode: IntentMode) {
+  async function handleIntentAction(
+    nextMode: IntentMode,
+    options?: { joinMode?: "OPEN" | "CONFIRM"; matchMode?: DotaMatchMode }
+  ) {
     if (lookingBusy || (isLooking && intentMode !== nextMode)) {
       return;
     }
@@ -612,12 +816,22 @@ export function GamesSearchView() {
     if (!isLooking) {
       setIntentMode(nextMode);
       setSelectedPartySlug("");
+
+      if (nextMode === "join" && options?.matchMode) {
+        setMatchMode(options.matchMode);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem("opinia.matchMode", options.matchMode);
+        }
+      }
     }
 
-    await handleToggleLooking(nextMode);
+    await handleToggleLooking(nextMode, options);
   }
 
-  async function handleToggleLooking(requestedMode: IntentMode = intentMode) {
+  async function handleToggleLooking(
+    requestedMode: IntentMode = intentMode,
+    options?: { joinMode?: "OPEN" | "CONFIRM"; matchMode?: DotaMatchMode }
+  ) {
     if (!authSession?.accessToken || !myDotaProfile.hasProfile) {
       setGateSlug("__looking__");
       return;
@@ -642,6 +856,7 @@ export function GamesSearchView() {
           stopPartySlug ? { partySlug: stopPartySlug } : undefined
         );
         setIsLooking(false);
+        setRejectedApplicationPartySlugs(new Set());
         if (requestedMode === "recruit") {
           setSelectedPartySlug("");
         }
@@ -658,6 +873,24 @@ export function GamesSearchView() {
         setOwnedParties((current) =>
           current.some((item) => item.id === party.id) ? current : [party, ...current]
         );
+
+        const recruitJoinMode = options?.joinMode ?? "OPEN";
+
+        if (recruitJoinMode !== (party.joinMode ?? "OPEN")) {
+          try {
+            const updated = await updatePartyJoinMode(
+              partySlug,
+              recruitJoinMode,
+              authSession.accessToken
+            );
+            setOwnedParties((current) =>
+              current.map((item) => (item.slug === partySlug ? updated : item))
+            );
+          } catch {
+            // Default OPEN remains if join-mode patch fails.
+          }
+        }
+
         await refreshParties();
         void trackAnalyticsCta("games_party_create_from_search");
 
@@ -693,6 +926,11 @@ export function GamesSearchView() {
 
         void trackAnalyticsCta("games_search_start_recruit");
       } else {
+        const joinMatchMode = options?.matchMode ?? matchMode ?? "auto";
+        setMatchMode(joinMatchMode);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem("opinia.matchMode", joinMatchMode);
+        }
         await setDotaLfgLooking(true, authSession.accessToken);
         void trackAnalyticsCta("games_search_start_join");
       }
@@ -743,6 +981,10 @@ export function GamesSearchView() {
     positionRole?: DotaPositionRole,
     invitePartySlug?: string
   ) {
+    if (stackBusySlug || autoMatchInFlightRef.current) {
+      return;
+    }
+
     setStackError(null);
     setStackMessage(null);
 
@@ -813,8 +1055,191 @@ export function GamesSearchView() {
     }
   }
 
+  // Auto match: join → OPEN claim or CONFIRM application on matching roles; recruit → invite solo.
+  useEffect(() => {
+    if (
+      !searchLive ||
+      !isLooking ||
+      matchMode !== "auto" ||
+      !authSession?.accessToken ||
+      !authSession.userId ||
+      autoMatchInFlightRef.current ||
+      stackBusySlug
+    ) {
+      return;
+    }
+
+    if (intentMode === "join") {
+      if (myRoles.length === 0) {
+        return;
+      }
+
+      const pick = pickBestAutoJoinTarget(
+        results,
+        myRoles,
+        myMmr,
+        authSession.userId,
+        autoMatchExcludedPartySlugs
+      );
+
+      if (!pick) {
+        return;
+      }
+
+      const key = `join:${pick.targetSlug}:${pick.role}`;
+
+      if (autoMatchKeyRef.current === key) {
+        return;
+      }
+
+      autoMatchKeyRef.current = key;
+      autoMatchInFlightRef.current = true;
+      setStackBusySlug(`${pick.targetSlug}:${pick.role}`);
+
+      void (async () => {
+        try {
+          const stacked = await stackWithPlayer(
+            pick.targetSlug,
+            authSession.accessToken,
+            undefined,
+            pick.role
+          );
+
+          if (stacked.invite.status === "ACCEPTED" || stacked.party.isMember) {
+            setStackMessage(t("dota.team.joinSuccess"));
+            router.push(`/dota/teams/${stacked.party.slug}`);
+            return;
+          }
+
+          if (stacked.invite.inviteKind === "APPLICATION") {
+            setStackMessage(t("games.search.applicationSent"));
+            setInvites((current) => {
+              const nextInvite: GamePartyInvite = {
+                ...stacked.invite,
+                direction: "incoming"
+              };
+              return [nextInvite, ...current.filter((item) => item.id !== nextInvite.id)];
+            });
+            autoMatchKeyRef.current = null;
+            void refreshParties();
+            return;
+          }
+
+          setStackMessage(t("games.search.stackSent"));
+        } catch (error) {
+          autoMatchKeyRef.current = null;
+
+          if (isApiError(error)) {
+            const apiMessage = readApiErrorMessage(error.body);
+
+            if (
+              apiMessage === "Your application to this party was declined" ||
+              apiMessage === "This role is not open on that party" ||
+              apiMessage === "This role is already taken"
+            ) {
+              setRejectedApplicationPartySlugs((current) => new Set(current).add(pick.partySlug));
+            }
+          }
+
+          setStackError(resolveStackInviteError(error, t));
+        } finally {
+          autoMatchInFlightRef.current = false;
+          setStackBusySlug(null);
+          void refreshList({ quiet: true });
+        }
+      })();
+      return;
+    }
+
+    if (intentMode === "recruit") {
+      const myRecruit = results.find(
+        (hit) => hit.ownerUserId === authSession.userId && hit.partySlug
+      );
+      const partySlug =
+        myRecruit?.partySlug ?? (selectedPartySlug || ownedParties[0]?.slug || "");
+
+      if (!partySlug) {
+        return;
+      }
+
+      const openRoles =
+        myRecruit != null
+          ? openRecruitRolesForHit(myRecruit)
+          : [...ROLE_POSITIONS];
+      const pick = pickBestAutoRecruitTarget(
+        results,
+        openRoles.length > 0 ? openRoles : [...ROLE_POSITIONS],
+        myMmr,
+        authSession.userId
+      );
+
+      if (!pick) {
+        return;
+      }
+
+      const key = `recruit:${pick.targetSlug}:${pick.role}:${partySlug}`;
+
+      if (autoMatchKeyRef.current === key) {
+        return;
+      }
+
+      autoMatchKeyRef.current = key;
+      autoMatchInFlightRef.current = true;
+      setStackBusySlug(`${pick.targetSlug}:${pick.role}`);
+
+      void (async () => {
+        try {
+          const stacked = await stackWithPlayer(
+            pick.targetSlug,
+            authSession.accessToken,
+            partySlug,
+            pick.role
+          );
+          setStackMessage(t("games.search.stackSent"));
+          setOutgoingInvites((current) => {
+            const nextInvite: GamePartyInvite = {
+              ...stacked.invite,
+              direction: stacked.invite.direction ?? "outgoing"
+            };
+            return [nextInvite, ...current.filter((item) => item.id !== nextInvite.id)];
+          });
+        } catch (error) {
+          autoMatchKeyRef.current = null;
+          setStackError(resolveStackInviteError(error, t));
+        } finally {
+          autoMatchInFlightRef.current = false;
+          setStackBusySlug(null);
+          void Promise.all([refreshList({ quiet: true }), refreshParties()]);
+        }
+      })();
+    }
+    // handleStack closes over latest auth/state; intentional for one-shot auto join.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- auto-match trigger on feed/mode
+  }, [
+    authSession?.accessToken,
+    authSession?.userId,
+    intentMode,
+    isLooking,
+    matchMode,
+    myMmr,
+    myRoles,
+    ownedParties,
+    autoMatchExcludedPartySlugsKey,
+    results,
+    searchLive,
+    selectedPartySlug,
+    stackBusySlug
+  ]);
+
+  useEffect(() => {
+    if (!isLooking || matchMode !== "auto") {
+      autoMatchKeyRef.current = null;
+      // Do not clear autoMatchInFlightRef here — in-flight request must finish itself.
+    }
+  }, [isLooking, matchMode, intentMode]);
+
   async function handleAcceptInvite(invite: GamePartyInvite) {
-    if (!authSession?.accessToken) {
+    if (!authSession?.accessToken || inviteBusyId) {
       return;
     }
 
@@ -838,7 +1263,7 @@ export function GamesSearchView() {
   }
 
   async function handleDeclineInvite(invite: GamePartyInvite) {
-    if (!authSession?.accessToken) {
+    if (!authSession?.accessToken || inviteBusyId) {
       return;
     }
 
@@ -861,6 +1286,7 @@ export function GamesSearchView() {
     setCinematicProfileReady(true);
     setCinematicSearchPending(true);
     setIntentMode(result.intentMode);
+    setMatchMode(result.matchMode);
     setMyMmr(result.mmr);
     setMyRoles(result.roles);
     setIsLooking(true);
@@ -883,6 +1309,7 @@ export function GamesSearchView() {
     setCinematicMode("done");
     setCinematicProfileReady(true);
     setIntentMode(result.intentMode);
+    setMatchMode(result.matchMode);
     if (result.intentMode === "recruit" && result.party) {
       router.push(`/dota/teams/${result.party.slug}`);
       return;
@@ -966,48 +1393,119 @@ export function GamesSearchView() {
               <div className={styles.controlBlock} ref={intentCoachRef}>
                 <h2 className={styles.panelTitle}>{t("games.search.intentTitle")}</h2>
                 <div className={styles.modeList} aria-label={t("games.search.intentTitle")}>
-                  <button
-                    aria-pressed={isLooking && intentMode === "join"}
-                    className={`${styles.modeCard}${
-                      isLooking && intentMode === "join" ? ` ${styles.modeCardActive}` : ""
-                    }`}
-                    disabled={lookingBusy || (isLooking && intentMode !== "join")}
-                    onClick={() => void handleIntentAction("join")}
-                    type="button"
-                  >
-                    <strong>{t("games.search.intentLooking")}</strong>
-                    <span>
-                      {lookingBusy && intentMode === "join"
-                        ? t("games.search.toggleLookingBusy")
-                        : isLooking && intentMode === "join"
-                          ? t("games.search.stopLooking")
-                          : t("games.search.intentLookingHint")}
-                    </span>
-                  </button>
-                  <button
-                    aria-pressed={isLooking && intentMode === "recruit"}
-                    className={`${styles.modeCard}${
-                      isLooking && intentMode === "recruit" ? ` ${styles.modeCardActive}` : ""
-                    }`}
-                    disabled={lookingBusy || (isLooking && intentMode !== "recruit")}
-                    onClick={() => void handleIntentAction("recruit")}
-                    type="button"
-                  >
-                    <strong>{t("games.search.intentInvite")}</strong>
-                    <span>
-                      {lookingBusy && intentMode === "recruit"
-                        ? t("games.search.toggleLookingBusy")
-                        : isLooking && intentMode === "recruit"
-                          ? t("games.search.stopRecruitLooking")
-                          : t("games.search.intentInviteHint")}
-                    </span>
-                  </button>
+                  {isLooking && intentMode === "join" ? (
+                    <button
+                      aria-pressed
+                      className={`${styles.modeCard} ${styles.modeCardActive}`}
+                      disabled={lookingBusy}
+                      onClick={() => void handleIntentAction("join")}
+                      type="button"
+                    >
+                      <strong>{t("games.search.intentLooking")}</strong>
+                      <span>
+                        {lookingBusy
+                          ? t("games.search.toggleLookingBusy")
+                          : t("games.search.stopLooking")}
+                      </span>
+                    </button>
+                  ) : (
+                    <div
+                      className={`${styles.modeSplit}${
+                        lookingBusy || (isLooking && intentMode !== "join")
+                          ? ` ${styles.modeSplitDisabled}`
+                          : ""
+                      }`}
+                    >
+                      <div className={styles.modeSplitFace} aria-hidden="true">
+                        <strong>{t("games.search.intentLooking")}</strong>
+                        <span>{t("games.search.intentLookingHint")}</span>
+                      </div>
+                      <div className={styles.modeSplitChoices}>
+                        <button
+                          className={styles.modeSplitChoice}
+                          disabled={lookingBusy || (isLooking && intentMode !== "join")}
+                          onClick={() => void handleIntentAction("join", { matchMode: "auto" })}
+                          type="button"
+                        >
+                          <strong>{t("games.search.intentSplit.findMe")}</strong>
+                          <span>{t("games.search.intentSplit.findMeHint")}</span>
+                        </button>
+                        <button
+                          className={styles.modeSplitChoice}
+                          disabled={lookingBusy || (isLooking && intentMode !== "join")}
+                          onClick={() => void handleIntentAction("join", { matchMode: "manual" })}
+                          type="button"
+                        >
+                          <strong>{t("games.search.intentSplit.findMyself")}</strong>
+                          <span>{t("games.search.intentSplit.findMyselfHint")}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {isLooking && intentMode === "recruit" ? (
+                    <button
+                      aria-pressed
+                      className={`${styles.modeCard} ${styles.modeCardActive}`}
+                      disabled={lookingBusy}
+                      onClick={() => void handleIntentAction("recruit")}
+                      type="button"
+                    >
+                      <strong>{t("games.search.intentInvite")}</strong>
+                      <span>
+                        {lookingBusy
+                          ? t("games.search.toggleLookingBusy")
+                          : t("games.search.stopRecruitLooking")}
+                      </span>
+                    </button>
+                  ) : (
+                    <div
+                      className={`${styles.modeSplit}${
+                        lookingBusy || (isLooking && intentMode !== "recruit")
+                          ? ` ${styles.modeSplitDisabled}`
+                          : ""
+                      }`}
+                    >
+                      <div className={styles.modeSplitFace} aria-hidden="true">
+                        <strong>{t("games.search.intentInvite")}</strong>
+                        <span>{t("games.search.intentInviteHint")}</span>
+                      </div>
+                      <div className={styles.modeSplitChoices}>
+                        <button
+                          className={styles.modeSplitChoice}
+                          disabled={lookingBusy || (isLooking && intentMode !== "recruit")}
+                          onClick={() =>
+                            void handleIntentAction("recruit", { joinMode: "OPEN" })
+                          }
+                          type="button"
+                        >
+                          <strong>{t("games.search.intentSplit.openJoin")}</strong>
+                          <span>{t("games.search.intentSplit.openJoinHint")}</span>
+                        </button>
+                        <button
+                          className={styles.modeSplitChoice}
+                          disabled={lookingBusy || (isLooking && intentMode !== "recruit")}
+                          onClick={() =>
+                            void handleIntentAction("recruit", { joinMode: "CONFIRM" })
+                          }
+                          type="button"
+                        >
+                          <strong>{t("games.search.intentSplit.confirmJoin")}</strong>
+                          <span>{t("games.search.intentSplit.confirmJoinHint")}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <Link className={styles.profileLink} href={myDotaProfile.href}>
-                {t("games.search.openProfileCta")}
-              </Link>
+              <button
+                className={styles.profileEditBtn}
+                onClick={() => router.push("/dota/create?intent=search")}
+                type="button"
+              >
+                {t("games.search.editProfileCta")}
+              </button>
             </section>
           )}
         </aside>
@@ -1055,6 +1553,27 @@ export function GamesSearchView() {
           {loadError ? <p className={styles.error}>{loadError}</p> : null}
           {stackError ? <p className={styles.error}>{stackError}</p> : null}
           {stackMessage ? <p className={styles.feedback}>{stackMessage}</p> : null}
+          {isLooking && matchMode === "auto" ? (
+            <div className={styles.matchModeBanner} role="status">
+              <p>
+                {intentMode === "recruit"
+                  ? t("games.search.matchMode.autoBannerRecruit")
+                  : t("games.search.matchMode.autoBannerJoin")}
+              </p>
+              <button
+                className="button-secondary"
+                onClick={() => {
+                  setMatchMode("manual");
+                  if (typeof window !== "undefined") {
+                    window.sessionStorage.setItem("opinia.matchMode", "manual");
+                  }
+                }}
+                type="button"
+              >
+                {t("games.search.matchMode.switchToManual")}
+              </button>
+            </div>
+          ) : null}
 
           {isLoading && !hasLoadedOnce ? (
             <p className={styles.feedback}>{t("common.loadingEllipsis")}</p>
@@ -1097,7 +1616,8 @@ export function GamesSearchView() {
               {visiblePlayers.map((player) => {
                 const isRecruitParty = Boolean(player.partySlug && player.partyName);
                 const claimedRoles = new Set(player.claimedRoles ?? []);
-                const lookingRoles = new Set(player.recruitedRoles ?? []);
+                const openRecruitRoles = openRecruitRolesForHit(player);
+                const lookingRoles = new Set(openRecruitRoles);
                 const rosterTitle = player.partyName ?? player.title;
                 const rosterHref = player.partySlug
                   ? `/dota/teams/${player.partySlug}`
@@ -1140,12 +1660,12 @@ export function GamesSearchView() {
                       {isRecruitParty ? (
                         <p
                           className={`${styles.joinModeStatus}${
-                            (player.joinMode ?? "CONFIRM") === "OPEN"
+                            (player.joinMode ?? "OPEN") === "OPEN"
                               ? ` ${styles.joinModeStatusOpen}`
                               : ` ${styles.joinModeStatusConfirm}`
                           }`}
                         >
-                          {(player.joinMode ?? "CONFIRM") === "OPEN"
+                          {(player.joinMode ?? "OPEN") === "OPEN"
                             ? t("games.search.joinModeOpen")
                             : t("games.search.joinModeConfirm")}
                         </p>
@@ -1159,23 +1679,23 @@ export function GamesSearchView() {
                     <span
                       className={`${styles.badge}${
                         isRecruitParty
-                          ? (player.joinMode ?? "CONFIRM") === "OPEN"
+                          ? (player.joinMode ?? "OPEN") === "OPEN"
                             ? ` ${styles.badgeJoinOpen}`
                             : ` ${styles.badgeJoinConfirm}`
                           : ""
                       }`}
                     >
                       {isRecruitParty
-                        ? (player.joinMode ?? "CONFIRM") === "OPEN"
+                        ? (player.joinMode ?? "OPEN") === "OPEN"
                           ? t("games.search.joinModeOpenShort")
                           : t("games.search.joinModeConfirmShort")
                         : t("games.search.lookingBadge")}
                     </span>
                   </div>
-                  {isRecruitParty && (player.recruitedRoles?.length ?? 0) > 0 ? (
+                  {isRecruitParty && openRecruitRoles.length > 0 ? (
                     <p className={styles.recruitRoles}>
                       {t("games.search.recruitCardRoles", {
-                        roles: player.recruitedRoles
+                        roles: openRecruitRoles
                           .map((role) => `${role} ${getDotaPositionLabel(role, t)}`)
                           .join(" · ")
                       })}
@@ -1234,9 +1754,9 @@ export function GamesSearchView() {
                       <span className={styles.flagEmpty}>{t("games.search.noFlagsYet")}</span>
                     ) : null}
                   </div>
-                  {isRecruitParty && (player.recruitedRoles?.length ?? 0) > 0 ? (
+                  {isRecruitParty && openRecruitRoles.length > 0 ? (
                     <div className={styles.applyRoleRow}>
-                      {player.recruitedRoles.map((role) => {
+                      {openRecruitRoles.map((role) => {
                         const busyKey = `${player.slug}:${role}`;
                         return (
                           <button
@@ -1248,7 +1768,7 @@ export function GamesSearchView() {
                           >
                             {stackBusySlug === busyKey
                               ? t("games.search.stackBusy")
-                              : (player.joinMode ?? "CONFIRM") === "OPEN"
+                              : (player.joinMode ?? "OPEN") === "OPEN"
                                 ? t("games.search.joinForRole", {
                                     role: `${role} ${getDotaPositionLabel(role, t)}`
                                   })
@@ -1376,7 +1896,7 @@ export function GamesSearchView() {
                             <button
                               aria-label={t("games.search.inviteAccept")}
                               className={styles.acceptBtn}
-                              disabled={inviteBusyId === invite.id}
+                              disabled={inviteBusyId !== null}
                               onClick={() => void handleAcceptInvite(invite)}
                               type="button"
                             >
@@ -1390,7 +1910,7 @@ export function GamesSearchView() {
                                 : t("games.search.inviteDecline")
                             }
                             className={styles.declineBtn}
-                            disabled={inviteBusyId === invite.id}
+                            disabled={inviteBusyId !== null}
                             onClick={() => void handleDeclineInvite(invite)}
                             type="button"
                           >
@@ -1451,7 +1971,7 @@ export function GamesSearchView() {
                             <button
                               aria-label={t("games.search.acceptApplication")}
                               className={styles.acceptBtn}
-                              disabled={inviteBusyId === invite.id}
+                              disabled={inviteBusyId !== null}
                               onClick={() => void handleAcceptInvite(invite)}
                               type="button"
                             >
@@ -1460,7 +1980,7 @@ export function GamesSearchView() {
                             <button
                               aria-label={t("games.search.declineApplication")}
                               className={styles.declineBtn}
-                              disabled={inviteBusyId === invite.id}
+                              disabled={inviteBusyId !== null}
                               onClick={() => void handleDeclineInvite(invite)}
                               type="button"
                             >

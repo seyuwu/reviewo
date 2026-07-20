@@ -1096,7 +1096,7 @@ model GameParty {
   ownerUserId   String              @map("owner_user_id") @db.Uuid
   kind          GamePartyKind       @default(TEAM)
   visibility    GamePartyVisibility @default(PUBLIC)
-  joinMode      GamePartyJoinMode   @default(CONFIRM) @map("join_mode")
+  joinMode      GamePartyJoinMode   @default(OPEN) @map("join_mode")
   maxMembers    Int                 @default(5) @map("max_members")
   expiresAt     DateTime?           @map("expires_at") @db.Timestamptz(6)
   discordChannelId String?          @map("discord_channel_id") @db.VarChar(32)
@@ -1108,6 +1108,7 @@ model GameParty {
   owner         User                @relation("GamePartyOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
   members       GamePartyMember[]
   invites       GamePartyInvite[]
+  joinBlocks    GamePartyJoinBlock[]
   chatMessages  GamePartyChatMessage[]
 
   @@unique([vertical, slug])
@@ -1124,6 +1125,8 @@ model GamePartyMember {
   userId       String              @map("user_id") @db.Uuid
   role         GamePartyMemberRole @default(MEMBER)
   /// Dota lane position 1-5; null until the member claims a slot.
+  /// Partial unique (party_id, position_role) WHERE NOT NULL — see migration
+  /// 20260715160000_party_member_position_role (Prisma cannot express partial uniques).
   positionRole String?             @map("position_role")
   joinedAt     DateTime            @default(now()) @map("joined_at") @db.Timestamptz(6)
   party        GameParty           @relation(fields: [partyId], references: [id], onDelete: Cascade)
@@ -1154,6 +1157,20 @@ model GamePartyInvite {
   @@index([inviteeUserId, status])
   @@index([inviterUserId])
   @@map("game_party_invites")
+  @@schema("social")
+}
+
+/// After a kick: user cannot OPEN/claim/auto-rejoin this party until a fresh INVITE is accepted.
+model GamePartyJoinBlock {
+  id        String    @id @default(uuid()) @db.Uuid
+  partyId   String    @map("party_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  party     GameParty @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@unique([partyId, userId])
+  @@index([userId])
+  @@map("game_party_join_blocks")
   @@schema("social")
 }
 

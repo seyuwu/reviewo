@@ -216,6 +216,42 @@ export function createTopViewRateLimitRules(request: RequestLike): RateLimitRule
   ];
 }
 
+export function createPartyLinkOpenRateLimitRules(request: RequestLike): RateLimitRule[] {
+  return [
+    {
+      key: resolveRequestIp(request),
+      limit: 120,
+      message: "Too many party link opens from this network",
+      namespace: "parties:link-open:ip",
+      windowSeconds: 60 * 60
+    }
+  ];
+}
+
+/** Stricter bucket for claim / join-by-token / auto-stack to limit seat-claim spam. */
+export function createPartyJoinRateLimitRules(
+  userId: string,
+  request: RequestLike
+): RateLimitRule[] {
+  return [
+    ...createSocialWriteRateLimitRules(userId, request),
+    {
+      key: userId,
+      limit: 20,
+      message: "Too many party join attempts from this account",
+      namespace: "parties:join:user",
+      windowSeconds: 60
+    },
+    {
+      key: resolveRequestIp(request),
+      limit: 60,
+      message: "Too many party join attempts from this network",
+      namespace: "parties:join:ip",
+      windowSeconds: 60
+    }
+  ];
+}
+
 export function createSpotlightEndorseRateLimitRules(
   userId: string,
   request: RequestLike

@@ -1,3 +1,5 @@
+import type { DotaMatchMode } from "@reviewo/shared";
+
 import type { DotaProfile } from "../../dota/types/dota";
 import type { DotaPositionRole, GameParty } from "../../social/types/social";
 import type { IntentMode } from "./games-search-onboarding-types";
@@ -7,6 +9,7 @@ export type GamesSearchCinematicPhase =
   | "mmr"
   | "roles"
   | "recruitRoles"
+  | "matchMode"
   | "creating"
   | "leftMorph"
   | "ready"
@@ -17,8 +20,11 @@ export type GamesSearchCinematicPhase =
 
 export type GamesSearchCinematicVisualPhase = "hidden" | "left" | "feed" | "rail";
 
+export type { DotaMatchMode as GamesSearchMatchMode };
+
 export interface GamesSearchCinematicResult {
   intentMode: IntentMode;
+  matchMode: DotaMatchMode;
   mmr: string;
   party: GameParty | null;
   profile: DotaProfile;

@@ -263,6 +263,15 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
     );
 
     const party = await this.gamePartiesService.getPartyBySlug(partySlug, currentUser.id);
+    // Heal desynced sockets: sender may have lost room membership after reconnect/flaky join.
+    const room = partyRoomName(party.id);
+    await client.join(room);
+    getSocketData(client).partySession = {
+      partyId: party.id,
+      partySlug: party.slug,
+      room
+    };
+
     this.broadcastNewMessage(party.id, message);
     return message;
   }

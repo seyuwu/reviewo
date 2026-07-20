@@ -75,6 +75,8 @@ export interface GameParty {
   isOwner: boolean;
   joinMode?: "OPEN" | "CONFIRM";
   kind: GamePartyKind;
+  /** Soft-unique invite opens; captains/officers only. */
+  linkOpenCount?: number | null;
   maxMembers: number;
   memberCount: number;
   members: GamePartyMember[];
@@ -89,7 +91,7 @@ export interface GameParty {
 export interface MyPartiesResponse {
   invites: GamePartyInvite[];
   outgoingInvites: GamePartyInvite[];
-  /** All active temporary parties (newest first). */
+  /** All active temporary parties (oldest join first, newest last). */
   parties: GameParty[];
   /** Most recently joined temporary party. */
   party: GameParty | null;

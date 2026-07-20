@@ -1,0 +1,11 @@
+Original artwork generated for OpinIA Games party role slots.
+No third-party stock. No Valve / Dota franchise IP (generic fantasy role portraits only).
+
+Files under /dota/slots/:
+- role-1-carry.jpg
+- role-2-mid.jpg
+- role-3-offlane.jpg
+- role-4-support.jpg
+- role-5-hard-support.jpg
+
+Style matched to /dota/party-hero-assassin.png (dark indigo/violet mist).

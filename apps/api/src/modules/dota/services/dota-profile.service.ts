@@ -11,6 +11,7 @@ import {
   DOTA_VERTICAL,
   isDotaConfirmationKey,
   isDotaGreenFlagKey,
+  isDotaMatchMode,
   isDotaPositionRole,
   isDotaRedFlagKey,
   type DotaPositionRole
@@ -46,6 +47,7 @@ interface DotaAttributeInput {
   gender?: CreateDotaProfileDto["gender"];
   hasMic?: boolean;
   language?: string;
+  matchMode?: CreateDotaProfileDto["matchMode"];
   mmr?: string;
   playIntent?: CreateDotaProfileDto["playIntent"];
   roles?: string[];
@@ -171,9 +173,13 @@ export class DotaProfileService {
   async listLookingPlayers(input: {
     roles?: string[];
     server?: string;
+    viewerUserId?: string;
   }): Promise<DotaLfgListResponseDto> {
     const rows = await this.entityAttributesRepository.listLookingDotaProfiles(20);
     const now = Date.now();
+    const blockedPartySlugs = input.viewerUserId
+      ? new Set(await this.gamePartiesRepository.listBlockedPartySlugsForUser(input.viewerUserId))
+      : new Set<string>();
 
     const candidates = rows
       .map((row) => {
@@ -187,6 +193,11 @@ export class DotaProfileService {
 
         const roles = parseRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
         const server = attributes[DOTA_ATTRIBUTE_KEYS.server] ?? null;
+        const partySlug = attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || null;
+
+        if (partySlug && blockedPartySlugs.has(partySlug)) {
+          return null;
+        }
 
         if (input.server && server !== input.server) {
           return null;
@@ -204,7 +215,7 @@ export class DotaProfileService {
           ownerUserId: row.ownerUserId,
           partyKind: parsePartyKind(attributes[DOTA_ATTRIBUTE_KEYS.lfgPartyKind]),
           partyName: attributes[DOTA_ATTRIBUTE_KEYS.lfgPartyName]?.trim() || null,
-          partySlug: attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || null,
+          partySlug,
           recruitedRoles: parseRecruitedRoles(attributes[DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]),
           roles,
           server,
@@ -239,7 +250,7 @@ export class DotaProfileService {
           let memberCount = candidate.memberCount;
           let claimedRoles: string[] = [];
           let mmr = candidate.mmr;
-          let joinMode: "OPEN" | "CONFIRM" = "CONFIRM";
+          let joinMode: "OPEN" | "CONFIRM" = "OPEN";
 
           if (candidate.partySlug) {
             const party = await this.gamePartiesRepository.findByVerticalAndSlug(
@@ -929,6 +940,10 @@ export class DotaProfileService {
       attributes[DOTA_ATTRIBUTE_KEYS.playIntent] = input.playIntent;
     }
 
+    if (input.matchMode) {
+      attributes[DOTA_ATTRIBUTE_KEYS.matchMode] = input.matchMode;
+    }
+
     return attributes;
   }
 
@@ -960,6 +975,16 @@ export class DotaProfileService {
       next[DOTA_ATTRIBUTE_KEYS.hasMic] = hasMic;
     }
 
+    const playIntent = currentAttributes[DOTA_ATTRIBUTE_KEYS.playIntent];
+    if (input.playIntent === undefined && playIntent) {
+      next[DOTA_ATTRIBUTE_KEYS.playIntent] = playIntent;
+    }
+
+    const matchMode = currentAttributes[DOTA_ATTRIBUTE_KEYS.matchMode];
+    if (input.matchMode === undefined && matchMode) {
+      next[DOTA_ATTRIBUTE_KEYS.matchMode] = matchMode;
+    }
+
     return next;
   }
 
@@ -986,6 +1011,10 @@ export class DotaProfileService {
       mmr: attributes[DOTA_ATTRIBUTE_KEYS.mmr] ?? null,
       ownerUserId: entity.ownerUserId,
       playIntent: attributes[DOTA_ATTRIBUTE_KEYS.playIntent] ?? null,
+      matchMode: (() => {
+        const value = attributes[DOTA_ATTRIBUTE_KEYS.matchMode];
+        return value && isDotaMatchMode(value) ? value : null;
+      })(),
       progress: {
         current: distinctConfirmers,
         target: DOTA_CONFIRMATION_MILESTONE

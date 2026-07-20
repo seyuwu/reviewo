@@ -296,6 +296,120 @@
   gap: 0.55rem;
 }
 
+.modeSplit {
+  background: rgb(255 255 255 / 3.5%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.9rem;
+  isolation: isolate;
+  min-height: 4.4rem;
+  overflow: hidden;
+  position: relative;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.modeSplitFace {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.85rem 0.9rem;
+  text-align: left;
+  transition: opacity 160ms ease;
+}
+
+.modeSplitFace strong,
+.modeSplitChoice strong {
+  font-size: 0.92rem;
+  font-weight: 750;
+}
+
+.modeSplitFace span,
+.modeSplitChoice span {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.modeSplitChoices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 160ms ease;
+}
+
+.modeSplitChoice {
+  align-content: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid rgb(147 130 255 / 18%);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.15rem;
+  justify-items: start;
+  min-width: 0;
+  padding: 0.7rem 0.65rem;
+  text-align: left;
+  transition: background-color 140ms ease;
+}
+
+.modeSplitChoice:last-child {
+  border-right: 0;
+}
+
+.modeSplitChoice:hover:not(:disabled) {
+  background: rgb(109 74 255 / 16%);
+}
+
+.modeSplitChoice:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.modeSplitDisabled {
+  opacity: 0.58;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .modeSplit:hover:not(.modeSplitDisabled),
+  .modeSplit:focus-within:not(.modeSplitDisabled) {
+    background: rgb(255 255 255 / 6%);
+    border-color: rgb(147 130 255 / 28%);
+  }
+
+  .modeSplit:hover:not(.modeSplitDisabled) .modeSplitFace,
+  .modeSplit:focus-within:not(.modeSplitDisabled) .modeSplitFace {
+    opacity: 0;
+  }
+
+  .modeSplit:hover:not(.modeSplitDisabled) .modeSplitChoices,
+  .modeSplit:focus-within:not(.modeSplitDisabled) .modeSplitChoices {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .modeSplitFace {
+    display: none;
+  }
+
+  .modeSplitChoices {
+    opacity: 1;
+    pointer-events: auto;
+    position: static;
+  }
+
+  .modeSplitChoice {
+    min-height: 3.6rem;
+  }
+}
+
 .modeCard {
   background: rgb(255 255 255 / 3.5%);
   border: 1px solid var(--color-card-border);
@@ -310,6 +424,7 @@
     background-color 160ms ease,
     border-color 160ms ease,
     box-shadow 160ms ease;
+  width: 100%;
 }
 
 .modeCard strong {
@@ -380,6 +495,32 @@
   font-size: 0.88rem;
   line-height: 1.45;
   margin: 0;
+}
+
+.profileEditBtn {
+  appearance: none;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(167 139 250 / 28%);
+  border-radius: 0.65rem;
+  color: #ddd6fe;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+  padding: 0.55rem 0.75rem;
+  text-align: center;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  width: 100%;
+}
+
+.profileEditBtn:hover {
+  background: rgb(109 74 255 / 14%);
+  border-color: rgb(167 139 250 / 45%);
+  color: #ede9fe;
 }
 
 .profileLink {
@@ -996,6 +1137,24 @@
 .feedback {
   color: var(--color-text-muted);
   font-size: 0.9rem;
+  margin: 0;
+}
+
+.matchModeBanner {
+  align-items: center;
+  background: rgb(109 74 255 / 12%);
+  border: 1px solid rgb(109 74 255 / 28%);
+  border-radius: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+}
+
+.matchModeBanner p {
+  color: var(--color-text);
+  font-size: 0.95rem;
   margin: 0;
 }
 

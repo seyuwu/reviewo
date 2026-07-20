@@ -52,7 +52,7 @@ export class GamePartyResponseDto {
   isMember!: boolean;
   isOfficer!: boolean;
   isOwner!: boolean;
-  /** OPEN = instant LFG join; CONFIRM = application required. */
+  /** OPEN = instant LFG join (default); CONFIRM = application required. */
   joinMode!: GamePartyJoinMode;
   kind!: GamePartyKind;
   maxMembers!: number;
@@ -61,6 +61,8 @@ export class GamePartyResponseDto {
   name!: string;
   openSlots!: number;
   ownerUserId!: string;
+  /** Soft-unique invite link opens; only populated for captains/officers. */
+  linkOpenCount!: number | null;
   slug!: string;
   vertical!: string;
   visibility!: "PUBLIC" | "PRIVATE";
@@ -80,7 +82,7 @@ export class MyPartiesResponseDto {
   invites!: GamePartyInviteDto[];
   /** Stack invites you sent (pending + briefly after accept/decline). */
   outgoingInvites!: GamePartyInviteDto[];
-  /** All active temporary parties the user belongs to (newest first). */
+  /** All active temporary parties the user belongs to (oldest join first, newest last). */
   parties!: GamePartyResponseDto[];
   /** Most recently joined temporary party (compat shorthand). */
   party!: GamePartyResponseDto | null;

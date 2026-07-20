@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { useMyDotaProfileNav } from "../../dota/hooks/use-my-dota-profile-nav";
 import { buildDotaFriendInviteUrl } from "../../dota/lib/share";
 import { useTranslation } from "../../i18n/locale-provider";
+import { isApiError, readApiErrorMessage } from "../../../lib/api/read-api-error";
 import {
   acceptFriendRequest,
   declineFriendRequest,
@@ -31,6 +33,7 @@ type DockTab = "friends" | "requests";
 
 export function FriendsDock() {
   const t = useTranslation();
+  const pathname = usePathname();
   const { authSession, isAuthSessionLoaded } = useAuthSession();
   const profileNav = useMyDotaProfileNav();
   const [open, setOpen] = useState(false);
@@ -50,6 +53,11 @@ export function FriendsDock() {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   accessTokenRef.current = authSession?.accessToken ?? null;
+
+  const preferredPartySlug = useMemo(() => {
+    const match = pathname?.match(/^\/dota\/teams\/([^/?#]+)/);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  }, [pathname]);
 
   const refresh = useCallback(async () => {
     const accessToken = accessTokenRef.current;
@@ -72,7 +80,7 @@ export function FriendsDock() {
         setFriends(friendsResponse.friends);
         setIncoming(requestsResponse.incoming);
         setOutgoing(requestsResponse.outgoing);
-        setInviteTarget(resolveInviteTarget(partiesResponse));
+        setInviteTarget(resolveInviteTarget(partiesResponse, preferredPartySlug));
         setError(null);
       }
     } catch {
@@ -83,7 +91,7 @@ export function FriendsDock() {
       inFlightRef.current = false;
       setIsLoading(false);
     }
-  }, [t]);
+  }, [preferredPartySlug, t]);
 
   useEffect(() => {
     if (!authSession?.accessToken) {
@@ -234,8 +242,12 @@ export function FriendsDock() {
       return;
     }
 
-    if (!inviteTarget || inviteTarget.openSlots <= 0 || !inviteTarget.canManageParty) {
-      setError(t("web.friendsDock.inviteNoRoster"));
+    if (!inviteTarget || inviteTarget.openSlots <= 0 || !inviteTarget.isMember) {
+      setError(
+        inviteTarget && inviteTarget.openSlots <= 0
+          ? t("web.friendsDock.inviteRosterFull")
+          : t("web.friendsDock.inviteNoRoster")
+      );
       return;
     }
 
@@ -249,8 +261,14 @@ export function FriendsDock() {
     try {
       await inviteFriendToParty(inviteTarget.slug, friend.id, session.accessToken);
       setInvitedIds((current) => new Set(current).add(friend.id));
-    } catch {
-      setError(t("dota.friends.actionError"));
+    } catch (error) {
+      const apiMessage = isApiError(error) ? readApiErrorMessage(error.body) : null;
+
+      setError(
+        apiMessage === "This player declined an invite to this party"
+          ? t("web.friendsDock.inviteDeclined")
+          : t("dota.friends.actionError")
+      );
     } finally {
       setBusyId(null);
     }
@@ -417,7 +435,7 @@ export function FriendsDock() {
                     const alreadyInvited = invitedIds.has(friend.id);
                     const inviteBusy = busyId === `invite-${friend.id}`;
                     const canInvite =
-                      Boolean(inviteTarget?.canManageParty) &&
+                      Boolean(inviteTarget?.isMember) &&
                       (inviteTarget?.openSlots ?? 0) > 0 &&
                       !alreadyInRoster &&
                       !alreadyInvited;
@@ -458,7 +476,9 @@ export function FriendsDock() {
                               title={
                                 canInvite
                                   ? t("web.friendsDock.inviteToParty")
-                                  : t("web.friendsDock.inviteNoRoster")
+                                  : inviteTarget && inviteTarget.openSlots <= 0
+                                    ? t("web.friendsDock.inviteRosterFull")
+                                    : t("web.friendsDock.inviteNoRoster")
                               }
                               type="button"
                             >
@@ -496,7 +516,8 @@ export function FriendsDock() {
 }
 
 function resolveInviteTarget(
-  partiesResponse: Awaited<ReturnType<typeof fetchMyParties>> | null
+  partiesResponse: Awaited<ReturnType<typeof fetchMyParties>> | null,
+  preferredSlug?: string | null
 ): GameParty | null {
   if (!partiesResponse) {
     return null;
@@ -508,9 +529,17 @@ function resolveInviteTarget(
     ...(partiesResponse.parties ?? [])
   ].filter((party): party is GameParty => Boolean(party));
 
-  return (
-    candidates.find((party) => party.canManageParty && party.openSlots > 0) ?? null
-  );
+  const open = candidates.filter((party) => party.isMember && party.openSlots > 0);
+
+  if (preferredSlug) {
+    const preferred = open.find((party) => party.slug === preferredSlug);
+    if (preferred) {
+      return preferred;
+    }
+  }
+
+  // Prefer temporary party over team when both have seats.
+  return open.find((party) => party.kind === "PARTY") ?? open[0] ?? null;
 }
 
 function resolveInitial(displayName: string | undefined): string {

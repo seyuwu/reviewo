@@ -49,12 +49,18 @@ import {
 } from "../party-realtime.types.js";
 import { DiscordVoiceService } from "./discord-voice.service.js";
 import type { PartyDiscordVoiceResponseDto } from "../dto/game-party-response.dto.js";
+import { RedisService } from "../../../redis/redis.service.js";
+import { createHash, randomBytes } from "node:crypto";
 
 const INVITE_FLAG_LIMIT = 3;
 const PARTY_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
 const TERMINAL_INVITE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const INVITE_TTL_MS = DOTA_PARTY_INVITE_TTL_HOURS * 60 * 60 * 1000;
 const DISCORD_VOICE_READY_SYSTEM_MESSAGE = "__system__:discord_voice_ready";
+const PARTY_SAFETY_SYSTEM_MESSAGE = "__system__:party_safety";
+const PARTY_LINK_OPEN_DEDUPE_TTL_SECONDS = 60 * 60 * 24;
+/** Matches JWT party-join TTL (7 days). */
+const PARTY_JOIN_CODE_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 
 @Injectable()
@@ -72,6 +78,7 @@ export class GamePartiesService implements OnModuleInit {
     private readonly jwtTokenService: JwtTokenService,
     @Inject(PARTY_REALTIME_PUBLISHER)
     private readonly partyRealtimeService: PartyRealtimePublisher,
+    private readonly redisService: RedisService,
     private readonly usersRepository: UsersRepository
   ) {}
 
@@ -107,6 +114,12 @@ export class GamePartiesService implements OnModuleInit {
       ownerUserId: currentUser.id,
       slug,
       vertical: DOTA_PARTY_VERTICAL
+    });
+
+    await this.gamePartiesRepository.createChatMessage({
+      message: PARTY_SAFETY_SYSTEM_MESSAGE,
+      partyId: party.id,
+      userId: currentUser.id
     });
 
     const full = await this.gamePartiesRepository.findById(party.id);
@@ -313,6 +326,128 @@ export class GamePartiesService implements OnModuleInit {
     return this.toPartyResponse(party, viewerUserId);
   }
 
+  async recordPartyLinkOpen(
+    slug: string,
+    viewerKey: string
+  ): Promise<{ linkOpenCount: number }> {
+    const party = await this.gamePartiesRepository.findByVerticalAndSlug(DOTA_PARTY_VERTICAL, slug);
+
+    if (!party || this.isExpired(party)) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Team was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    const redis = await this.redisService.getClient();
+    const viewerHash = createHash("sha256").update(viewerKey).digest("hex").slice(0, 24);
+    const dedupeKey = `party:link-open-seen:${party.id}:${viewerHash}`;
+    const countKey = `party:link-opens:${party.id}`;
+    const wasNew = await redis.set(dedupeKey, "1", {
+      EX: PARTY_LINK_OPEN_DEDUPE_TTL_SECONDS,
+      NX: true
+    });
+
+    if (wasNew) {
+      await redis.incr(countKey);
+    }
+
+    const raw = await redis.get(countKey);
+    const linkOpenCount = Number(raw);
+    return {
+      linkOpenCount: Number.isFinite(linkOpenCount) && linkOpenCount > 0 ? Math.floor(linkOpenCount) : 0
+    };
+  }
+
+  private async readPartyLinkOpenCount(partyId: string): Promise<number> {
+    try {
+      const redis = await this.redisService.getClient();
+      const raw = await redis.get(`party:link-opens:${partyId}`);
+      const count = Number(raw);
+      return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private async mintPartyJoinCode(slug: string, token: string): Promise<string> {
+    const redis = await this.redisService.getClient();
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const code = randomBytes(5).toString("base64url");
+      const key = `party:join-code:${code}`;
+      const created = await redis.set(
+        key,
+        JSON.stringify({ slug, token }),
+        {
+          EX: PARTY_JOIN_CODE_TTL_SECONDS,
+          NX: true
+        }
+      );
+
+      if (created) {
+        return code;
+      }
+    }
+
+    throw createAppException({
+      code: AppErrorCode.Conflict,
+      message: "Could not create a short join link. Try again.",
+      statusCode: HttpStatus.CONFLICT
+    });
+  }
+
+  private async readPartyJoinCode(
+    code: string
+  ): Promise<{ code: string; slug: string; token: string } | null> {
+    const normalized = code.trim();
+
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(normalized)) {
+      return null;
+    }
+
+    try {
+      const redis = await this.redisService.getClient();
+      const raw = await redis.get(`party:join-code:${normalized}`);
+
+      if (!raw) {
+        return null;
+      }
+
+      const parsed = JSON.parse(raw) as { slug?: unknown; token?: unknown };
+
+      if (typeof parsed.slug !== "string" || typeof parsed.token !== "string") {
+        return null;
+      }
+
+      return { code: normalized, slug: parsed.slug, token: parsed.token };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Accepts either a short Redis join code or a legacy signed JWT. */
+  private async resolvePartyJoinCredential(raw: string): Promise<string> {
+    const value = raw.trim();
+
+    if (value.includes(".")) {
+      return value;
+    }
+
+    const resolved = await this.readPartyJoinCode(value);
+
+    if (!resolved) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Join link is invalid or expired",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    return resolved.token;
+  }
+
   async getMyParties(currentUser: AuthenticatedUser): Promise<MyPartiesResponseDto> {
     const [teamMembership, partyMemberships, invites, outgoing] = await Promise.all([
       this.gamePartiesRepository.findActiveMembershipForUserInVerticalByKind(
@@ -377,7 +512,7 @@ export class GamePartiesService implements OnModuleInit {
         invite.status === "PENDING" && invite.createdAt.getTime() < inviteTtlCutoff;
 
       if (invite.status === "PENDING" && (partyExpired || full || inviteStale)) {
-        await this.gamePartiesRepository.updateInviteStatus(invite.id, "CANCELLED");
+        await this.gamePartiesRepository.cancelPendingInvite(invite.id);
         continue;
       }
 
@@ -413,7 +548,7 @@ export class GamePartiesService implements OnModuleInit {
         invite.status === "PENDING" && invite.createdAt.getTime() < inviteTtlCutoff;
 
       if (invite.status === "PENDING" && (partyExpired || full || inviteStale)) {
-        await this.gamePartiesRepository.updateInviteStatus(invite.id, "CANCELLED");
+        await this.gamePartiesRepository.cancelPendingInvite(invite.id);
         continue;
       }
 
@@ -459,7 +594,7 @@ export class GamePartiesService implements OnModuleInit {
       invites: liveInvites,
       outgoingInvites,
       parties,
-      party: parties[0] ?? null,
+      party: parties.at(-1) ?? null,
       team
     };
   }
@@ -469,7 +604,8 @@ export class GamePartiesService implements OnModuleInit {
     input: CreatePartyInviteDto,
     currentUser: AuthenticatedUser
   ): Promise<GamePartyInviteDto> {
-    const party = await this.requireManagerParty(slug, currentUser.id);
+    // Any party member can invite friends — not only captain/officer.
+    const party = await this.requireMemberParty(slug, currentUser.id);
     const areFriends = await this.friendshipsRepository.areFriends(currentUser.id, input.userId);
 
     if (!areFriends) {
@@ -524,6 +660,8 @@ export class GamePartiesService implements OnModuleInit {
         });
       }
     }
+
+    await this.assertCanReceivePartyInvite(party.id, input.userId);
 
     const existingInvite = await this.gamePartiesRepository.findPendingInvite(party.id, input.userId);
 
@@ -616,9 +754,9 @@ export class GamePartiesService implements OnModuleInit {
 
     const party = await this.gamePartiesRepository.findById(invite.partyId);
 
-    if (!party) {
+      if (!party) {
       if (invite.status === "PENDING") {
-        await this.gamePartiesRepository.updateInviteStatus(invite.id, "CANCELLED");
+        await this.gamePartiesRepository.cancelPendingInvite(invite.id);
       }
 
       throw createAppException({
@@ -634,7 +772,7 @@ export class GamePartiesService implements OnModuleInit {
 
       if (!kept || this.isExpired(kept)) {
         if (invite.status === "PENDING") {
-          await this.gamePartiesRepository.updateInviteStatus(invite.id, "CANCELLED");
+          await this.gamePartiesRepository.cancelPendingInvite(invite.id);
         }
 
         throw createAppException({
@@ -671,6 +809,10 @@ export class GamePartiesService implements OnModuleInit {
     const joiningUserId = invite.inviteeUserId;
     await this.assertNoActiveMembershipOfKind(joiningUserId, party.kind);
 
+    if (isApplication) {
+      await this.assertNotJoinBlocked(party.id, joiningUserId);
+    }
+
     if (party.members.length >= party.maxMembers) {
       const closed = await this.gamePartiesRepository.cancelPendingInvitesForParty(party.id);
       await this.emitAutoClosedNotifications(closed, party);
@@ -701,6 +843,7 @@ export class GamePartiesService implements OnModuleInit {
 
     let closedInvites: GamePartyInvite[] = [];
     let joined: GamePartyMember | null = null;
+    let acceptFailReason: "full" | "role_taken" | "already_on_other_team" | undefined;
 
     try {
       const accepted = await this.gamePartiesRepository.acceptInviteAtomically({
@@ -712,6 +855,7 @@ export class GamePartiesService implements OnModuleInit {
       });
       closedInvites = accepted.closedInvites;
       joined = accepted.member;
+      acceptFailReason = accepted.reason;
 
       if (accepted.staleInvite) {
         throw createAppException({
@@ -739,15 +883,28 @@ export class GamePartiesService implements OnModuleInit {
     if (!joined) {
       // Role/full race: closedInvites already collected inside the transaction.
       await this.emitAutoClosedNotifications(closedInvites, party);
+
+      if (acceptFailReason === "already_on_other_team") {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "You already belong to a Dota team",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
+
       throw createAppException({
         code: AppErrorCode.Conflict,
-        message: invite.positionRole ? "This role is already taken" : "This team is already full",
+        message:
+          acceptFailReason === "role_taken"
+            ? "This role is already taken"
+            : "This team is already full",
         statusCode: HttpStatus.CONFLICT
       });
     }
 
     await this.clearLookingForUser(joiningUserId);
     await this.refreshRecruitLookingAttributes(party.ownerUserId, party.id);
+    await this.gamePartiesRepository.deleteJoinBlock(party.id, joiningUserId);
 
     const updated = await this.gamePartiesRepository.findById(party.id);
 
@@ -766,10 +923,14 @@ export class GamePartiesService implements OnModuleInit {
       await this.clearLookingForUser(updated.ownerUserId);
     }
 
-    const closedById = new Map(
-      [...closedInvites, ...extraClosed].map((row) => [row.id, row] as const)
-    );
-    await this.emitAutoClosedNotifications([...closedById.values()], party);
+    const allClosed = [...closedInvites, ...extraClosed];
+    const closedById = new Map(allClosed.map((row) => [row.id, row] as const));
+    const uniqueClosed = [...closedById.values()];
+    const samePartyClosed = uniqueClosed.filter((row) => row.partyId === party.id);
+    const otherPartyClosed = uniqueClosed.filter((row) => row.partyId !== party.id);
+
+    await this.emitAutoClosedNotifications(samePartyClosed, party);
+    await this.emitCrossPartyApplicationCancellations(otherPartyClosed);
 
     const inviteeMeta = await this.loadInviteeMeta([invite.inviteeUserId]);
     const invitee = await this.usersRepository.findById(invite.inviteeUserId);
@@ -787,12 +948,22 @@ export class GamePartiesService implements OnModuleInit {
       inviteeMeta[invite.inviteeUserId]
     );
 
+    const partyResponse = await this.toPartyResponse(updated, currentUser.id);
+    this.notifyPartyMembersJoined(partyResponse, notifyInvite, joiningUserId);
+
+    if (isApplication) {
+      this.partyRealtimeService.emitPartyNotification(joiningUserId, {
+        invite: { ...notifyInvite, direction: "incoming" },
+        type: "accepted"
+      });
+    }
+
     return {
       inviteKind: invite.kind === "APPLICATION" ? "APPLICATION" : "INVITE",
       inviteeUserId: invite.inviteeUserId,
       inviterUserId: invite.inviterUserId,
       notifyInvite,
-      party: await this.toPartyResponse(updated, currentUser.id)
+      party: partyResponse
     };
   }
 
@@ -838,7 +1009,18 @@ export class GamePartiesService implements OnModuleInit {
       });
     }
 
-    await this.gamePartiesRepository.updateInviteStatus(invite.id, "DECLINED");
+    const withdrawnByApplicant = isApplication && isInvitee;
+    const resolved = withdrawnByApplicant
+      ? await this.gamePartiesRepository.cancelPendingInvite(invite.id)
+      : await this.gamePartiesRepository.declinePendingInvite(invite.id);
+
+    if (!resolved) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "Invite was already resolved",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
 
     const inviteeMeta = await this.loadInviteeMeta([invite.inviteeUserId]);
     const invitee = await this.usersRepository.findById(invite.inviteeUserId);
@@ -856,7 +1038,7 @@ export class GamePartiesService implements OnModuleInit {
           displayName: invitee?.displayName ?? "Player",
           id: invite.inviteeUserId
         },
-        status: "DECLINED"
+        status: withdrawnByApplicant ? "CANCELLED" : "DECLINED"
       },
       isApplication ? "incoming" : "outgoing",
       partyForDto,
@@ -976,6 +1158,7 @@ export class GamePartiesService implements OnModuleInit {
 
       if (recruitParty.joinMode === "OPEN") {
         await this.assertNoActiveMembershipOfKind(currentUser.id, recruitParty.kind);
+        await this.assertNotJoinBlocked(recruitParty.id, currentUser.id);
 
         const joined = await this.gamePartiesRepository.addMemberAtomically({
           maxMembers: recruitParty.maxMembers,
@@ -984,7 +1167,35 @@ export class GamePartiesService implements OnModuleInit {
           userId: currentUser.id
         });
 
-        if (!joined) {
+        if (!joined.ok) {
+          if (joined.reason === "already_on_other_team") {
+            throw createAppException({
+              code: AppErrorCode.Conflict,
+              message: "You already belong to a Dota team",
+              statusCode: HttpStatus.CONFLICT
+            });
+          }
+
+          if (joined.reason === "party_gone") {
+            throw createAppException({
+              code: AppErrorCode.NotFound,
+              message: "Team was not found",
+              statusCode: HttpStatus.NOT_FOUND
+            });
+          }
+
+          if (joined.reason === "full") {
+            const closed = await this.gamePartiesRepository.cancelPendingInvitesForParty(
+              recruitParty.id
+            );
+            await this.emitAutoClosedNotifications(closed, recruitParty);
+            throw createAppException({
+              code: AppErrorCode.Conflict,
+              message: "This team is already full",
+              statusCode: HttpStatus.CONFLICT
+            });
+          }
+
           const closed = await this.gamePartiesRepository.closePendingInvitesForPosition(
             recruitParty.id,
             resolvedPosition,
@@ -997,6 +1208,8 @@ export class GamePartiesService implements OnModuleInit {
             statusCode: HttpStatus.CONFLICT
           });
         }
+
+        await this.emitCrossPartyApplicationCancellations(joined.cancelledApplications);
 
         const closedSameRole = await this.gamePartiesRepository.closePendingInvitesForPosition(
           recruitParty.id,
@@ -1042,7 +1255,9 @@ export class GamePartiesService implements OnModuleInit {
         );
         inviteDirection = "incoming";
         partyResponse = loaded;
+        this.notifyPartyMembersJoined(partyResponse, invite, currentUser.id);
       } else {
+        await this.assertNotJoinBlocked(recruitParty.id, currentUser.id);
         invite = await this.inviteWithoutFriendshipCheck(
           recruitSlug,
           currentUser.id,
@@ -1064,7 +1279,6 @@ export class GamePartiesService implements OnModuleInit {
         }
 
         partyResponse = loaded;
-        await this.clearLookingForUser(currentUser.id);
       }
     } else if (fromPartySlug) {
       const owned = await this.requireManagerParty(fromPartySlug, currentUser.id);
@@ -1129,22 +1343,63 @@ export class GamePartiesService implements OnModuleInit {
   async createJoinToken(
     slug: string,
     currentUser: AuthenticatedUser
-  ): Promise<{ token: string }> {
+  ): Promise<{ code: string; token: string }> {
     const party = await this.requireMemberParty(slug, currentUser.id);
+    const token = this.jwtTokenService.signPartyJoinToken(party.id, party.slug);
+    const code = await this.mintPartyJoinCode(party.slug, token);
 
-    return {
-      token: this.jwtTokenService.signPartyJoinToken(party.id, party.slug)
-    };
+    return { code, token };
   }
 
-  async joinByToken(
-    token: string,
+  async resolveJoinCode(code: string): Promise<{ code: string; slug: string }> {
+    const resolved = await this.readPartyJoinCode(code);
+
+    if (!resolved) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Join link is invalid or expired",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    return { code: resolved.code, slug: resolved.slug };
+  }
+
+  async claimPartySeat(
+    slug: string,
+    positionRole: DotaPositionRole,
     currentUser: AuthenticatedUser
   ): Promise<{
     application: GamePartyInviteDto | null;
     party: GamePartyResponseDto;
   }> {
-    const verified = this.jwtTokenService.verifyPartyJoinToken(token);
+    const party = await this.gamePartiesRepository.findByVerticalAndSlug(DOTA_PARTY_VERTICAL, slug);
+
+    if (!party || this.isExpired(party)) {
+      if (party) {
+        await this.purgeExpiredParty(party);
+      }
+
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Team was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+
+    return this.joinPartyAsApplicant(party, currentUser, positionRole);
+  }
+
+  async joinByToken(
+    token: string,
+    currentUser: AuthenticatedUser,
+    positionRole?: DotaPositionRole
+  ): Promise<{
+    application: GamePartyInviteDto | null;
+    party: GamePartyResponseDto;
+  }> {
+    const jwtToken = await this.resolvePartyJoinCredential(token);
+    const verified = this.jwtTokenService.verifyPartyJoinToken(jwtToken);
 
     if (!verified) {
       throw createAppException({
@@ -1176,16 +1431,76 @@ export class GamePartiesService implements OnModuleInit {
         });
       }
 
-      // Occupancy auto-extend kept the party — continue join against fresh row.
-      return this.joinByToken(token, currentUser);
+      return this.joinByToken(token, currentUser, positionRole);
     }
 
+    return this.joinPartyAsApplicant(party, currentUser, positionRole ?? null);
+  }
+
+  private async joinPartyAsApplicant(
+    party: NonNullable<Awaited<ReturnType<GamePartiesRepository["findById"]>>>,
+    currentUser: AuthenticatedUser,
+    positionRole?: DotaPositionRole | null
+  ): Promise<{
+    application: GamePartyInviteDto | null;
+    party: GamePartyResponseDto;
+  }> {
     const alreadyMember = party.members.some((member) => member.userId === currentUser.id);
 
     if (alreadyMember) {
+      if (positionRole) {
+        const claimed = party.members.some(
+          (member) => member.positionRole === positionRole && member.userId !== currentUser.id
+        );
+        const self = party.members.find((member) => member.userId === currentUser.id);
+
+        if (claimed) {
+          throw createAppException({
+            code: AppErrorCode.Conflict,
+            message: "This role is already taken",
+            statusCode: HttpStatus.CONFLICT
+          });
+        }
+
+        if (self && self.positionRole !== positionRole) {
+          try {
+            await this.gamePartiesRepository.updateMemberPositionRole(
+              party.id,
+              currentUser.id,
+              positionRole
+            );
+          } catch (error) {
+            if (isPrismaErrorCode(error, "P2002")) {
+              throw createAppException({
+                code: AppErrorCode.Conflict,
+                message: "This role is already taken",
+                statusCode: HttpStatus.CONFLICT
+              });
+            }
+
+            throw error;
+          }
+
+          const closed = await this.gamePartiesRepository.closePendingInvitesForPosition(
+            party.id,
+            positionRole,
+            { status: "DECLINED" }
+          );
+          await this.emitAutoClosedNotifications(closed, party);
+          await this.refreshRecruitLookingAttributes(party.ownerUserId, party.id);
+
+          const refreshed = await this.gamePartiesRepository.findById(party.id);
+          return {
+            application: null,
+            party: await this.toPartyResponse(refreshed ?? party, currentUser.id)
+          };
+        }
+      }
+
+      const latest = await this.gamePartiesRepository.findById(party.id);
       return {
         application: null,
-        party: await this.toPartyResponse(party, currentUser.id)
+        party: await this.toPartyResponse(latest ?? party, currentUser.id)
       };
     }
 
@@ -1201,7 +1516,20 @@ export class GamePartiesService implements OnModuleInit {
       });
     }
 
-    // CONFIRM: join link creates an application; managers accept before membership.
+    if (positionRole) {
+      const roleTaken = party.members.some((member) => member.positionRole === positionRole);
+      if (roleTaken) {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "This role is already taken",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
+    }
+
+    await this.assertNotJoinBlocked(party.id, currentUser.id);
+
+    // CONFIRM: creates an application; managers accept before membership.
     if (party.joinMode === "CONFIRM") {
       const existingInvite = await this.gamePartiesRepository.findPendingInvite(
         party.id,
@@ -1219,7 +1547,10 @@ export class GamePartiesService implements OnModuleInit {
         party.slug,
         currentUser.id,
         { id: party.ownerUserId } as AuthenticatedUser,
-        { inviteKind: "APPLICATION" }
+        {
+          inviteKind: "APPLICATION",
+          positionRole: positionRole ?? null
+        }
       );
 
       return {
@@ -1231,10 +1562,35 @@ export class GamePartiesService implements OnModuleInit {
     const joined = await this.gamePartiesRepository.addMemberAtomically({
       maxMembers: party.maxMembers,
       partyId: party.id,
+      positionRole: positionRole ?? null,
       userId: currentUser.id
     });
 
-    if (!joined) {
+    if (!joined.ok) {
+      if (joined.reason === "already_on_other_team") {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "You already belong to a Dota team",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
+
+      if (joined.reason === "party_gone") {
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Team was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+
+      if (joined.reason === "role_taken" && positionRole) {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "This role is already taken",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
+
       const closed = await this.gamePartiesRepository.cancelPendingInvitesForParty(party.id);
       await this.emitAutoClosedNotifications(closed, party);
       throw createAppException({
@@ -1243,6 +1599,8 @@ export class GamePartiesService implements OnModuleInit {
         statusCode: HttpStatus.CONFLICT
       });
     }
+
+    await this.emitCrossPartyApplicationCancellations(joined.cancelledApplications);
 
     if (party.kind === "PARTY") {
       await this.clearLookingForUser(currentUser.id);
@@ -1265,10 +1623,48 @@ export class GamePartiesService implements OnModuleInit {
 
     await this.refreshRecruitLookingAttributes(updated.ownerUserId, updated.id);
 
+    const partyResponse = await this.toPartyResponse(updated, currentUser.id);
+    const joiner = await this.usersRepository.findById(currentUser.id);
+    const joinedNotify = this.toInviteDto(
+      {
+        createdAt: new Date(),
+        id: `open-join-${party.id}-${currentUser.id}`,
+        invitee: {
+          displayName: joiner?.displayName ?? currentUser.displayName,
+          id: currentUser.id
+        },
+        inviteeUserId: currentUser.id,
+        kind: "APPLICATION",
+        positionRole: positionRole ?? null,
+        status: "ACCEPTED"
+      },
+      "outgoing",
+      updated
+    );
+    this.notifyPartyMembersJoined(partyResponse, joinedNotify, currentUser.id);
+
     return {
       application: null,
-      party: await this.toPartyResponse(updated, currentUser.id)
+      party: partyResponse
     };
+  }
+
+  /** Toast + sound for everyone already in the party when someone joins. */
+  private notifyPartyMembersJoined(
+    party: GamePartyResponseDto,
+    invite: GamePartyInviteDto,
+    joinerUserId: string
+  ): void {
+    for (const member of party.members) {
+      if (member.userId === joinerUserId) {
+        continue;
+      }
+
+      this.partyRealtimeService.emitPartyNotification(member.userId, {
+        invite: { ...invite, direction: "outgoing" },
+        type: "member_joined"
+      });
+    }
   }
 
   private async inviteWithoutFriendshipCheck(
@@ -1327,14 +1723,28 @@ export class GamePartiesService implements OnModuleInit {
       }
     }
 
+    if ((options?.inviteKind ?? "INVITE") === "INVITE") {
+      await this.assertCanReceivePartyInvite(party.id, targetUserId);
+    }
+
     const existingInvite = await this.gamePartiesRepository.findPendingInvite(party.id, targetUserId);
 
     if (existingInvite) {
-      throw createAppException({
-        code: AppErrorCode.Conflict,
-        message: "Invite already pending",
-        statusCode: HttpStatus.CONFLICT
-      });
+      // Managers re-inviting after kick: drop stale PENDING and mint a fresh invite id.
+      if ((options?.inviteKind ?? "INVITE") === "INVITE") {
+        await this.gamePartiesRepository.cancelPendingInvite(existingInvite.id);
+      } else {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "Invite already pending",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
+    }
+
+    if ((options?.inviteKind ?? "INVITE") === "APPLICATION") {
+      await this.assertNotJoinBlocked(party.id, targetUserId);
+      await this.assertCanSubmitPartyApplication(party.id, targetUserId);
     }
 
     const positionRole = options?.positionRole ?? null;
@@ -1938,6 +2348,7 @@ export class GamePartiesService implements OnModuleInit {
     limit?: number
   ): Promise<GamePartyChatMessagesPageDto> {
     const party = await this.requireMemberParty(slug, currentUser.id);
+    await this.ensurePartySafetyChatMessage(party.id, party.ownerUserId);
     const rows = await this.gamePartiesRepository.listChatMessages(party.id, before, limit);
     const chronological = [...rows].reverse();
     const pageSize = limit ?? 50;
@@ -1949,18 +2360,53 @@ export class GamePartiesService implements OnModuleInit {
     };
   }
 
+  /** First chat line: safety tip. Seeded on create; backfilled for older parties. */
+  private async ensurePartySafetyChatMessage(partyId: string, ownerUserId: string): Promise<void> {
+    const existing = await this.gamePartiesRepository.findChatMessageByExactText(
+      partyId,
+      PARTY_SAFETY_SYSTEM_MESSAGE
+    );
+
+    if (existing) {
+      return;
+    }
+
+    await this.gamePartiesRepository.createChatMessage({
+      message: PARTY_SAFETY_SYSTEM_MESSAGE,
+      partyId,
+      userId: ownerUserId
+    });
+  }
+
   async sendChatMessage(
     slug: string,
     message: string,
     currentUser: AuthenticatedUser
   ): Promise<GamePartyChatMessageDto> {
     const party = await this.requireMemberParty(slug, currentUser.id);
+
+    if (typeof message !== "string") {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Message cannot be empty",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
     const trimmed = message.trim();
 
     if (trimmed.length < 1) {
       throw createAppException({
         code: AppErrorCode.ValidationError,
         message: "Message cannot be empty",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    if (trimmed.length > 10_000) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Message is too long",
         statusCode: HttpStatus.BAD_REQUEST
       });
     }
@@ -2041,7 +2487,7 @@ export class GamePartiesService implements OnModuleInit {
     }
 
     await this.revokeDiscordVoiceAccessForUser(party.discordChannelId, targetUserId);
-    await this.gamePartiesRepository.removeMember(party.id, targetUserId);
+    await this.gamePartiesRepository.kickMemberAtomically(party.id, targetUserId);
     await this.refreshRecruitLookingAttributes(party.ownerUserId, party.id);
     return this.getPartyBySlug(slug, currentUser.id);
   }
@@ -2401,6 +2847,56 @@ export class GamePartiesService implements OnModuleInit {
     });
   }
 
+  private async assertNotJoinBlocked(partyId: string, userId: string): Promise<void> {
+    const block = await this.gamePartiesRepository.findJoinBlock(partyId, userId);
+
+    if (!block) {
+      return;
+    }
+
+    throw createAppException({
+      code: AppErrorCode.Forbidden,
+      message: "You were removed from this party. Wait for a new invite to rejoin.",
+      statusCode: HttpStatus.FORBIDDEN
+    });
+  }
+
+  private async assertCanReceivePartyInvite(partyId: string, inviteeUserId: string): Promise<void> {
+    const declined = await this.gamePartiesRepository.hasDeclinedPartyInvite(
+      partyId,
+      inviteeUserId,
+      "INVITE"
+    );
+
+    if (!declined) {
+      return;
+    }
+
+    throw createAppException({
+      code: AppErrorCode.Forbidden,
+      message: "This player declined an invite to this party",
+      statusCode: HttpStatus.FORBIDDEN
+    });
+  }
+
+  private async assertCanSubmitPartyApplication(partyId: string, applicantUserId: string): Promise<void> {
+    const declined = await this.gamePartiesRepository.hasDeclinedPartyInvite(
+      partyId,
+      applicantUserId,
+      "APPLICATION"
+    );
+
+    if (!declined) {
+      return;
+    }
+
+    throw createAppException({
+      code: AppErrorCode.Forbidden,
+      message: "Your application to this party was declined",
+      statusCode: HttpStatus.FORBIDDEN
+    });
+  }
+
   private async clearLookingForUser(userId: string): Promise<void> {
     const entity = await this.entitiesRepository.findByOwnerUserId(userId);
 
@@ -2653,10 +3149,13 @@ export class GamePartiesService implements OnModuleInit {
       (isOwner || isOfficer) &&
       voiceExpiresAt.getTime() < voiceMaxExpiresAtMs - 60_000;
 
+    const canManageParty = isOwner || isOfficer;
+    const linkOpenCount = canManageParty ? await this.readPartyLinkOpenCount(party.id) : null;
+
     return {
       canExtendDiscordVoice,
       canExtendParty,
-      canManageParty: isOwner || isOfficer,
+      canManageParty,
       // Multi-use Discord invites must not leak on public party pages / watchers.
       discordInviteUrl: isMember ? (party.discordInviteUrl ?? null) : null,
       discordVoiceAvailable: this.discordVoiceService.isConfigured(),
@@ -2668,6 +3167,7 @@ export class GamePartiesService implements OnModuleInit {
       isOwner,
       joinMode: party.joinMode === "OPEN" ? "OPEN" : "CONFIRM",
       kind: party.kind,
+      linkOpenCount,
       maxMembers: party.maxMembers,
       memberCount: members.length,
       members,
@@ -2687,6 +3187,7 @@ export class GamePartiesService implements OnModuleInit {
       inviteeUserId: string;
       inviterUserId: string;
       kind: "INVITE" | "APPLICATION";
+      partyId?: string;
       positionRole: string | null;
       status: "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED";
     }>,
@@ -2708,6 +3209,63 @@ export class GamePartiesService implements OnModuleInit {
         invite: item.invite,
         type: "declined"
       });
+    }
+  }
+
+  /**
+   * After joining party A: other parties' captains drop this user's pending applications.
+   * Notifies invitee + managers of each cancelled application party.
+   */
+  private async emitCrossPartyApplicationCancellations(
+    closed: Array<{
+      createdAt: Date;
+      id: string;
+      inviteeUserId: string;
+      inviterUserId: string;
+      kind: "INVITE" | "APPLICATION";
+      partyId: string;
+      positionRole: string | null;
+      status: "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED";
+    }>
+  ): Promise<void> {
+    if (closed.length === 0) {
+      return;
+    }
+
+    const byPartyId = new Map<string, typeof closed>();
+
+    for (const invite of closed) {
+      const list = byPartyId.get(invite.partyId) ?? [];
+      list.push(invite);
+      byPartyId.set(invite.partyId, list);
+    }
+
+    for (const [partyId, invites] of byPartyId) {
+      const party = await this.gamePartiesRepository.findById(partyId);
+
+      if (!party) {
+        continue;
+      }
+
+      await this.emitAutoClosedNotifications(invites, party);
+
+      const managerIds = new Set<string>([party.ownerUserId]);
+      for (const member of party.members) {
+        if (member.role === "OFFICER") {
+          managerIds.add(member.userId);
+        }
+      }
+
+      const notifications = await this.toAutoClosedNotifications(invites, party);
+
+      for (const item of notifications) {
+        for (const managerId of managerIds) {
+          this.partyRealtimeService.emitPartyNotification(managerId, {
+            invite: { ...item.invite, direction: "outgoing" },
+            type: "declined"
+          });
+        }
+      }
     }
   }
 

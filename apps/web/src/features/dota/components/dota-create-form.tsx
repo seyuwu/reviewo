@@ -215,6 +215,12 @@ export function DotaCreateForm() {
         const profile = await updateMyDotaProfile(profilePayload, accessToken);
         updateAuthSession({ displayName: profile.title });
         trackDotaEvent("dota_profile_updated", { slug: profile.slug });
+
+        if (searchParams.get("intent") === "search") {
+          router.push("/games/search", { scroll: false });
+          return;
+        }
+
         router.push(`/dota/${profile.slug}`);
         return;
       }

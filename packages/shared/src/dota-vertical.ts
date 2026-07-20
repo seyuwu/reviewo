@@ -10,6 +10,8 @@ export const DOTA_ATTRIBUTE_KEYS = {
   gender: "gender",
   hasMic: "has_mic",
   playIntent: "play_intent",
+  /** How the player wants stack matching: auto (we pick) vs manual (browse feed). */
+  matchMode: "match_mode",
   lfgUntil: "lfg_until",
   lfgPartySlug: "lfg_party_slug",
   lfgDesiredSize: "lfg_desired_size",
@@ -25,6 +27,13 @@ export const DOTA_LFG_TTL_SECONDS = 20 * 60;
 
 export const DOTA_GENDER_VALUES = ["female", "male", "unspecified"] as const;
 export type DotaGender = (typeof DOTA_GENDER_VALUES)[number];
+
+export const DOTA_MATCH_MODE_VALUES = ["auto", "manual"] as const;
+export type DotaMatchMode = (typeof DOTA_MATCH_MODE_VALUES)[number];
+
+export function isDotaMatchMode(value: string): value is DotaMatchMode {
+  return (DOTA_MATCH_MODE_VALUES as readonly string[]).includes(value);
+}
 
 /** Compact vibe tags — keep short so people actually click. */
 export const DOTA_GREEN_FLAG_KEYS = [

@@ -10,6 +10,8 @@ const pollIntervalMs = Number(process.env.TSC_WATCH_POLL_INTERVAL_MS ?? "1000");
 let building = false;
 let pendingRebuild = false;
 let serverProcess = null;
+let changeDetectedAt = 0;
+const rebuildDebounceMs = Number(process.env.DEV_WATCH_REBUILD_DEBOUNCE_MS ?? "3000");
 
 function run(command, args) {
   return new Promise((resolve, reject) => {
@@ -147,12 +149,24 @@ async function rebuild() {
 async function watchSourceFiles(previousSnapshot) {
   const nextSnapshot = await snapshotSourceFiles();
 
-  if (hasSnapshotChanged(previousSnapshot, nextSnapshot)) {
-    await rebuild();
-    return nextSnapshot;
+  if (!hasSnapshotChanged(previousSnapshot, nextSnapshot)) {
+    changeDetectedAt = 0;
+    return previousSnapshot;
   }
 
-  return previousSnapshot;
+  const now = Date.now();
+  if (changeDetectedAt === 0) {
+    changeDetectedAt = now;
+    return previousSnapshot;
+  }
+
+  if (now - changeDetectedAt < rebuildDebounceMs) {
+    return previousSnapshot;
+  }
+
+  changeDetectedAt = 0;
+  await rebuild();
+  return nextSnapshot;
 }
 
 process.on("SIGINT", () => {

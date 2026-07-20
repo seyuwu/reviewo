@@ -8,7 +8,7 @@ export class DotaLfgHitDto {
   claimedRoles!: string[];
   desiredSize!: number | null;
   greenFlags!: DotaLfgFlagDto[];
-  /** OPEN = instant join; CONFIRM = application. Solo looking defaults CONFIRM. */
+  /** OPEN = instant join; CONFIRM = application. Solo looking defaults OPEN. */
   joinMode!: "OPEN" | "CONFIRM";
   memberCount!: number | null;
   /** Captain MMR for solo looking; average party MMR when recruiting. */

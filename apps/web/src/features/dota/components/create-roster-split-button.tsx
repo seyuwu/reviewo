@@ -59,7 +59,7 @@ export function CreateRosterSplitButton({
     try {
       const created = await createGameParty(kind, authSession.accessToken);
       onCreated?.(kind);
-      router.push(`/dota/teams/${created.slug}`);
+      router.push(`/dota/teams/${created.slug}?created=1`);
     } catch {
       setError(t("dota.team.createError"));
       setPendingKind(null);

@@ -59,6 +59,13 @@
   width: min(60rem, calc(100% - 2rem));
 }
 
+.root[data-phase="matchMode"] .questionnaire {
+  min-height: min(28rem, calc(100% - 2rem));
+  overflow-x: hidden;
+  overflow-y: auto;
+  width: min(42rem, calc(100% - 2rem));
+}
+
 .root[data-phase="intent"] .questionnaire::after {
   background: linear-gradient(90deg, transparent, rgb(128 80 255 / 92%), transparent);
   bottom: 0;
@@ -131,6 +138,34 @@
   gap: clamp(1.5rem, 4vw, 3.25rem);
   grid-template-columns: minmax(14rem, 0.85fr) minmax(24rem, 1.35fr);
   min-height: 21rem;
+}
+
+.matchModeStep {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: 1fr;
+  min-width: 0;
+  width: 100%;
+}
+
+.matchModeStep .title {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.matchModeStep .intentChoices {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  width: 100%;
+}
+
+.matchModeStep .intentChoice {
+  min-height: 11.5rem;
+  min-width: 0;
+}
+
+.matchModeStep .intentChoice small {
+  max-width: 14rem;
 }
 
 .intentIntro {
@@ -670,10 +705,33 @@
     width: calc(100% - 1rem);
   }
 
+  .root[data-phase="matchMode"] .questionnaire {
+    width: calc(100% - 1rem);
+  }
+
   .intentStep {
     gap: 1.25rem;
     grid-template-columns: 1fr;
     min-height: 0;
+  }
+
+  .matchModeStep .intentChoices {
+    grid-template-columns: 1fr;
+  }
+
+  .matchModeStep .intentChoice {
+    grid-template-columns: auto 1fr;
+    justify-items: start;
+    min-height: 0;
+    text-align: left;
+  }
+
+  .matchModeStep .choiceCopy {
+    justify-items: start;
+  }
+
+  .matchModeStep .intentChoice small {
+    max-width: none;
   }
 
   .intentIntro {

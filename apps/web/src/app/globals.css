@@ -542,6 +542,19 @@ button:disabled {
   min-width: 0;
 }
 
+.shell.shell-party {
+  background: #0b0e14;
+  flex: 1 1 auto;
+  gap: 0;
+  height: auto;
+  max-height: none;
+  max-width: none;
+  min-height: 0;
+  overflow: visible;
+  padding: 0;
+  width: 100%;
+}
+
 .shell.shell-auth {
   align-content: center;
   justify-items: center;
@@ -873,9 +886,17 @@ button:disabled {
 }
 
 .app-layout {
+  display: flex;
+  flex-direction: column;
   max-width: 100%;
-  min-height: 100vh;
+  min-height: 100dvh;
   min-width: 0;
+  overflow-x: hidden;
+}
+
+.app-layout[data-product="games"] {
+  background: #0b0e14;
+  min-height: 100dvh;
   overflow-x: hidden;
 }
 
@@ -884,6 +905,7 @@ button:disabled {
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--color-card-border);
   box-shadow: 0 1px 0 rgb(255 255 255 / 80%) inset;
+  flex-shrink: 0;
   position: sticky;
   top: 0;
   z-index: 20;
