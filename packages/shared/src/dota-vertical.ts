@@ -59,6 +59,40 @@ export type DotaConfirmationKey = DotaGreenFlagKey | DotaRedFlagKey;
 export const DOTA_FLAG_LIMIT_PER_SIDE = 5;
 export const DOTA_CONFIRMATION_MILESTONE = 3;
 export const DOTA_ACCOUNT_ID_PATTERN = /^\d{8,10}$/;
+export const DOTA_MMR_MAX = 18000;
+const DOTA_MMR_VALUE_PATTERN = /^\d{1,5}$/;
+
+export function isValidDotaMmrValue(value: string): boolean {
+  const normalized = value.trim();
+
+  if (!DOTA_MMR_VALUE_PATTERN.test(normalized)) {
+    return false;
+  }
+
+  const numeric = Number(normalized);
+
+  return Number.isInteger(numeric) && numeric >= 0 && numeric <= DOTA_MMR_MAX;
+}
+
+export function isValidDotaMmr(value: string): boolean {
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized.includes("-")) {
+    const parts = normalized.split("-");
+
+    if (parts.length !== 2 || !parts[0] || !parts[1]) {
+      return false;
+    }
+
+    return isValidDotaMmrValue(parts[0]) && isValidDotaMmrValue(parts[1]);
+  }
+
+  return isValidDotaMmrValue(normalized);
+}
 
 export function isDotaGender(value: string): value is DotaGender {
   return (DOTA_GENDER_VALUES as readonly string[]).includes(value);

@@ -422,7 +422,7 @@ export const enMessages = {
   "games.search.cinematic.finish": "Start search",
   "games.search.cinematic.preparing": "Putting it all together…",
   "games.search.cinematic.preparingHint": "Preparing search from your answers.",
-  "games.search.cinematic.mmrError": "Enter MMR as a number up to 5 digits.",
+  "games.search.cinematic.mmrError": "Enter MMR as a number up to 18,000.",
   "games.search.cinematic.rolesError": "Pick at least one role.",
   "games.search.cinematic.recruitRolesError": "Pick at least one position to recruit.",
   "games.search.cinematic.prepareError": "Couldn’t start search. Try again.",

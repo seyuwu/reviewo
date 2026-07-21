@@ -12,6 +12,8 @@ import {
   MinLength
 } from "class-validator";
 
+import { IsDotaMmr } from "../validators/is-dota-mmr.validator.js";
+
 const PLAY_INTENTS = ["fun", "ranked", "tournament"] as const;
 const ROLE_VALUES = ["1", "2", "3", "4", "5"] as const;
 
@@ -61,7 +63,7 @@ export class UpdateDotaProfileDto {
   @IsOptional()
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   @IsString()
-  @Matches(/^\d{1,5}(-\d{1,5})?$/)
+  @IsDotaMmr()
   mmr?: string;
 
   @IsOptional()

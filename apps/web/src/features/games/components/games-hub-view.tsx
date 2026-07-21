@@ -65,11 +65,11 @@ export function GamesHubView() {
           <p className={styles.eyebrow}>{t("games.hub.communityEyebrow")}</p>
           <h2>{t("games.hub.communityTitle")}</h2>
           <p>{t("games.hub.communityLead")}</p>
+        </div>
+        <div className={styles.communityActions}>
           <Link className="button-secondary" href="/games/search">
             {t("games.hub.openSearch")}
           </Link>
-        </div>
-        <div className={styles.communityActions}>
           <Link className="button-primary" data-analytics="games_hero_profile" href={myDotaProfile.href}>
             {myDotaProfile.hasProfile ? t("games.hub.openProfile") : t("games.hub.createProfile")}
           </Link>

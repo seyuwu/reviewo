@@ -10,7 +10,7 @@ export const DOTA_MMR_PRESETS: DotaMmrPreset[] = [
   { from: "2000", id: "2to3k", labelKey: "dota.create.mmrPreset.2to3k", to: "3000" },
   { from: "3000", id: "3to4k", labelKey: "dota.create.mmrPreset.3to4k", to: "4000" },
   { from: "4000", id: "4to5k", labelKey: "dota.create.mmrPreset.4to5k", to: "5000" },
-  { from: "5000", id: "5kPlus", labelKey: "dota.create.mmrPreset.5kPlus", to: "8000" }
+  { from: "5000", id: "5kPlus", labelKey: "dota.create.mmrPreset.5kPlus", to: "18000" }
 ];
 
 export function isMmrPresetActive(

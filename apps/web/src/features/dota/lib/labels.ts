@@ -1,4 +1,4 @@
-import type { DotaGreenFlagKey, DotaQualityKey, DotaRedFlagKey } from "@reviewo/shared";
+import { isValidDotaMmrValue, type DotaGreenFlagKey, type DotaQualityKey, type DotaRedFlagKey } from "@reviewo/shared";
 
 import type { TranslateFn } from "@reviewo/i18n";
 
@@ -116,13 +116,12 @@ export function formatDotaMmrRange(from: string, to: string): string | null {
 export function isValidDotaMmrInput(from: string, to: string, mode: "single" | "range"): boolean {
   const normalizedFrom = from.trim();
   const normalizedTo = to.trim();
-  const mmrPattern = /^\d{1,5}$/;
 
   if (mode === "single") {
-    return mmrPattern.test(normalizedFrom || normalizedTo);
+    return isValidDotaMmrValue(normalizedFrom || normalizedTo);
   }
 
-  return mmrPattern.test(normalizedFrom) && mmrPattern.test(normalizedTo);
+  return isValidDotaMmrValue(normalizedFrom) && isValidDotaMmrValue(normalizedTo);
 }
 
 export function resolveDotaMmrMode(from: string, to: string): "single" | "range" {

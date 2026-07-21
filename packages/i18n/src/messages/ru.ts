@@ -424,7 +424,7 @@ export const ruMessages: MessageDictionary = {
   "games.search.cinematic.finish": "Начать поиск",
   "games.search.cinematic.preparing": "Собираем всё вместе…",
   "games.search.cinematic.preparingHint": "Настраиваем поиск по твоим ответам.",
-  "games.search.cinematic.mmrError": "Укажи MMR числом до 5 цифр.",
+  "games.search.cinematic.mmrError": "Укажи MMR числом до 18 000.",
   "games.search.cinematic.rolesError": "Выбери хотя бы одну роль.",
   "games.search.cinematic.recruitRolesError": "Выбери хотя бы одну позицию для поиска.",
   "games.search.cinematic.prepareError": "Не удалось запустить поиск. Попробуй ещё раз.",

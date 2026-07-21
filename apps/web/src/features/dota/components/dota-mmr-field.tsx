@@ -1,5 +1,6 @@
 "use client";
 
+import { DOTA_MMR_MAX } from "@reviewo/shared";
 import { useState } from "react";
 
 import { useTranslation } from "../../i18n/locale-provider";
@@ -29,17 +30,27 @@ export function DotaMmrField({ mmrFrom, mmrTo, onChange }: DotaMmrFieldProps) {
     onChange(mmrFrom.trim() || singleValue, mmrTo.trim() && mmrTo !== mmrFrom ? mmrTo : "");
   }
 
+  function normalizeMmrDigits(value: string): string {
+    const digits = value.replace(/\D/g, "").slice(0, 5);
+
+    if (!digits) {
+      return "";
+    }
+
+    return String(Math.min(Number(digits), DOTA_MMR_MAX));
+  }
+
   function handleSingleChange(value: string) {
-    const normalized = value.replace(/\D/g, "").slice(0, 5);
+    const normalized = normalizeMmrDigits(value);
     onChange(normalized, normalized);
   }
 
   function handleFromChange(value: string) {
-    onChange(value.replace(/\D/g, "").slice(0, 5), mmrTo);
+    onChange(normalizeMmrDigits(value), mmrTo);
   }
 
   function handleToChange(value: string) {
-    onChange(mmrFrom, value.replace(/\D/g, "").slice(0, 5));
+    onChange(mmrFrom, normalizeMmrDigits(value));
   }
 
   return (
