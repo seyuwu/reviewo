@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from .config import load_settings
@@ -46,7 +47,11 @@ async def main() -> None:
 
     rate_limiter = HourlyRateLimiter(settings.hourly_cap)
 
-    bot = Bot(token=settings.bot_token)
+    proxy_url = os.getenv("TELEGRAM_PROXY", "").strip()
+    bot = Bot(
+        token=settings.bot_token,
+        session=AiohttpSession(proxy=proxy_url) if proxy_url else None,
+    )
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
 

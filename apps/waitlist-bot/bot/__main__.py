@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import os
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 
 from .config import load_settings
 from .handlers import router
@@ -18,7 +20,11 @@ async def main() -> None:
     storage = WaitlistStorage(settings.database_path)
     storage.initialize()
 
-    bot = Bot(token=settings.bot_token)
+    proxy_url = os.getenv("TELEGRAM_PROXY", "").strip()
+    bot = Bot(
+        token=settings.bot_token,
+        session=AiohttpSession(proxy=proxy_url) if proxy_url else None,
+    )
     dispatcher = Dispatcher()
     dispatcher.include_router(router)
 
