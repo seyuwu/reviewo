@@ -49,10 +49,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // dota.* → Dota landing (not search/waitlist — matching stays under /games/search)
+  // dota.* → Games search (Dota landing stays under /dota)
   if (DOTA_HOSTS.has(host) && pathname === "/") {
     const url = request.nextUrl.clone();
-    url.pathname = "/dota";
+    url.pathname = "/games/search";
     return NextResponse.redirect(url);
   }
 
