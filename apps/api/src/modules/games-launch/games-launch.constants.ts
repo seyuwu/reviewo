@@ -1,5 +1,5 @@
-/** Soft launch moment shown in UI: 19.07.2026 19:00 Europe/Moscow. */
-export const GAMES_LAUNCH_AT_ISO = "2026-07-19T16:00:00.000Z";
+/** Soft launch moment shown in UI: 20.09.2026 19:00 Europe/Moscow. */
+export const GAMES_LAUNCH_AT_ISO = "2026-09-20T16:00:00.000Z";
 
 export const GAMES_LAUNCH_SETTING_ID = "default";
 

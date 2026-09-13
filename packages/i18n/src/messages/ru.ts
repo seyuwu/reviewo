@@ -446,8 +446,8 @@ export const ruMessages: MessageDictionary = {
   "games.launch.waitlist.pageTitle": "Список ожидания открыт.",
   "games.launch.waitlist.pageLead":
     "Открываемся {when} — {date} в {time}. Вступи в Telegram-канал, чтобы не пропустить старт.",
-  "games.launch.waitlist.dateFull": "19 июля 2026 в 19:00 (МСК)",
-  "games.launch.waitlist.dateLabel": "19.07.2026",
+  "games.launch.waitlist.dateFull": "20 сентября 2026 в 19:00 (МСК)",
+  "games.launch.waitlist.dateLabel": "20.09.2026",
   "games.launch.waitlist.timeLabel": "19:00",
   "games.launch.waitlist.timeZone": "19:00 (МСК)",
   "games.launch.waitlist.leftTitle": "Здесь будет поиск",

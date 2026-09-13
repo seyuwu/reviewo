@@ -14,7 +14,7 @@ const FALLBACK_STATUS: GamesLaunchStatus = {
   communityOpen: false,
   devNoteLikeCount: 0,
   devNoteLiked: false,
-  launchAt: "2026-07-19T16:00:00.000Z",
+  launchAt: "2026-09-20T16:00:00.000Z",
   searchLive: false,
   waitingCount: 0
 };

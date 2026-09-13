@@ -444,8 +444,8 @@ export const enMessages = {
   "games.launch.waitlist.pageTitle": "Waitlist is open.",
   "games.launch.waitlist.pageLead":
     "We open {when} — {date} at {time}. Join the Telegram channel so you don’t miss launch.",
-  "games.launch.waitlist.dateFull": "19 July 2026 at 19:00 (MSK)",
-  "games.launch.waitlist.dateLabel": "19.07.2026",
+  "games.launch.waitlist.dateFull": "20 September 2026 at 19:00 (MSK)",
+  "games.launch.waitlist.dateLabel": "20.09.2026",
   "games.launch.waitlist.timeLabel": "19:00",
   "games.launch.waitlist.timeZone": "19:00 (MSK)",
   "games.launch.waitlist.leftTitle": "Search controls live here",
