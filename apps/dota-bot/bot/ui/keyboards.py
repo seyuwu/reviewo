@@ -1,23 +1,19 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def home_keyboard(registered: bool, has_party: bool) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    if registered:
-        rows.extend(
-            [
-                [button("🎯 Ищу пати", "search:looking"), button("🧭 Набираю игроков", "search:recruit")],
-                [button("👥 Моя пати", "panel:party"), button("🔎 Игроки", "search:list")],
-                [button("📨 Заявки и приглашения", "panel:invites")],
-                [button("👤 Профиль", "panel:profile"), button("ℹ️ Аккаунт", "panel:account")],
-            ]
-        )
-        if has_party:
-            rows.insert(1, [button("⏹ Остановить поиск", "search:stop")])
-    else:
-        rows.append([button("🆕 Создать Dota-профиль", "register:start")])
-        rows.append([button("🔗 Привязать аккаунт сайта", "account:help")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+def home_keyboard(
+    registered: bool,
+    has_party: bool,
+    is_recruiting: bool = False,
+) -> InlineKeyboardMarkup:
+    second_label = "⏹ Остановить набор" if is_recruiting else "🧭 Набираю игроков"
+    second_action = "search:stop" if is_recruiting else "search:recruit"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("🎯 Ищу пати", "search:looking"), button(second_label, second_action)],
+            [button("👤 Аккаунт", "panel:account")],
+        ]
+    )
 
 
 def back_keyboard(target: str = "home") -> InlineKeyboardMarkup:
@@ -47,7 +43,9 @@ def candidate_action_keyboard(candidate: dict, mode: str) -> InlineKeyboardMarku
         for role in open_roles[:5]:
             rows.append([button(f"Подать заявку · позиция {role}", f"candidate:apply:{role}")])
     elif mode == "recruit":
-        for role in candidate.get("roles", [])[:5]:
+        recruit_role = candidate.get("_recruitRole")
+        roles = [recruit_role] if recruit_role else candidate.get("roles", [])[:5]
+        for role in roles:
             rows.append([button(f"Пригласить · позиция {role}", f"candidate:invite:{role}")])
     else:
         rows.append([button("Пригласить в пати", "candidate:invite:0")])
@@ -64,18 +62,55 @@ def invite_keyboard(invite_id: str, invite_kind: str) -> InlineKeyboardMarkup:
 
 
 def role_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
-    rows = []
-    names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
-    roles = ("1", "2", "3", "4", "5")
-    for index in range(0, len(roles), 2):
-        row = []
-        for role in roles[index : index + 2]:
-            marker = "✅ " if role in selected else ""
-            row.append(button(f"{marker}{role} · {names[role]}", f"recruit:toggle:{role}"))
-        rows.append(row)
-    rows.append([button("🔍 Начать набор", "recruit:start")])
-    rows.append([button("← В меню", "panel:home")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    role_row = [
+        button(f"{'✅' if role in selected else ''}{role}", f"recruit:toggle:{role}")
+        for role in ("1", "2", "3", "4", "5")
+    ]
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            role_row,
+            [button("🔍 Начать набор", "recruit:start")],
+            [button("← Назад", "panel:home")],
+        ]
+    )
+
+
+def recruiting_party_keyboard(party: dict, owner_user_id: str | None) -> InlineKeyboardMarkup:
+    occupants = party_slot_occupants(party, owner_user_id)
+    slots = [
+        button(truncate(occupants.get(role, role), 12), f"recruit:slot:{role}")
+        for role in ("1", "2", "3", "4", "5")
+    ]
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            slots,
+            [button("⏹ Остановить набор", "search:stop")],
+            [button("← Назад", "panel:home")],
+        ]
+    )
+
+
+def party_slot_occupants(party: dict, owner_user_id: str | None) -> dict[str, str]:
+    occupants: dict[str, str] = {}
+    members = party.get("members") or []
+    for member in members:
+        role = str(member.get("positionRole") or "")
+        if role in {"1", "2", "3", "4", "5"} and role not in occupants:
+            occupants[role] = str(member.get("displayName") or "Игрок")
+
+    unassigned = [
+        member
+        for member in members
+        if str(member.get("positionRole") or "") not in {"1", "2", "3", "4", "5"}
+    ]
+    unassigned.sort(key=lambda member: member.get("userId") != owner_user_id)
+    for member in unassigned:
+        role = next((item for item in ("1", "2", "3", "4", "5") if item not in occupants), None)
+        if role is None:
+            break
+        occupants[role] = str(member.get("displayName") or "Игрок")
+
+    return occupants
 
 
 def registration_step_keyboard() -> InlineKeyboardMarkup:
@@ -101,9 +136,25 @@ def registration_roles_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def account_keyboard(linked: bool, recovery_available: bool) -> InlineKeyboardMarkup:
-    rows = []
-    rows.append([button("Отвязать Telegram" if linked else "Как привязать аккаунт", "account:unlink" if linked else "account:help")])
+def account_keyboard(
+    linked: bool,
+    recovery_available: bool,
+    profile_exists: bool = True,
+    has_party: bool = False,
+    has_invites: bool = False,
+) -> InlineKeyboardMarkup:
+    rows = [
+        [button("👤 Профиль", "panel:profile"), button("🔗 Аккаунт Opinia", "account:unlink" if linked else "account:help")]
+    ]
+    if has_party or has_invites:
+        rows.append(
+            [
+                *([button("👥 Моя пати", "panel:party")] if has_party else []),
+                *([button("📨 Заявки", "panel:invites")] if has_invites else []),
+            ]
+        )
+    if not profile_exists:
+        rows.append([button("🆕 Создать Dota-профиль", "register:start")])
     if recovery_available:
         rows.append([button("🔐 Показать ссылку восстановления", "account:recovery")])
     rows.append([button("← В меню", "panel:home")])

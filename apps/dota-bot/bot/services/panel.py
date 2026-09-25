@@ -14,6 +14,7 @@ from ..ui.keyboards import (
     candidate_keyboard,
     home_keyboard,
     role_keyboard,
+    recruiting_party_keyboard,
 )
 
 
@@ -133,6 +134,11 @@ async def render_screen(
 ) -> tuple[str, InlineKeyboardMarkup]:
     session = storage.get_session(telegram_user_id)
     if not session:
+        if screen == "account":
+            return (
+                "<b>Аккаунт</b>\n\nСоздайте Dota-профиль или привяжите аккаунт Opinia.",
+                account_keyboard(False, False, False),
+            )
         return (
             "<b>Поиск пати Dota 2 · Opinia</b>\n\nСоздайте профиль или привяжите аккаунт сайта.",
             home_keyboard(False, False),
@@ -166,7 +172,9 @@ async def render_screen(
         invites = [item for item in my_parties.get("invites", []) if item.get("status") == "PENDING"]
         if invites:
             text += f"\nОжидают ответа: {len(invites)}"
-        return text, home_keyboard(True, bool(looking))
+        auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
+        is_recruiting = bool(looking and auto_search.get("mode") == "recruit")
+        return text, home_keyboard(True, bool(party), is_recruiting)
 
     if screen == "profile":
         if not profile:
@@ -174,9 +182,25 @@ async def render_screen(
         return profile_text(profile), back_keyboard()
 
     if screen == "account":
+        if not profile:
+            text = "<b>Аккаунт</b>\n\nСоздайте Dota-профиль или привяжите аккаунт Opinia."
+        else:
+            text = (
+                "<b>Аккаунт</b>\n\n"
+                f"Игрок: <b>{escape_text(profile.get('title') or 'Игрок')}</b> · "
+                f"{escape_text(profile.get('mmr') or '—')} MMR\n"
+                f"Opinia: {'привязан к Telegram' if session else 'не привязан'}"
+            )
+        invites = [item for item in my_parties.get("invites", []) if item.get("status") == "PENDING"]
         return (
-            "<b>Аккаунт Telegram</b>\n\nАккаунт Opinia привязан. Данные авторизации и ссылка восстановления сохранены в зашифрованном виде.",
-            account_keyboard(True, bool(session.recovery_url)),
+            text,
+            account_keyboard(
+                bool(session),
+                bool(session.recovery_url) if session else False,
+                bool(profile),
+                bool(my_parties.get("party") or my_parties.get("parties")),
+                bool(invites),
+            ),
         )
 
     if screen == "party":
@@ -187,6 +211,22 @@ async def render_screen(
         link = f"{settings.site_url}/dota/teams/{party.get('slug', '')}"
         text = party_text(party) + f"\n\n<a href=\"{escape_text(link)}\">Чат и Discord на сайте</a>"
         return text, back_keyboard()
+
+    if screen == "recruiting":
+        party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
+        if not party:
+            return "Пати не найдена. Вернитесь в меню и начните набор заново.", back_keyboard()
+        search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
+        roles = search.get("roles") or []
+        role_names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
+        roles_text = ", ".join(role_names[role] for role in roles if role in role_names) or "все свободные позиции"
+        text = (
+            f"<b>Набираю игроков · {escape_text((profile or {}).get('title') or 'Игрок')}</b>\n"
+            f"Ищем: {escape_text(roles_text)}\n"
+            f"Состав: {party.get('memberCount', 0)}/{party.get('maxMembers', 5)}\n\n"
+            "Нажмите на свободную позицию, чтобы выбрать игрока."
+        )
+        return text, recruiting_party_keyboard(party, str((profile or {}).get("ownerUserId") or ""))
 
     if screen == "invites":
         incoming = [item for item in my_parties.get("invites", []) if item.get("status") == "PENDING"]
@@ -230,7 +270,16 @@ async def render_screen(
             candidates = choices["items"]
         mode = (choices or {}).get("mode", "looking")
         if not candidates:
-            return "Пока нет подходящих игроков. Поиск продолжается — попробуйте обновить через минуту.", back_keyboard()
+            target = "recruiting" if mode == "recruit" else "home"
+            return (
+                "Пока нет подходящих игроков. Попробуйте обновить список через минуту.",
+                InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="🔄 Обновить", callback_data="search:list")],
+                        [InlineKeyboardButton(text="← Назад", callback_data=f"panel:{target}")],
+                    ]
+                ),
+            )
         lines = ["<b>Подходящие игроки</b>", ""]
         for candidate in candidates[:8]:
             lines.append(
@@ -253,7 +302,8 @@ async def render_screen(
     if screen == "recruit":
         selected = storage.get_choice(telegram_user_id, "recruit_roles", 0) or {}
         return (
-            "<b>Какие позиции набираете?</b>\nВыберите одну или несколько. Если ничего не выбрать, будут открыты все свободные позиции.",
+            "<b>Какие позиции ищем?</b>\nВыберите одну или несколько. Нажмите на номер позиции:\n"
+            "1 — керри · 2 — мид · 3 — оффлейн · 4 — саппорт · 5 — хард-саппорт.",
             role_keyboard(selected.get("roles", [])),
         )
 

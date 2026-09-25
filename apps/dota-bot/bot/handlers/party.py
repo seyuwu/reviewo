@@ -9,7 +9,6 @@ from .account import deliver_join_hint
 from ..ui.keyboards import invite_keyboard
 from ..ui.formatters import notification_text
 from ..services.auto_matcher import remember_declined_target
-from ..services.auto_matcher import remember_declined_target
 
 router = Router(name="party")
 
@@ -53,7 +52,9 @@ async def resolve_invite(
                 await callback.message.delete()
             except Exception:
                 pass
-        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
+        auto_search = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}
+        screen = "recruiting" if auto_search.get("mode") == "recruit" else "home"
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, screen)
     except ApiError as error:
         if callback.message:
             await callback.message.edit_text(str(error))
@@ -69,13 +70,19 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
         if event_type == "party_updated":
             parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
             active = parties.get("party") or ((parties.get("parties") or [None])[-1])
-            screen = "party" if active and active.get("slug") == payload.get("partySlug") else "home"
+            auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
+            if auto_search.get("mode") == "recruit" and active and active.get("slug") == auto_search.get("partySlug"):
+                screen = "recruiting"
+            else:
+                screen = "party" if active and active.get("slug") == payload.get("partySlug") else "home"
             await edit_panel(bot, storage, api, settings, telegram_user_id, screen)
             return True
         if event_type == "declined":
             remember_declined_target(storage, telegram_user_id, payload)
         if event_type == "member_joined":
-            await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
+            auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
+            screen = "recruiting" if auto_search.get("mode") == "recruit" else "party"
+            await edit_panel(bot, storage, api, settings, telegram_user_id, screen)
             return True
         if event_type == "accepted":
             party_slug = invite.get("partySlug")
