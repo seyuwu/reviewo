@@ -17,3 +17,10 @@ export function loginWithTelegram(payload: TelegramLoginPayload): Promise<AuthRe
     method: "POST"
   });
 }
+
+export function exchangeTelegramWebAccessTicket(ticket: string): Promise<AuthResponse> {
+  return apiRequest<AuthResponse>("/telegram/web-access-ticket/exchange", {
+    body: { ticket },
+    method: "POST"
+  });
+}

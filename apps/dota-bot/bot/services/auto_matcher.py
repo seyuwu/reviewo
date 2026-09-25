@@ -13,9 +13,18 @@ logger = logging.getLogger(__name__)
 ROLE_VALUES = {"1", "2", "3", "4", "5"}
 
 
-async def auto_match_loop(bot, api: OpiniaApi, settings: Settings, storage: BotStorage) -> None:
+async def auto_match_loop(
+    bot,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+    match_wakeup: asyncio.Event,
+) -> None:
     """Automatically join compatible open parties for Telegram users searching solo."""
     while True:
+        # Clear before scanning so signals raised during a scan trigger another pass
+        # immediately instead of being lost when the scan finishes.
+        match_wakeup.clear()
         try:
             for telegram_user_id in storage.session_user_ids():
                 try:
@@ -30,7 +39,10 @@ async def auto_match_loop(bot, api: OpiniaApi, settings: Settings, storage: BotS
             raise
         except Exception:
             logger.exception("Automatic party matching failed")
-        await asyncio.sleep(15)
+        try:
+            await asyncio.wait_for(match_wakeup.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            pass
 
 
 async def _match_user(
@@ -111,7 +123,7 @@ async def _match_user(
                     # Retry another compatible free position before excluding the party.
                     if error.status == 409 and "role" in str(error).lower():
                         continue
-                    if error.status in {404, 409, 422}:
+                    if error.status in {403, 404, 409, 422}:
                         storage.exclude_auto_match_target(telegram_user_id, candidate["slug"])
                         break
                     raise
@@ -131,7 +143,7 @@ async def _match_user(
             await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
             try:
                 await deliver_join_hint(
-                    bot, storage, telegram_user_id, settings.site_url, party["slug"]
+                    bot, api, storage, telegram_user_id, settings.site_url, party["slug"]
                 )
             except Exception:
                 logger.warning(

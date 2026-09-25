@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { loginWithTelegram, type TelegramLoginPayload } from "../api/telegram-login";
+import {
+  exchangeTelegramWebAccessTicket,
+  loginWithTelegram,
+  type TelegramLoginPayload
+} from "../api/telegram-login";
 import { useAuthSession } from "../hooks/use-auth-session";
 
 const loginRequests = new Map<string, ReturnType<typeof loginWithTelegram>>();
@@ -15,6 +19,7 @@ export function TelegramLoginView() {
   const { authSession, isAuthSessionLoaded, storeAuthSession } = useAuthSession();
   const [error, setError] = useState<string | null>(null);
   const loginStarted = useRef(false);
+  const webAccessTicket = searchParams.get("ticket");
   const nextPath = useMemo(() => safePartyPath(searchParams.get("next")), [searchParams]);
 
   useEffect(() => {
@@ -30,9 +35,12 @@ export function TelegramLoginView() {
     }
 
     const payload = readTelegramPayload(searchParams);
-    if (!payload) {
+    const hasValidWebAccessTicket = Boolean(
+      webAccessTicket && /^[A-Za-z0-9_-]{43}$/.test(webAccessTicket)
+    );
+    if (!payload && !hasValidWebAccessTicket) {
       setError(
-        "Telegram не передал данные для входа. Нажмите кнопку входа в боте и подтвердите авторизацию."
+        "Ссылка входа недействительна. Вернитесь в бота и нажмите кнопку открытия сайта ещё раз."
       );
       return;
     }
@@ -46,10 +54,13 @@ export function TelegramLoginView() {
     );
 
     let cancelled = false;
-    let request = loginRequests.get(payload.hash);
+    const requestKey = webAccessTicket ? `ticket:${webAccessTicket}` : `telegram:${payload?.hash}`;
+    let request = loginRequests.get(requestKey);
     if (!request) {
-      request = loginWithTelegram(payload);
-      loginRequests.set(payload.hash, request);
+      request = hasValidWebAccessTicket
+        ? exchangeTelegramWebAccessTicket(webAccessTicket!)
+        : loginWithTelegram(payload!);
+      loginRequests.set(requestKey, request);
     }
 
     void request
@@ -62,18 +73,28 @@ export function TelegramLoginView() {
       .catch(() => {
         if (!cancelled) {
           setError(
-            "Не удалось войти через Telegram. Проверьте, что этот Telegram привязан к аккаунту Opinia, и попробуйте ещё раз из бота."
+            hasValidWebAccessTicket
+              ? "Ссылка входа устарела или уже использована. Вернитесь в бота и откройте сайт ещё раз."
+              : "Не удалось войти через Telegram. Вернитесь в бота и откройте сайт оттуда ещё раз."
           );
         }
       })
       .finally(() => {
-        loginRequests.delete(payload.hash);
+        loginRequests.delete(requestKey);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [authSession, isAuthSessionLoaded, nextPath, router, searchParams, storeAuthSession]);
+  }, [
+    authSession,
+    isAuthSessionLoaded,
+    nextPath,
+    router,
+    searchParams,
+    storeAuthSession,
+    webAccessTicket
+  ]);
 
   return (
     <main className="shell entity-route">
@@ -122,7 +143,10 @@ function safePartyPath(value: string | null): string {
   }
   try {
     const target = new URL(value, "https://opinia.invalid");
-    if (target.origin !== "https://opinia.invalid" || !target.pathname.startsWith("/dota/teams/")) {
+    if (
+      target.origin !== "https://opinia.invalid" ||
+      (target.pathname !== "/profile" && !target.pathname.startsWith("/dota/teams/"))
+    ) {
       return "/dota";
     }
     return `${target.pathname}${target.search}${target.hash}`;

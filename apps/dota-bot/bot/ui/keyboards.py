@@ -1,6 +1,6 @@
 from urllib.parse import quote
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, LoginUrl
+from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup, LoginUrl
 
 
 def home_keyboard(
@@ -35,6 +35,15 @@ def back_keyboard(target: str = "home") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[button("← Назад", f"panel:{target}")]])
 
 
+def profile_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("✏️ Изменить", "profile:edit")],
+            [button("← Назад", "panel:home")],
+        ]
+    )
+
+
 def invite_keyboard(invite_id: str, invite_kind: str) -> InlineKeyboardMarkup:
     if invite_kind == "APPLICATION":
         buttons = [button("✅ Принять заявку", f"invite:{invite_id}:accept"), button("✖️ Отклонить", f"invite:{invite_id}:decline")]
@@ -48,6 +57,7 @@ def party_keyboard(
     show_search: bool,
     searching_roles: set[str] | None = None,
     site_url: str | None = None,
+    web_access_url: str | None = None,
 ) -> InlineKeyboardMarkup:
     occupants = party_slot_occupants(party)
     searching_roles = searching_roles or set()
@@ -66,14 +76,44 @@ def party_keyboard(
     ]
     rows = [slots, search_status]
     if site_url and party.get("slug"):
-        next_path = f"/dota/teams/{party['slug']}"
-        login_url = f"{site_url.rstrip('/')}/telegram/access?next={quote(next_path, safe='')}"
-        rows.append([button_login("💬 Чат и Discord", login_url)])
+        if web_access_url:
+            rows.append([button_url("💬 Чат и Discord", web_access_url)])
+        else:
+            next_path = f"/dota/teams/{party['slug']}"
+            login_url = f"{site_url.rstrip('/')}/telegram/access?next={quote(next_path, safe='')}"
+            rows.append([button_login("💬 Чат и Discord", login_url)])
+    rows.append([button("🔗 Пригласить по ссылке", "party:share")])
     if party.get("canManageParty"):
         rows.append([button("⏹ Остановить набор", "search:stop")])
     if party.get("isOwner"):
         rows.append([button("🗑 Удалить пати", "party:delete:confirm")])
+    else:
+        rows.append([button("🚪 Покинуть пати", "party:leave:confirm")])
     rows.append([button("← Назад", "panel:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def party_invitation_keyboard(code: str, available_roles: list[str], needs_account_link: bool) -> InlineKeyboardMarkup:
+    names = {"1": "1 · Керри", "2": "2 · Мид", "3": "3 · Оффлейн", "4": "4 · Саппорт", "5": "5 · Хард-саппорт"}
+    rows = []
+    if needs_account_link:
+        rows.append([button("🔗 Уже есть аккаунт Opinia", f"partyinvite:link:{code}")])
+    rows.extend([[button(names[role], f"partyinvite:join:{code}:{role}")] for role in available_roles if role in names])
+    rows.append([button("← В меню", "panel:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def party_invitation_copy_keyboard(invitation_text: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="📋 Скопировать текст", copy_text=CopyTextButton(text=invitation_text))]]
+    )
+
+
+def party_invitation_retry_keyboard(code: str, role: str, recovery_url: str | None = None) -> InlineKeyboardMarkup:
+    rows = [[button("🔄 Повторить вступление", f"partyinvite:join:{code}:{role}")]]
+    if recovery_url:
+        rows.insert(0, [button_url("🔐 Сохранить ссылку восстановления", recovery_url)])
+    rows.append([button("← В меню", "panel:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -81,6 +121,15 @@ def delete_party_confirmation_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [button("🗑 Да, удалить пати", "party:delete:execute")],
+            [button("← Отмена", "panel:party")],
+        ]
+    )
+
+
+def leave_party_confirmation_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("🚪 Да, покинуть пати", "party:leave:execute")],
             [button("← Отмена", "panel:party")],
         ]
     )
@@ -118,6 +167,15 @@ def registration_step_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[button("✖️ Отменить", "register:cancel")]])
 
 
+def registration_name_keyboard(show_login: bool = True, allow_cancel: bool = True) -> InlineKeyboardMarkup:
+    rows = []
+    if show_login:
+        rows.append([button("🔑 Уже есть аккаунт? Войти", "account:help")])
+    if allow_cancel:
+        rows.append([button("✖️ Отменить", "register:cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def registration_roles_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
     rows = []
     names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
@@ -145,7 +203,10 @@ def account_keyboard(
     has_invites: bool = False,
 ) -> InlineKeyboardMarkup:
     rows = [
-        [button("👤 Профиль", "panel:profile"), button("🔗 Аккаунт Opinia", "account:unlink" if linked else "account:help")]
+        [
+            button("👤 Профиль", "panel:profile"),
+            button("🔗 Аккаунт Opinia" if linked else "🔑 Уже есть аккаунт? Войти", "account:open" if linked else "account:help"),
+        ]
     ]
     if has_party or has_invites:
         rows.append(

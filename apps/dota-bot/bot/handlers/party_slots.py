@@ -1,3 +1,5 @@
+import asyncio
+from html import escape
 from urllib.parse import quote
 
 from aiogram import F, Router
@@ -8,7 +10,7 @@ from ..config import Settings
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from .search import show_error
-from ..ui.keyboards import delete_party_confirmation_keyboard
+from ..ui.keyboards import delete_party_confirmation_keyboard, leave_party_confirmation_keyboard
 
 router = Router(name="party-slots")
 
@@ -97,6 +99,7 @@ async def enable_search_for_party_slot(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    match_wakeup: asyncio.Event,
 ) -> None:
     role = (callback.data or "").rsplit(":", 1)[-1]
     if role not in {"1", "2", "3", "4", "5"}:
@@ -151,6 +154,8 @@ async def enable_search_for_party_slot(
         else:
             storage.set_choices(callback.from_user.id, "auto_search", [])
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+        if roles:
+            match_wakeup.set()
     except ApiError as error:
         await show_error(callback, api, settings, storage, error)
 
@@ -207,6 +212,67 @@ async def delete_party(
             callback.from_user.id,
             "DELETE",
             f"/social/parties/{quote(str(party['slug']), safe='')}",
+        )
+        storage.set_choices(callback.from_user.id, "auto_search", [])
+        storage.clear_auto_match_exclusions(callback.from_user.id)
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
+    except ApiError as error:
+        await show_error(callback, api, settings, storage, error)
+
+
+@router.callback_query(F.data == "party:leave:confirm")
+async def confirm_leave_party(
+    callback: CallbackQuery,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    await callback.answer()
+    await begin_panel_transition(
+        callback.bot, storage, callback.from_user.id,
+        callback.message.chat.id if callback.message else None,
+    )
+    try:
+        party = current_party(await api.user(callback.from_user.id, "GET", "/social/parties/me"))
+        if not party or party.get("isOwner"):
+            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+            return
+        await edit_panel_content(
+            callback.bot,
+            storage,
+            api,
+            settings,
+            callback.from_user.id,
+            "party:leave:confirm",
+            f"<b>Покинуть пати «{escape(str(party.get('name') or 'Моя пати'))}»?</b>\n\n"
+            "Ваш слот освободится, а набор продолжится.",
+            leave_party_confirmation_keyboard(),
+        )
+    except ApiError as error:
+        await show_error(callback, api, settings, storage, error)
+
+
+@router.callback_query(F.data == "party:leave:execute")
+async def leave_party(
+    callback: CallbackQuery,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    await callback.answer("Покидаю пати…")
+    await begin_panel_transition(
+        callback.bot, storage, callback.from_user.id,
+        callback.message.chat.id if callback.message else None,
+    )
+    try:
+        party = current_party(await api.user(callback.from_user.id, "GET", "/social/parties/me"))
+        if not party or party.get("isOwner"):
+            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
+            return
+        await api.user(
+            callback.from_user.id,
+            "DELETE",
+            f"/social/parties/{quote(str(party['slug']), safe='')}/members/me",
         )
         storage.set_choices(callback.from_user.id, "auto_search", [])
         storage.clear_auto_match_exclusions(callback.from_user.id)

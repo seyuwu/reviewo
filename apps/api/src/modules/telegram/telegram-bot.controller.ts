@@ -7,15 +7,19 @@ import {
   HttpStatus,
   Post,
   Req,
-  UnauthorizedException
+  UnauthorizedException,
+  UseGuards
 } from "@nestjs/common";
 import { timingSafeEqual } from "node:crypto";
 import { IsBoolean, IsOptional, IsString, Matches, MaxLength } from "class-validator";
+import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
+import type { AuthenticatedUser } from "../../common/interfaces/authenticated-request.js";
 import {
   ApiRateLimiterService,
   resolveRequestIp,
   type RequestLike
 } from "../../common/rate-limiting/api-rate-limiter.service.js";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 
 import { TelegramBotService } from "./telegram-bot.service.js";
 
@@ -75,6 +79,12 @@ class NotificationDeliveryDto {
   telegramUserId!: string;
 }
 
+class TelegramWebAccessTicketDto {
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{43}$/)
+  ticket!: string;
+}
+
 @Controller("telegram")
 export class TelegramBotController {
   constructor(
@@ -95,6 +105,48 @@ export class TelegramBotController {
       }
     ]);
     return this.telegramBotService.loginFromTelegram(input);
+  }
+
+  @Post("web-access-ticket")
+  @UseGuards(JwtAuthGuard)
+  createWebAccessTicket(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ) {
+    return this.apiRateLimiterService
+      .assertWithinLimits([
+        {
+          key: currentUser.id,
+          limit: 30,
+          message: "Too many Telegram web access links",
+          namespace: "telegram:web-access-ticket:user",
+          windowSeconds: 15 * 60
+        },
+        {
+          key: resolveRequestIp(request),
+          limit: 60,
+          message: "Too many Telegram web access links",
+          namespace: "telegram:web-access-ticket:ip",
+          windowSeconds: 15 * 60
+        }
+      ])
+      .then(() => this.telegramBotService.createWebAccessTicket(currentUser.id));
+  }
+
+  @Post("web-access-ticket/exchange")
+  @HttpCode(HttpStatus.OK)
+  exchangeWebAccessTicket(@Body() input: TelegramWebAccessTicketDto, @Req() request: RequestLike) {
+    return this.apiRateLimiterService
+      .assertWithinLimits([
+        {
+          key: resolveRequestIp(request),
+          limit: 30,
+          message: "Too many Telegram web access attempts",
+          namespace: "telegram:web-access-exchange:ip",
+          windowSeconds: 15 * 60
+        }
+      ])
+      .then(() => this.telegramBotService.exchangeWebAccessTicket(input.ticket));
   }
 
   @Post("link")

@@ -19,6 +19,7 @@ from ..ui.keyboards import (
     party_keyboard,
     party_member_keyboard,
     party_slot_occupants,
+    profile_keyboard,
 )
 
 logger = logging.getLogger(__name__)
@@ -228,13 +229,13 @@ async def render_screen(
     if not session:
         if screen == "account":
             return (
-                "<b>Аккаунт</b>\n\nСоздайте Dota-профиль или привяжите аккаунт Opinia.",
+                "<b>Аккаунт</b>\n\nСоздайте Dota-профиль или войдите в существующий аккаунт Opinia.",
                 account_keyboard(False, False, False),
             )
         return (
             "<b>Поиск пати Dota 2 · Opinia</b>\n\n"
             "Найдите команду для игры или соберите состав сами.\n\n"
-            "Для начала откройте раздел «Аккаунт»: там можно создать Dota-профиль или привязать Opinia.",
+            "Для начала откройте раздел «Аккаунт»: там можно создать Dota-профиль или войти в существующий аккаунт Opinia.",
             home_keyboard(False, False),
         )
 
@@ -309,7 +310,7 @@ async def render_screen(
     if screen == "profile":
         if not profile:
             return "Dota-профиль не найден. Создайте его из меню.", back_keyboard()
-        return profile_text(profile), back_keyboard()
+        return profile_text(profile), profile_keyboard()
 
     if screen == "account":
         if not profile:
@@ -351,11 +352,45 @@ async def render_screen(
             text += f"\n\n🔎 <b>Ищем игроков:</b> {escape_text(roles_text)}{timer}"
         else:
             text += "\n\nПодбор сейчас не запущен. Нажмите FREE под свободной ролью, чтобы искать игрока на неё."
+        web_access_url = None
+        if settings.site_url and party.get("slug"):
+            try:
+                cached_ticket = storage.get_choice(telegram_user_id, "web_access_ticket", 0) or {}
+                if (
+                    cached_ticket.get("partySlug") == party.get("slug")
+                    and float(cached_ticket.get("expiresAt") or 0) > time.time()
+                ):
+                    ticket = str(cached_ticket["ticket"])
+                else:
+                    ticket = await api.create_web_access_ticket(telegram_user_id)
+                    storage.set_choices(
+                        telegram_user_id,
+                        "web_access_ticket",
+                        [
+                            {
+                                "ticket": ticket,
+                                "partySlug": party.get("slug"),
+                                "expiresAt": time.time() + 9 * 60,
+                            }
+                        ],
+                    )
+                next_path = f"/dota/teams/{party['slug']}"
+                web_access_url = (
+                    f"{settings.site_url.rstrip('/')}/telegram/access"
+                    f"?ticket={quote(ticket, safe='')}&next={quote(next_path, safe='')}"
+                )
+            except ApiError:
+                logger.warning(
+                    "Could not create website login link for Telegram user %s",
+                    telegram_user_id,
+                    exc_info=True,
+                )
         return text, party_keyboard(
             party,
             bool(party.get("canManageParty")),
             searching_roles,
             settings.site_url,
+            web_access_url,
         )
 
     if screen in {"member", "kick_confirm"}:

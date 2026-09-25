@@ -74,6 +74,10 @@ class OpiniaApi:
             method, path, body=body, access_token=refreshed["accessToken"]
         )
 
+    async def create_web_access_ticket(self, telegram_user_id: int) -> str:
+        result = await self.user(telegram_user_id, "POST", "/telegram/web-access-ticket")
+        return str(result["ticket"])
+
     async def complete_link(self, code: str, telegram_user_id: int) -> dict:
         return await self._request(
             "POST",

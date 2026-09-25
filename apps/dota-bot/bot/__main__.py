@@ -29,20 +29,27 @@ async def main() -> None:
     )
     api = OpiniaApi(settings, storage)
     await api.start()
+    match_wakeup = asyncio.Event()
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
     dispatcher.message.outer_middleware(DeletePrivateMessagesMiddleware())
     tasks = [
         asyncio.create_task(poll_notifications(bot, api, settings, storage)),
         asyncio.create_task(cleanup_temporary_messages(bot, storage)),
-        asyncio.create_task(auto_match_loop(bot, api, settings, storage)),
+        asyncio.create_task(auto_match_loop(bot, api, settings, storage, match_wakeup)),
         asyncio.create_task(refresh_active_search_panels(bot, api, settings, storage)),
     ]
 
     try:
         await bot.delete_webhook(drop_pending_updates=False)
         logging.info("Dota.Opinia Telegram bot started in long polling mode.")
-        await dispatcher.start_polling(bot, api=api, settings=settings, storage=storage)
+        await dispatcher.start_polling(
+            bot,
+            api=api,
+            settings=settings,
+            storage=storage,
+            match_wakeup=match_wakeup,
+        )
     finally:
         for task in tasks:
             task.cancel()

@@ -1184,6 +1184,14 @@ export class GamePartiesService implements OnModuleInit {
             });
           }
 
+          if (joined.reason === "join_blocked") {
+            throw createAppException({
+              code: AppErrorCode.Forbidden,
+              message: "You left or were removed from this party. Rejoin only through a new invite.",
+              statusCode: HttpStatus.FORBIDDEN
+            });
+          }
+
           if (joined.reason === "full") {
             const closed = await this.gamePartiesRepository.cancelPendingInvitesForParty(
               recruitParty.id
@@ -1436,13 +1444,16 @@ export class GamePartiesService implements OnModuleInit {
       return this.joinByToken(token, currentUser, positionRole);
     }
 
-    return this.joinPartyAsApplicant(party, currentUser, positionRole ?? null);
+    // A bearer join link is an explicit invitation to enter this party, even when
+    // the party normally requires approval for public applications.
+    return this.joinPartyAsApplicant(party, currentUser, positionRole ?? null, true);
   }
 
   private async joinPartyAsApplicant(
     party: NonNullable<Awaited<ReturnType<GamePartiesRepository["findById"]>>>,
     currentUser: AuthenticatedUser,
-    positionRole?: DotaPositionRole | null
+    positionRole?: DotaPositionRole | null,
+    acceptJoinLink = false
   ): Promise<{
     application: GamePartyInviteDto | null;
     party: GamePartyResponseDto;
@@ -1532,7 +1543,7 @@ export class GamePartiesService implements OnModuleInit {
     await this.assertNotJoinBlocked(party.id, currentUser.id);
 
     // CONFIRM: creates an application; managers accept before membership.
-    if (party.joinMode === "CONFIRM") {
+    if (party.joinMode === "CONFIRM" && !acceptJoinLink) {
       const existingInvite = await this.gamePartiesRepository.findPendingInvite(
         party.id,
         currentUser.id
@@ -1582,6 +1593,14 @@ export class GamePartiesService implements OnModuleInit {
           code: AppErrorCode.NotFound,
           message: "Team was not found",
           statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+
+      if (joined.reason === "join_blocked") {
+        throw createAppException({
+          code: AppErrorCode.Forbidden,
+          message: "You left or were removed from this party. Rejoin only through a new invite.",
+          statusCode: HttpStatus.FORBIDDEN
         });
       }
 
@@ -1927,7 +1946,7 @@ export class GamePartiesService implements OnModuleInit {
     }
 
     await this.revokeDiscordVoiceAccessForUser(party.discordChannelId, currentUser.id);
-    await this.gamePartiesRepository.removeMember(party.id, currentUser.id);
+    await this.gamePartiesRepository.removeMemberAndBlockJoinAtomically(party.id, currentUser.id);
 
     if (!this.isExpired(party)) {
       await this.refreshRecruitLookingAttributes(party.ownerUserId, party.id);
@@ -2494,7 +2513,7 @@ export class GamePartiesService implements OnModuleInit {
     }
 
     await this.revokeDiscordVoiceAccessForUser(party.discordChannelId, targetUserId);
-    await this.gamePartiesRepository.kickMemberAtomically(party.id, targetUserId);
+    await this.gamePartiesRepository.removeMemberAndBlockJoinAtomically(party.id, targetUserId);
     await this.refreshRecruitLookingAttributes(party.ownerUserId, party.id);
     return this.getPartyBySlug(slug, currentUser.id);
   }
@@ -2863,7 +2882,7 @@ export class GamePartiesService implements OnModuleInit {
 
     throw createAppException({
       code: AppErrorCode.Forbidden,
-      message: "You were removed from this party. Wait for a new invite to rejoin.",
+      message: "You left or were removed from this party. Rejoin only through a new invite.",
       statusCode: HttpStatus.FORBIDDEN
     });
   }

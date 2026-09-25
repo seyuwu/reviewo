@@ -47,7 +47,7 @@ async def resolve_invite(
             and result.get("slug")
         ):
             await deliver_join_hint(
-                callback.bot, storage, callback.from_user.id, settings.site_url, result["slug"]
+                callback.bot, api, storage, callback.from_user.id, settings.site_url, result["slug"]
             )
         if callback.message:
             try:
@@ -89,12 +89,27 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
             remember_declined_target(storage, telegram_user_id, payload)
         if event_type == "member_joined":
             await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
+            message = await bot.send_message(
+                telegram_user_id,
+                notification_text(payload),
+                parse_mode="HTML",
+            )
+            storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 8)
+            return True
+        if event_type in {"member_left", "member_kicked"}:
+            await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
+            message = await bot.send_message(
+                telegram_user_id,
+                notification_text(payload),
+                parse_mode="HTML",
+            )
+            storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 8)
             return True
         if event_type == "accepted":
             party_slug = invite.get("partySlug")
             if party_slug:
                 await deliver_join_hint(
-                    bot, storage, telegram_user_id, settings.site_url, party_slug
+                    bot, api, storage, telegram_user_id, settings.site_url, party_slug
                 )
             else:
                 message = await bot.send_message(telegram_user_id, notification_text(payload))

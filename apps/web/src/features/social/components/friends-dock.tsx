@@ -50,6 +50,7 @@ export function FriendsDock() {
   const [isLoading, setIsLoading] = useState(false);
   const accessTokenRef = useRef<string | null>(null);
   const inFlightRef = useRef(false);
+  const inviteMutationVersionRef = useRef(0);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   accessTokenRef.current = authSession?.accessToken ?? null;
@@ -68,6 +69,7 @@ export function FriendsDock() {
 
     inFlightRef.current = true;
     setIsLoading(true);
+    const inviteMutationVersion = inviteMutationVersionRef.current;
 
     try {
       const [friendsResponse, requestsResponse, partiesResponse] = await Promise.all([
@@ -77,10 +79,27 @@ export function FriendsDock() {
       ]);
 
       if (accessTokenRef.current === accessToken) {
+        const nextInviteTarget = resolveInviteTarget(partiesResponse, preferredPartySlug);
         setFriends(friendsResponse.friends);
         setIncoming(requestsResponse.incoming);
         setOutgoing(requestsResponse.outgoing);
-        setInviteTarget(resolveInviteTarget(partiesResponse, preferredPartySlug));
+        setInviteTarget(nextInviteTarget);
+
+        if (inviteMutationVersionRef.current === inviteMutationVersion) {
+          setInvitedIds(
+            new Set(
+              (partiesResponse?.outgoingInvites ?? [])
+                .filter(
+                  (invite) =>
+                    invite.status === "PENDING" &&
+                    invite.inviteKind === "INVITE" &&
+                    invite.partySlug === nextInviteTarget?.slug
+                )
+                .map((invite) => invite.inviteeUserId)
+            )
+          );
+        }
+
         setError(null);
       }
     } catch {
@@ -260,6 +279,7 @@ export function FriendsDock() {
 
     try {
       await inviteFriendToParty(inviteTarget.slug, friend.id, session.accessToken);
+      inviteMutationVersionRef.current += 1;
       setInvitedIds((current) => new Set(current).add(friend.id));
     } catch (error) {
       const apiMessage = isApiError(error) ? readApiErrorMessage(error.body) : null;

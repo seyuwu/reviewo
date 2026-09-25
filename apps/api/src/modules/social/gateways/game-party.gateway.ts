@@ -308,11 +308,15 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
       });
   }
 
-  notifyTelegramPartyRosterUpdated(userIds: string[], partySlug: string): void {
+  notifyTelegramPartyRosterUpdated(
+    userIds: string[],
+    partySlug: string,
+    activity?: { type: "member_left" | "member_kicked"; memberDisplayName: string; partyName: string }
+  ): void {
     const eventId = randomUUID();
     for (const userId of new Set(userIds)) {
       void this.telegramBotService
-        .enqueuePartyRosterNotification(userId, partySlug, eventId)
+        .enqueuePartyRosterNotification(userId, partySlug, eventId, activity)
         .catch((error: unknown) => {
           console.error("Failed to enqueue Telegram party roster update", error);
         });

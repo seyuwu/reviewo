@@ -7,6 +7,7 @@ from ..api.client import OpiniaApi
 from ..config import Settings
 from ..services.panel import begin_panel_transition, edit_panel
 from ..storage.database import BotStorage
+from .registration import start_profile_registration
 
 router = Router(name="panel")
 
@@ -24,6 +25,17 @@ async def start_panel(
         return
     await state.clear()
     await begin_panel_transition(bot, storage, message.from_user.id, message.chat.id)
+    if not storage.get_session(message.from_user.id):
+        await start_profile_registration(
+            bot,
+            state,
+            api,
+            settings,
+            storage,
+            message.from_user.id,
+            message.chat.id,
+        )
+        return
     await edit_panel(bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
 
 
@@ -34,6 +46,7 @@ async def navigate_panel(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    state: FSMContext,
 ) -> None:
     await callback.answer()
     if callback.message is None:
@@ -42,6 +55,17 @@ async def navigate_panel(
         return
     screen = (callback.data or "panel:home").split(":", maxsplit=1)[1]
     await begin_panel_transition(bot, storage, callback.from_user.id, callback.message.chat.id)
+    if screen == "home" and not storage.get_session(callback.from_user.id):
+        await start_profile_registration(
+            bot,
+            state,
+            api,
+            settings,
+            storage,
+            callback.from_user.id,
+            callback.message.chat.id,
+        )
+        return
     await edit_panel(
         bot,
         storage,

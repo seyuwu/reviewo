@@ -48,4 +48,9 @@ def notification_text(payload: dict) -> str:
         return f"Заявка или приглашение в {name} отклонены."
     if event_type == "member_joined":
         return f"<b>Состав {name} обновился.</b> Игрок {player} вступил в пати."
+    if event_type in {"member_left", "member_kicked"}:
+        party_name = escape(str(payload.get("partyName") or "пати"))
+        player = escape(str(payload.get("memberDisplayName") or "Игрок"))
+        action = "был удалён из пати" if event_type == "member_kicked" else "вышел из пати"
+        return f"<b>Состав {party_name} обновился.</b> Игрок {player} {action}."
     return f"Обновление пати {name}."

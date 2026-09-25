@@ -371,7 +371,10 @@ export class GamePartiesRepository {
     userId: string;
   }): Promise<
     | { cancelledApplications: GamePartyInvite[]; member: GamePartyMember; ok: true }
-    | { ok: false; reason: "full" | "role_taken" | "already_on_other_team" | "party_gone" }
+    | {
+        ok: false;
+        reason: "full" | "role_taken" | "already_on_other_team" | "party_gone" | "join_blocked";
+      }
   > {
     return this.prismaService.$transaction(async (tx) => {
       // Serialize joins for this user so concurrent accepts cannot both keep foreign applications.
@@ -391,6 +394,20 @@ export class GamePartiesRepository {
 
       if (!partyMeta) {
         return { ok: false as const, reason: "party_gone" as const };
+      }
+
+      const joinBlock = await tx.gamePartyJoinBlock.findUnique({
+        select: { id: true },
+        where: {
+          partyId_userId: {
+            partyId: input.partyId,
+            userId: input.userId
+          }
+        }
+      });
+
+      if (joinBlock) {
+        return { ok: false as const, reason: "join_blocked" as const };
       }
 
       if (partyMeta.kind === "TEAM") {
@@ -728,10 +745,8 @@ export class GamePartiesRepository {
     });
   }
 
-  /**
-   * Kick member + join-block + cancel their pending invites in one locked transaction.
-   */
-  async kickMemberAtomically(partyId: string, userId: string): Promise<void> {
+  /** Remove a member, block public rejoining, and cancel party invites atomically. */
+  async removeMemberAndBlockJoinAtomically(partyId: string, userId: string): Promise<void> {
     await this.prismaService.$transaction(async (tx) => {
       await tx.$executeRaw`
         SELECT id FROM social.game_parties WHERE id = ${partyId}::uuid FOR UPDATE
@@ -760,15 +775,6 @@ export class GamePartiesRepository {
           status: "CANCELLED"
         }
       });
-    });
-  }
-
-  removeMember(partyId: string, userId: string): Promise<Prisma.BatchPayload> {
-    return this.prismaService.gamePartyMember.deleteMany({
-      where: {
-        partyId,
-        userId
-      }
     });
   }
 

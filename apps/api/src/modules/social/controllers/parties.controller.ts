@@ -555,9 +555,15 @@ export class PartiesController {
         openSlots: Math.min(party.maxMembers, party.openSlots + 1)
       });
     }
+    const departedMember = party.members.find((member) => member.userId === currentUser.id);
     this.gamePartyGateway.notifyTelegramPartyRosterUpdated(
       party.members.map((member) => member.userId),
-      slug
+      slug,
+      {
+        type: "member_left",
+        memberDisplayName: departedMember?.displayName ?? "Игрок",
+        partyName: party.name
+      }
     );
 
     return result;
@@ -606,9 +612,15 @@ export class PartiesController {
     const party = await this.gamePartiesService.kickMember(slug, userId, currentUser);
     const broadcastParty = await this.gamePartiesService.getPartyBySlug(slug).catch(() => party);
     this.gamePartyGateway.broadcastPartyUpdated(broadcastParty);
+    const removedMember = before.members.find((member) => member.userId === userId);
     this.gamePartyGateway.notifyTelegramPartyRosterUpdated(
-      [...before.members.map((member) => member.userId), userId],
-      slug
+      before.members.map((member) => member.userId),
+      slug,
+      {
+        type: "member_kicked",
+        memberDisplayName: removedMember?.displayName ?? "Игрок",
+        partyName: before.name
+      }
     );
     return party;
   }

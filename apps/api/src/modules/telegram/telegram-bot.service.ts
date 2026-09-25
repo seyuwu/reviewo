@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { EnvironmentVariables } from "../../config/environment.validation.js";
 import { PrismaService } from "../../database/prisma.service.js";
 import { RedisService } from "../../redis/redis.service.js";
@@ -53,6 +53,47 @@ export class TelegramBotService {
     });
   }
 
+  async createWebAccessTicket(userId: string): Promise<{ ticket: string; expiresIn: number }> {
+    const ticket = randomBytes(32).toString("base64url");
+    const redis = await this.redisService.getClient();
+    const stored = await redis.set(this.webAccessTicketKey(ticket), userId, {
+      EX: 10 * 60,
+      NX: true
+    });
+    if (stored !== "OK") {
+      throw new UnauthorizedException("Could not create Telegram web access ticket");
+    }
+    return { ticket, expiresIn: 10 * 60 };
+  }
+
+  async exchangeWebAccessTicket(ticket: string) {
+    const redis = await this.redisService.getClient();
+    const userId = await redis.getDel(this.webAccessTicketKey(ticket));
+    if (!userId) {
+      throw new UnauthorizedException("Telegram web access link is invalid or expired");
+    }
+
+    const user = await this.prismaService.user.findUnique({ where: { id: userId } });
+    if (!user || user.status !== "active") {
+      throw new UnauthorizedException("Telegram web access link is invalid or expired");
+    }
+
+    return this.authService.createAuthResponse({
+      avatarUrl: user.avatarUrl,
+      displayName: user.displayName,
+      email: user.email,
+      id: user.id,
+      role: user.role,
+      status: user.status,
+      username: user.username
+    });
+  }
+
+  private webAccessTicketKey(ticket: string): string {
+    const digest = createHash("sha256").update(ticket).digest("hex");
+    return `auth:telegram-web-access:${digest}`;
+  }
+
   async enqueuePartyNotification(userId: string, payload: PartyNotificationPayload): Promise<void> {
     const identity = await this.prismaService.userAuthIdentity.findFirst({
       select: { providerUserId: true },
@@ -78,7 +119,12 @@ export class TelegramBotService {
   async enqueuePartyRosterNotification(
     userId: string,
     partySlug: string,
-    eventId: string
+    eventId: string,
+    activity?: {
+      type: "member_left" | "member_kicked";
+      memberDisplayName: string;
+      partyName: string;
+    }
   ): Promise<void> {
     const identity = await this.prismaService.userAuthIdentity.findFirst({
       select: { providerUserId: true },
@@ -92,8 +138,10 @@ export class TelegramBotService {
     await this.prismaService.telegramBotNotification.createMany({
       data: [
         {
-          eventKey: `party_updated:${partySlug}:${eventId}`,
-          payload: { partySlug, type: "party_updated" },
+          eventKey: `${activity?.type ?? "party_updated"}:${partySlug}:${eventId}`,
+          payload: activity
+            ? { ...activity, partySlug, type: activity.type }
+            : { partySlug, type: "party_updated" },
           telegramUserId: identity.providerUserId
         }
       ],

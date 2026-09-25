@@ -1,3 +1,4 @@
+import asyncio
 from html import escape
 from random import choice
 from urllib.parse import quote
@@ -21,6 +22,7 @@ async def start_looking(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    match_wakeup: asyncio.Event,
 ) -> None:
     await callback.answer()
     await begin_panel_transition(
@@ -34,6 +36,7 @@ async def start_looking(
         storage.clear_auto_match_exclusions(callback.from_user.id)
         storage.set_choices(callback.from_user.id, "auto_search", [{"mode": "looking"}])
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "looking")
+        match_wakeup.set()
     except PartyOwnerMustResolveMembers:
         await edit_panel_content(
             callback.bot,
@@ -56,6 +59,7 @@ async def begin_recruiting(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    match_wakeup: asyncio.Event,
 ) -> None:
     await callback.answer()
     await begin_panel_transition(
@@ -117,6 +121,8 @@ async def begin_recruiting(
             [{"mode": "recruit", "partySlug": party["slug"], "roles": open_roles}],
         )
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+        if open_roles:
+            match_wakeup.set()
     except ApiError as error:
         await show_error(callback, api, settings, storage, error)
 
