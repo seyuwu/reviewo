@@ -5,9 +5,10 @@ from aiogram.types import CallbackQuery
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
-from ..services.panel import begin_panel_transition, edit_panel
+from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from .search import show_error
+from ..ui.keyboards import delete_party_confirmation_keyboard
 
 router = Router(name="party-slots")
 
@@ -16,10 +17,7 @@ def current_party(response: dict) -> dict | None:
     return response.get("party") or ((response.get("parties") or [None])[-1])
 
 
-def return_screen(storage: BotStorage, telegram_user_id: int, party_slug: str) -> str:
-    search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
-    if search.get("mode") == "recruit" and search.get("partySlug") == party_slug:
-        return "recruiting"
+def return_screen() -> str:
     return "party"
 
 
@@ -31,6 +29,11 @@ async def occupied_search_slot(callback: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("party:searching:"))
 async def already_searching_party_slot(callback: CallbackQuery) -> None:
     await callback.answer("Поиск игроков на эту позицию уже идёт")
+
+
+@router.callback_query(F.data == "party:readonly")
+async def readonly_party_search_status(callback: CallbackQuery) -> None:
+    await callback.answer("Управлять подбором может капитан или офицер", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("party:slot:"))
@@ -75,7 +78,7 @@ async def open_or_claim_slot(
         )
         await edit_panel(
             callback.bot, storage, api, settings, callback.from_user.id,
-            return_screen(storage, callback.from_user.id, party["slug"]),
+            return_screen(),
         )
     except ApiError as error:
         await show_error(callback, api, settings, storage, error)
@@ -91,8 +94,125 @@ async def search_for_party_slot(
 @router.callback_query(F.data.startswith("party:toggle-search:"))
 async def enable_search_for_party_slot(
     callback: CallbackQuery,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
 ) -> None:
-    await callback.answer("Автоподбор ищет игроков на все свободные позиции", show_alert=True)
+    role = (callback.data or "").rsplit(":", 1)[-1]
+    if role not in {"1", "2", "3", "4", "5"}:
+        await callback.answer("Позиция не найдена", show_alert=True)
+        return
+    await callback.answer()
+    await begin_panel_transition(
+        callback.bot, storage, callback.from_user.id,
+        callback.message.chat.id if callback.message else None,
+    )
+    try:
+        party = current_party(await api.user(callback.from_user.id, "GET", "/social/parties/me"))
+        if not party:
+            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
+            return
+        if not party.get("canManageParty"):
+            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+            return
+        if role in {str(member.get("positionRole")) for member in party.get("members", [])}:
+            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+            return
+
+        roles = set(map(str, party.get("recruitedRoles") or []))
+        if role in roles:
+            roles.remove(role)
+        else:
+            roles.add(role)
+        slug = quote(str(party["slug"]), safe="")
+        if roles:
+            await api.user(
+                callback.from_user.id,
+                "PATCH",
+                f"/social/parties/{slug}/join-mode",
+                {"joinMode": "OPEN"},
+            )
+        await api.user(
+            callback.from_user.id,
+            "POST",
+            "/dota/profiles/lfg/looking",
+            {
+                "looking": bool(roles),
+                "partySlug": party["slug"],
+                **({"recruitedRoles": sorted(roles)} if roles else {}),
+            },
+        )
+        if roles:
+            storage.set_choices(
+                callback.from_user.id,
+                "auto_search",
+                [{"mode": "recruit", "partySlug": party["slug"], "roles": sorted(roles)}],
+            )
+        else:
+            storage.set_choices(callback.from_user.id, "auto_search", [])
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+    except ApiError as error:
+        await show_error(callback, api, settings, storage, error)
+
+
+@router.callback_query(F.data == "party:delete:confirm")
+async def confirm_delete_party(
+    callback: CallbackQuery,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    await callback.answer()
+    await begin_panel_transition(
+        callback.bot, storage, callback.from_user.id,
+        callback.message.chat.id if callback.message else None,
+    )
+    try:
+        party = current_party(await api.user(callback.from_user.id, "GET", "/social/parties/me"))
+        if not party or not party.get("isOwner"):
+            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+            return
+        await edit_panel_content(
+            callback.bot,
+            storage,
+            api,
+            settings,
+            callback.from_user.id,
+            "notice",
+            "<b>Удалить пати?</b>\n\nВсе участники будут удалены из неё, а подбор остановится.",
+            delete_party_confirmation_keyboard(),
+        )
+    except ApiError as error:
+        await show_error(callback, api, settings, storage, error)
+
+
+@router.callback_query(F.data == "party:delete:execute")
+async def delete_party(
+    callback: CallbackQuery,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    await callback.answer("Удаляю пати")
+    await begin_panel_transition(
+        callback.bot, storage, callback.from_user.id,
+        callback.message.chat.id if callback.message else None,
+    )
+    try:
+        party = current_party(await api.user(callback.from_user.id, "GET", "/social/parties/me"))
+        if not party or not party.get("isOwner"):
+            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
+            return
+        await api.user(
+            callback.from_user.id,
+            "DELETE",
+            f"/social/parties/{quote(str(party['slug']), safe='')}",
+        )
+        storage.set_choices(callback.from_user.id, "auto_search", [])
+        storage.clear_auto_match_exclusions(callback.from_user.id)
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
+    except ApiError as error:
+        await show_error(callback, api, settings, storage, error)
 
 
 @router.callback_query(F.data.startswith("party:kick:confirm:"))
@@ -137,7 +257,7 @@ async def kick_party_member(
         storage.set_choices(callback.from_user.id, "selected_party_member", [])
         await edit_panel(
             callback.bot, storage, api, settings, callback.from_user.id,
-            return_screen(storage, callback.from_user.id, party["slug"]),
+            return_screen(),
         )
     except ApiError as error:
         await show_error(callback, api, settings, storage, error)

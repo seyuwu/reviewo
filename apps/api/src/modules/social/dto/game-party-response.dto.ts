@@ -61,6 +61,10 @@ export class GamePartyResponseDto {
   name!: string;
   openSlots!: number;
   ownerUserId!: string;
+  /** Roles currently being recruited by the party owner through LFG. */
+  recruitedRoles!: Array<"1" | "2" | "3" | "4" | "5">;
+  /** Expiration of the active party LFG window, if any. */
+  recruitingUntil!: string | null;
   /** Soft-unique invite link opens; only populated for captains/officers. */
   linkOpenCount!: number | null;
   slug!: string;

@@ -11,6 +11,7 @@ from .handlers import router
 from .middlewares import DeletePrivateMessagesMiddleware
 from .services.notifications import cleanup_temporary_messages, poll_notifications
 from .services.auto_matcher import auto_match_loop
+from .services.panel import refresh_active_search_panels
 from .storage.database import BotStorage
 
 
@@ -35,6 +36,7 @@ async def main() -> None:
         asyncio.create_task(poll_notifications(bot, api, settings, storage)),
         asyncio.create_task(cleanup_temporary_messages(bot, storage)),
         asyncio.create_task(auto_match_loop(bot, api, settings, storage)),
+        asyncio.create_task(refresh_active_search_panels(bot, api, settings, storage)),
     ]
 
     try:

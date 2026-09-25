@@ -45,15 +45,18 @@ async function performApiRequest<TResponse>(
       const accessToken = await refreshAccessToken();
 
       if (accessToken) {
-        return performApiRequest<TResponse>(path, {
-          ...options,
-          headers: {
-            ...headers,
-            authorization: `Bearer ${accessToken}`
-          }
-        }, true);
+        return performApiRequest<TResponse>(
+          path,
+          {
+            ...options,
+            headers: {
+              ...headers,
+              authorization: `Bearer ${accessToken}`
+            }
+          },
+          true
+        );
       }
-
     }
 
     throw new ApiError("API request failed", response.status, responseBody);
@@ -71,7 +74,8 @@ function isAuthEndpoint(path: string): boolean {
     path === "/auth/login" ||
     path === "/auth/logout" ||
     path === "/auth/refresh" ||
-    path === "/auth/register"
+    path === "/auth/register" ||
+    path === "/telegram/login"
   );
 }
 

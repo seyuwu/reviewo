@@ -2,6 +2,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 import asyncio
+import logging
 import time
 from urllib.parse import quote
 
@@ -18,8 +19,9 @@ from ..ui.keyboards import (
     party_keyboard,
     party_member_keyboard,
     party_slot_occupants,
-    recruiting_party_keyboard,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def edit_panel(
@@ -33,12 +35,14 @@ async def edit_panel(
     *,
     content: tuple[str, InlineKeyboardMarkup] | None = None,
 ) -> None:
+    if screen == "recruiting":
+        screen = "party"
     text, keyboard = content or await render_screen(api, storage, settings, telegram_user_id, screen)
     panel = storage.get_panel(telegram_user_id)
     destination = chat_id or (panel.chat_id if panel else telegram_user_id)
     loading_panel = panel if panel and panel.screen == "loading" else None
     photo: str | BufferedInputFile = f"{settings.site_url}/dota/party-hero-soft.png"
-    if screen == "party":
+    if screen in {"party", "recruiting"}:
         try:
             my_parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
             party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
@@ -159,6 +163,58 @@ async def edit_panel_content(
         chat_id,
         content=(text, keyboard),
     )
+
+
+async def refresh_active_search_panels(
+    bot: Bot,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    """Refresh countdowns for active party search without re-uploading party images."""
+    while True:
+        try:
+            for telegram_user_id in storage.session_user_ids():
+                search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
+                panel = storage.get_panel(telegram_user_id)
+                if search.get("mode") != "recruit" or not panel or panel.screen != "party":
+                    continue
+                try:
+                    parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
+                    party = parties.get("party") or ((parties.get("parties") or [None])[-1])
+                    if not party or party.get("slug") != search.get("partySlug"):
+                        storage.set_choices(telegram_user_id, "auto_search", [])
+                        continue
+                    if not party.get("recruitedRoles"):
+                        storage.set_choices(telegram_user_id, "auto_search", [])
+                    text, keyboard = await render_screen(api, storage, settings, telegram_user_id, "party")
+                    if panel.is_photo:
+                        await bot.edit_message_caption(
+                            chat_id=panel.chat_id,
+                            message_id=panel.message_id,
+                            caption=text,
+                            reply_markup=keyboard,
+                            parse_mode="HTML",
+                        )
+                    else:
+                        await bot.edit_message_text(
+                            text,
+                            chat_id=panel.chat_id,
+                            message_id=panel.message_id,
+                            reply_markup=keyboard,
+                            parse_mode="HTML",
+                            disable_web_page_preview=True,
+                        )
+                except TelegramBadRequest as error:
+                    if "message is not modified" not in str(error).lower():
+                        logger.info("Could not refresh party search panel for %s: %s", telegram_user_id, error)
+                except ApiError:
+                    continue
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Party search panel refresh failed")
+        await asyncio.sleep(15)
 
 
 async def render_screen(
@@ -282,40 +338,25 @@ async def render_screen(
         party = my_parties.get("party") or (parties[-1] if parties else None)
         if not party:
             return "Вы пока не состоите в пати.", home_keyboard(True, False)
-        link = f"{settings.site_url}/dota/teams/{party.get('slug', '')}"
-        text = party_text(party) + f"\n\n<a href=\"{escape_text(link)}\">Чат и Discord на сайте</a>"
-        auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
-        is_recruiting = auto_search.get("mode") == "recruit" and auto_search.get("partySlug") == party.get("slug")
+        text = party_text(party)
         occupants = party_slot_occupants(party)
         available_roles = {role for role in ("1", "2", "3", "4", "5") if role not in occupants}
-        roles = auto_search.get("roles") or []
-        searching_roles = (set(roles) if roles else available_roles) & available_roles
+        searching_roles = set(map(str, party.get("recruitedRoles") or [])) & available_roles
+        role_names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
+        if searching_roles:
+            roles_text = ", ".join(role_names[role] for role in sorted(searching_roles))
+            until = party.get("recruitingUntil")
+            remaining = remaining_seconds(until)
+            timer = f" · осталось {format_duration(remaining)}" if remaining is not None else ""
+            text += f"\n\n🔎 <b>Ищем игроков:</b> {escape_text(roles_text)}{timer}"
+        else:
+            text += "\n\nПодбор сейчас не запущен. Нажмите FREE под свободной ролью, чтобы искать игрока на неё."
         return text, party_keyboard(
             party,
             bool(party.get("canManageParty")),
-            is_recruiting,
             searching_roles,
+            settings.site_url,
         )
-
-    if screen == "recruiting":
-        party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
-        if not party:
-            return "Пати не найдена. Вернитесь в меню и начните набор заново.", back_keyboard()
-        search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
-        roles = search.get("roles") or []
-        occupants = party_slot_occupants(party)
-        available_roles = {role for role in ("1", "2", "3", "4", "5") if role not in occupants}
-        searching_roles = set(roles) if roles else available_roles
-        searching_roles &= available_roles
-        role_names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
-        roles_text = ", ".join(role_names[role] for role in roles if role in role_names) or "все свободные позиции"
-        text = (
-            f"<b>Набираю игроков · {escape_text((profile or {}).get('title') or 'Игрок')}</b>\n"
-            f"Ищем: {escape_text(roles_text)}\n"
-            f"Состав: {party.get('memberCount', 0)}/{party.get('maxMembers', 5)}\n\n"
-            "Нажмите на свободную позицию, чтобы занять слот."
-        )
-        return text, recruiting_party_keyboard(party, searching_roles)
 
     if screen in {"member", "kick_confirm"}:
         selected_member = storage.get_choice(telegram_user_id, "selected_party_member", 0) or {}
@@ -339,8 +380,7 @@ async def render_screen(
         name = escape_text((current_profile or {}).get("title") or member.get("displayName") or "Игрок")
         mmr = escape_text((current_profile or {}).get("mmr") or member.get("mmr") or "—")
         role = escape_text(member.get("positionRole") or "не выбрана")
-        auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
-        back_target = "recruiting" if auto_search.get("mode") == "recruit" else "party"
+        back_target = "party"
         can_kick = bool(party.get("canManageParty")) and member.get("role") != "OWNER"
         if member.get("role") == "OFFICER" and not party.get("isOwner"):
             can_kick = False
@@ -406,3 +446,20 @@ def escape_text(value: object) -> str:
     from html import escape
 
     return escape(str(value))
+
+
+def remaining_seconds(value: object) -> int | None:
+    from datetime import datetime, timezone
+
+    try:
+        expires_at = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        return max(0, int((expires_at - datetime.now(timezone.utc)).total_seconds()))
+    except (TypeError, ValueError):
+        return None
+
+
+def format_duration(seconds: int) -> str:
+    minutes, remainder = divmod(seconds, 60)
+    return f"{minutes:02}:{remainder:02}"

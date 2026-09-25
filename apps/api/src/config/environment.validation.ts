@@ -14,6 +14,7 @@ export interface EnvironmentVariables {
   REPUTATION_ENGINE_ENABLED: boolean;
   TRUST_PROXY_HOPS: number;
   TELEGRAM_BOT_API_SECRET?: string;
+  DOTA_BOT_TOKEN?: string;
 }
 
 const DEFAULT_API_PORT = 3000;
@@ -52,6 +53,7 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   const redisUrl = parseRedisUrl(config["REDIS_URL"], nodeEnvironment);
   const trustProxyHops = parseTrustProxyHops(config["TRUST_PROXY_HOPS"]);
   const telegramBotApiSecret = parseOptionalSecret(config["TELEGRAM_BOT_API_SECRET"]);
+  const dotaBotToken = parseOptionalBotToken(config["DOTA_BOT_TOKEN"]);
 
   return {
     API_PORT: apiPort,
@@ -64,8 +66,21 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     REFRESH_TOKEN_TTL_SECONDS: refreshTokenTtlSeconds,
     REPUTATION_ENGINE_ENABLED: reputationEngineEnabled,
     TRUST_PROXY_HOPS: trustProxyHops,
-    ...(telegramBotApiSecret ? { TELEGRAM_BOT_API_SECRET: telegramBotApiSecret } : {})
+    ...(telegramBotApiSecret ? { TELEGRAM_BOT_API_SECRET: telegramBotApiSecret } : {}),
+    ...(dotaBotToken ? { DOTA_BOT_TOKEN: dotaBotToken } : {})
   };
+}
+
+function parseOptionalBotToken(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || !/^\d{5,15}:[A-Za-z0-9_-]{20,}$/.test(value.trim())) {
+    throw new Error("DOTA_BOT_TOKEN must be a valid Telegram bot token");
+  }
+
+  return value.trim();
 }
 
 function parseOptionalSecret(value: unknown): string | undefined {

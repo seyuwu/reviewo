@@ -10,7 +10,7 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { timingSafeEqual } from "node:crypto";
-import { IsBoolean, IsString, Matches } from "class-validator";
+import { IsBoolean, IsOptional, IsString, Matches, MaxLength } from "class-validator";
 import {
   ApiRateLimiterService,
   resolveRequestIp,
@@ -18,6 +18,39 @@ import {
 } from "../../common/rate-limiting/api-rate-limiter.service.js";
 
 import { TelegramBotService } from "./telegram-bot.service.js";
+
+class TelegramLoginDto {
+  @IsString()
+  @Matches(/^\d{1,20}$/)
+  id!: string;
+
+  @IsString()
+  @Matches(/^\d{10}$/)
+  auth_date!: string;
+
+  @IsString()
+  @Matches(/^[a-f\d]{64}$/i)
+  hash!: string;
+
+  @IsString()
+  @MaxLength(128)
+  first_name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  last_name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  username?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  photo_url?: string;
+}
 
 class CompleteTelegramLinkDto {
   @IsString()
@@ -48,6 +81,21 @@ export class TelegramBotController {
     private readonly apiRateLimiterService: ApiRateLimiterService,
     private readonly telegramBotService: TelegramBotService
   ) {}
+
+  @Post("login")
+  @HttpCode(HttpStatus.OK)
+  async login(@Body() input: TelegramLoginDto, @Req() request: RequestLike): Promise<unknown> {
+    await this.apiRateLimiterService.assertWithinLimits([
+      {
+        key: resolveRequestIp(request),
+        limit: 30,
+        message: "Too many Telegram login attempts",
+        namespace: "telegram:login:ip",
+        windowSeconds: 15 * 60
+      }
+    ]);
+    return this.telegramBotService.loginFromTelegram(input);
+  }
 
   @Post("link")
   @HttpCode(HttpStatus.OK)

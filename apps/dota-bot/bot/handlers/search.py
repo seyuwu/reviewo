@@ -1,4 +1,5 @@
 from html import escape
+from random import choice
 from urllib.parse import quote
 
 from aiogram import F, Router
@@ -66,13 +67,29 @@ async def begin_recruiting(
     try:
         my_parties = await api.user(callback.from_user.id, "GET", "/social/parties/me")
         party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
-        if not party:
-            party = await api.user(
+        if party:
+            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+            return
+
+        party = await api.user(
+            callback.from_user.id,
+            "POST",
+            "/social/parties",
+            {"kind": "PARTY"},
+        )
+
+        profile = await api.user(callback.from_user.id, "GET", "/dota/profiles/me")
+        role_values = {"1", "2", "3", "4", "5"}
+        profile_roles = sorted({str(role) for role in (profile.get("roles") or [])} & role_values)
+        if profile_roles:
+            await api.user(
                 callback.from_user.id,
-                "POST",
-                "/social/parties",
-                {"kind": "PARTY"},
+                "PATCH",
+                f"/social/parties/{quote(str(party['slug']), safe='')}/members/me/position",
+                {"positionRole": choice(profile_roles)},
             )
+            my_parties = await api.user(callback.from_user.id, "GET", "/social/parties/me")
+            party = my_parties.get("party") or party
 
         slug = quote(str(party["slug"]), safe="")
         await api.user(
@@ -81,20 +98,25 @@ async def begin_recruiting(
             f"/social/parties/{slug}/join-mode",
             {"joinMode": "OPEN"},
         )
-        # Omitting recruitedRoles means all currently unfilled positions.
+        occupants = {
+            str(member.get("positionRole"))
+            for member in party.get("members", [])
+            if member.get("positionRole")
+        }
+        open_roles = sorted(role_values - occupants)
         await api.user(
             callback.from_user.id,
             "POST",
             "/dota/profiles/lfg/looking",
-            {"looking": True, "partySlug": party["slug"]},
+            {"looking": True, "partySlug": party["slug"], "recruitedRoles": open_roles},
         )
         storage.clear_auto_match_exclusions(callback.from_user.id)
         storage.set_choices(
             callback.from_user.id,
             "auto_search",
-            [{"mode": "recruit", "partySlug": party["slug"], "roles": []}],
+            [{"mode": "recruit", "partySlug": party["slug"], "roles": open_roles}],
         )
-        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "recruiting")
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
     except ApiError as error:
         await show_error(callback, api, settings, storage, error)
 
@@ -122,7 +144,8 @@ async def stop_search(
         await api.user(callback.from_user.id, "POST", "/dota/profiles/lfg/looking", payload)
         storage.set_choices(callback.from_user.id, "auto_search", [])
         storage.clear_auto_match_exclusions(callback.from_user.id)
-        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
+        screen = "party" if party else "home"
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, screen)
     except ApiError as error:
         await show_error(callback, api, settings, storage, error)
 

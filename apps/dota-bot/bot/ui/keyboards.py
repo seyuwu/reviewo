@@ -1,4 +1,6 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from urllib.parse import quote
+
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, LoginUrl
 
 
 def home_keyboard(
@@ -10,7 +12,7 @@ def home_keyboard(
     first_label = "🔎 Ищу пати" if is_looking else "🎯 Ищу пати"
     first_action = "panel:looking" if is_looking else "search:looking"
     open_party = has_party or is_recruiting
-    second_label = "👥 Моя пати" if open_party else "🧭 Набираю игроков"
+    second_label = "👥 Моя пати" if open_party else "🧭 Собрать пати"
     second_action = "panel:party" if open_party else "search:recruit"
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -41,20 +43,11 @@ def invite_keyboard(invite_id: str, invite_kind: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[buttons])
 
 
-def recruiting_party_keyboard(party: dict, searching_roles: set[str] | None = None) -> InlineKeyboardMarkup:
-    return party_keyboard(
-        party,
-        bool(party.get("canManageParty")),
-        is_recruiting=True,
-        searching_roles=searching_roles or set(),
-    )
-
-
 def party_keyboard(
     party: dict,
     show_search: bool,
-    is_recruiting: bool = False,
     searching_roles: set[str] | None = None,
+    site_url: str | None = None,
 ) -> InlineKeyboardMarkup:
     occupants = party_slot_occupants(party)
     searching_roles = searching_roles or set()
@@ -66,21 +59,31 @@ def party_keyboard(
             (
                 f"party:noop:{role}"
                 if role in occupants
-                else f"party:searching:{role}"
+                else (f"party:toggle-search:{role}" if show_search else "party:readonly")
             ),
         )
         for role in roles
     ]
-    rows = [slots]
-    if show_search and is_recruiting:
-        rows.append(search_status)
+    rows = [slots, search_status]
+    if site_url and party.get("slug"):
+        next_path = f"/dota/teams/{party['slug']}"
+        login_url = f"{site_url.rstrip('/')}/telegram/access?next={quote(next_path, safe='')}"
+        rows.append([button_login("💬 Чат и Discord", login_url)])
     if party.get("canManageParty"):
-        if is_recruiting:
-            rows.append([button("⏹ Остановить набор", "search:stop")])
-        else:
-            rows.append([button("🔎 Начать автоподбор", "search:recruit")])
+        rows.append([button("⏹ Остановить набор", "search:stop")])
+    if party.get("isOwner"):
+        rows.append([button("🗑 Удалить пати", "party:delete:confirm")])
     rows.append([button("← Назад", "panel:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def delete_party_confirmation_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("🗑 Да, удалить пати", "party:delete:execute")],
+            [button("← Отмена", "panel:party")],
+        ]
+    )
 
 
 def party_slot_occupants(party: dict) -> dict[str, str]:
@@ -165,6 +168,10 @@ def button(text: str, callback_data: str) -> InlineKeyboardButton:
 
 def button_url(text: str, url: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=text, url=url)
+
+
+def button_login(text: str, url: str) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text=text, login_url=LoginUrl(url=url))
 
 
 def truncate(value: str, limit: int) -> str:

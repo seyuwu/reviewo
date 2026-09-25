@@ -3097,6 +3097,7 @@ export class GamePartiesService implements OnModuleInit {
     party: NonNullable<Awaited<ReturnType<GamePartiesRepository["findById"]>>>,
     viewerUserId?: string
   ): Promise<GamePartyResponseDto> {
+    let ownerAttributes: Record<string, string> = {};
     const members: GamePartyMemberDto[] = await Promise.all(
       [...party.members]
         .sort((left, right) => {
@@ -3114,6 +3115,9 @@ export class GamePartiesService implements OnModuleInit {
           const attributes = dotaEntity
             ? await this.entityAttributesRepository.findByEntityId(dotaEntity.id)
             : {};
+          if (member.userId === party.ownerUserId) {
+            ownerAttributes = attributes;
+          }
 
           return {
             displayName: member.user.displayName,
@@ -3161,6 +3165,19 @@ export class GamePartiesService implements OnModuleInit {
 
     const canManageParty = isOwner || isOfficer;
     const linkOpenCount = canManageParty ? await this.readPartyLinkOpenCount(party.id) : null;
+    const recruitingUntilValue = ownerAttributes[DOTA_ATTRIBUTE_KEYS.lfgUntil];
+    const recruitingUntilDate = recruitingUntilValue ? new Date(recruitingUntilValue) : null;
+    const isRecruiting =
+      party.kind === "PARTY" &&
+      ownerAttributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() === party.slug &&
+      recruitingUntilDate !== null &&
+      Number.isFinite(recruitingUntilDate.getTime()) &&
+      recruitingUntilDate.getTime() > Date.now();
+    const recruitedRoles = isRecruiting
+      ? parseRecruitedRoles(ownerAttributes[DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]).filter(
+          (role) => !members.some((member) => member.positionRole === role)
+        )
+      : [];
 
     return {
       canExtendDiscordVoice,
@@ -3184,6 +3201,9 @@ export class GamePartiesService implements OnModuleInit {
       name: party.name,
       openSlots: Math.max(0, party.maxMembers - members.length),
       ownerUserId: party.ownerUserId,
+      recruitedRoles,
+      recruitingUntil:
+        recruitedRoles.length > 0 ? (recruitingUntilDate?.toISOString() ?? null) : null,
       slug: party.slug,
       vertical: party.vertical,
       visibility: party.visibility

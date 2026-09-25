@@ -1,6 +1,9 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from urllib.parse import quote
+
+from aiogram.types import InlineKeyboardMarkup
 
 from ..storage.database import BotStorage
+from ..ui.keyboards import button_login
 
 
 async def deliver_join_hint(
@@ -10,13 +13,14 @@ async def deliver_join_hint(
     site_url: str,
     party_slug: str,
 ) -> None:
-    link = f"{site_url}/dota/teams/{party_slug}"
+    next_path = f"/dota/teams/{party_slug}"
+    link = f"{site_url.rstrip('/')}/telegram/access?next={quote(next_path, safe='')}"
     message = await bot.send_message(
         telegram_user_id,
         "Вы теперь в пати! Общайтесь в чате на сайте или переходите в Discord.",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="Открыть пати на сайте", url=link)]
+                [button_login("Открыть пати на сайте", link)]
             ]
         ),
     )

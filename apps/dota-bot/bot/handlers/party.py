@@ -54,8 +54,9 @@ async def resolve_invite(
                 await callback.message.delete()
             except Exception:
                 pass
-        auto_search = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}
-        screen = "recruiting" if auto_search.get("mode") == "recruit" else "home"
+        parties_after = await api.user(callback.from_user.id, "GET", "/social/parties/me")
+        active_after = parties_after.get("party") or ((parties_after.get("parties") or [None])[-1])
+        screen = "party" if active_after else "home"
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, screen)
     except ApiError as error:
         await edit_panel_content(
@@ -81,19 +82,13 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
         if event_type == "party_updated":
             parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
             active = parties.get("party") or ((parties.get("parties") or [None])[-1])
-            auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
-            if auto_search.get("mode") == "recruit" and active and active.get("slug") == auto_search.get("partySlug"):
-                screen = "recruiting"
-            else:
-                screen = "party" if active and active.get("slug") == payload.get("partySlug") else "home"
+            screen = "party" if active and active.get("slug") == payload.get("partySlug") else "home"
             await edit_panel(bot, storage, api, settings, telegram_user_id, screen)
             return True
         if event_type == "declined":
             remember_declined_target(storage, telegram_user_id, payload)
         if event_type == "member_joined":
-            auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
-            screen = "recruiting" if auto_search.get("mode") == "recruit" else "party"
-            await edit_panel(bot, storage, api, settings, telegram_user_id, screen)
+            await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
             return True
         if event_type == "accepted":
             party_slug = invite.get("partySlug")
