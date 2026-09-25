@@ -281,7 +281,7 @@ async def render_screen(
             f"<b>Набираю игроков · {escape_text((profile or {}).get('title') or 'Игрок')}</b>\n"
             f"Ищем: {escape_text(roles_text)}\n"
             f"Состав: {party.get('memberCount', 0)}/{party.get('maxMembers', 5)}\n\n"
-            "Нажмите на свободную позицию, чтобы выбрать игрока."
+            "Нажмите на свободную позицию, чтобы выбрать свободного игрока или занять слот."
         )
         return text, recruiting_party_keyboard(party, searching_roles)
 

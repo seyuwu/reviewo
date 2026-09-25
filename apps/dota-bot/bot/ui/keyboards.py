@@ -6,8 +6,8 @@ def home_keyboard(
     has_party: bool,
     is_recruiting: bool = False,
 ) -> InlineKeyboardMarkup:
-    second_label = "⏹ Остановить набор" if is_recruiting else "🧭 Набираю игроков"
-    second_action = "search:stop" if is_recruiting else "search:recruit"
+    second_label = "👥 Моя пати" if is_recruiting else "🧭 Набираю игроков"
+    second_action = "panel:party" if is_recruiting else "search:recruit"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [button("🎯 Ищу пати", "search:looking"), button(second_label, second_action)],
