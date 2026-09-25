@@ -1,13 +1,14 @@
 from urllib.parse import urlencode
+from html import escape
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
-from ..services.panel import edit_panel
+from ..services.panel import edit_panel, edit_panel_content
 from ..storage.database import BotStorage
-from ..ui.keyboards import role_keyboard
+from ..ui.keyboards import back_keyboard, role_keyboard
 from .account import deliver_join_hint
 
 router = Router(name="search")
@@ -21,7 +22,7 @@ async def start_looking(callback: CallbackQuery, api: OpiniaApi, settings: Setti
         storage.set_choices(callback.from_user.id, "auto_search", [{"mode": "looking"}])
         await show_candidates(callback, api, settings, storage, "looking")
     except ApiError as error:
-        await callback.message.answer(str(error))
+        await show_error(callback, api, settings, storage, error)
 
 
 @router.callback_query(F.data == "search:recruit")
@@ -40,10 +41,15 @@ async def begin_recruiting(
 async def toggle_recruit_role(callback: CallbackQuery, storage: BotStorage) -> None:
     await callback.answer()
     parts = (callback.data or "").split(":")
-    if len(parts) < 4:
+    if len(parts) == 4:
+        # Accept buttons rendered by the previous bot version until the panel is refreshed.
+        selected = parts[2].split(",") if parts[2] else []
+        role = parts[3]
+    elif len(parts) == 3:
+        role = parts[2]
+        selected = (storage.get_choice(callback.from_user.id, "recruit_roles", 0) or {}).get("roles", [])
+    else:
         return
-    selected = parts[2].split(",") if parts[2] else []
-    role = parts[3]
     selected = [item for item in selected if item in {"1", "2", "3", "4", "5"}]
     if role in selected:
         selected.remove(role)
@@ -85,7 +91,7 @@ async def finish_recruiting(
         )
         await show_candidates(callback, api, settings, storage, "recruit")
     except ApiError as error:
-        await callback.message.answer(str(error))
+        await show_error(callback, api, settings, storage, error)
 
 
 @router.callback_query(F.data == "search:stop")
@@ -102,7 +108,7 @@ async def stop_search(callback: CallbackQuery, api: OpiniaApi, settings: Setting
         storage.clear_auto_match_exclusions(callback.from_user.id)
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
     except ApiError as error:
-        await callback.message.answer(str(error))
+        await show_error(callback, api, settings, storage, error)
 
 
 @router.callback_query(F.data == "search:list")
@@ -114,7 +120,6 @@ async def refresh_candidates(callback: CallbackQuery, api: OpiniaApi, settings: 
 
 @router.callback_query(F.data.startswith("candidate:"))
 async def select_candidate(callback: CallbackQuery, settings: Settings, storage: BotStorage, api: OpiniaApi) -> None:
-    await callback.answer()
     value = (callback.data or "").split(":")
     if len(value) == 2 and value[1].isdigit():
         candidates = storage.get_choice(callback.from_user.id, "candidates", 0) or {}
@@ -123,14 +128,17 @@ async def select_candidate(callback: CallbackQuery, settings: Settings, storage:
         if index >= len(items):
             await callback.answer("Игрок уже недоступен", show_alert=True)
             return
+        await callback.answer()
         storage.set_choices(callback.from_user.id, "selected_candidate", [items[index]])
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "candidate")
         return
 
     if len(value) != 3 or value[1] not in {"apply", "invite"}:
+        await callback.answer()
         return
     selected = storage.get_choice(callback.from_user.id, "selected_candidate", 0)
     if not selected:
+        await callback.answer("Игрок больше недоступен", show_alert=True)
         return
     try:
         position_role = value[2]
@@ -152,13 +160,14 @@ async def select_candidate(callback: CallbackQuery, settings: Settings, storage:
                 settings.site_url,
                 result["party"]["slug"],
             )
+            await callback.answer("Вы вступили в пати")
         elif value[1] == "apply" and selected.get("partySlug"):
-            await callback.message.answer("Заявка отправлена. Ответ придёт в уведомлении.")
+            await callback.answer("Заявка отправлена. Ответ придёт в уведомлении.")
         else:
-            await callback.message.answer("Готово — действие отправлено.")
+            await callback.answer("Готово — действие отправлено.")
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
     except ApiError as error:
-        await callback.message.answer(str(error))
+        await callback.answer(str(error)[:180], show_alert=True)
 
 
 async def show_candidates(callback, api: OpiniaApi, settings: Settings, storage: BotStorage, mode: str) -> None:
@@ -185,4 +194,20 @@ async def show_candidates(callback, api: OpiniaApi, settings: Settings, storage:
         storage.set_choices(callback.from_user.id, "candidates", [{"items": candidates, "mode": mode}])
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "candidates")
     except ApiError as error:
-        await callback.message.answer(str(error))
+        await show_error(callback, api, settings, storage, error)
+
+
+async def show_error(callback, api: OpiniaApi, settings: Settings, storage: BotStorage, error: ApiError) -> None:
+    if callback.message is None:
+        return
+    await edit_panel_content(
+        callback.bot,
+        storage,
+        api,
+        settings,
+        callback.from_user.id,
+        "notice",
+        f"<b>Не получилось выполнить действие</b>\n\n{escape(str(error))}",
+        back_keyboard(),
+        callback.message.chat.id,
+    )

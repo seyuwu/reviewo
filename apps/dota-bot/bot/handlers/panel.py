@@ -1,5 +1,6 @@
 from aiogram import F, Router
 from aiogram.filters import CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from ..api.client import OpiniaApi
@@ -17,9 +18,11 @@ async def start_panel(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    state: FSMContext,
 ) -> None:
     if message.chat.type != "private" or message.from_user is None:
         return
+    await state.clear()
     await edit_panel(bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
 
 

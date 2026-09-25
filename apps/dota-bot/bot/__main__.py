@@ -8,6 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from .api.client import OpiniaApi
 from .config import load_settings
 from .handlers import router
+from .middlewares import DeletePrivateMessagesMiddleware
 from .services.notifications import cleanup_temporary_messages, poll_notifications
 from .services.auto_matcher import auto_match_loop
 from .storage.database import BotStorage
@@ -29,6 +30,7 @@ async def main() -> None:
     await api.start()
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
+    dispatcher.message.outer_middleware(DeletePrivateMessagesMiddleware())
     tasks = [
         asyncio.create_task(poll_notifications(bot, api, settings, storage)),
         asyncio.create_task(cleanup_temporary_messages(bot, storage)),

@@ -66,11 +66,38 @@ def invite_keyboard(invite_id: str, invite_kind: str) -> InlineKeyboardMarkup:
 def role_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
     rows = []
     names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
-    for role in ("1", "2", "3", "4", "5"):
-        marker = "✅ " if role in selected else ""
-        rows.append([button(f"{marker}{names[role]}", f"recruit:toggle:{','.join(selected)}:{role}")])
+    roles = ("1", "2", "3", "4", "5")
+    for index in range(0, len(roles), 2):
+        row = []
+        for role in roles[index : index + 2]:
+            marker = "✅ " if role in selected else ""
+            row.append(button(f"{marker}{role} · {names[role]}", f"recruit:toggle:{role}"))
+        rows.append(row)
     rows.append([button("🔍 Начать набор", "recruit:start")])
     rows.append([button("← В меню", "panel:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def registration_step_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[button("✖️ Отменить", "register:cancel")]])
+
+
+def registration_roles_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
+    rows = []
+    names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
+    roles = ("1", "2", "3", "4", "5")
+    for index in range(0, len(roles), 2):
+        row = []
+        for role in roles[index : index + 2]:
+            marker = "✅ " if role in selected else ""
+            row.append(button(f"{marker}{role} · {names[role]}", f"register:toggle:{role}"))
+        rows.append(row)
+    rows.extend(
+        [
+            [button("Продолжить", "register:complete")],
+            [button("✖️ Отменить", "register:cancel")],
+        ]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

@@ -1,4 +1,5 @@
 import re
+from html import escape
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -7,11 +8,21 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
-from ..services.panel import edit_panel
+from ..services.panel import edit_panel, edit_panel_content
 from ..storage.database import BotStorage
+from ..ui.keyboards import back_keyboard
 
 router = Router(name="account")
 CODE_PATTERN = re.compile(r"^\d{8}$")
+
+
+def link_help_keyboard(settings: Settings) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть профиль Opinia", url=f"{settings.site_url}/profile")],
+            [InlineKeyboardButton(text="← В меню", callback_data="panel:home")],
+        ]
+    )
 
 
 @router.message(Command("link"))
@@ -26,7 +37,17 @@ async def link_account(
         return
     code = (command.args or "").strip()
     if not CODE_PATTERN.fullmatch(code):
-        await message.answer("Введите код с сайта: <code>/link 12345678</code>", parse_mode="HTML")
+        await edit_panel_content(
+            message.bot,
+            storage,
+            api,
+            settings,
+            message.from_user.id,
+            "account:link",
+            "<b>Привязка аккаунта Opinia</b>\n\nВведите код с сайта командой <code>/link 12345678</code>.",
+            link_help_keyboard(settings),
+            message.chat.id,
+        )
         return
     try:
         auth = await api.complete_link(code, message.from_user.id)
@@ -38,38 +59,83 @@ async def link_account(
         )
         await edit_panel(message.bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
     except ApiError as error:
-        await message.answer(str(error))
+        await edit_panel_content(
+            message.bot,
+            storage,
+            api,
+            settings,
+            message.from_user.id,
+            "account:link",
+            f"<b>Не получилось привязать аккаунт</b>\n\n{escape(str(error))}",
+            link_help_keyboard(settings),
+            message.chat.id,
+        )
 
 
 @router.callback_query(F.data == "account:help")
 async def account_link_help(
     callback: CallbackQuery,
+    api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
 ) -> None:
     await callback.answer()
-    message = await callback.message.answer(
-        "Откройте сайт Opinia и войдите в аккаунт. В профиле нажмите «Привязать Telegram», "
-        "затем отправьте сюда код командой <code>/link 12345678</code>. Код живёт 10 минут.",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="Открыть профиль Opinia", url=f"{settings.site_url}/profile")]]
-        ),
-        parse_mode="HTML",
+    await edit_panel_content(
+        callback.bot,
+        storage,
+        api,
+        settings,
+        callback.from_user.id,
+        "account:link",
+        "<b>Привязка аккаунта Opinia</b>\n\nОткройте сайт и войдите в аккаунт. В профиле нажмите "
+        "«Привязать Telegram», затем отправьте сюда код командой <code>/link 12345678</code>. "
+        "Код действует 10 минут.",
+        link_help_keyboard(settings),
+        callback.message.chat.id if callback.message else None,
     )
-    storage.add_temporary_message(callback.from_user.id, message.chat.id, message.message_id, 300)
 
 
 @router.callback_query(F.data == "account:recovery")
-async def show_recovery_link(callback: CallbackQuery, storage: BotStorage) -> None:
+async def show_recovery_link(
+    callback: CallbackQuery,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
     await callback.answer()
     session = storage.get_session(callback.from_user.id)
-    if not session or not session.recovery_url or callback.message is None:
+    if callback.message is None:
         return
-    message = await callback.message.answer(
-        "Сохраните ссылку восстановления аккаунта в надёжном месте:\n" + session.recovery_url,
-        disable_web_page_preview=True,
+    if not session or not session.recovery_url:
+        await edit_panel_content(
+            callback.bot,
+            storage,
+            api,
+            settings,
+            callback.from_user.id,
+            "account:recovery",
+            "Ссылка восстановления недоступна. Аккаунт Opinia привязан.",
+            back_keyboard("account"),
+            callback.message.chat.id,
+        )
+        return
+    await edit_panel_content(
+        callback.bot,
+        storage,
+        api,
+        settings,
+        callback.from_user.id,
+        "account:recovery",
+        "<b>Ссылка восстановления</b>\n\nСохраните её в надёжном месте. Ссылка даёт доступ к аккаунту:\n<code>"
+        f"{escape(session.recovery_url)}</code>",
+        InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="Открыть ссылку", url=session.recovery_url)],
+                [InlineKeyboardButton(text="← В аккаунт", callback_data="panel:account")],
+            ]
+        ),
+        callback.message.chat.id,
     )
-    storage.add_temporary_message(callback.from_user.id, message.chat.id, message.message_id, 300)
 
 
 @router.callback_query(F.data == "account:unlink")

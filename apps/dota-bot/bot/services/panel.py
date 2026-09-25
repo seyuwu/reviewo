@@ -25,8 +25,10 @@ async def edit_panel(
     telegram_user_id: int,
     screen: str = "home",
     chat_id: int | None = None,
+    *,
+    content: tuple[str, InlineKeyboardMarkup] | None = None,
 ) -> None:
-    text, keyboard = await render_screen(api, storage, settings, telegram_user_id, screen)
+    text, keyboard = content or await render_screen(api, storage, settings, telegram_user_id, screen)
     panel = storage.get_panel(telegram_user_id)
     destination = chat_id or (panel.chat_id if panel else telegram_user_id)
     photo: str | BufferedInputFile = f"{settings.site_url}/dota/party-hero-soft.png"
@@ -97,6 +99,29 @@ async def edit_panel(
             disable_web_page_preview=True,
         )
         storage.save_panel(telegram_user_id, message.chat.id, message.message_id, screen, False)
+
+
+async def edit_panel_content(
+    bot: Bot,
+    storage: BotStorage,
+    api: OpiniaApi,
+    settings: Settings,
+    telegram_user_id: int,
+    screen: str,
+    text: str,
+    keyboard: InlineKeyboardMarkup,
+    chat_id: int | None = None,
+) -> None:
+    await edit_panel(
+        bot,
+        storage,
+        api,
+        settings,
+        telegram_user_id,
+        screen,
+        chat_id,
+        content=(text, keyboard),
+    )
 
 
 async def render_screen(
