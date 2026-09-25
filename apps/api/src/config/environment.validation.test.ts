@@ -90,6 +90,7 @@ describe("validateEnvironment", () => {
       "postgresql://reviewo:reviewo_password@localhost:5432/reviewo"
     );
     assert.equal(config.JWT_ACCESS_TOKEN_TTL_SECONDS, 7 * 86_400);
+    assert.equal(config.REFRESH_TOKEN_TTL_SECONDS, 30 * 86_400);
     assert.equal(config.TRUST_PROXY_HOPS, 0);
   });
 

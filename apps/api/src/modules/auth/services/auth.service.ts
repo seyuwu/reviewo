@@ -9,6 +9,8 @@ import type { EnvironmentVariables } from "../../../config/environment.validatio
 import { PrismaService } from "../../../database/prisma.service.js";
 import { ProductAnalyticsService } from "../../analytics/services/product-analytics.service.js";
 import { UsersService } from "../../users/services/users.service.js";
+
+const REFRESH_TOKEN_CONCURRENCY_GRACE_MS = 5_000;
 import { AuthRepository } from "../repositories/auth.repository.js";
 import { AuthResponseDto } from "../dto/auth-response.dto.js";
 import { ChangePasswordDto } from "../dto/change-password.dto.js";
@@ -442,9 +444,16 @@ export class AuthService {
 
     const nextPasswordHash = await this.passwordHasherService.hash(input.newPassword);
 
-    await this.authRepository.updateEmailIdentity(identity.id, {
-      email: identity.providerUserId,
-      passwordHash: nextPasswordHash
+    await this.prismaService.$transaction(async (transaction) => {
+      await this.authRepository.updateEmailIdentity(
+        identity.id,
+        {
+          email: identity.providerUserId,
+          passwordHash: nextPasswordHash
+        },
+        transaction
+      );
+      await this.authRepository.revokeRefreshTokensForUser(currentUser.id, transaction);
     });
   }
 
@@ -455,12 +464,90 @@ export class AuthService {
   }
 
   async createAuthResponse(user: AuthenticatedUser): Promise<AuthResponseDto> {
+    const refreshToken = this.authRepository.createRefreshTokenPlaintext();
+    const refreshTtlSeconds = this.configService.get("REFRESH_TOKEN_TTL_SECONDS", { infer: true });
+
+    await this.authRepository.createRefreshToken(
+      user.id,
+      this.authRepository.hashRefreshToken(refreshToken),
+      new Date(Date.now() + refreshTtlSeconds * 1000)
+    );
+
+    return this.buildAuthResponse(user, refreshToken);
+  }
+
+  private async buildAuthResponse(
+    user: AuthenticatedUser,
+    refreshToken: string
+  ): Promise<AuthResponseDto> {
     return {
       accessToken: this.jwtTokenService.signAccessToken(user.id),
       expiresIn: this.configService.get("JWT_ACCESS_TOKEN_TTL_SECONDS", { infer: true }),
+      refreshToken,
       tokenType: "Bearer",
       user: await this.getCurrentUserDto(user)
     };
+  }
+
+  async refreshAuthResponse(refreshToken: string): Promise<AuthResponseDto> {
+    const tokenHash = this.authRepository.hashRefreshToken(refreshToken);
+    const stored = await this.authRepository.findRefreshTokenByHash(tokenHash);
+
+    if (!stored) {
+      throw createInvalidRefreshTokenException();
+    }
+
+    if (stored.revokedAt) {
+      if (Date.now() - stored.revokedAt.getTime() <= REFRESH_TOKEN_CONCURRENCY_GRACE_MS) {
+        // A second tab can arrive just after the first request committed its rotation.
+        // Reject its stale token without treating normal concurrency as token theft.
+        throw createInvalidRefreshTokenException();
+      }
+
+      // A revoked token presented again means the token family leaked.
+      // Revoke everything else for the user so the attacker loses access too.
+      await this.authRepository.revokeRefreshTokensForUser(stored.userId);
+      throw createInvalidRefreshTokenException();
+    }
+
+    if (stored.expiresAt.getTime() <= Date.now()) {
+      await this.authRepository.revokeRefreshToken(stored.id);
+      throw createInvalidRefreshTokenException();
+    }
+
+    const nextRefreshToken = this.authRepository.createRefreshTokenPlaintext();
+    const now = new Date();
+    const refreshTtlSeconds = this.configService.get("REFRESH_TOKEN_TTL_SECONDS", { infer: true });
+    const rotated = await this.authRepository.rotateRefreshToken({
+      expiresAt: new Date(now.getTime() + refreshTtlSeconds * 1000),
+      id: stored.id,
+      nextTokenHash: this.authRepository.hashRefreshToken(nextRefreshToken),
+      now,
+      userId: stored.userId
+    });
+
+    if (!rotated) {
+      // Another request rotated the token after our initial read. Treat this as a
+      // concurrent refresh, not token theft: its successful response carries the
+      // replacement token to the other tab.
+      throw createInvalidRefreshTokenException();
+    }
+
+    return this.buildAuthResponse(toAuthenticatedUser(stored.user), nextRefreshToken);
+  }
+
+  async logout(refreshToken?: string): Promise<void> {
+    if (!refreshToken) {
+      return;
+    }
+
+    const stored = await this.authRepository.findRefreshTokenByHash(
+      this.authRepository.hashRefreshToken(refreshToken)
+    );
+
+    if (stored && !stored.revokedAt) {
+      await this.authRepository.revokeRefreshToken(stored.id);
+    }
   }
 }
 
@@ -513,6 +600,14 @@ function toAuthenticatedUser(user: User): AuthenticatedUser {
     status: user.status,
     username: user.username
   };
+}
+
+function createInvalidRefreshTokenException(): Error {
+  return createAppException({
+    code: AppErrorCode.Unauthorized,
+    message: "Refresh token is invalid or expired",
+    statusCode: HttpStatus.UNAUTHORIZED
+  });
 }
 
 function createEmailAlreadyExistsException(): Error {

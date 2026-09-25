@@ -94,8 +94,10 @@ export function LocaleProvider({ children }: LocaleProviderProps) {
   };
 
   const resolvedLocale = useMemo((): AppLocale => {
+    // Pre-hydration renders (including the server HTML crawlers see) use the
+    // site's primary locale; the stored preference / navigator takes over on mount.
     if (!isLocaleHydrated) {
-      return "en";
+      return "ru";
     }
 
     return resolveLocale(localePreference);

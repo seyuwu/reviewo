@@ -4,7 +4,6 @@ import { describe, it } from "node:test";
 import {
   buildForkTopTitle,
   MAX_TOP_TITLE_LENGTH,
-  normalizeForkSourceTitle,
   resolveForkAuthorLabel
 } from "./build-fork-top-title.js";
 

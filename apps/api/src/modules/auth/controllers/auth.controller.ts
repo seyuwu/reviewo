@@ -7,6 +7,9 @@ import {
   resolveRequestIp,
   type RequestLike
 } from "../../../common/rate-limiting/api-rate-limiter.service.js";
+import { createAuthRefreshRateLimitRules } from "../../../common/rate-limiting/write-rate-limit-rules.js";
+import { RateLimit } from "../../../common/rate-limiting/rate-limit.decorator.js";
+import { RateLimitGuard } from "../../../common/rate-limiting/rate-limit.guard.js";
 import { AuthResponseDto } from "../dto/auth-response.dto.js";
 import { ChangePasswordDto } from "../dto/change-password.dto.js";
 import { ClaimEmailDto } from "../dto/claim-email.dto.js";
@@ -14,6 +17,7 @@ import { CurrentUserDto } from "../dto/current-user.dto.js";
 import { LoginDto } from "../dto/login.dto.js";
 import { RecoverAccountDto } from "../dto/recover-account.dto.js";
 import { RecoverAccountResponseDto } from "../dto/recover-account-response.dto.js";
+import { LogoutDto, RefreshTokenDto } from "../dto/refresh.dto.js";
 import { RegisterDto } from "../dto/register.dto.js";
 import { UpdateAvatarDto } from "../dto/update-avatar.dto.js";
 import { UpdateCurrentUserDto } from "../dto/update-current-user.dto.js";
@@ -50,6 +54,22 @@ export class AuthController {
     ]);
 
     return this.authService.register(input);
+  }
+
+  @Post("refresh")
+  @UseGuards(RateLimitGuard)
+  @RateLimit(({ request }) => createAuthRefreshRateLimitRules(request))
+  async refresh(@Body() input: RefreshTokenDto): Promise<AuthResponseDto> {
+    return this.authService.refreshAuthResponse(input.refreshToken);
+  }
+
+  @Post("logout")
+  @UseGuards(RateLimitGuard)
+  @RateLimit(({ request }) => createAuthRefreshRateLimitRules(request))
+  @HttpCode(200)
+  async logout(@Body() input: LogoutDto): Promise<{ ok: true }> {
+    await this.authService.logout(input.refreshToken);
+    return { ok: true };
   }
 
   @Post("login")

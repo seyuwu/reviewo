@@ -15,6 +15,8 @@ interface EmbedEntityPageProps {
   }>;
 }
 
+export const revalidate = 60;
+
 export default async function EmbedEntityPage({ params }: EmbedEntityPageProps) {
   const { entityId } = await params;
 

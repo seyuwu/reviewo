@@ -22,7 +22,7 @@ const owner: AuthenticatedUser = {
   username: "fivii"
 };
 
-const friend: AuthenticatedUser = {
+const _friend: AuthenticatedUser = {
   avatarUrl: null,
   displayName: "Friend",
   email: "friend@example.com",

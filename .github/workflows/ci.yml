@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm exec tsc -p tsconfig.json --noEmit
+      # TODO: drop the exclusion once apps/extension strict-mode debt is paid off
+      # (dozens of pre-existing tsc errors; its build uses esbuild, which skips types).
+      - run: corepack pnpm -r --if-present --filter '!@reviewo/extension' typecheck
+
+  api-tests:
+    name: API tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: reviewo
+          POSTGRES_PASSWORD: reviewo_password
+          POSTGRES_USER: reviewo
+        options: >-
+          --health-cmd "pg_isready -U reviewo -d reviewo"
+          --health-interval 5s
+          --health-retries 10
+          --health-timeout 5s
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:8-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-retries 10
+          --health-timeout 5s
+        ports:
+          - 6379:6379
+    env:
+      DATABASE_URL: postgresql://reviewo:reviewo_password@localhost:5432/reviewo
+      INTEGRATION_TESTS: "true"
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm --filter @reviewo/api db:migrate
+      - run: corepack pnpm --filter @reviewo/api test
+
+  extension-tests:
+    name: Extension tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm --filter @reviewo/extension test
+
+  web-tests:
+    name: Web tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm --filter @reviewo/i18n build
+      - run: corepack pnpm --filter @reviewo/web test
+
+  web-build:
+    name: Web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: corepack pnpm install --frozen-lockfile
+      # Trailing "..." builds workspace dependencies (i18n, shared, types, ui) first.
+      - run: corepack pnpm --filter "@reviewo/web..." build

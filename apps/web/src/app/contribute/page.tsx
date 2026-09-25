@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   title: "Contribute | Opinia"
 };
 
+export const revalidate = 60;
+
 export default async function ContributePage() {
   const initialData = await fetchContributeQueuesServer(20);
 

@@ -10,6 +10,7 @@ export interface EnvironmentVariables {
   JWT_SECRET: string;
   NODE_ENV: NodeEnvironment;
   REDIS_URL: string;
+  REFRESH_TOKEN_TTL_SECONDS: number;
   REPUTATION_ENGINE_ENABLED: boolean;
   TRUST_PROXY_HOPS: number;
 }
@@ -20,6 +21,7 @@ const DEFAULT_DATABASE_URL = "postgresql://reviewo:reviewo_password@localhost:54
 const DEVELOPMENT_CHROME_EXTENSION_WILDCARD = "chrome-extension://*";
 const SECONDS_PER_DAY = 86_400;
 const DEFAULT_JWT_ACCESS_TOKEN_TTL_SECONDS = 7 * SECONDS_PER_DAY;
+const DEFAULT_REFRESH_TOKEN_TTL_SECONDS = 30 * SECONDS_PER_DAY;
 const MAX_DEVELOPMENT_JWT_ACCESS_TOKEN_TTL_SECONDS = 365 * SECONDS_PER_DAY;
 const MAX_PRODUCTION_JWT_ACCESS_TOKEN_TTL_SECONDS = 30 * SECONDS_PER_DAY;
 const DEFAULT_JWT_SECRET = "reviewo_development_jwt_secret_change_me";
@@ -39,6 +41,12 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     config["JWT_ACCESS_TOKEN_TTL_SECONDS"],
     nodeEnvironment
   );
+  const refreshTokenTtlSeconds = parsePositiveInteger(
+    config["REFRESH_TOKEN_TTL_SECONDS"],
+    DEFAULT_REFRESH_TOKEN_TTL_SECONDS,
+    365 * SECONDS_PER_DAY,
+    "REFRESH_TOKEN_TTL_SECONDS"
+  );
   const reputationEngineEnabled = parseBooleanFlag(
     config["REPUTATION_ENGINE_ENABLED"],
     false
@@ -54,6 +62,7 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     JWT_SECRET: jwtSecret,
     NODE_ENV: nodeEnvironment,
     REDIS_URL: redisUrl,
+    REFRESH_TOKEN_TTL_SECONDS: refreshTokenTtlSeconds,
     REPUTATION_ENGINE_ENABLED: reputationEngineEnabled,
     TRUST_PROXY_HOPS: trustProxyHops
   };
@@ -277,4 +286,23 @@ function isPlaceholderSecret(value: string): boolean {
     normalized.includes("reviewo_password") ||
     normalized.includes("development_jwt_secret")
   );
+}
+
+function parsePositiveInteger(
+  value: unknown,
+  fallback: number,
+  maxValue: number,
+  name: string
+): number {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+
+  const parsed = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > maxValue) {
+    throw new Error(`${name} must be an integer between 1 and ${maxValue}`);
+  }
+
+  return parsed;
 }

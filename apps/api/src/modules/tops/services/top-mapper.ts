@@ -29,7 +29,7 @@ export async function toTopDto(context: TopMapperContext): Promise<TopDto> {
       continue;
     }
 
-    let rating = null;
+    let rating;
 
     try {
       rating = await context.ratingsPort.getAggregate(item.entityId);

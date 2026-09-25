@@ -51,8 +51,8 @@ body {
     var(--color-background);
   color: var(--color-text);
   font-family:
-    "Plus Jakarta Sans",
-    Inter,
+    var(--font-plus-jakarta-sans),
+    var(--font-inter),
     ui-sans-serif,
     system-ui,
     -apple-system,

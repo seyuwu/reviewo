@@ -9,6 +9,8 @@ interface DotaIdRedirectPageProps {
   }>;
 }
 
+export const revalidate = 60;
+
 export default async function DotaIdRedirectPage({ params }: DotaIdRedirectPageProps) {
   const { accountId } = await params;
 

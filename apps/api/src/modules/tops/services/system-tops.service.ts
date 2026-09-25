@@ -143,7 +143,7 @@ export class SystemTopsService {
         continue;
       }
 
-      let rating = null;
+      let rating;
 
       try {
         rating = await this.ratingsPort.getAggregate(item.entityId);

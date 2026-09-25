@@ -1,6 +1,6 @@
 import { ApiError } from "./api-error";
 import { publicEnv } from "../config/public-env";
-import { clearAuthSession } from "../../features/auth/lib/auth-session-storage";
+import { refreshAccessToken } from "../../features/auth/lib/session-refresh";
 
 export interface ApiRequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
@@ -9,6 +9,14 @@ export interface ApiRequestOptions extends Omit<RequestInit, "body"> {
 export async function apiRequest<TResponse>(
   path: string,
   options: ApiRequestOptions = {}
+): Promise<TResponse> {
+  return performApiRequest<TResponse>(path, options, false);
+}
+
+async function performApiRequest<TResponse>(
+  path: string,
+  options: ApiRequestOptions,
+  isRetry: boolean
 ): Promise<TResponse> {
   const { body, headers, ...requestOptions } = options;
   const requestInit: RequestInit = {
@@ -30,10 +38,22 @@ export async function apiRequest<TResponse>(
   if (!response.ok) {
     if (
       response.status === 401 &&
+      !isRetry &&
       typeof window !== "undefined" &&
       !isAuthEndpoint(path)
     ) {
-      clearAuthSession();
+      const accessToken = await refreshAccessToken();
+
+      if (accessToken) {
+        return performApiRequest<TResponse>(path, {
+          ...options,
+          headers: {
+            ...headers,
+            authorization: `Bearer ${accessToken}`
+          }
+        }, true);
+      }
+
     }
 
     throw new ApiError("API request failed", response.status, responseBody);
@@ -47,7 +67,12 @@ function createApiUrl(path: string): URL {
 }
 
 function isAuthEndpoint(path: string): boolean {
-  return path === "/auth/login" || path === "/auth/register";
+  return (
+    path === "/auth/login" ||
+    path === "/auth/logout" ||
+    path === "/auth/refresh" ||
+    path === "/auth/register"
+  );
 }
 
 async function parseResponseBody(response: Response): Promise<unknown> {

@@ -1,4 +1,4 @@
-import { EntityMediaSource, EntityMediaType } from "#prisma/client";
+import { EntityMediaSource } from "#prisma/client";
 
 export const ENTITY_MEDIA_TRUST_SCORES: Record<EntityMediaSource, number> = {
   [EntityMediaSource.MANUAL]: 1,

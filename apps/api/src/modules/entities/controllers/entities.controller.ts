@@ -21,6 +21,7 @@ import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import { CreateEntityDto } from "../dto/create-entity.dto.js";
 import { EntityDto } from "../dto/entity.dto.js";
 import { SearchEntitiesDto } from "../dto/search-entities.dto.js";
+import { SitemapEntriesResponseDto } from "../dto/sitemap-entries.dto.js";
 import { EntitiesService } from "../services/entities.service.js";
 
 @Controller("entities")
@@ -51,6 +52,20 @@ export class EntitiesController {
   @Get("search")
   async searchEntities(@Query() query: SearchEntitiesDto): Promise<EntityDto[]> {
     return this.entitiesService.searchEntities(query.query);
+  }
+
+  @Get("sitemap-entries")
+  async listSitemapEntries(
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string
+  ): Promise<SitemapEntriesResponseDto> {
+    const parsedLimit = Number.parseInt(limit ?? "", 10);
+    const parsedOffset = Number.parseInt(offset ?? "", 10);
+
+    return this.entitiesService.listSitemapEntries(
+      Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 5000) : 1000,
+      Number.isFinite(parsedOffset) ? Math.max(parsedOffset, 0) : 0
+    );
   }
 
   @Get("slug/:slug")

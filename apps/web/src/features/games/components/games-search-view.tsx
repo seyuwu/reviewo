@@ -1,6 +1,12 @@
 "use client";
 
-import { type DotaGreenFlagKey, type DotaMatchMode, type DotaRedFlagKey, isDotaMatchMode } from "@reviewo/shared";
+import {
+  DOTA_PARTY_INVITE_TTL_HOURS,
+  type DotaGreenFlagKey,
+  type DotaMatchMode,
+  type DotaRedFlagKey,
+  isDotaMatchMode
+} from "@reviewo/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -168,12 +174,14 @@ function pickBestAutoJoinTarget(
   return best ? { partySlug: best.partySlug, role: best.role, targetSlug: best.targetSlug } : null;
 }
 
-/** Best solo looking player for an open recruit seat (MMR-aware). */
+/** Best opted-in solo player for an open recruit seat, ranked by MMR proximity. */
 function pickBestAutoRecruitTarget(
   players: DotaLfgHit[],
   openRoles: DotaPositionRole[],
   myMmr: string | null,
-  myUserId: string
+  myUserId: string,
+  excludedTargetKeys: ReadonlySet<string>,
+  partySlug: string
 ): { role: DotaPositionRole; targetSlug: string } | null {
   if (openRoles.length === 0) {
     return null;
@@ -183,13 +191,19 @@ function pickBestAutoRecruitTarget(
   let best: { role: DotaPositionRole; score: number; targetSlug: string } | null = null;
 
   for (const hit of players) {
-    if (hit.partySlug || hit.ownerUserId === myUserId) {
+    // LFG results contain only active lookers; solo profiles have no partySlug.
+    if (
+      hit.partySlug ||
+      hit.ownerUserId === myUserId ||
+      excludedTargetKeys.has(autoInviteTargetKey(partySlug, hit.slug))
+    ) {
       continue;
     }
 
-    const overlap = hit.roles.filter((role): role is DotaPositionRole =>
-      ROLE_POSITIONS.includes(role as DotaPositionRole) &&
-      openRoles.includes(role as DotaPositionRole)
+    const overlap = hit.roles.filter(
+      (role): role is DotaPositionRole =>
+        ROLE_POSITIONS.includes(role as DotaPositionRole) &&
+        openRoles.includes(role as DotaPositionRole)
     );
 
     if (overlap.length === 0) {
@@ -198,13 +212,10 @@ function pickBestAutoRecruitTarget(
 
     const role = openRoles.find((item) => overlap.includes(item)) ?? overlap[0]!;
     const theirMid = mmrMidpoint(hit.mmr);
-    let score = 50;
-
-    if (myMid !== null && theirMid !== null) {
-      score -= Math.min(90, Math.abs(myMid - theirMid) / 40);
-    } else {
-      score -= 20;
-    }
+    const score =
+      myMid !== null && theirMid !== null
+        ? 50 - Math.min(90, Math.abs(myMid - theirMid) / 40)
+        : 30;
 
     if (!best || score > best.score) {
       best = { role, score, targetSlug: hit.slug };
@@ -212,6 +223,20 @@ function pickBestAutoRecruitTarget(
   }
 
   return best ? { role: best.role, targetSlug: best.targetSlug } : null;
+}
+
+function autoInviteTargetKey(partySlug: string, targetSlug: string): string {
+  return `${partySlug}:${targetSlug}`;
+}
+
+function isUnexpiredPendingInvite(invite: GamePartyInvite, now = Date.now()): boolean {
+  const createdAt = Date.parse(invite.createdAt);
+
+  return (
+    invite.status === "PENDING" &&
+    Number.isFinite(createdAt) &&
+    createdAt + DOTA_PARTY_INVITE_TTL_HOURS * 60 * 60 * 1000 > now
+  );
 }
 
 function playerInitial(title: string): string {
@@ -260,7 +285,7 @@ function mergeOutgoingInvites(
       }
 
       // Keep optimistic PENDING invites briefly until the server catches up.
-      return invite.status === "PENDING" && invite.direction !== "incoming";
+      return isUnexpiredPendingInvite(invite) && invite.direction !== "incoming";
     })
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
@@ -280,6 +305,14 @@ export function GamesSearchView() {
   const [outgoingInvites, setOutgoingInvites] = useState<GamePartyInvite[]>([]);
   const [dismissedOutgoingIds, setDismissedOutgoingIds] = useState<Set<string>>(() => new Set());
   const [rejectedApplicationPartySlugs, setRejectedApplicationPartySlugs] = useState<Set<string>>(
+    () => new Set()
+  );
+  /** Solo targets already invited / declined / conflicted — skip auto-recruit churn. */
+  const [autoMatchExcludedTargetSlugs, setAutoMatchExcludedTargetSlugs] = useState<Set<string>>(
+    () => new Set()
+  );
+  /** A solo target is invited at most once per party during this auto-match session. */
+  const [autoInviteExcludedTargetKeys, setAutoInviteExcludedTargetKeys] = useState<Set<string>>(
     () => new Set()
   );
   const flashScheduledRef = useRef(new Set<string>());
@@ -673,11 +706,8 @@ export function GamesSearchView() {
   const pendingApplicationPartySlugs = useMemo(() => {
     const slugs = new Set<string>();
     for (const invite of invites) {
-      if (
-        invite.inviteKind === "APPLICATION" &&
-        invite.status === "PENDING" &&
-        invite.direction === "incoming"
-      ) {
+      if (invite.status === "PENDING" && invite.direction === "incoming") {
+        // APPLICATION we sent, or INVITE we already received — don't re-auto-join that party.
         slugs.add(invite.partySlug);
       }
     }
@@ -757,7 +787,6 @@ export function GamesSearchView() {
     window.sessionStorage.removeItem(PENDING_STACK_KEY);
     void handleStack(pendingSlug);
     // Intentionally once after profile becomes available.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authSession?.accessToken, isAuthSessionLoaded, myDotaProfile.slug]);
 
   /** While looking: recruit → show inviteable solos; join → show recruiting parties. Idle → both. */
@@ -1055,7 +1084,8 @@ export function GamesSearchView() {
     }
   }
 
-  // Auto match: join → OPEN claim or CONFIRM application on matching roles; recruit → invite solo.
+  // Auto match: join → OPEN claim or CONFIRM application on matching roles;
+  // recruit → accept matching applications, then invite one active solo looker at a time.
   useEffect(() => {
     if (
       !searchLive ||
@@ -1120,7 +1150,7 @@ export function GamesSearchView() {
               };
               return [nextInvite, ...current.filter((item) => item.id !== nextInvite.id)];
             });
-            autoMatchKeyRef.current = null;
+            // Keep key so we do not re-fire while pending; exclusion list also covers party.
             void refreshParties();
             return;
           }
@@ -1135,7 +1165,8 @@ export function GamesSearchView() {
             if (
               apiMessage === "Your application to this party was declined" ||
               apiMessage === "This role is not open on that party" ||
-              apiMessage === "This role is already taken"
+              apiMessage === "This role is already taken" ||
+              apiMessage === "Invite already pending"
             ) {
               setRejectedApplicationPartySlugs((current) => new Set(current).add(pick.partySlug));
             }
@@ -1162,22 +1193,98 @@ export function GamesSearchView() {
         return;
       }
 
-      const openRoles =
-        myRecruit != null
-          ? openRecruitRolesForHit(myRecruit)
-          : [...ROLE_POSITIONS];
+      const rolesForMatch =
+        myRecruit != null ? openRecruitRolesForHit(myRecruit) : [...ROLE_POSITIONS];
+
+      // Prefer accepting an inbound application over waiting on the feed.
+      const matchingApplication = outgoingInvites.find((invite) => {
+        if (
+          invite.status !== "PENDING" ||
+          invite.inviteKind !== "APPLICATION" ||
+          invite.partySlug !== partySlug
+        ) {
+          return false;
+        }
+
+        if (
+          invite.inviteeDotaSlug &&
+          autoMatchExcludedTargetSlugs.has(invite.inviteeDotaSlug)
+        ) {
+          return false;
+        }
+
+        const role = invite.positionRole;
+
+        if (!role || !ROLE_POSITIONS.includes(role)) {
+          return rolesForMatch.length > 0;
+        }
+
+        return rolesForMatch.includes(role);
+      });
+
+      if (matchingApplication) {
+        const key = `recruit-accept:${matchingApplication.id}`;
+
+        if (autoMatchKeyRef.current === key) {
+          return;
+        }
+
+        autoMatchKeyRef.current = key;
+        autoMatchInFlightRef.current = true;
+        setInviteBusyId(matchingApplication.id);
+
+        void (async () => {
+          try {
+            await acceptPartyInvite(matchingApplication.id, authSession.accessToken);
+            setOutgoingInvites((current) =>
+              current.filter((item) => item.id !== matchingApplication.id)
+            );
+            setStackMessage(t("dota.team.joinSuccess"));
+            void Promise.all([refreshList({ quiet: true }), refreshParties()]);
+          } catch (error) {
+            autoMatchKeyRef.current = null;
+            if (matchingApplication.inviteeDotaSlug) {
+              setAutoMatchExcludedTargetSlugs((current) =>
+                new Set(current).add(matchingApplication.inviteeDotaSlug!)
+              );
+            }
+            setStackError(resolveInviteDecisionError(error, t));
+          } finally {
+            autoMatchInFlightRef.current = false;
+            setInviteBusyId(null);
+          }
+        })();
+        return;
+      }
+
+      // Let only one invitation wait for a response; try the next opted-in player after
+      // an explicit decline or once the server-side invite TTL has elapsed.
+      if (
+        outgoingInvites.some(
+          (invite) =>
+            invite.partySlug === partySlug &&
+            (invite.inviteKind ?? "INVITE") === "INVITE" &&
+            isUnexpiredPendingInvite(invite)
+        )
+      ) {
+        return;
+      }
+
       const pick = pickBestAutoRecruitTarget(
         results,
-        openRoles.length > 0 ? openRoles : [...ROLE_POSITIONS],
+        rolesForMatch,
         myMmr,
-        authSession.userId
+        authSession.userId,
+        autoInviteExcludedTargetKeys,
+        partySlug
       );
 
       if (!pick) {
         return;
       }
 
-      const key = `recruit:${pick.targetSlug}:${pick.role}:${partySlug}`;
+      const exclusionKey = autoInviteTargetKey(partySlug, pick.targetSlug);
+      const key = `recruit-invite:${exclusionKey}:${pick.role}`;
 
       if (autoMatchKeyRef.current === key) {
         return;
@@ -1185,6 +1292,7 @@ export function GamesSearchView() {
 
       autoMatchKeyRef.current = key;
       autoMatchInFlightRef.current = true;
+      setAutoInviteExcludedTargetKeys((current) => new Set(current).add(exclusionKey));
       setStackBusySlug(`${pick.targetSlug}:${pick.role}`);
 
       void (async () => {
@@ -1195,26 +1303,36 @@ export function GamesSearchView() {
             partySlug,
             pick.role
           );
+          const nextInvite: GamePartyInvite = {
+            ...stacked.invite,
+            direction: stacked.invite.direction ?? "outgoing"
+          };
           setStackMessage(t("games.search.stackSent"));
-          setOutgoingInvites((current) => {
-            const nextInvite: GamePartyInvite = {
-              ...stacked.invite,
-              direction: stacked.invite.direction ?? "outgoing"
-            };
-            return [nextInvite, ...current.filter((item) => item.id !== nextInvite.id)];
-          });
+          setOutgoingInvites((current) => [
+            nextInvite,
+            ...current.filter((item) => item.id !== nextInvite.id)
+          ]);
         } catch (error) {
-          autoMatchKeyRef.current = null;
-          setStackError(resolveStackInviteError(error, t));
+          const apiMessage = isApiError(error) ? readApiErrorMessage(error.body) : null;
+          const expectedRace =
+            apiMessage === "Invite already pending" ||
+            apiMessage === "Player already applied to this party" ||
+            apiMessage === "This team is already full" ||
+            apiMessage === "This role is already taken";
+
+          if (!expectedRace) {
+            setStackError(resolveStackInviteError(error, t));
+          }
         } finally {
           autoMatchInFlightRef.current = false;
           setStackBusySlug(null);
           void Promise.all([refreshList({ quiet: true }), refreshParties()]);
         }
       })();
+      return;
     }
     // handleStack closes over latest auth/state; intentional for one-shot auto join.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- auto-match trigger on feed/mode
+    // NOTE: auto-match trigger on feed/mode
   }, [
     authSession?.accessToken,
     authSession?.userId,
@@ -1225,6 +1343,9 @@ export function GamesSearchView() {
     myRoles,
     ownedParties,
     autoMatchExcludedPartySlugsKey,
+    autoMatchExcludedTargetSlugs,
+    autoInviteExcludedTargetKeys,
+    outgoingInvites,
     results,
     searchLive,
     selectedPartySlug,

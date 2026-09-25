@@ -223,10 +223,12 @@ export function HeaderNotifications() {
               }
             }
 
-            if (invite.status === "DECLINED" || invite.status === "CANCELLED") {
+            // CANCELLED = system close (slot taken, race, TTL) — list refresh only.
+            // Only human DECLINED gets an "Отказали" toast.
+            if (invite.status === "DECLINED") {
               // Notify the other party, not the person who clicked decline:
-              // - INVITE declined/cancelled → toast for captain (outgoing)
-              // - APPLICATION declined/cancelled by system or captain → toast for applicant (incoming)
+              // - INVITE declined → toast for captain (outgoing)
+              // - APPLICATION declined by captain → toast for applicant (incoming)
               const shouldNotify =
                 (invite.inviteKind === "INVITE" && invite.direction === "outgoing") ||
                 (invite.inviteKind === "APPLICATION" && invite.direction === "incoming");

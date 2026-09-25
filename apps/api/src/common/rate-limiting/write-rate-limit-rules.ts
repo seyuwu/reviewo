@@ -26,6 +26,18 @@ export function createEntityCreationRateLimitRules(
   ];
 }
 
+export function createAuthRefreshRateLimitRules(request: RequestLike): RateLimitRule[] {
+  return [
+    {
+      key: resolveRequestIp(request),
+      limit: 60,
+      message: "Too many auth refresh attempts from this network",
+      namespace: "auth:refresh:ip",
+      windowSeconds: 5 * 60
+    }
+  ];
+}
+
 export function createTrustCheckRateLimitRules(request: RequestLike): RateLimitRule[] {
   return [
     {

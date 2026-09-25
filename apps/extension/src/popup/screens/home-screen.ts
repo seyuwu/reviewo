@@ -17,7 +17,7 @@ import {
   shortenCanonicalUrlForTree
 } from "../domain-tree.js";
 import type { EntityViewModel, RecentEntityRecord } from "../types.js";
-import { buildEntityPageUrl, buildGlobalTopsUrl, entityViewFromResolve, escapeHtml } from "../view-helpers.js";
+import { buildEntityPageUrl, entityViewFromResolve, escapeHtml } from "../view-helpers.js";
 import { resolveExtensionContentLocale } from "../../shared/content-locale.js";
 import { bindAuthPromptTriggers } from "../bind-auth-prompt-triggers.js";
 import { sendExtensionMessage } from "../services/popup-messaging.js";

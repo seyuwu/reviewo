@@ -6,6 +6,7 @@ export interface SharedAuthCookieSession {
   avatarUrl: string | null;
   displayName: string;
   email: string | null;
+  refreshToken?: string;
   userId: string;
 }
 
@@ -52,6 +53,7 @@ export function readSharedAuthSessionCookie(
       avatarUrl: typeof parsed.avatarUrl === "string" ? parsed.avatarUrl : null,
       displayName: parsed.displayName,
       email: typeof parsed.email === "string" ? parsed.email : null,
+      ...(typeof parsed.refreshToken === "string" ? { refreshToken: parsed.refreshToken } : {}),
       userId: typeof parsed.userId === "string" ? parsed.userId : ""
     };
   } catch {
@@ -80,6 +82,7 @@ export function writeSharedAuthSessionCookie(
     avatarUrl: null,
     displayName: session.displayName,
     email: session.email,
+    ...(session.refreshToken ? { refreshToken: session.refreshToken } : {}),
     userId: session.userId
   };
   const value = encodeURIComponent(JSON.stringify(cookieSession));

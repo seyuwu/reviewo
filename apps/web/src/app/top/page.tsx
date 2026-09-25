@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   title: "Top picks | Opinia"
 };
 
+export const revalidate = 60;
+
 export default async function TopPage() {
   const [topResponse, catalogResponse] = await Promise.all([
     fetchTopRatingsServer("votes", 20),

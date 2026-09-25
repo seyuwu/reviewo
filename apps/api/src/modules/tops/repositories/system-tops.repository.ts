@@ -7,7 +7,6 @@ import type { SystemTopDefinition } from "../system-top-definitions.js";
 import {
   buildOrderSql,
   buildScoreExpression,
-  sortRankedEntities,
   type TopRankedEntityRow
 } from "../top-rank.utils.js";
 

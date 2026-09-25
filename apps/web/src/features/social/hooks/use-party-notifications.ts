@@ -87,6 +87,11 @@ export function usePartyNotifications(): void {
 
       dispatchPartyNotificationEvent({ ...payload, toastId });
 
+      // System CANCELLED (slot taken, race, superseded) — refresh lists only, never toast.
+      if (payload.type === "declined" && invite.status === "CANCELLED") {
+        return;
+      }
+
       // Application declined/withdrawn: no notification sound.
       if (payload.type === "declined" && invite.inviteKind === "APPLICATION") {
         // Applicant withdrew — captain only needs the list update.
@@ -99,6 +104,27 @@ export function usePartyNotifications(): void {
         }
 
         toastedIdsRef.current.add(toastId);
+        pushToast({
+          body: t("web.toast.declinedBody", { party: invite.partyName }),
+          id: toastId,
+          title: t("web.toast.declined")
+        });
+        return;
+      }
+
+      // INVITE decline: only the inviter (outgoing) hears "Отказали".
+      // Invitee must not get a toast that feels like they invited someone.
+      if (payload.type === "declined" && invite.inviteKind !== "APPLICATION") {
+        if (invite.direction !== "outgoing") {
+          return;
+        }
+
+        if (toastedIdsRef.current.has(toastId)) {
+          return;
+        }
+
+        toastedIdsRef.current.add(toastId);
+        playNotificationSound();
         pushToast({
           body: t("web.toast.declinedBody", { party: invite.partyName }),
           id: toastId,
@@ -161,11 +187,7 @@ export function usePartyNotifications(): void {
           });
           break;
         case "declined":
-          pushToast({
-            body: t("web.toast.declinedBody", { party: invite.partyName }),
-            id: toastId,
-            title: t("web.toast.declined")
-          });
+          // Handled above (APPLICATION / INVITE direction checks).
           break;
       }
     }

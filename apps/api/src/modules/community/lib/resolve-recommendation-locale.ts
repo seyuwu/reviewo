@@ -1,4 +1,4 @@
-import { inferReviewLocaleFromText } from "@reviewo/shared";
+import { inferReviewLocaleFromText, parseExplicitLocale } from "@reviewo/shared";
 
 export type RecommendationLocale = "ru" | "en";
 
@@ -8,16 +8,13 @@ export function resolveRecommendationLocale(input: {
   reviewLocale?: string | null | undefined;
   topLocale?: string | null | undefined;
 }): RecommendationLocale {
-  if (input.localeInput === "en" || input.localeInput === "ru") {
-    return input.localeInput;
-  }
+  const explicit =
+    parseExplicitLocale(input.localeInput) ??
+    parseExplicitLocale(input.reviewLocale) ??
+    parseExplicitLocale(input.topLocale);
 
-  if (input.reviewLocale === "en" || input.reviewLocale === "ru") {
-    return input.reviewLocale;
-  }
-
-  if (input.topLocale === "en" || input.topLocale === "ru") {
-    return input.topLocale;
+  if (explicit) {
+    return explicit;
   }
 
   const trimmedMessage = input.message?.trim() ?? "";

@@ -7,6 +7,20 @@ export default [
   ...tseslint.configs.recommended,
   eslintConfigPrettier,
   {
+    files: ["**/*.{js,cjs,mjs}"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        clearInterval: "readonly",
+        clearTimeout: "readonly",
+        fetch: "readonly",
+        setInterval: "readonly",
+        setTimeout: "readonly",
+        URLSearchParams: "readonly"
+      }
+    }
+  },
+  {
     files: ["**/*.{js,cjs,mjs,ts,tsx}"],
     languageOptions: {
       ecmaVersion: 2022,
@@ -18,6 +32,13 @@ export default [
       sourceType: "module"
     },
     rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_"
+        }
+      ],
       "no-console": "off"
     }
   }

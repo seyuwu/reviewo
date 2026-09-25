@@ -543,7 +543,7 @@ export function bindChatDrawerToggle(
     closeLayoutTimer = window.setTimeout(finishPanelClose, POPUP_CHAT_PANEL_ANIMATION_MS + 80);
   };
 
-  const renderDrawer = (): void => {
+  const _renderDrawer = (): void => {
     const expanded = expandedStateByEntity.get(entityId) ?? false;
     setExpandedUi(expanded);
 

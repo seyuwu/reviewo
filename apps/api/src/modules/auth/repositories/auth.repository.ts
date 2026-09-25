@@ -1,5 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import type { AccountRecoveryToken, Prisma, User, UserAuthIdentity } from "#prisma/client";
+import type {
+  AccountRecoveryToken,
+  Prisma,
+  RefreshToken,
+  User,
+  UserAuthIdentity
+} from "#prisma/client";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { PrismaService } from "../../../database/prisma.service.js";
@@ -17,6 +23,10 @@ export type EmailIdentityWithUser = UserAuthIdentity & {
 };
 
 export type RecoveryTokenWithUser = AccountRecoveryToken & {
+  user: User;
+};
+
+export type RefreshTokenWithUser = RefreshToken & {
   user: User;
 };
 
@@ -209,6 +219,101 @@ export class AuthRepository {
       },
       where: {
         consumedAt: null,
+        userId
+      }
+    });
+  }
+
+  createRefreshTokenPlaintext(): string {
+    return randomBytes(48).toString("base64url");
+  }
+
+  hashRefreshToken(token: string): string {
+    return createHash("sha256").update(token).digest("base64url");
+  }
+
+  async createRefreshToken(
+    userId: string,
+    tokenHash: string,
+    expiresAt: Date,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<RefreshToken> {
+    return client.refreshToken.create({
+      data: {
+        expiresAt,
+        tokenHash,
+        userId
+      }
+    });
+  }
+
+  async rotateRefreshToken(input: {
+    expiresAt: Date;
+    id: string;
+    nextTokenHash: string;
+    now: Date;
+    userId: string;
+  }): Promise<boolean> {
+    return this.prismaService.$transaction(async (transaction) => {
+      const revoked = await transaction.refreshToken.updateMany({
+        data: { revokedAt: input.now },
+        where: {
+          expiresAt: { gt: input.now },
+          id: input.id,
+          revokedAt: null
+        }
+      });
+
+      if (revoked.count !== 1) {
+        return false;
+      }
+
+      await this.createRefreshToken(
+        input.userId,
+        input.nextTokenHash,
+        input.expiresAt,
+        transaction
+      );
+
+      return true;
+    });
+  }
+
+  async findRefreshTokenByHash(tokenHash: string): Promise<RefreshTokenWithUser | null> {
+    return this.prismaService.refreshToken.findUnique({
+      include: {
+        user: true
+      },
+      where: {
+        tokenHash
+      }
+    });
+  }
+
+  async revokeRefreshToken(
+    id: string,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<void> {
+    await client.refreshToken.update({
+      data: {
+        revokedAt: new Date()
+      },
+      where: {
+        id
+      }
+    });
+  }
+
+  async revokeRefreshTokensForUser(
+    userId: string,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<void> {
+    await client.refreshToken.updateMany({
+      data: {
+        revokedAt: new Date()
+      },
+      where: {
+        revokedAt: null,
         userId
       }
     });

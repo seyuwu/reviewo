@@ -17,7 +17,6 @@ import { JwtTokenService } from "../../auth/services/jwt-token.service.js";
 import { UsersService } from "../../users/services/users.service.js";
 import type {
   GamePartyChatMessageDto,
-  GamePartyInviteDto,
   GamePartyResponseDto
 } from "../dto/game-party-response.dto.js";
 import type {

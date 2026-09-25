@@ -4,9 +4,7 @@ import { isTwitchPage, isYouTubePage, readPageSourceTitle } from "./read-page-ti
 import {
   doesYouTubeMetadataMatchVideo,
   isGenericYouTubeTitle,
-  isYouTubeOgUrlStillOnVideoPage,
   isYouTubeVideoPageUrl,
-  readYouTubeOgUrl,
   readYouTubeVideoIdFromPageUrl
 } from "./youtube-page-state.js";
 

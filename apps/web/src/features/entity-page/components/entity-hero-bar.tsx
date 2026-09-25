@@ -3,8 +3,9 @@
 import Link from "next/link";
 
 import { OpiniaIcon } from "../../../components/opinia-icon";
+import { formatScore, formatScoreOneDecimal } from "../../../lib/format/format-score";
 import { EntityAvatar } from "../../entities/components/entity-avatar";
-import { formatScoreOneDecimal, formatStarRating } from "../../growth/lib/format-growth-stats";
+import { formatStarRating } from "../../growth/lib/format-growth-stats";
 import { formatEntityHeroTitle } from "../../growth/lib/format-entity-display-name";
 import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
 import { useTranslation } from "../../i18n/locale-provider";
@@ -227,10 +228,6 @@ function EntityStat({
       <strong>{value}</strong>
     </div>
   );
-}
-
-function formatScore(score: number): string {
-  return score.toFixed(2);
 }
 
 function formatReliabilityPercent(confidence: number): string {

@@ -4,7 +4,6 @@ import "reflect-metadata";
 
 import {
   assertCreated,
-  assertOk,
   authHeaders,
   createTestApplication,
   provisionTestUser,
@@ -19,7 +18,7 @@ describe("User tops endpoints", { skip: !shouldRunIntegrationTests }, () => {
   let context: TestApplicationContext;
   let accessToken = "";
   let userId = "";
-  let entityIds: string[] = [];
+  const entityIds: string[] = [];
   let categoryId = "";
 
   before(async () => {

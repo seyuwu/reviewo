@@ -8,6 +8,7 @@ export interface CurrentUser {
 export interface AuthResponse {
   accessToken: string;
   expiresIn: number;
+  refreshToken?: string;
   tokenType: "Bearer";
   user: CurrentUser;
 }
@@ -26,5 +27,7 @@ export interface StoredAuthSession {
   avatarUrl: string | null;
   displayName: string;
   email: string | null;
+  /** Kept in localStorage only: the shared auth cookie must stay small enough for browsers. */
+  refreshToken?: string;
   userId: string;
 }

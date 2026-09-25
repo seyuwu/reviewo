@@ -1,5 +1,4 @@
 import {
-  guardExtensionContext,
   onExtensionContextInvalidated,
   runWithExtensionContext
 } from "./extension-context.js";

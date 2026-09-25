@@ -313,7 +313,6 @@ export function FriendsDock() {
         <Link className={styles.profile} href={accountHref}>
           <span aria-hidden="true" className={styles.avatar}>
             {session.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img alt="" className={styles.avatarImage} src={session.avatarUrl} />
             ) : (
               resolveInitial(session.displayName)

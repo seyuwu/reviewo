@@ -5,6 +5,7 @@ import { isApiError, readApiErrorMessage } from "../../../lib/api/read-api-error
 const STACK_ERROR_MESSAGES: Record<string, string> = {
   "Captain needs a Dota profile to recruit": "dota.team.recruitNeedProfile",
   "Invite already pending": "games.search.error.invitePending",
+  "Player already applied to this party": "games.search.error.alreadyApplied",
   "Pick a role to apply for": "games.search.error.pickRole",
   "Player is no longer recruiting for a party": "games.search.error.recruitEnded",
   "Player is not looking for a party right now": "games.search.error.notLooking",

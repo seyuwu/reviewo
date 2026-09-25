@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
@@ -17,15 +18,29 @@ import { isGamesModePath, isGamesProductMode } from "../features/games/lib/games
 import { NotificationToastsProvider } from "../features/games/lib/use-notification-toasts";
 import { LocaleSwitcher } from "../features/i18n/locale-switcher";
 import { useTranslation } from "../features/i18n/locale-provider";
-import { FriendsDock } from "../features/social/components/friends-dock";
 import { usePartyNotifications } from "../features/social/hooks/use-party-notifications";
 import { HeaderActivityNav } from "./header-activity-nav";
 import { HeaderChromeSearch } from "./header-chrome-search";
 import { HeaderGamesNav } from "./header-games-nav";
-import { HeaderNotifications } from "./header-notifications";
-import { HeaderRostersMenu } from "./header-rosters-menu";
 import { HeaderStatusIndicators } from "./header-status-indicators";
 import { ProductBrandSwitcher } from "./product-brand-switcher";
+
+// Socket-connected chrome widgets pull socket.io-client into the page bundle; load them lazily
+// on the client so static pages stay lean. They render nothing until their chunk arrives.
+const FriendsDock = dynamic(
+  () => import("../features/social/components/friends-dock").then((mod) => mod.FriendsDock),
+  { loading: () => null, ssr: false }
+);
+
+const HeaderNotifications = dynamic(
+  () => import("./header-notifications").then((mod) => mod.HeaderNotifications),
+  { loading: () => null, ssr: false }
+);
+
+const HeaderRostersMenu = dynamic(
+  () => import("./header-rosters-menu").then((mod) => mod.HeaderRostersMenu),
+  { loading: () => null, ssr: false }
+);
 
 interface AppChromeProps {
   children: ReactNode;
@@ -167,7 +182,6 @@ export function AppChrome({ children }: AppChromeProps) {
                   >
                     <span className="app-chrome-user-avatar" aria-hidden="true">
                       {authSession?.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img alt="" className="app-chrome-user-avatar-image" src={authSession.avatarUrl} />
                       ) : (
                         resolveUserInitial(authSession?.displayName)

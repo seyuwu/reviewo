@@ -4,9 +4,7 @@ export function formatStarRating(score: number): string {
   return `${"★".repeat(rounded)}${"☆".repeat(5 - rounded)}`;
 }
 
-export function formatScoreOneDecimal(score: number): string {
-  return score.toFixed(1);
-}
+export { formatScoreOneDecimal } from "../../../lib/format/format-score";
 
 export function formatTrustPercent(confidence: number): string {
   return `${Math.round(confidence * 100)}%`;

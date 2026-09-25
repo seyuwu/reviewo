@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { HttpStatus, Injectable } from "@nestjs/common";
+import type { RedisClientType } from "redis";
 
 import { AppErrorCode } from "../exceptions/app-error-code.js";
 import { createAppException } from "../exceptions/app.exception.js";
@@ -20,6 +21,18 @@ export interface RequestLike {
     remoteAddress?: string;
   };
 }
+
+/**
+ * Atomic INCR + first-hit EXPIRE. Doing this server-side in one script keeps the
+ * window TTL correct even if the process dies between the counter and the expiry.
+ */
+const INCR_WITH_TTL_SCRIPT = `
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+`;
 
 @Injectable()
 export class ApiRateLimiterService {
@@ -46,11 +59,7 @@ export class ApiRateLimiterService {
   private async assertWithinLimit(rule: RateLimitRule): Promise<void> {
     const client = await this.redisService.getClient();
     const redisKey = buildRateLimitRedisKey(rule);
-    const count = await client.incr(redisKey);
-
-    if (count === 1) {
-      await client.expire(redisKey, rule.windowSeconds);
-    }
+    const count = await this.incrementWithTtl(client, redisKey, rule.windowSeconds);
 
     if (count <= rule.limit) {
       return;
@@ -75,11 +84,21 @@ export class ApiRateLimiterService {
   private async recordLimit(rule: RateLimitRule): Promise<void> {
     const client = await this.redisService.getClient();
     const redisKey = buildRateLimitRedisKey(rule);
-    const count = await client.incr(redisKey);
 
-    if (count === 1) {
-      await client.expire(redisKey, rule.windowSeconds);
-    }
+    await this.incrementWithTtl(client, redisKey, rule.windowSeconds);
+  }
+
+  private async incrementWithTtl(
+    client: Pick<RedisClientType, "eval">,
+    redisKey: string,
+    windowSeconds: number
+  ): Promise<number> {
+    const result = await client.eval(INCR_WITH_TTL_SCRIPT, {
+      arguments: [String(windowSeconds)],
+      keys: [redisKey]
+    });
+
+    return Number(result);
   }
 }
 

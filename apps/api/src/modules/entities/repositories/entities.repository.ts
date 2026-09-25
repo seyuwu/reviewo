@@ -225,6 +225,34 @@ export class EntitiesRepository {
     });
   }
 
+  async listSitemapEntries(
+    limit: number,
+    offset: number
+  ): Promise<Array<Pick<Entity, "id" | "updatedAt">>> {
+    return this.prismaService.entity.findMany({
+      orderBy: {
+        createdAt: "asc"
+      },
+      select: {
+        id: true,
+        updatedAt: true
+      },
+      skip: offset,
+      take: limit,
+      where: {
+        visibility: "ACTIVE"
+      }
+    });
+  }
+
+  async countActive(): Promise<number> {
+    return this.prismaService.entity.count({
+      where: {
+        visibility: "ACTIVE"
+      }
+    });
+  }
+
   async updateVisibility(id: string, visibility: EntityVisibility): Promise<Entity> {
     return this.prismaService.entity.update({
       data: {

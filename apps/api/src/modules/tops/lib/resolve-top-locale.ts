@@ -1,12 +1,14 @@
-import { inferReviewLocaleFromText } from "@reviewo/shared";
+import { inferReviewLocaleFromText, parseExplicitLocale } from "@reviewo/shared";
 
 export function resolveTopLocale(
   localeInput: string | undefined,
   title: string,
   description?: string | null
 ): "ru" | "en" {
-  if (localeInput === "en" || localeInput === "ru") {
-    return localeInput;
+  const explicit = parseExplicitLocale(localeInput);
+
+  if (explicit) {
+    return explicit;
   }
 
   const combined = `${title} ${description ?? ""}`.trim();

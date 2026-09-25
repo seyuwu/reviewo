@@ -8,6 +8,7 @@ import { createAppException } from "../../../common/exceptions/app.exception.js"
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
 import { CreateEntityDto } from "../dto/create-entity.dto.js";
 import { EntityDto } from "../dto/entity.dto.js";
+import { SitemapEntriesResponseDto } from "../dto/sitemap-entries.dto.js";
 import type { RankedSearchEntityDto } from "../dto/ranked-search-entity.dto.js";
 import { TrustCheckResponseDto } from "../dto/trust-check-response.dto.js";
 import { createEntityCreatedEvent } from "../events/entity-created.event.js";
@@ -448,6 +449,23 @@ export class EntitiesService implements EntitiesPort {
     const rankedRows = await this.performRankedSearch(query);
 
     return rankedRows.map(({ entity }) => toEntityDto(entity));
+  }
+
+  async listSitemapEntries(limit: number, offset: number): Promise<SitemapEntriesResponseDto> {
+    const [entities, total] = await Promise.all([
+      this.entitiesRepository.listSitemapEntries(limit, offset),
+      this.entitiesRepository.countActive()
+    ]);
+
+    return {
+      items: entities.map((entity) => ({
+        id: entity.id,
+        updatedAt: entity.updatedAt.toISOString()
+      })),
+      limit,
+      offset,
+      total
+    };
   }
 
   async searchEntitiesRanked(query: string): Promise<RankedSearchEntityDto[]> {

@@ -841,8 +841,8 @@ export class GamePartiesService implements OnModuleInit {
       }
     }
 
-    let closedInvites: GamePartyInvite[] = [];
-    let joined: GamePartyMember | null = null;
+    let closedInvites: GamePartyInvite[];
+    let joined: GamePartyMember | null;
     let acceptFailReason: "full" | "role_taken" | "already_on_other_team" | undefined;
 
     try {
@@ -1728,18 +1728,24 @@ export class GamePartiesService implements OnModuleInit {
     }
 
     const existingInvite = await this.gamePartiesRepository.findPendingInvite(party.id, targetUserId);
+    const nextKind = options?.inviteKind ?? "INVITE";
 
     if (existingInvite) {
-      // Managers re-inviting after kick: drop stale PENDING and mint a fresh invite id.
-      if ((options?.inviteKind ?? "INVITE") === "INVITE") {
-        await this.gamePartiesRepository.cancelPendingInvite(existingInvite.id);
-      } else {
+      // Never cancel-and-recreate: that fired CANCELLED→"declined" toast spam and wiped
+      // pending APPLICATIONS when recruit auto-invite raced join auto-apply.
+      if (existingInvite.kind === "APPLICATION" && nextKind === "INVITE") {
         throw createAppException({
           code: AppErrorCode.Conflict,
-          message: "Invite already pending",
+          message: "Player already applied to this party",
           statusCode: HttpStatus.CONFLICT
         });
       }
+
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "Invite already pending",
+        statusCode: HttpStatus.CONFLICT
+      });
     }
 
     if ((options?.inviteKind ?? "INVITE") === "APPLICATION") {
@@ -3312,7 +3318,8 @@ export class GamePartiesService implements OnModuleInit {
           inviteeUserId: row.inviteeUserId,
           kind: row.kind,
           positionRole: row.positionRole,
-          status: row.status === "PENDING" ? "DECLINED" : row.status
+          // Keep CANCELLED as CANCELLED — clients must not toast it as a human decline.
+          status: row.status === "PENDING" ? "CANCELLED" : row.status
         },
         "incoming",
         party,
@@ -3346,7 +3353,7 @@ export class GamePartiesService implements OnModuleInit {
     },
     meta?: InviteeMeta
   ): GamePartyInviteDto {
-    const positionRole =
+    const _positionRole =
       invite.positionRole && isDotaPositionRole(invite.positionRole) ? invite.positionRole : null;
 
     return {

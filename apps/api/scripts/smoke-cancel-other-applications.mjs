@@ -33,7 +33,7 @@ async function api(method, path, token, body) {
     body: body ? JSON.stringify(body) : undefined
   });
   const text = await response.text();
-  let json = null;
+  let json;
   try {
     json = text ? JSON.parse(text) : null;
   } catch {

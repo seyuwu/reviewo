@@ -24,7 +24,7 @@ import { bindAutoDismiss, bindOutsideDismiss, clearAutoDismiss, unbindAutoDismis
 import { buildCardDisplayContext, getRateTargetEntityId } from "./card-display.js";
 import { installCardResponsiveScale } from "./card-responsive-scale.js";
 import { installCardTitleRefresh, resolveCardDisplayTitle } from "./card-page-title.js";
-import { isPageContentReadyForCard, waitForPageContentReady } from "./page-content-ready.js";
+import { isPageContentReadyForCard } from "./page-content-ready.js";
 import { toFoundResponseFromByUrlRating } from "./convert-by-url-rating.js";
 import { fetchMyEntityReview } from "./fetch-my-entity-review.js";
 import { fetchEntityReviews } from "./fetch-entity-reviews.js";

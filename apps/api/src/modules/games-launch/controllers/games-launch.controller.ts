@@ -1,16 +1,14 @@
-import { Body, Controller, Get, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post, Query, UseGuards } from "@nestjs/common";
 
 import { CurrentUser } from "../../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
-import {
-  ApiRateLimiterService,
-  type RequestLike
-} from "../../../common/rate-limiting/api-rate-limiter.service.js";
 import {
   createGamesLaunchDevNoteLikeRateLimitRules,
   createGamesLaunchInterestRateLimitRules,
   createGamesLaunchSuggestionRateLimitRules
 } from "../../../common/rate-limiting/write-rate-limit-rules.js";
+import { RateLimit } from "../../../common/rate-limiting/rate-limit.decorator.js";
+import { RateLimitGuard } from "../../../common/rate-limiting/rate-limit.guard.js";
 import { AdminGuard } from "../../auth/guards/admin.guard.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.js";
@@ -27,10 +25,7 @@ import { GamesLaunchService } from "../services/games-launch.service.js";
 
 @Controller("games/launch")
 export class GamesLaunchController {
-  constructor(
-    private readonly apiRateLimiterService: ApiRateLimiterService,
-    private readonly gamesLaunchService: GamesLaunchService
-  ) {}
+  constructor(private readonly gamesLaunchService: GamesLaunchService) {}
 
   @Get("status")
   @UseGuards(OptionalJwtAuthGuard)
@@ -45,41 +40,32 @@ export class GamesLaunchController {
   }
 
   @Post("interest")
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(OptionalJwtAuthGuard, RateLimitGuard)
+  @RateLimit(({ request }) => createGamesLaunchInterestRateLimitRules(request))
   async createInterest(
     @Body() input: CreateGamesLaunchInterestDto,
-    @CurrentUser() currentUser: AuthenticatedUser | undefined,
-    @Req() request: RequestLike
+    @CurrentUser() currentUser: AuthenticatedUser | undefined
   ): Promise<{ ok: true }> {
-    await this.apiRateLimiterService.assertWithinLimits(
-      createGamesLaunchInterestRateLimitRules(request)
-    );
     return this.gamesLaunchService.createInterest(input, currentUser?.id);
   }
 
   @Post("suggestions")
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(OptionalJwtAuthGuard, RateLimitGuard)
+  @RateLimit(({ request }) => createGamesLaunchSuggestionRateLimitRules(request))
   async createSuggestion(
     @Body() input: CreateGamesLaunchSuggestionDto,
-    @CurrentUser() currentUser: AuthenticatedUser | undefined,
-    @Req() request: RequestLike
+    @CurrentUser() currentUser: AuthenticatedUser | undefined
   ): Promise<{ ok: true }> {
-    await this.apiRateLimiterService.assertWithinLimits(
-      createGamesLaunchSuggestionRateLimitRules(request)
-    );
     return this.gamesLaunchService.createSuggestion(input, currentUser?.id);
   }
 
   @Post("dev-note/like")
-  @UseGuards(OptionalJwtAuthGuard)
+  @UseGuards(OptionalJwtAuthGuard, RateLimitGuard)
+  @RateLimit(({ request }) => createGamesLaunchDevNoteLikeRateLimitRules(request))
   async toggleDevNoteLike(
     @Body() input: ToggleGamesLaunchDevNoteLikeDto,
-    @CurrentUser() currentUser: AuthenticatedUser | undefined,
-    @Req() request: RequestLike
+    @CurrentUser() currentUser: AuthenticatedUser | undefined
   ): Promise<{ likeCount: number; liked: boolean }> {
-    await this.apiRateLimiterService.assertWithinLimits(
-      createGamesLaunchDevNoteLikeRateLimitRules(request)
-    );
     return this.gamesLaunchService.toggleDevNoteLike({
       ...(currentUser?.id ? { userId: currentUser.id } : {}),
       ...(input.voterKey ? { voterKey: input.voterKey } : {})

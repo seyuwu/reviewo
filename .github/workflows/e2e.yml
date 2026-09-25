@@ -1,0 +1,70 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright e2e
+    runs-on: ubuntu-latest
+    env:
+      # Container names (reviewo-dev-redis-1) are referenced by e2e rate-limit cleanup helpers.
+      COMPOSE_PROJECT_NAME: reviewo-dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: corepack pnpm install --frozen-lockfile
+
+      - name: Start stack (api, web, postgres, redis)
+        run: >-
+          docker compose
+          -f docker-compose.yml
+          -f docker-compose.dev.yml
+          up -d --build api web postgres redis
+
+      - name: Apply database migrations
+        run: >-
+          docker compose
+          -f docker-compose.yml
+          -f docker-compose.dev.yml
+          exec -T api corepack pnpm --filter @reviewo/api db:migrate
+
+      - name: Wait for API and web
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:3000/health >/dev/null \
+              && curl -sf -o /dev/null http://localhost:3001/; then
+              echo "Stack is up"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Stack did not become healthy in time"
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail 100
+          exit 1
+
+      - name: Install Playwright chromium
+        run: corepack pnpm --filter @reviewo/e2e exec playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        run: corepack pnpm test:e2e
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            e2e/test-results/
+            e2e/playwright-report/
+          retention-days: 7

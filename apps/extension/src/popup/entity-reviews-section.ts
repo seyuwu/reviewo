@@ -323,7 +323,7 @@ export function bindEntityReviewsSection(
   let myReviewText = initialMyReviewText;
   let activeReviewIndex = 0;
   const hideMyReviewWhenSaved = renderOptions.hideMyReviewWhenSaved !== false;
-  let showReviewForm =
+  let _showReviewForm =
     renderOptions.showReviewForm ??
     !(hideMyReviewWhenSaved && hasSavedReviewText(myReviewText));
 
@@ -554,7 +554,7 @@ export function bindEntityReviewsSection(
     }
 
     myReviewText = result.review.text;
-    showReviewForm = false;
+    _showReviewForm = false;
     const existingIndex = state.reviews.findIndex((item) => item.id === result.review!.id);
 
     state = {

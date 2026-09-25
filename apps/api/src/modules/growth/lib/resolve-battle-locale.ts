@@ -1,7 +1,5 @@
-export function resolveBattleLocale(localeInput?: string): "ru" | "en" {
-  if (localeInput === "en" || localeInput === "ru") {
-    return localeInput;
-  }
+import { parseExplicitLocale } from "@reviewo/shared";
 
-  return "ru";
+export function resolveBattleLocale(localeInput?: string): "ru" | "en" {
+  return parseExplicitLocale(localeInput) ?? "ru";
 }

@@ -58,7 +58,6 @@ interface EntityChatPanelProps {
 export function EntityChatPanel({
   accessToken,
   entityId,
-  entityTitle,
   initialExpanded = false,
   isAuthenticated,
   onRequestSignIn,

@@ -61,6 +61,8 @@ export async function generateMetadata({ params }: DotaTeamPageProps): Promise<M
   };
 }
 
+export const revalidate = 60;
+
 export default async function DotaTeamPage({ params }: DotaTeamPageProps) {
   const { slug } = await params;
   const party = await fetchParty(slug);

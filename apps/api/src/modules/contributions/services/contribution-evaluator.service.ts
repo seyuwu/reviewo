@@ -9,7 +9,6 @@ import {
   UPDATE_URL_CHANGE_BASE_APPROVE_WEIGHT,
   UPDATE_URL_CHANGE_MIN_UNIQUE_VOTERS
 } from "../constants/contribution-limits.js";
-import type { FieldChangePayload } from "../types/contribution-payload.js";
 import { isFieldChangePayload } from "../types/contribution-payload.js";
 
 export interface ContributionVoteTotals {

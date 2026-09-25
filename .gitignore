@@ -32,6 +32,15 @@ pnpm-debug.log*
 apps/waitlist-bot/data/
 apps/api/src/generated/
 
+# Python
+__pycache__/
+*.pyc
+
+# Playwright
+e2e/test-results/
+e2e/playwright-report/
+e2e/.playwright/
+
 # IDE and OS files
 .DS_Store
 Thumbs.db

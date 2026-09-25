@@ -25,7 +25,7 @@ type PendingEvent = {
   type: string;
 };
 
-let queue: PendingEvent[] = [];
+const queue: PendingEvent[] = [];
 let flushTimer: number | null = null;
 let pageEnteredAt = 0;
 let pagePath = "";

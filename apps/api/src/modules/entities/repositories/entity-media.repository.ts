@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { EntityMedia, EntityMediaSource, EntityMediaType, Prisma } from "#prisma/client";
+import type { EntityMedia, EntityMediaSource, Prisma } from "#prisma/client";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 import { ENTITY_MEDIA_AUTO_SOURCES, ENTITY_MEDIA_MANUAL_SOURCES } from "../constants/entity-media.js";

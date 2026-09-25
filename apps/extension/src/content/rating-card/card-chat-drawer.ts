@@ -488,7 +488,7 @@ export function bindCardChatDrawer(
     ensureDrawerMounted(true);
   };
 
-  const renderDrawer = (): void => {
+  const _renderDrawer = (): void => {
     const expanded = expandedStateByEntity.get(entityId) ?? false;
     setExpandedUi(expanded);
 

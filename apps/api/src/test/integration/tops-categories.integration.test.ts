@@ -41,7 +41,7 @@ async function seedTopCategories(context: TestApplicationContext): Promise<void>
 describe("Top categories endpoints", { skip: !shouldRunIntegrationTests }, () => {
   let context: TestApplicationContext;
   let accessToken = "";
-  let entityIds: string[] = [];
+  const entityIds: string[] = [];
   let aiCategoryId = "";
 
   before(async () => {

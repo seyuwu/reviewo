@@ -55,6 +55,8 @@ export async function generateMetadata({ params }: DotaProfilePageProps): Promis
   };
 }
 
+export const revalidate = 60;
+
 export default async function DotaProfilePage({ params }: DotaProfilePageProps) {
   const { slug } = await params;
   const profile = await fetchProfile(slug);

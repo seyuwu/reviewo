@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { formatScoreOneDecimal } from "../../../lib/format/format-score";
 import { EntityAvatar } from "../../entities/components/entity-avatar";
 import { useTranslation } from "../../i18n/locale-provider";
 import { formatEntityTypeLabel } from "../../i18n/entity-type-label";
@@ -99,7 +100,7 @@ function CanonicalSearchHit({ entity, query }: CanonicalSearchHitProps) {
             <span className="home-search-hit-rating-score" aria-hidden="true">
               ★
             </span>
-            <span>{formatScore(entity.avgScore)}</span>
+            <span>{formatScoreOneDecimal(entity.avgScore)}</span>
             <span className="home-search-hit-rating-meta">
               {t("search.canonical.ratings", { count: entity.votesCount })}
             </span>
@@ -123,8 +124,4 @@ function formatSearchHostname(canonicalUrl: string | null): string | null {
   } catch {
     return canonicalUrl;
   }
-}
-
-function formatScore(score: number): string {
-  return score.toFixed(1);
 }

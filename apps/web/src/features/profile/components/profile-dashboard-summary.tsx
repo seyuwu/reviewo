@@ -104,7 +104,6 @@ export function ProfileDashboardSummary({ accessToken, profile }: ProfileDashboa
         <div className={styles.heroIdentity}>
           <span className={styles.avatar} aria-hidden="true">
             {profile.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img alt="" className={styles.avatarImage} src={profile.avatarUrl} />
             ) : (
               getInitials(profile.displayName)

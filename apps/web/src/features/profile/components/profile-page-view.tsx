@@ -71,7 +71,6 @@ export function ProfilePageView() {
       email: profileQuery.data.email
     });
     // Sync session once when loaded profile changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     profileQuery.data?.avatarUrl,
     profileQuery.data?.displayName,
@@ -386,7 +385,6 @@ function ProfileDetails({
         <>
           <div className="profile-avatar" aria-hidden="true">
             {profile.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img alt="" className="profile-avatar-image" src={profile.avatarUrl} />
             ) : (
               getInitials(displayName)
@@ -403,7 +401,6 @@ function ProfileDetails({
       <div className="profile-avatar-editor">
         <div className="profile-avatar" aria-hidden="true">
           {profile.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img alt="" className="profile-avatar-image" src={profile.avatarUrl} />
           ) : (
             getInitials(displayName)

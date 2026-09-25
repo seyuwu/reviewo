@@ -178,7 +178,7 @@ export function bindEntityAvatars(container: ParentNode): void {
         return;
       }
 
-      let candidates: string[] = [];
+      let candidates: string[];
 
       try {
         candidates = JSON.parse(rawCandidates) as string[];

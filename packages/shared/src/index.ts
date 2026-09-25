@@ -16,6 +16,7 @@ export {
   inferReviewLocaleFromText,
   normalizeContentLocaleFilter,
   parseContentLocaleParam,
+  parseExplicitLocale,
   resolveContentLocale,
   type ContentLocaleParam,
   type LocalePreference

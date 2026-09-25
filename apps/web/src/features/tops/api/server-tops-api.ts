@@ -1,6 +1,6 @@
 import { appendContentLocaleToPath } from "../../i18n/content-locale";
 import { serverApiRequest } from "../../../lib/api/server-api-client";
-import { parseTopListSort, type TopListSort } from "../lib/top-list-sort";
+import { type TopListSort } from "../lib/top-list-sort";
 import type { ContentLocaleParam } from "../../i18n/content-locale";
 import type { SystemTopCatalogResponse, SystemTopDetail, Top, TopCategoryListResponse, TopListResponse } from "../types/tops";
 

@@ -1,3 +1,4 @@
+import { publicEnv } from "../../../lib/config/public-env";
 import type { AuthResponse, StoredAuthSession } from "../types/auth";
 import {
   clearSharedAuthSessionCookie,
@@ -41,7 +42,11 @@ export function getStoredAuthSession(): StoredAuthSession | null {
       avatarUrl:
         fromLocal?.userId === fromCookie.userId && fromLocal.avatarUrl
           ? fromLocal.avatarUrl
-          : fromCookie.avatarUrl
+          : fromCookie.avatarUrl,
+      // Preserve refresh tokens from older cookies/local sessions during migration.
+      ...(fromCookie.refreshToken || fromLocal?.userId !== fromCookie.userId || !fromLocal?.refreshToken
+        ? {}
+        : { refreshToken: fromLocal.refreshToken })
     };
     window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(merged));
     return merged;
@@ -68,6 +73,7 @@ export function saveAuthSession(
     avatarUrl: authResponse.user.avatarUrl ?? null,
     displayName: authResponse.user.displayName,
     email: authResponse.user.email,
+    ...(authResponse.refreshToken ? { refreshToken: authResponse.refreshToken } : {}),
     userId: authResponse.user.id
   };
 
@@ -119,11 +125,38 @@ export function clearAuthSession(): void {
 
   const cookieOptions = getCookieRuntimeOptions();
 
+  revokeRefreshTokenServerSide();
   window.localStorage.setItem(WEB_SIGNED_OUT_KEY, "1");
   window.localStorage.removeItem(AUTH_STORAGE_KEY);
   clearSharedAuthSessionCookie(cookieOptions);
   writeSharedSignedOutCookie(cookieOptions);
   notifyWebSignOut();
+}
+
+function revokeRefreshTokenServerSide(): void {
+  const storedAuth = window.localStorage.getItem(AUTH_STORAGE_KEY);
+
+  if (!storedAuth) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(storedAuth) as { refreshToken?: string };
+
+    if (!parsed.refreshToken) {
+      return;
+    }
+
+    // Best effort: the local session is cleared regardless of the outcome.
+    void fetch(new URL("/auth/logout", publicEnv.apiBaseUrl), {
+      body: JSON.stringify({ refreshToken: parsed.refreshToken }),
+      headers: { "content-type": "application/json" },
+      keepalive: true,
+      method: "POST"
+    }).catch(() => undefined);
+  } catch {
+    return;
+  }
 }
 
 function readLocalAuthSession(): StoredAuthSession | null {

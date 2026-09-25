@@ -53,7 +53,6 @@ export function DotaProfileAvatarEditor({ displayName }: DotaProfileAvatarEditor
     <div className={styles.wrap}>
       <span className={styles.avatar} aria-hidden="true">
         {avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img alt="" className={styles.avatarImage} src={avatarUrl} />
         ) : (
           initial

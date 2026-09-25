@@ -2,7 +2,6 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { BackToSearchLink } from "../../../components/back-to-search-link";
@@ -47,12 +46,11 @@ const MAX_REVIEW_TEXT_LENGTH = 5000;
 
 interface EntityPageViewProps {
   entityId: string;
+  /** Server-fetched payload seeded into the query cache so the first HTML paint contains content. */
+  initialEntityPage?: EntityPageResponse | null;
 }
 
-export function EntityPageView({ entityId }: EntityPageViewProps) {
-  const searchParams = useSearchParams();
-  const returnQuery = searchParams.get("q")?.trim() ?? "";
-  const shouldOpenChat = searchParams.get("chat") === "open";
+export function EntityPageView({ entityId, initialEntityPage }: EntityPageViewProps) {
   const queryClient = useQueryClient();
   const t = useTranslation();
   const { resolvedLocale: locale } = useLocale();
@@ -74,7 +72,17 @@ export function EntityPageView({ entityId }: EntityPageViewProps) {
   const [showAllReviews, setShowAllReviews] = useState(false);
   const contentLocale = showAllReviews ? "all" : locale;
 
+  const [returnQuery, setReturnQuery] = useState("");
+  const [shouldOpenChat, setShouldOpenChat] = useState(false);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    setReturnQuery(searchParams.get("q")?.trim() ?? "");
+    setShouldOpenChat(searchParams.get("chat") === "open");
+  }, []);
+
   const entityPageQuery = useQuery({
+    initialData: initialEntityPage ?? undefined,
     queryFn: () => getEntityPage(entityId, accessToken, contentLocale),
     queryKey: ["entity-page", entityId, accessToken ?? null, contentLocale],
     placeholderData: keepPreviousData

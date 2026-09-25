@@ -3,7 +3,7 @@ COMPOSE_DEV = $(COMPOSE) --env-file .env.development -f docker-compose.yml -f do
 COMPOSE_PROD = $(COMPOSE) --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml
 PNPM = corepack pnpm
 
-.PHONY: dev down build rebuild logs clean lint typecheck format test prod prod-down prod-logs migrate seed seed-ai-tools
+.PHONY: dev down build rebuild logs clean lint typecheck format test e2e prod prod-down prod-logs migrate migrate-prod seed seed-ai-tools
 
 dev:
 	$(COMPOSE_DEV) up
@@ -36,8 +36,14 @@ format:
 test:
 	$(PNPM) test
 
+e2e:
+	$(PNPM) test:e2e
+
 migrate:
 	$(COMPOSE_DEV) exec api corepack pnpm --filter @reviewo/api db:migrate
+
+migrate-prod:
+	$(COMPOSE_PROD) exec api corepack pnpm --filter @reviewo/api db:migrate
 
 seed:
 	$(COMPOSE_DEV) exec api corepack pnpm --filter @reviewo/api db:seed

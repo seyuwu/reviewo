@@ -1,4 +1,4 @@
-import { normalizeEntityChatLocale, type EntityChatLocale } from "./entity-chat.js";
+import type { EntityChatLocale } from "./entity-chat.js";
 
 export type ContentLocaleParam = EntityChatLocale | "all";
 
@@ -9,6 +9,16 @@ export function parseContentLocaleParam(value?: string | null): ContentLocalePar
     return "all";
   }
 
+  if (value === "en" || value === "ru") {
+    return value;
+  }
+
+  return undefined;
+}
+
+export function parseExplicitLocale(
+  value?: string | null | undefined
+): EntityChatLocale | undefined {
   if (value === "en" || value === "ru") {
     return value;
   }

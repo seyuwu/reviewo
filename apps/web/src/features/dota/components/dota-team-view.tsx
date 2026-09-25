@@ -12,7 +12,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import type { TranslateFn } from "@reviewo/i18n";
 
-import { DOTA_PARTY_SIZE, DOTA_TEAM_DISCORD_VOICE_EXTEND_HOURS, DOTA_TEMP_PARTY_EXTEND_HOURS, DOTA_TEMP_PARTY_TTL_HOURS, type DotaGreenFlagKey, type DotaRedFlagKey } from "@reviewo/shared";
+import { DOTA_PARTY_SIZE, DOTA_TEMP_PARTY_EXTEND_HOURS, DOTA_TEMP_PARTY_TTL_HOURS, type DotaGreenFlagKey, type DotaRedFlagKey } from "@reviewo/shared";
 
 import { FormFeedback } from "../../../components/form-feedback";
 import { ApiError } from "../../../lib/api/api-error";
@@ -399,7 +399,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
     null
   );
   const [renameEditing, setRenameEditing] = useState(false);
-  const [extendHintDismissed, setExtendHintDismissed] = useState(false);
+  const [_extendHintDismissed, setExtendHintDismissed] = useState(false);
   const [extendVoiceBusy, setExtendVoiceBusy] = useState(false);
   const expiryWarnSentRef = useRef(false);
   const [friends, setFriends] = useState<FriendUser[]>([]);
@@ -416,7 +416,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   );
   const [pending, setPending] = useState(false);
   const [discordVoiceBusy, setDiscordVoiceBusy] = useState(false);
-  const [discordVoiceCopied, setDiscordVoiceCopied] = useState(false);
+  const [_discordVoiceCopied, setDiscordVoiceCopied] = useState(false);
   const [extendBusy, setExtendBusy] = useState(false);
   const [friendBusyId, setFriendBusyId] = useState<string | null>(null);
   const [outgoingFriendIds, setOutgoingFriendIds] = useState<Set<string>>(() => new Set());
@@ -443,7 +443,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   const [recruitCandidateMessage, setRecruitCandidateMessage] = useState<string | null>(null);
   const invitedRecruitCandidateSlugsRef = useRef(new Set<string>());
   const [hasDotaProfile, setHasDotaProfile] = useState<boolean | null>(null);
-  const [visitorOpenRoles, setVisitorOpenRoles] = useState<DotaPositionRole[]>([]);
+  const [_visitorOpenRoles, setVisitorOpenRoles] = useState<DotaPositionRole[]>([]);
   const [visitorApplyBusyRole, setVisitorApplyBusyRole] = useState<DotaPositionRole | null>(null);
   const [visitorApplyError, setVisitorApplyError] = useState<string | null>(null);
   const [viewerInvite, setViewerInvite] = useState<GamePartyInvite | null>(null);
@@ -534,7 +534,6 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       }, 8000);
     });
     // Intentionally once after OAuth return.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     authSession?.accessToken,
     isAuthSessionLoaded,
@@ -564,7 +563,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
     setParty(initialParty);
     setRenameDraft(initialParty.name);
     // Only re-seed from SSR when navigating to another team — not on every prop identity change.
-  }, [initialParty.slug]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional slug-only sync
+  }, [initialParty.slug]); // intentional slug-only sync
 
   useEffect(() => {
     if (!appsPanelRole) {
@@ -1606,7 +1605,6 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       });
     }
     // Intentionally once on created landing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authSession?.accessToken, party.isMember, party.slug]);
 
   function neededRolesForInvite(): DotaPositionRole[] {
@@ -1926,7 +1924,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
     }
   }
 
-  async function handleExtendDiscordVoice() {
+  async function _handleExtendDiscordVoice() {
     if (!authSession?.accessToken || !party.canExtendDiscordVoice || extendVoiceBusy) {
       return;
     }

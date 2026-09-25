@@ -17,12 +17,15 @@ describe("ApiRateLimiterService", () => {
     const expirations = new Map<string, number>();
     const redisService = {
       getClient: async () => ({
-        expire: async (key: string, seconds: number) => {
-          expirations.set(key, seconds);
-        },
-        incr: async (key: string) => {
+        eval: async (_script: string, options: { arguments: string[]; keys: string[] }) => {
+          const key = options.keys[0] ?? "";
+          const windowSeconds = Number(options.arguments[0]);
           const next = (counts.get(key) ?? 0) + 1;
           counts.set(key, next);
+
+          if (next === 1) {
+            expirations.set(key, windowSeconds);
+          }
 
           return next;
         },
