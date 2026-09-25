@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
-from ..services.panel import edit_panel, edit_panel_content
+from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from ..ui.keyboards import back_keyboard
 
@@ -80,6 +80,7 @@ async def account_link_help(
     storage: BotStorage,
 ) -> None:
     await callback.answer()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     await edit_panel_content(
         callback.bot,
         storage,
@@ -103,6 +104,7 @@ async def show_recovery_link(
     storage: BotStorage,
 ) -> None:
     await callback.answer()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     session = storage.get_session(callback.from_user.id)
     if callback.message is None:
         return
@@ -146,6 +148,7 @@ async def unlink_account(
     storage: BotStorage,
 ) -> None:
     await callback.answer()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     if storage.get_session(callback.from_user.id):
         try:
             await api.user(callback.from_user.id, "DELETE", "/auth/telegram")

@@ -3,10 +3,11 @@ from aiogram.types import CallbackQuery
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
-from ..services.panel import edit_panel
+from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from .account import deliver_join_hint
-from ..ui.keyboards import invite_keyboard
+from ..ui.keyboards import back_keyboard, invite_keyboard
+from html import escape
 from ..ui.formatters import notification_text
 from ..services.auto_matcher import remember_declined_target
 
@@ -26,6 +27,7 @@ async def resolve_invite(
         return
     _, invite_id, action = parts
     await callback.answer()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     try:
         before = await api.user(callback.from_user.id, "GET", "/social/parties/me")
         invite_before = next(
@@ -56,8 +58,17 @@ async def resolve_invite(
         screen = "recruiting" if auto_search.get("mode") == "recruit" else "home"
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, screen)
     except ApiError as error:
-        if callback.message:
-            await callback.message.edit_text(str(error))
+        await edit_panel_content(
+            callback.bot,
+            storage,
+            api,
+            settings,
+            callback.from_user.id,
+            "notice",
+            f"<b>Не получилось обработать приглашение</b>\n\n{escape(str(error))}",
+            back_keyboard(),
+            callback.message.chat.id if callback.message else None,
+        )
 
 
 async def send_party_notification(bot, settings, storage, api, row: dict) -> bool:

@@ -6,7 +6,7 @@ from aiogram.types import CallbackQuery
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
-from ..services.panel import edit_panel, edit_panel_content
+from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from ..ui.keyboards import back_keyboard, party_slot_occupants, role_keyboard
 from .account import deliver_join_hint
@@ -17,6 +17,7 @@ router = Router(name="search")
 @router.callback_query(F.data == "search:looking")
 async def start_looking(callback: CallbackQuery, api: OpiniaApi, settings: Settings, storage: BotStorage) -> None:
     await callback.answer()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     try:
         await api.user(callback.from_user.id, "POST", "/dota/profiles/lfg/looking", {"looking": True})
         storage.set_choices(callback.from_user.id, "auto_search", [{"mode": "looking"}])
@@ -33,6 +34,7 @@ async def begin_recruiting(
     storage: BotStorage,
 ) -> None:
     await callback.answer()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     storage.set_choices(callback.from_user.id, "recruit_roles", [{"roles": []}])
     await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "recruit")
 
@@ -68,6 +70,7 @@ async def finish_recruiting(
     storage: BotStorage,
 ) -> None:
     await callback.answer()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     selected = storage.get_choice(callback.from_user.id, "recruit_roles", 0) or {"roles": []}
     try:
         my_parties = await api.user(callback.from_user.id, "GET", "/social/parties/me")
@@ -97,6 +100,7 @@ async def finish_recruiting(
 @router.callback_query(F.data == "search:stop")
 async def stop_search(callback: CallbackQuery, api: OpiniaApi, settings: Settings, storage: BotStorage) -> None:
     await callback.answer()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     try:
         my_parties = await api.user(callback.from_user.id, "GET", "/social/parties/me")
         party = my_parties.get("party")
@@ -122,23 +126,32 @@ async def select_recruit_slot(
     if role not in {"1", "2", "3", "4", "5"}:
         await callback.answer("Позиция не найдена", show_alert=True)
         return
+    await callback.answer("Проверяю позицию")
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     try:
         search = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}
         selected_roles = [str(item) for item in search.get("roles", [])]
         if selected_roles and role not in selected_roles:
-            await callback.answer("Эту позицию не выбрали при запуске набора", show_alert=True)
+            await edit_panel_content(
+                callback.bot, storage, api, settings, callback.from_user.id,
+                "notice", "Эту позицию не выбрали при запуске набора.",
+                back_keyboard("recruiting"),
+            )
             return
         profile = await api.user(callback.from_user.id, "GET", "/dota/profiles/me")
         parties = await api.user(callback.from_user.id, "GET", "/social/parties/me")
         party = parties.get("party") or ((parties.get("parties") or [None])[-1])
         if not party:
-            await callback.answer("Пати больше не найдена", show_alert=True)
+            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
             return
         occupants = party_slot_occupants(party, str(profile.get("ownerUserId") or ""))
         if role in occupants:
-            await callback.answer(f"Слот занимает {occupants[role]}", show_alert=True)
+            await edit_panel_content(
+                callback.bot, storage, api, settings, callback.from_user.id,
+                "notice", f"Слот занимает {escape(occupants[role])}.",
+                back_keyboard("recruiting"),
+            )
             return
-        await callback.answer("Ищу игроков на эту позицию")
         await show_candidates(callback, api, settings, storage, "recruit", role)
     except ApiError as error:
         await show_error(callback, api, settings, storage, error)
@@ -147,6 +160,7 @@ async def select_recruit_slot(
 @router.callback_query(F.data == "search:list")
 async def refresh_candidates(callback: CallbackQuery, api: OpiniaApi, settings: Settings, storage: BotStorage) -> None:
     await callback.answer("Обновляю список")
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     choices = storage.get_choice(callback.from_user.id, "candidates", 0) or {}
     await show_candidates(
         callback, api, settings, storage,
@@ -165,6 +179,7 @@ async def select_candidate(callback: CallbackQuery, settings: Settings, storage:
             await callback.answer("Игрок уже недоступен", show_alert=True)
             return
         await callback.answer()
+        await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
         storage.set_choices(callback.from_user.id, "selected_candidate", [items[index]])
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "candidate")
         return
@@ -176,6 +191,8 @@ async def select_candidate(callback: CallbackQuery, settings: Settings, storage:
     if not selected:
         await callback.answer("Игрок больше недоступен", show_alert=True)
         return
+    await callback.answer()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     try:
         position_role = value[2]
         body: dict = {"targetSlug": selected["slug"]}
@@ -196,16 +213,11 @@ async def select_candidate(callback: CallbackQuery, settings: Settings, storage:
                 settings.site_url,
                 result["party"]["slug"],
             )
-            await callback.answer("Вы вступили в пати")
-        elif value[1] == "apply" and selected.get("partySlug"):
-            await callback.answer("Заявка отправлена. Ответ придёт в уведомлении.")
-        else:
-            await callback.answer("Готово — действие отправлено.")
         candidates_state = storage.get_choice(callback.from_user.id, "candidates", 0) or {}
         return_screen = "recruiting" if candidates_state.get("mode") == "recruit" else "home"
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, return_screen)
     except ApiError as error:
-        await callback.answer(str(error)[:180], show_alert=True)
+        await show_error(callback, api, settings, storage, error)
 
 
 async def show_candidates(

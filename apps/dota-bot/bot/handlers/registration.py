@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
-from ..services.panel import edit_panel, edit_panel_content
+from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from ..ui.keyboards import registration_roles_keyboard, registration_step_keyboard
 
@@ -58,6 +58,7 @@ async def begin_registration(
     await callback.answer()
     if callback.message is None:
         return
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
     await state.clear()
     await state.set_state(GuestProfileWizard.display_name)
     await state.update_data(roles=[])
@@ -167,6 +168,7 @@ async def cancel_registration(
     storage: BotStorage,
 ) -> None:
     await callback.answer("Регистрация отменена")
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     await state.clear()
     await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
 
@@ -190,6 +192,7 @@ async def complete_registration(
         return
 
     await callback.answer("Создаю профиль…")
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     recovery_url = None
     try:
         profile = {

@@ -1,6 +1,7 @@
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+import asyncio
 import time
 
 from ..api.client import ApiError, OpiniaApi
@@ -32,6 +33,7 @@ async def edit_panel(
     text, keyboard = content or await render_screen(api, storage, settings, telegram_user_id, screen)
     panel = storage.get_panel(telegram_user_id)
     destination = chat_id or (panel.chat_id if panel else telegram_user_id)
+    loading_panel = panel if panel and panel.screen == "loading" else None
     photo: str | BufferedInputFile = f"{settings.site_url}/dota/party-hero-soft.png"
     if screen == "party":
         try:
@@ -47,7 +49,10 @@ async def edit_panel(
         except ApiError:
             pass
 
-    if panel and panel.chat_id == destination and panel.is_photo:
+    if loading_panel and loading_panel.chat_id == destination:
+        # Keep the instant loading message visible until the final panel is sent.
+        pass
+    elif panel and panel.chat_id == destination and panel.is_photo:
         try:
             await bot.edit_message_media(
                 chat_id=panel.chat_id,
@@ -68,7 +73,7 @@ async def edit_panel(
                 pass
 
     elif panel and panel.chat_id == destination and not panel.is_photo:
-        if isinstance(photo, BufferedInputFile) or screen != "party":
+        if not loading_panel and (isinstance(photo, BufferedInputFile) or screen != "party"):
             try:
                 await bot.delete_message(panel.chat_id, panel.message_id)
             except TelegramBadRequest:
@@ -100,6 +105,34 @@ async def edit_panel(
             disable_web_page_preview=True,
         )
         storage.save_panel(telegram_user_id, message.chat.id, message.message_id, screen, False)
+    if loading_panel and loading_panel.message_id != message.message_id:
+        try:
+            await bot.delete_message(loading_panel.chat_id, loading_panel.message_id)
+        except TelegramAPIError:
+            pass
+
+
+async def begin_panel_transition(
+    bot: Bot,
+    storage: BotStorage,
+    telegram_user_id: int,
+    chat_id: int | None = None,
+) -> None:
+    """Show immediate feedback, then remove the stale panel while data loads."""
+    panel = storage.get_panel(telegram_user_id)
+    if panel and panel.screen == "loading":
+        return
+    destination = chat_id or (panel.chat_id if panel else telegram_user_id)
+    try:
+        message = await bot.send_message(destination, "⏳ Обновляю окно…")
+    except TelegramAPIError:
+        return
+    storage.save_panel(telegram_user_id, message.chat.id, message.message_id, "loading", False)
+    if panel and panel.chat_id == message.chat.id:
+        try:
+            await bot.delete_message(panel.chat_id, panel.message_id)
+        except TelegramAPIError:
+            pass
 
 
 async def edit_panel_content(
@@ -144,16 +177,19 @@ async def render_screen(
             home_keyboard(False, False),
         )
 
-    profile = None
-    my_parties: dict = {"parties": [], "invites": []}
-    try:
-        profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
-    except ApiError:
-        pass
-    try:
-        my_parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
-    except ApiError:
-        pass
+    async def fetch_profile() -> dict | None:
+        try:
+            return await api.user(telegram_user_id, "GET", "/dota/profiles/me")
+        except ApiError:
+            return None
+
+    async def fetch_parties() -> dict:
+        try:
+            return await api.user(telegram_user_id, "GET", "/social/parties/me")
+        except ApiError:
+            return {"parties": [], "invites": []}
+
+    profile, my_parties = await asyncio.gather(fetch_profile(), fetch_parties())
 
     if screen == "home":
         if not profile:
