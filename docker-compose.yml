@@ -57,6 +57,7 @@ services:
   api:
     <<: *app-common
     environment:
+      <<: *app-environment
       DOTA_BOT_TOKEN: ${DOTA_BOT_TOKEN:-}
     image: reviewo-api:${IMAGE_TAG:-local}
     build:
