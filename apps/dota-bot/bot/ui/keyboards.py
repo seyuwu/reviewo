@@ -5,13 +5,26 @@ def home_keyboard(
     registered: bool,
     has_party: bool,
     is_recruiting: bool = False,
+    is_looking: bool = False,
 ) -> InlineKeyboardMarkup:
-    second_label = "👥 Моя пати" if is_recruiting else "🧭 Набираю игроков"
-    second_action = "panel:party" if is_recruiting else "search:recruit"
+    first_label = "🔎 Ищу пати" if is_looking else "🎯 Ищу пати"
+    first_action = "panel:looking" if is_looking else "search:looking"
+    open_party = has_party or is_recruiting
+    second_label = "👥 Моя пати" if open_party else "🧭 Набираю игроков"
+    second_action = "panel:party" if open_party else "search:recruit"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [button("🎯 Ищу пати", "search:looking"), button(second_label, second_action)],
+            [button(first_label, first_action), button(second_label, second_action)],
             [button("👤 Аккаунт", "panel:account")],
+        ]
+    )
+
+
+def looking_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("⏹ Остановить поиск", "search:stop")],
+            [button("← В меню", "panel:home")],
         ]
     )
 
@@ -20,59 +33,12 @@ def back_keyboard(target: str = "home") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[button("← Назад", f"panel:{target}")]])
 
 
-def candidate_keyboard(candidates: list[dict], mode: str = "looking") -> InlineKeyboardMarkup:
-    rows = []
-    for index, candidate in enumerate(candidates[:20]):
-        role = candidate.get("positionRole") or candidate.get("roles", [None])[0]
-        title = str(candidate.get("title") or candidate.get("slug") or "Игрок")
-        mmr = candidate.get("mmr") or "?"
-        suffix = f" · {mmr} MMR"
-        if mode == "recruit":
-            label = f"➕ {truncate(title, 24)}{suffix}"
-        else:
-            label = f"{truncate(title, 24)}{suffix}"
-        rows.append([button(label, f"candidate:{index}")])
-    rows.extend([[button("🔄 Обновить", "search:list")], [button("← В меню", "panel:home")]])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def candidate_action_keyboard(candidate: dict, mode: str) -> InlineKeyboardMarkup:
-    rows = []
-    if candidate.get("partySlug"):
-        open_roles = candidate.get("recruitedRoles") or candidate.get("roles") or []
-        for role in open_roles[:5]:
-            rows.append([button(f"Подать заявку · позиция {role}", f"candidate:apply:{role}")])
-    elif mode == "recruit":
-        recruit_role = candidate.get("_recruitRole")
-        roles = [recruit_role] if recruit_role else candidate.get("roles", [])[:5]
-        for role in roles:
-            rows.append([button(f"Пригласить · позиция {role}", f"candidate:invite:{role}")])
-    else:
-        rows.append([button("Пригласить в пати", "candidate:invite:0")])
-    rows.append([button("← К игрокам", "panel:candidates")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
 def invite_keyboard(invite_id: str, invite_kind: str) -> InlineKeyboardMarkup:
     if invite_kind == "APPLICATION":
         buttons = [button("✅ Принять заявку", f"invite:{invite_id}:accept"), button("✖️ Отклонить", f"invite:{invite_id}:decline")]
     else:
         buttons = [button("✅ Принять", f"invite:{invite_id}:accept"), button("✖️ Отклонить", f"invite:{invite_id}:decline")]
     return InlineKeyboardMarkup(inline_keyboard=[buttons])
-
-
-def role_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
-    role_row = [
-        button(f"{'✅' if role in selected else ''}{role}", f"recruit:toggle:{role}")
-        for role in ("1", "2", "3", "4", "5")
-    ]
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            role_row,
-            [button("🔍 Начать набор", "recruit:start")],
-            [button("← Назад", "panel:home")],
-        ]
-    )
 
 
 def recruiting_party_keyboard(party: dict, searching_roles: set[str] | None = None) -> InlineKeyboardMarkup:
@@ -101,28 +67,18 @@ def party_keyboard(
                 f"party:noop:{role}"
                 if role in occupants
                 else f"party:searching:{role}"
-                if role in searching_roles
-                else f"party:toggle-search:{role}"
             ),
         )
         for role in roles
     ]
     rows = [slots]
-    if show_search:
+    if show_search and is_recruiting:
+        rows.append(search_status)
+    if party.get("canManageParty"):
         if is_recruiting:
-            rows.append(search_status)
+            rows.append([button("⏹ Остановить набор", "search:stop")])
         else:
-            rows.append(
-                [
-                    button(
-                        "🔍" if role not in occupants else "—",
-                        f"party:search:{role}" if role not in occupants else f"party:noop:{role}",
-                    )
-                    for role in roles
-                ]
-            )
-    if party.get("canManageParty") and is_recruiting:
-        rows.append([button("⏹ Остановить набор", "search:stop")])
+            rows.append([button("🔎 Начать автоподбор", "search:recruit")])
     rows.append([button("← Назад", "panel:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

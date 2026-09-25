@@ -5,7 +5,7 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
-from .account import deliver_join_hint
+from ..services.party_notifications import deliver_join_hint
 from ..ui.keyboards import back_keyboard, invite_keyboard
 from html import escape
 from ..ui.formatters import notification_text

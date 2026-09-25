@@ -12,14 +12,12 @@ from ..ui.formatters import party_text, profile_text
 from ..ui.keyboards import (
     account_keyboard,
     back_keyboard,
-    candidate_action_keyboard,
-    candidate_keyboard,
     home_keyboard,
+    looking_keyboard,
     kick_confirmation_keyboard,
     party_keyboard,
     party_member_keyboard,
     party_slot_occupants,
-    role_keyboard,
     recruiting_party_keyboard,
 )
 
@@ -225,7 +223,32 @@ async def render_screen(
         )
         auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
         is_recruiting = bool(looking and auto_search.get("mode") == "recruit")
-        return text, home_keyboard(True, bool(party), is_recruiting)
+        is_looking = bool(looking and auto_search.get("mode") == "looking")
+        return text, home_keyboard(True, bool(party), is_recruiting, is_looking)
+
+    if screen == "looking":
+        if not profile:
+            return "Сначала создайте Dota-профиль в разделе «Аккаунт».", back_keyboard()
+        roles = profile.get("roles") or []
+        role_names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
+        roles_text = ", ".join(role_names[role] for role in roles if role in role_names) or "не выбраны"
+        if not profile.get("looking"):
+            return (
+                "Автопоиск завершён. Нажмите ниже, чтобы искать пати снова.",
+                InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="🔎 Искать пати", callback_data="search:looking")],
+                        [InlineKeyboardButton(text="← В меню", callback_data="panel:home")],
+                    ]
+                ),
+            )
+        return (
+            f"<b>Ищу пати · {escape_text(profile.get('title') or 'Игрок')}</b>\n"
+            f"MMR: {escape_text(profile.get('mmr') or '—')}\n"
+            f"Позиции: {escape_text(roles_text)}\n\n"
+            "Подбираю пати автоматически по позициям и MMR.",
+            looking_keyboard(),
+        )
 
     if screen == "profile":
         if not profile:
@@ -263,7 +286,16 @@ async def render_screen(
         text = party_text(party) + f"\n\n<a href=\"{escape_text(link)}\">Чат и Discord на сайте</a>"
         auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
         is_recruiting = auto_search.get("mode") == "recruit" and auto_search.get("partySlug") == party.get("slug")
-        return text, party_keyboard(party, bool(party.get("canManageParty")), is_recruiting)
+        occupants = party_slot_occupants(party)
+        available_roles = {role for role in ("1", "2", "3", "4", "5") if role not in occupants}
+        roles = auto_search.get("roles") or []
+        searching_roles = (set(roles) if roles else available_roles) & available_roles
+        return text, party_keyboard(
+            party,
+            bool(party.get("canManageParty")),
+            is_recruiting,
+            searching_roles,
+        )
 
     if screen == "recruiting":
         party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
@@ -281,7 +313,7 @@ async def render_screen(
             f"<b>Набираю игроков · {escape_text((profile or {}).get('title') or 'Игрок')}</b>\n"
             f"Ищем: {escape_text(roles_text)}\n"
             f"Состав: {party.get('memberCount', 0)}/{party.get('maxMembers', 5)}\n\n"
-            "Нажмите на свободную позицию, чтобы выбрать свободного игрока или занять слот."
+            "Нажмите на свободную позицию, чтобы занять слот."
         )
         return text, recruiting_party_keyboard(party, searching_roles)
 
@@ -361,49 +393,10 @@ async def render_screen(
         buttons.append([InlineKeyboardButton(text="← В меню", callback_data="panel:home")])
         return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=buttons)
 
-    if screen == "candidates":
-        choices = storage.get_choice(telegram_user_id, "candidates", 0)
-        candidates = []
-        # All candidates are stored as one list at index zero.
-        if choices and isinstance(choices.get("items"), list):
-            candidates = choices["items"]
-        mode = (choices or {}).get("mode", "looking")
-        if not candidates:
-            target = (choices or {}).get("return_screen") or ("recruiting" if mode == "recruit" else "home")
-            return (
-                "Пока нет подходящих игроков. Попробуйте обновить список через минуту.",
-                InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [InlineKeyboardButton(text="🔄 Обновить", callback_data="search:list")],
-                        [InlineKeyboardButton(text="← Назад", callback_data=f"panel:{target}")],
-                    ]
-                ),
-            )
-        lines = ["<b>Подходящие игроки</b>", ""]
-        for candidate in candidates[:8]:
-            lines.append(
-                f"• {escape_text(str(candidate.get('title', 'Игрок'))[:40])} · {escape_text(candidate.get('mmr') or '—')} MMR"
-            )
-        if len(candidates) > 8:
-            lines.append(f"\nВ списке ещё {len(candidates) - 8} игроков.")
-        return "\n".join(lines), candidate_keyboard(candidates, mode)
-
-    if screen == "candidate":
-        choice = storage.get_choice(telegram_user_id, "selected_candidate", 0)
-        if not choice:
-            return "Игрок больше недоступен. Обновите список.", back_keyboard("candidates")
-        name = escape_text(choice.get("title") or "Игрок")
-        roles = ", ".join(escape_text(role) for role in choice.get("roles", [])) or "—"
-        text = f"<b>{name}</b>\nMMR: {escape_text(choice.get('mmr') or '—')}\nПозиции: {roles}"
-        mode = storage.get_choice(telegram_user_id, "candidates", 0) or {}
-        return text, candidate_action_keyboard(choice, mode.get("mode", "looking"))
-
     if screen == "recruit":
-        selected = storage.get_choice(telegram_user_id, "recruit_roles", 0) or {}
         return (
-            "<b>Какие позиции ищем?</b>\nВыберите одну или несколько. Нажмите на номер позиции:\n"
-            "1 — керри · 2 — мид · 3 — оффлейн · 4 — саппорт · 5 — хард-саппорт.",
-            role_keyboard(selected.get("roles", [])),
+            "Автоподбор включён: ищем игроков на все свободные позиции.",
+            back_keyboard("home"),
         )
 
     return "Поиск пати Dota 2 · Opinia", home_keyboard(True, False)

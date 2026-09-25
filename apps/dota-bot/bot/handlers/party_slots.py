@@ -7,8 +7,7 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.panel import begin_panel_transition, edit_panel
 from ..storage.database import BotStorage
-from ..ui.keyboards import party_slot_occupants
-from .search import show_candidates, show_error
+from .search import show_error
 
 router = Router(name="party-slots")
 
@@ -85,98 +84,15 @@ async def open_or_claim_slot(
 @router.callback_query(F.data.startswith("party:search:"))
 async def search_for_party_slot(
     callback: CallbackQuery,
-    api: OpiniaApi,
-    settings: Settings,
-    storage: BotStorage,
 ) -> None:
-    role = (callback.data or "").rsplit(":", 1)[-1]
-    if role not in {"1", "2", "3", "4", "5"}:
-        await callback.answer("Позиция не найдена", show_alert=True)
-        return
-
-    await callback.answer("Ищу игроков на эту позицию")
-    await begin_panel_transition(
-        callback.bot, storage, callback.from_user.id,
-        callback.message.chat.id if callback.message else None,
-    )
-    try:
-        parties = await api.user(callback.from_user.id, "GET", "/social/parties/me")
-        party = current_party(parties)
-        if not party or not party.get("canManageParty"):
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
-            return
-        occupants = party_slot_occupants(party)
-        if role in occupants:
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
-            return
-        screen = return_screen(storage, callback.from_user.id, party["slug"])
-        await show_candidates(callback, api, settings, storage, "recruit", role, screen)
-    except ApiError as error:
-        await show_error(callback, api, settings, storage, error)
+    await callback.answer("Ручной подбор отключён", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("party:toggle-search:"))
 async def enable_search_for_party_slot(
     callback: CallbackQuery,
-    api: OpiniaApi,
-    settings: Settings,
-    storage: BotStorage,
 ) -> None:
-    role = (callback.data or "").rsplit(":", 1)[-1]
-    if role not in {"1", "2", "3", "4", "5"}:
-        await callback.answer("Позиция не найдена", show_alert=True)
-        return
-
-    search = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}
-    if search.get("mode") != "recruit" or not search.get("partySlug"):
-        await callback.answer("Сначала запустите набор игроков", show_alert=True)
-        return
-
-    await callback.answer()
-    await begin_panel_transition(
-        callback.bot, storage, callback.from_user.id,
-        callback.message.chat.id if callback.message else None,
-    )
-    try:
-        profile = await api.user(callback.from_user.id, "GET", "/dota/profiles/me")
-        parties = await api.user(callback.from_user.id, "GET", "/social/parties/me")
-        party = current_party(parties)
-        if (
-            not party
-            or party.get("slug") != search.get("partySlug")
-            or not party.get("canManageParty")
-            or not profile.get("looking")
-        ):
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
-            return
-
-        occupants = party_slot_occupants(party)
-        available_roles = {item for item in ("1", "2", "3", "4", "5") if item not in occupants}
-        if role not in available_roles:
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "recruiting")
-            return
-
-        selected_roles = [str(item) for item in search.get("roles", []) if str(item) in available_roles]
-        searching_roles = set(selected_roles) if selected_roles else available_roles
-        if role in searching_roles:
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "recruiting")
-            return
-
-        next_roles = sorted(searching_roles | {role})
-        await api.user(
-            callback.from_user.id,
-            "POST",
-            "/dota/profiles/lfg/looking",
-            {"looking": True, "partySlug": party["slug"], "recruitedRoles": next_roles},
-        )
-        storage.set_choices(
-            callback.from_user.id,
-            "auto_search",
-            [{**search, "roles": next_roles}],
-        )
-        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "recruiting")
-    except ApiError as error:
-        await show_error(callback, api, settings, storage, error)
+    await callback.answer("Автоподбор ищет игроков на все свободные позиции", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("party:kick:confirm:"))

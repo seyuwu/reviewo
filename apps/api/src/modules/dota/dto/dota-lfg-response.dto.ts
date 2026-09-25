@@ -13,6 +13,9 @@ export class DotaLfgHitDto {
   memberCount!: number | null;
   /** Captain MMR for solo looking; average party MMR when recruiting. */
   mmr!: string | null;
+  /** Allowed recruit MMR band computed from the current party roster. */
+  recruitMmrMax!: number | null;
+  recruitMmrMin!: number | null;
   ownerUserId!: string;
   partyKind!: "TEAM" | "PARTY" | null;
   partyName!: string | null;

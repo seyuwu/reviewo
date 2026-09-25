@@ -34,7 +34,7 @@ async def main() -> None:
     tasks = [
         asyncio.create_task(poll_notifications(bot, api, settings, storage)),
         asyncio.create_task(cleanup_temporary_messages(bot, storage)),
-        asyncio.create_task(auto_match_loop(api, storage)),
+        asyncio.create_task(auto_match_loop(bot, api, settings, storage)),
     ]
 
     try:

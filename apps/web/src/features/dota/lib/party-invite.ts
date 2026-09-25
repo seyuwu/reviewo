@@ -1,4 +1,5 @@
 import type { TranslateFn } from "@reviewo/i18n";
+import { DOTA_PARTY_RECRUIT_MMR_SPREAD } from "@reviewo/shared";
 
 import { copyTextToClipboard } from "../../growth/lib/share-urls";
 import { getDotaPublicOrigin } from "../../../lib/config/product-hosts";
@@ -6,8 +7,8 @@ import { recordPartyLinkOpen as recordPartyLinkOpenApi } from "../../social/api/
 import type { DotaPositionRole, GameParty, GamePartyMember } from "../../social/types/social";
 import { buildDotaTeamJoinUrl, buildDotaTeamUrl } from "./share";
 
-/** Max MMR gap between party members and recruits (Dota party queue uses a similar band). */
-export const PARTY_RECRUIT_MMR_SPREAD = 1500;
+/** Alias retained for existing consumers; shared with the API auto-match check. */
+export const PARTY_RECRUIT_MMR_SPREAD = DOTA_PARTY_RECRUIT_MMR_SPREAD;
 
 export function computePartyRecruitMmrRange(
   members: Pick<GamePartyMember, "mmr">[]
@@ -50,8 +51,7 @@ export function buildDotaPartyInviteMessage(
   neededRoles: DotaPositionRole[] = []
 ): string {
   const need = Math.max(0, party.maxMembers - party.memberCount);
-  const roleLine =
-    neededRoles.length > 0 ? [...neededRoles].sort().join(",") : null;
+  const roleLine = neededRoles.length > 0 ? [...neededRoles].sort().join(",") : null;
   const mmrRange = computePartyRecruitMmrRange(party.members);
 
   const lines = [

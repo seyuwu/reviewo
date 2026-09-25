@@ -6,6 +6,7 @@ import {
   DOTA_FLAG_LIMIT_PER_SIDE,
   DOTA_LFG_TTL_SECONDS,
   DOTA_PARTY_SIZE,
+  DOTA_PARTY_RECRUIT_MMR_SPREAD,
   DOTA_PARTY_VERTICAL,
   DOTA_POSITION_ROLES,
   DOTA_VERTICAL,
@@ -200,6 +201,9 @@ export class DotaProfileService {
         const roles = parseRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
         const server = attributes[DOTA_ATTRIBUTE_KEYS.server] ?? null;
         const partySlug = attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || null;
+        const recruitedRoles = parseRecruitedRoles(
+          attributes[DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]
+        );
 
         if (partySlug && blockedPartySlugs.has(partySlug)) {
           return null;
@@ -212,7 +216,7 @@ export class DotaProfileService {
         if (
           input.roles &&
           input.roles.length > 0 &&
-          !input.roles.some((role) => roles.includes(role))
+          !input.roles.some((role) => (partySlug ? recruitedRoles : roles).includes(role))
         ) {
           return null;
         }
@@ -226,7 +230,7 @@ export class DotaProfileService {
           partyKind: parsePartyKind(attributes[DOTA_ATTRIBUTE_KEYS.lfgPartyKind]),
           partyName: attributes[DOTA_ATTRIBUTE_KEYS.lfgPartyName]?.trim() || null,
           partySlug,
-          recruitedRoles: parseRecruitedRoles(attributes[DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]),
+          recruitedRoles,
           roles,
           server,
           slug: row.slug,
@@ -236,8 +240,10 @@ export class DotaProfileService {
       .filter((row): row is NonNullable<typeof row> => row !== null);
 
     candidates.sort((left, right) => {
-      const leftOverlap = input.roles?.filter((role) => left.roles.includes(role)).length ?? 0;
-      const rightOverlap = input.roles?.filter((role) => right.roles.includes(role)).length ?? 0;
+      const leftRoles = left.partySlug ? left.recruitedRoles : left.roles;
+      const rightRoles = right.partySlug ? right.recruitedRoles : right.roles;
+      const leftOverlap = input.roles?.filter((role) => leftRoles.includes(role)).length ?? 0;
+      const rightOverlap = input.roles?.filter((role) => rightRoles.includes(role)).length ?? 0;
 
       if (rightOverlap !== leftOverlap) {
         return rightOverlap - leftOverlap;
@@ -260,6 +266,8 @@ export class DotaProfileService {
           let memberCount = candidate.memberCount;
           let claimedRoles: string[] = [];
           let mmr = candidate.mmr;
+          let recruitMmrMin: number | null = null;
+          let recruitMmrMax: number | null = null;
           let joinMode: "OPEN" | "CONFIRM" = "OPEN";
 
           if (candidate.partySlug) {
@@ -318,6 +326,13 @@ export class DotaProfileService {
             }
 
             mmr = averageDotaMmr(memberMmrs) ?? candidate.mmr;
+            const numericMmrs = memberMmrs
+              .map((value) => Number(value))
+              .filter((value) => Number.isFinite(value) && value > 0);
+            if (numericMmrs.length > 0) {
+              recruitMmrMin = Math.max(0, Math.max(...numericMmrs) - DOTA_PARTY_RECRUIT_MMR_SPREAD);
+              recruitMmrMax = Math.min(...numericMmrs) + DOTA_PARTY_RECRUIT_MMR_SPREAD;
+            }
 
             if (recruitedRoles.length === 0 || memberCount >= party.maxMembers) {
               await this.entityAttributesRepository.upsertMany(candidate.entityId, {
@@ -347,6 +362,8 @@ export class DotaProfileService {
             partySlug: candidate.partySlug,
             recruitedRoles,
             redFlags: pickTopFlags(qualities, isDotaRedFlagKey),
+            recruitMmrMax,
+            recruitMmrMin,
             roles: candidate.roles,
             server: candidate.server,
             slug: candidate.slug,
