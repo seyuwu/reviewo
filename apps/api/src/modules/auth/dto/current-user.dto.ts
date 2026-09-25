@@ -6,5 +6,6 @@ export class CurrentUserDto {
   id!: string;
   role!: "ADMIN" | "USER";
   status!: string;
+  telegramLinked!: boolean;
   username!: string | null;
 }

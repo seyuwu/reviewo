@@ -6,6 +6,7 @@ export interface CurrentUserProfile {
   id: string;
   role: "ADMIN" | "USER";
   status: string;
+  telegramLinked?: boolean;
   username: string | null;
 }
 

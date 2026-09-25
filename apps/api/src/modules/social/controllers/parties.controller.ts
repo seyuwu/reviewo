@@ -520,6 +520,10 @@ export class PartiesController {
         members: [],
         openSlots: party.maxMembers
       });
+      this.gamePartyGateway.notifyTelegramPartyRosterUpdated(
+        party.members.map((member) => member.userId),
+        slug
+      );
     }
 
     return result;
@@ -551,6 +555,10 @@ export class PartiesController {
         openSlots: Math.min(party.maxMembers, party.openSlots + 1)
       });
     }
+    this.gamePartyGateway.notifyTelegramPartyRosterUpdated(
+      party.members.map((member) => member.userId),
+      slug
+    );
 
     return result;
   }
@@ -590,9 +598,14 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
+    const before = await this.gamePartiesService.getPartyBySlug(slug, currentUser.id);
     const party = await this.gamePartiesService.kickMember(slug, userId, currentUser);
     const broadcastParty = await this.gamePartiesService.getPartyBySlug(slug).catch(() => party);
     this.gamePartyGateway.broadcastPartyUpdated(broadcastParty);
+    this.gamePartyGateway.notifyTelegramPartyRosterUpdated(
+      [...before.members.map((member) => member.userId), userId],
+      slug
+    );
     return party;
   }
 

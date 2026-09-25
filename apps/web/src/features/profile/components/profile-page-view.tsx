@@ -14,9 +14,11 @@ import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { isGamesProductMode, safeInternalNextPath } from "../../games/lib/games-mode";
 import {
   changeCurrentUserPassword,
+  createTelegramLinkCode,
   getCurrentUserProfile,
   getDiscordLinkUrl,
   unlinkDiscord,
+  unlinkTelegram,
   updateCurrentUserAvatar,
   updateCurrentUserProfile
 } from "../api/profile";
@@ -37,6 +39,9 @@ export function ProfilePageView() {
     useAuthSession();
   const accessToken = authSession?.accessToken;
   const [hostname, setHostname] = useState("");
+  const [telegramCode, setTelegramCode] = useState<string | null>(null);
+  const [telegramCodeExpiresAt, setTelegramCodeExpiresAt] = useState<number | null>(null);
+  const [telegramError, setTelegramError] = useState<string | null>(null);
 
   useEffect(() => {
     setHostname(window.location.hostname);
@@ -57,7 +62,8 @@ export function ProfilePageView() {
   const profileQuery = useQuery({
     enabled: Boolean(accessToken),
     queryFn: () => getCurrentUserProfile(accessToken ?? ""),
-    queryKey: ["profile", "me", accessToken]
+    queryKey: ["profile", "me", accessToken],
+    refetchInterval: telegramCode ? 3_000 : false
   });
 
   useEffect(() => {
@@ -78,6 +84,27 @@ export function ProfilePageView() {
     profileQuery.data?.id
   ]);
 
+  useEffect(() => {
+    if (profileQuery.data?.telegramLinked) {
+      setTelegramCode(null);
+      setTelegramCodeExpiresAt(null);
+    }
+  }, [profileQuery.data?.telegramLinked]);
+
+  useEffect(() => {
+    if (!telegramCodeExpiresAt) {
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => {
+        setTelegramCode(null);
+        setTelegramCodeExpiresAt(null);
+      },
+      Math.max(0, telegramCodeExpiresAt - Date.now())
+    );
+    return () => window.clearTimeout(timeout);
+  }, [telegramCodeExpiresAt]);
+
   const flowState: ProfileFlowState = !isAuthSessionLoaded
     ? "loading"
     : !authSession
@@ -97,7 +124,9 @@ export function ProfilePageView() {
             <header className="auth-center-header">
               <p className="eyebrow">{t("common.account")}</p>
               <h1 id="auth-heading">
-                {t(isGamesAuth ? "auth.context.signInToOpiniaGames" : "auth.context.signInToOpinia")}
+                {t(
+                  isGamesAuth ? "auth.context.signInToOpiniaGames" : "auth.context.signInToOpinia"
+                )}
               </h1>
               <p className="muted-copy">
                 {t(isGamesAuth ? "auth.context.signInHintGames" : "auth.context.signInHint")}
@@ -142,25 +171,74 @@ export function ProfilePageView() {
                 />
                 <ProfileAdminLink isAdmin={profileQuery.data.role === "ADMIN"} />
                 <ProfileUserTopsSection userId={profileQuery.data.id} />
-                <div className="panel-card profile-panel profile-settings-panel" id="profile-settings">
+                <div
+                  className="panel-card profile-panel profile-settings-panel"
+                  id="profile-settings"
+                >
                   <header className="panel-header">
                     <h2>{t("web.profile.dashboard.settingsTitle")}</h2>
                   </header>
-                <ProfileDetails
-                  accessToken={accessToken ?? ""}
-                  showIdentity={false}
-                  profile={profileQuery.data}
-                  onProfileUpdated={(profile) => {
-                    updateAuthSession({
-                      avatarUrl: profile.avatarUrl,
-                      displayName: profile.displayName,
-                      email: profile.email
-                    });
-                    queryClient.setQueryData(["profile", "me", accessToken], profile);
-                  }}
-                  onSignOut={signOut}
-                  t={t}
-                />
+                  <section className="profile-settings-section">
+                    <h3>{t("web.profile.telegram.title")}</h3>
+                    <p className="muted-copy">{t("web.profile.telegram.hint")}</p>
+                    {profileQuery.data.telegramLinked ? (
+                      <button
+                        className="button button-secondary"
+                        onClick={async () => {
+                          try {
+                            const profile = await unlinkTelegram(accessToken ?? "");
+                            queryClient.setQueryData(["profile", "me", accessToken], profile);
+                            setTelegramCode(null);
+                            setTelegramCodeExpiresAt(null);
+                            setTelegramError(null);
+                          } catch {
+                            setTelegramError(t("web.profile.telegram.error"));
+                          }
+                        }}
+                        type="button"
+                      >
+                        {t("web.profile.telegram.unlink")}
+                      </button>
+                    ) : (
+                      <button
+                        className="button button-secondary"
+                        onClick={async () => {
+                          try {
+                            const result = await createTelegramLinkCode(accessToken ?? "");
+                            setTelegramCode(result.code);
+                            setTelegramCodeExpiresAt(Date.parse(result.expiresAt));
+                            setTelegramError(null);
+                          } catch {
+                            setTelegramError(t("web.profile.telegram.error"));
+                          }
+                        }}
+                        type="button"
+                      >
+                        {t("web.profile.telegram.link")}
+                      </button>
+                    )}
+                    {telegramCode ? (
+                      <p role="status">
+                        {t("web.profile.telegram.codeInstruction", { code: telegramCode })}
+                      </p>
+                    ) : null}
+                    {telegramError ? <p role="alert">{telegramError}</p> : null}
+                  </section>
+                  <ProfileDetails
+                    accessToken={accessToken ?? ""}
+                    showIdentity={false}
+                    profile={profileQuery.data}
+                    onProfileUpdated={(profile) => {
+                      updateAuthSession({
+                        avatarUrl: profile.avatarUrl,
+                        displayName: profile.displayName,
+                        email: profile.email
+                      });
+                      queryClient.setQueryData(["profile", "me", accessToken], profile);
+                    }}
+                    onSignOut={signOut}
+                    t={t}
+                  />
                 </div>
               </>
             ) : null}
@@ -204,7 +282,6 @@ function ProfilePanelSkeleton() {
     </div>
   );
 }
-
 
 function ProfileDetails({
   accessToken,
@@ -471,11 +548,7 @@ function ProfileDetails({
           />
           <small>{t("web.profile.currentPasswordHint")}</small>
         </label>
-        <button
-          type="submit"
-          className="primary-button"
-          disabled={updateProfileMutation.isPending}
-        >
+        <button type="submit" className="primary-button" disabled={updateProfileMutation.isPending}>
           {updateProfileMutation.isPending ? t("web.profile.saving") : t("web.profile.saveProfile")}
         </button>
         <FormFeedback errorMessage={profileErrorMessage} statusMessage={profileStatusMessage} />

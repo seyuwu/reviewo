@@ -35,11 +35,11 @@ x-dev-workspace-volumes: &dev-workspace-volumes
     source: dev_i18n_node_modules
     target: /workspace/packages/i18n/node_modules
 
-x-dev-service-command: &dev-service-command
-  [
+x-dev-service-command:
+  &dev-service-command [
     "sh",
     "-c",
-    "LOCKFILE=/workspace/pnpm-lock.yaml; STAMP=/workspace/node_modules/.pnpm-install-stamp; if [ ! -f \"$$STAMP\" ] || [ \"$$LOCKFILE\" -nt \"$$STAMP\" ]; then echo dev-start: pnpm install; corepack pnpm install --frozen-lockfile --store-dir /pnpm/store && touch \"$$STAMP\"; else echo dev-start: skip install; fi; exec corepack pnpm --filter \"$$DEV_PNPM_FILTER\" dev"
+    'LOCKFILE=/workspace/pnpm-lock.yaml; STAMP=/workspace/node_modules/.pnpm-install-stamp; if [ ! -f "$$STAMP" ] || [ "$$LOCKFILE" -nt "$$STAMP" ]; then echo dev-start: pnpm install; corepack pnpm install --frozen-lockfile --store-dir /pnpm/store && touch "$$STAMP"; else echo dev-start: skip install; fi; exec corepack pnpm --filter "$$DEV_PNPM_FILTER" dev'
   ]
 
 services:
@@ -55,6 +55,7 @@ services:
       TSC_WATCH_POLL_INTERVAL_MS: "1000"
       # Keep API DB credentials aligned with postgres when the dev stack is recreated partially.
       DATABASE_URL: postgresql://${POSTGRES_USER:-reviewo}:${POSTGRES_PASSWORD:-reviewo_password}@postgres:5432/${POSTGRES_DB:-reviewo}
+      TELEGRAM_BOT_API_SECRET: ${TELEGRAM_BOT_API_SECRET:-}
       REPUTATION_ENGINE_ENABLED: ${REPUTATION_ENGINE_ENABLED:-true}
     volumes: *dev-workspace-volumes
     command: *dev-service-command
@@ -119,7 +120,18 @@ services:
         target: /data
     command: ["python", "-m", "bot"]
 
+  dota-bot:
+    volumes:
+      - type: bind
+        source: ./apps/dota-bot
+        target: /app
+      - type: volume
+        source: dota_bot_data
+        target: /data
+    command: ["python", "-m", "bot"]
+
 volumes:
+  dota_bot_data:
   welcome_flow_bot_data:
   dev_pnpm_store:
   dev_root_node_modules:

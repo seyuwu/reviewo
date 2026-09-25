@@ -8,6 +8,7 @@ import { GamesLaunchModule } from "../games-launch/games-launch.module.js";
 import { UsersModule } from "../users/users.module.js";
 import { PartiesController } from "./controllers/parties.controller.js";
 import { FriendshipsModule } from "./friendships.module.js";
+import { TelegramBotModule } from "../telegram/telegram-bot.module.js";
 import { GamePartyGateway } from "./gateways/game-party.gateway.js";
 import { GamePartiesRepository } from "./repositories/game-parties.repository.js";
 import { DiscordVoiceService } from "./services/discord-voice.service.js";
@@ -32,6 +33,7 @@ import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
     forwardRef(() => FriendshipsModule),
     GamesLaunchModule,
     RateLimitingModule,
+    TelegramBotModule,
     UsersModule
   ],
   providers: [

@@ -76,3 +76,19 @@ export function unlinkDiscord(accessToken: string): Promise<CurrentUserProfile> 
     method: "DELETE"
   });
 }
+
+export function createTelegramLinkCode(
+  accessToken: string
+): Promise<{ code: string; expiresAt: string }> {
+  return apiRequest<{ code: string; expiresAt: string }>("/auth/telegram/link-code", {
+    headers: { authorization: `Bearer ${accessToken}` },
+    method: "POST"
+  });
+}
+
+export function unlinkTelegram(accessToken: string): Promise<CurrentUserProfile> {
+  return apiRequest<CurrentUserProfile>("/auth/telegram", {
+    headers: { authorization: `Bearer ${accessToken}` },
+    method: "DELETE"
+  });
+}

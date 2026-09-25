@@ -109,6 +109,44 @@ export class AuthRepository {
     });
   }
 
+  async createTelegramIdentity(
+    userId: string,
+    telegramUserId: string,
+    client: PrismaClientOrTransaction = this.prismaService
+  ): Promise<UserAuthIdentity> {
+    return client.userAuthIdentity.create({
+      data: {
+        passwordHash: null,
+        provider: "telegram",
+        providerUserId: telegramUserId,
+        userId
+      }
+    });
+  }
+
+  async findTelegramIdentityByTelegramUserId(
+    telegramUserId: string
+  ): Promise<EmailIdentityWithUser | null> {
+    return this.prismaService.userAuthIdentity.findUnique({
+      include: { user: true },
+      where: {
+        provider_providerUserId: { provider: "telegram", providerUserId: telegramUserId }
+      }
+    });
+  }
+
+  async findTelegramIdentityByUserId(userId: string): Promise<UserAuthIdentity | null> {
+    return this.prismaService.userAuthIdentity.findFirst({
+      where: { provider: "telegram", userId }
+    });
+  }
+
+  async deleteTelegramIdentityByUserId(userId: string): Promise<void> {
+    await this.prismaService.userAuthIdentity.deleteMany({
+      where: { provider: "telegram", userId }
+    });
+  }
+
   async findDiscordIdentityByUserId(userId: string): Promise<UserAuthIdentity | null> {
     return this.prismaService.userAuthIdentity.findFirst({
       where: {

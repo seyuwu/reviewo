@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { User } from "#prisma/client";
+import { createHash, randomInt } from "node:crypto";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
@@ -93,7 +94,10 @@ export class AuthService {
     const recoveryTokenHash = this.authRepository.hashRecoveryToken(recoveryToken);
 
     const user = await this.prismaService.$transaction(async (transaction) => {
-      const createdUser = await this.usersService.createGuestUserProfile({ displayName }, transaction);
+      const createdUser = await this.usersService.createGuestUserProfile(
+        { displayName },
+        transaction
+      );
       await this.authRepository.createGuestIdentity(createdUser.id, transaction);
       await this.authRepository.createRecoveryToken(createdUser.id, recoveryTokenHash, transaction);
       return createdUser;
@@ -107,6 +111,135 @@ export class AuthService {
       recoveryUrl: this.buildRecoveryUrl(recoveryToken),
       user
     };
+  }
+
+  async createTelegramLinkCode(
+    currentUser: AuthenticatedUser
+  ): Promise<{ code: string; expiresAt: string }> {
+    const code = randomInt(0, 100_000_000).toString().padStart(8, "0");
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    const codeHash = createHash("sha256").update(code).digest("base64url");
+
+    await this.prismaService.$transaction(async (transaction) => {
+      await transaction.telegramLinkCode.updateMany({
+        data: { consumedAt: new Date() },
+        where: { consumedAt: null, userId: currentUser.id }
+      });
+      await transaction.telegramLinkCode.create({
+        data: { codeHash, expiresAt, userId: currentUser.id }
+      });
+    });
+
+    return { code, expiresAt: expiresAt.toISOString() };
+  }
+
+  async completeTelegramLink(input: {
+    code: string;
+    telegramUserId: string;
+  }): Promise<AuthResponseDto> {
+    const codeHash = createHash("sha256").update(input.code.trim()).digest("base64url");
+
+    try {
+      const user = await this.prismaService.$transaction(async (transaction) => {
+        const linkCode = await transaction.telegramLinkCode.findUnique({
+          include: { user: true },
+          where: { codeHash }
+        });
+        const now = new Date();
+
+        if (
+          !linkCode ||
+          linkCode.consumedAt ||
+          linkCode.expiresAt <= now ||
+          linkCode.user.status !== "active"
+        ) {
+          throw createAppException({
+            code: AppErrorCode.Unauthorized,
+            message: "Telegram link code is invalid or expired",
+            statusCode: HttpStatus.UNAUTHORIZED
+          });
+        }
+
+        const existingTelegramIdentity = await transaction.userAuthIdentity.findUnique({
+          where: {
+            provider_providerUserId: {
+              provider: "telegram",
+              providerUserId: input.telegramUserId
+            }
+          }
+        });
+
+        if (existingTelegramIdentity && existingTelegramIdentity.userId !== linkCode.userId) {
+          throw createAppException({
+            code: AppErrorCode.Conflict,
+            message: "This Telegram account is linked to another Opinia account",
+            statusCode: HttpStatus.CONFLICT
+          });
+        }
+
+        const existingUserTelegramIdentity = await transaction.userAuthIdentity.findFirst({
+          where: { provider: "telegram", userId: linkCode.userId }
+        });
+
+        if (
+          existingUserTelegramIdentity &&
+          existingUserTelegramIdentity.providerUserId !== input.telegramUserId
+        ) {
+          throw createAppException({
+            code: AppErrorCode.Conflict,
+            message: "This Opinia account is linked to another Telegram account",
+            statusCode: HttpStatus.CONFLICT
+          });
+        }
+
+        const consumed = await transaction.telegramLinkCode.updateMany({
+          data: { consumedAt: now },
+          where: { consumedAt: null, expiresAt: { gt: now }, id: linkCode.id }
+        });
+
+        if (consumed.count !== 1) {
+          throw createAppException({
+            code: AppErrorCode.Unauthorized,
+            message: "Telegram link code is invalid or expired",
+            statusCode: HttpStatus.UNAUTHORIZED
+          });
+        }
+
+        if (!existingTelegramIdentity) {
+          await this.authRepository.createTelegramIdentity(
+            linkCode.userId,
+            input.telegramUserId,
+            transaction
+          );
+        }
+
+        return toAuthenticatedUser(linkCode.user);
+      });
+
+      return this.createAuthResponse(user);
+    } catch (error) {
+      if (this.authRepository.isUniqueConstraintError(error)) {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "This Telegram account is already linked",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  async unlinkTelegram(currentUser: AuthenticatedUser): Promise<void> {
+    await this.prismaService.$transaction(async (transaction) => {
+      await transaction.telegramLinkCode.updateMany({
+        data: { consumedAt: new Date() },
+        where: { consumedAt: null, userId: currentUser.id }
+      });
+      await transaction.userAuthIdentity.deleteMany({
+        where: { provider: "telegram", userId: currentUser.id }
+      });
+    });
   }
 
   async login(input: LoginDto): Promise<AuthResponseDto> {
@@ -142,7 +275,11 @@ export class AuthService {
 
     await this.prismaService.$transaction(async (transaction) => {
       await this.authRepository.consumeRecoveryToken(existing.id, transaction);
-      await this.authRepository.createRecoveryToken(existing.userId, nextRecoveryTokenHash, transaction);
+      await this.authRepository.createRecoveryToken(
+        existing.userId,
+        nextRecoveryTokenHash,
+        transaction
+      );
     });
 
     const auth = await this.createAuthResponse(toAuthenticatedUser(existing.user));
@@ -154,7 +291,10 @@ export class AuthService {
     };
   }
 
-  async claimEmail(currentUser: AuthenticatedUser, input: ClaimEmailDto): Promise<AuthenticatedUser> {
+  async claimEmail(
+    currentUser: AuthenticatedUser,
+    input: ClaimEmailDto
+  ): Promise<AuthenticatedUser> {
     if (currentUser.email) {
       throw createAppException({
         code: AppErrorCode.Conflict,
@@ -213,7 +353,10 @@ export class AuthService {
   }
 
   async getCurrentUserDto(user: AuthenticatedUser): Promise<CurrentUserDto> {
-    const discord = await this.authRepository.findDiscordIdentityByUserId(user.id);
+    const [discord, telegram] = await Promise.all([
+      this.authRepository.findDiscordIdentityByUserId(user.id),
+      this.authRepository.findTelegramIdentityByUserId(user.id)
+    ]);
 
     return {
       avatarUrl: user.avatarUrl,
@@ -223,6 +366,7 @@ export class AuthService {
       id: user.id,
       role: user.role,
       status: user.status,
+      telegramLinked: Boolean(telegram),
       username: user.username
     };
   }
@@ -565,7 +709,10 @@ function sanitizeReturnTo(returnToRaw?: string): string {
   return trimmed.slice(0, 512) || fallback;
 }
 
-function sanitizeReturnOrigin(returnOriginRaw: string | undefined, allowedOrigins: string[]): string {
+function sanitizeReturnOrigin(
+  returnOriginRaw: string | undefined,
+  allowedOrigins: string[]
+): string {
   const fallback = allowedOrigins[0]?.replace(/\/$/, "") ?? "http://localhost:3001";
   if (!returnOriginRaw) {
     return fallback;
@@ -650,12 +797,7 @@ function createInvalidRecoveryTokenException(): Error {
   });
 }
 
-const SAFE_DISCORD_FAILURE_REASONS = new Set([
-  "access_denied",
-  "denied",
-  "error",
-  "exchange"
-]);
+const SAFE_DISCORD_FAILURE_REASONS = new Set(["access_denied", "denied", "error", "exchange"]);
 
 function sanitizeDiscordFailureReason(reason: string): string {
   const normalized = reason.trim().toLowerCase().slice(0, 64);

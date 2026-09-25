@@ -68,7 +68,8 @@ export const ruMessages: MessageDictionary = {
   "popup.search.idle": "Введите запрос для поиска в Opinia.",
   "popup.search.failed": "Поиск не удался. Проверьте, что API запущен.",
   "popup.search.noResults": "Ничего не найдено.",
-  "popup.search.noResultsHint": "Попробуйте другой запрос или оцените текущую страницу на главном экране.",
+  "popup.search.noResultsHint":
+    "Попробуйте другой запрос или оцените текущую страницу на главном экране.",
   "popup.currentPage.openInOpinia": "Открыть в Opinia",
   "popup.home.collapsible.activeNow": "Сейчас обсуждают",
   "popup.home.collapsible.recent": "Недавние",
@@ -193,7 +194,8 @@ export const ruMessages: MessageDictionary = {
   "card.rate.signInRequired": "Войдите через Opinia, чтобы оценить.",
   "card.auth.leadDefault": "Войдите или зарегистрируйтесь, чтобы оценить страницу.",
   "card.auth.leadPendingScore": "Войдите, чтобы сохранить оценку {score} / 5.",
-  "card.auth.error.unreachable": "Не удалось связаться с Opinia. Перезагрузите расширение и попробуйте снова.",
+  "card.auth.error.unreachable":
+    "Не удалось связаться с Opinia. Перезагрузите расширение и попробуйте снова.",
   "card.auth.success.savingRating": "Вход выполнен. Сохраняем оценку...",
   "card.auth.error.emailExists": "Этот email уже зарегистрирован. Переключитесь на «Вход».",
   "card.settingsTip.prefix": "Подсказка:",
@@ -325,7 +327,8 @@ export const ruMessages: MessageDictionary = {
   "web.nav.gamesActivityAriaLabel": "Навигация по играм",
   "games.hub.eyebrow": "Opinia Games",
   "games.hub.title": "Игры",
-  "games.hub.lead": "Профили игроков для поиска тиммейтов. Сейчас доступна Dota 2 — скоро добавим другие игры.",
+  "games.hub.lead":
+    "Профили игроков для поиска тиммейтов. Сейчас доступна Dota 2 — скоро добавим другие игры.",
   "games.hub.dota.title": "Dota 2",
   "games.hub.dota.lead": "Репутация игрока: роли, MMR и флаги от тех, с кем играл.",
   "games.hub.dota.cta": "Открыть Dota →",
@@ -334,8 +337,10 @@ export const ruMessages: MessageDictionary = {
   "games.hub.openProfile": "Открыть мой игровой профиль",
   "games.hub.communityEyebrow": "Создаём вместе",
   "games.hub.communityTitle": "Приглашайте тиммейтов и помогайте наполнять базу игроков",
-  "games.hub.communityLead": "Чем больше профилей и подтверждений мы соберём сейчас, тем точнее будет подбор подходящих тиммейтов и тем быстрее он появится.",
-  "games.hub.communityInviteText": "Присоединяйся к Opinia Games, создай профиль игрока и помоги наполнить базу тиммейтов.",
+  "games.hub.communityLead":
+    "Чем больше профилей и подтверждений мы соберём сейчас, тем точнее будет подбор подходящих тиммейтов и тем быстрее он появится.",
+  "games.hub.communityInviteText":
+    "Присоединяйся к Opinia Games, создай профиль игрока и помоги наполнить базу тиммейтов.",
   "games.hub.searchSoon": "Через несколько дней появится удобный и быстрый поиск тиммейтов.",
   "games.hub.openSearch": "Открыть поиск тиммейтов",
   "games.community.pageTitle": "Сообщество.",
@@ -383,8 +388,7 @@ export const ruMessages: MessageDictionary = {
   "games.search.eyebrow": "Поиск тиммейтов",
   "games.search.title": "Найти тиммейтов",
   "games.search.pageTitle": "Поиск тиммейтов.",
-  "games.search.pageLead":
-    "Не нужно сидеть и искать долго тиммейта — мы за тебя всё сделали.",
+  "games.search.pageLead": "Не нужно сидеть и искать долго тиммейта — мы за тебя всё сделали.",
   "games.search.cinematic.ariaLabel": "Быстрая настройка поиска",
   "games.search.cinematic.welcome": "Добро пожаловать",
   "games.search.cinematic.intentTitle": "Кого ищем сегодня?",
@@ -405,7 +409,8 @@ export const ruMessages: MessageDictionary = {
   "games.search.cinematic.askRecruitRoles": "Какие позиции ищешь?",
   "games.search.cinematic.askRecruitRolesHint": "Отметь роли, которые нужно закрыть в пати.",
   "games.search.cinematic.askMatchMode": "Как ищем тебе стак?",
-  "games.search.cinematic.askMatchModeHint": "Можем подобрать сами или показать подходящие — выберешь ты.",
+  "games.search.cinematic.askMatchModeHint":
+    "Можем подобрать сами или показать подходящие — выберешь ты.",
   "games.search.cinematic.askMatchModeRecruit": "Как ищем игроков?",
   "games.search.cinematic.askMatchModeRecruitHint":
     "Можем подобрать лучших сами или показать подходящих — выберешь ты.",
@@ -440,8 +445,10 @@ export const ruMessages: MessageDictionary = {
   "games.search.cinematic.revealHint": "Ничего дополнительно делать не нужно.",
   "games.search.cinematic.revealHintAuto": "Расслабься — покажем самые подходящие варианты.",
   "games.search.cinematic.createdBadge": "Создано",
-  "games.search.matchMode.autoBannerJoin": "Ищем открытый стак под твои роли и MMR. Как найдём — сразу кинем в пати.",
-  "games.search.matchMode.autoBannerRecruit": "Ищем подходящие заявки и принимаем автоматически. Инвайт из ленты — вручную.",
+  "games.search.matchMode.autoBannerJoin":
+    "Ищем открытый стак под твои роли и MMR. Как найдём — сразу кинем в пати.",
+  "games.search.matchMode.autoBannerRecruit":
+    "Ищем подходящие заявки и принимаем автоматически. Инвайт из ленты — вручную.",
   "games.search.matchMode.switchToManual": "Выберу сам",
   "games.launch.waitlist.pageTitle": "Список ожидания открыт.",
   "games.launch.waitlist.pageLead":
@@ -526,8 +533,7 @@ export const ruMessages: MessageDictionary = {
   "games.launch.waitlist.contactTitle": "Куда писать в {channel}",
   "games.launch.waitlist.contactBack": "Назад к каналам",
   "games.launch.waitlist.interestSubmit": "Записаться",
-  "games.launch.waitlist.interestThanks":
-    "Ты в списке, а пока можешь создать себе профиль",
+  "games.launch.waitlist.interestThanks": "Ты в списке, а пока можешь создать себе профиль",
   "games.launch.waitlist.interestSharePrompt": "Буду очень благодарен, если ",
   "games.launch.waitlist.interestShareCta": "поделишься с друзьями",
   "games.launch.waitlist.interestShareEmoji": "😊",
@@ -557,7 +563,8 @@ export const ruMessages: MessageDictionary = {
   "games.launch.waitlist.rightDateTitle": "Дата запуска",
   "games.launch.waitlist.rightDateLead": "{date} · {time} (МСК). Напомним в Telegram-канале.",
   "games.launch.waitlist.rightChannelsTitle": "Куда пишем",
-  "games.launch.waitlist.rightChannelsLead": "Главное — Telegram-канал. Если нет TG — оставь другой контакт на странице.",
+  "games.launch.waitlist.rightChannelsLead":
+    "Главное — Telegram-канал. Если нет TG — оставь другой контакт на странице.",
   "games.launch.waitlist.rightTipTitle": "Что появится",
   "games.launch.waitlist.waitingTitle": "Уже ждут запуска",
   "games.launch.waitlist.waitingCount": "{count}",
@@ -585,8 +592,7 @@ export const ruMessages: MessageDictionary = {
     "Поиск тиммейтов откроется {date} в {time}. Профиль уже можно создать — ждем старт вместе.",
   "dota.profile.waitlistCta.eyebrow": "Opinia Games",
   "dota.profile.waitlistCta.title": "Хочешь легко находить таких альтушек?",
-  "dota.profile.waitlistCta.lead":
-    "Запишись в список ожидания, и через 2 дня все альтушки твои",
+  "dota.profile.waitlistCta.lead": "Запишись в список ожидания, и через 2 дня все альтушки твои",
   "dota.profile.waitlistCta.when": "Старт поиска: {date} в {time} МСК",
   "dota.profile.waitlistCta.cta": "Записаться в waitlist",
   "games.launch.admin.title": "Поиск тиммейтов (весь Games)",
@@ -633,7 +639,8 @@ export const ruMessages: MessageDictionary = {
   "games.search.statusOn": "В поиске",
   "games.search.statusOff": "Не в поиске",
   "games.search.statusHint": "Включи — тебя увидят другие. Выключи — пропадёшь из списка.",
-  "games.search.lookingLockedHint": "Пока ты в поиске, параметры заблокированы — сначала останови поиск.",
+  "games.search.lookingLockedHint":
+    "Пока ты в поиске, параметры заблокированы — сначала останови поиск.",
   "games.search.startLooking": "Начать поиск",
   "games.search.stopLooking": "Остановить поиск",
   "games.search.startRecruitLooking": "Создать пати и искать",
@@ -656,9 +663,11 @@ export const ruMessages: MessageDictionary = {
   "games.search.recruitAsHint": "Выбери команду или пати — от её имени идёт набор.",
   "games.search.recruitExistingPartyHint":
     "Нужны игроки в уже существующую пати? Открой её страницу и нажми «Искать игроков».",
-  "games.search.joinModeHint": "Включи поиск — тебя найдут. Жми «Пригласить» у игрока и выбери, куда звать.",
+  "games.search.joinModeHint":
+    "Включи поиск — тебя найдут. Жми «Пригласить» у игрока и выбери, куда звать.",
   "games.search.rolesNeededTitle": "Какие роли ищешь",
-  "games.search.rolesNeededHelp": "Можно ничего не выбирать — тогда набор пойдёт по всем свободным ролям. Или отметь нужные вручную.",
+  "games.search.rolesNeededHelp":
+    "Можно ничего не выбирать — тогда набор пойдёт по всем свободным ролям. Или отметь нужные вручную.",
   "games.search.rolesNeededCount": "Нужно {count} · в составе {current}/{max}",
   "games.search.rolesExpand": "Расширить",
   "games.search.rolesCollapse": "Свернуть",
@@ -674,9 +683,11 @@ export const ruMessages: MessageDictionary = {
   "games.search.noFlagsYet": "Флагов пока нет",
   "games.search.slotsStepperTitle": "Сколько человек нужно в составе",
   "games.search.slotsLabel": "{current}/{max}",
-  "games.search.slotsHelp": "Фиолетовые — уже в составе, зелёные — кого ещё набираем, тусклые — запас до 5.",
+  "games.search.slotsHelp":
+    "Фиолетовые — уже в составе, зелёные — кого ещё набираем, тусклые — запас до 5.",
   "games.search.slotsProgress": "В составе {current} из {desired} (макс. {max})",
-  "games.search.slotsPreview": "Цель: {desired} игроков — выбери пати выше, чтобы искать от её лица",
+  "games.search.slotsPreview":
+    "Цель: {desired} игроков — выбери пати выше, чтобы искать от её лица",
   "games.search.slotTaken": "Занято",
   "games.search.slotNeeded": "Ищем",
   "games.search.slotIdle": "Не нужно",
@@ -760,8 +771,10 @@ export const ruMessages: MessageDictionary = {
   "games.search.emptyTitleParties": "Сейчас никто не набирает состав",
   "games.search.emptyLead":
     "Помоги проекту вырасти: зарегистрируйся и позови друзей — за несколько дней вместе сделаем удобный поиск.",
-  "games.search.emptyLeadPlayers": "Когда кто-то включит «Ищу пати», он появится здесь — сможешь пригласить.",
-  "games.search.emptyLeadParties": "Когда кто-то начнёт набор, пати появится здесь — сможешь подать заявку.",
+  "games.search.emptyLeadPlayers":
+    "Когда кто-то включит «Ищу пати», он появится здесь — сможешь пригласить.",
+  "games.search.emptyLeadParties":
+    "Когда кто-то начнёт набор, пати появится здесь — сможешь подать заявку.",
   "games.search.feedHintAll": "И составы в наборе, и игроки в поиске.",
   "games.search.feedHintPlayers": "Показаны игроки, которых можно пригласить в состав.",
   "games.search.feedHintParties": "Показаны составы, которые ищут тиммейтов.",
@@ -777,11 +790,14 @@ export const ruMessages: MessageDictionary = {
   "games.search.stackSent": "Приглашение отправлено — ответ появится справа.",
   "games.search.stackError": "Не удалось отправить приглашение. Попробуй ещё раз.",
   "games.search.error.alreadyMember": "Этот игрок уже в этом составе.",
-  "games.search.error.alreadyOnTeam": "У игрока уже есть другая команда — в постоянную команду нельзя.",
-  "games.search.error.kickedNeedInvite": "Тебя кикнули из этого пати. Зайти снова можно только по новому приглашению.",
+  "games.search.error.alreadyOnTeam":
+    "У игрока уже есть другая команда — в постоянную команду нельзя.",
+  "games.search.error.kickedNeedInvite":
+    "Тебя кикнули из этого пати. Зайти снова можно только по новому приглашению.",
   "games.search.error.invitePending": "Приглашение этому игроку уже отправлено и ждёт ответа.",
   "games.search.error.alreadyApplied": "Игрок уже подал заявку в пати — прими или отклони её.",
-  "games.search.error.inviteDeclined": "Игрок отклонил приглашение в это пати — повторно отправить нельзя.",
+  "games.search.error.inviteDeclined":
+    "Игрок отклонил приглашение в это пати — повторно отправить нельзя.",
   "games.search.error.applicationDeclined": "Пати отклонило заявку — повторно подать нельзя.",
   "games.search.error.inviteActionFailed": "Не удалось обновить эту заявку. Попробуй ещё раз.",
   "games.search.error.inviteForbidden": "Ты не можешь управлять этой заявкой.",
@@ -812,7 +828,8 @@ export const ruMessages: MessageDictionary = {
   "games.hub.suggestionsCta": "Написать на почту",
   "games.hub.partnershipEyebrow": "Сотрудничество",
   "games.hub.partnershipTitle": "Хотите помочь проекту?",
-  "games.hub.partnershipLead": "Партнёрство, поддержка или идеи развития — напишите нам на ту же почту.",
+  "games.hub.partnershipLead":
+    "Партнёрство, поддержка или идеи развития — напишите нам на ту же почту.",
   "games.hub.partnershipCta": "Написать на почту",
   "web.footer.privacy": "Конфиденциальность",
   "web.footer.ariaLabel": "Подвал сайта",
@@ -830,7 +847,8 @@ export const ruMessages: MessageDictionary = {
   "web.homeFeed.sidebarAriaLabel": "Боковая панель трендов",
   "web.homeFeed.bottomCtaAriaLabel": "Присоединиться к Opinia",
   "web.homeFeed.bottomCtaTitle": "Делитесь мнением о сервисах, которыми пользуетесь",
-  "web.homeFeed.bottomCtaSubtitle": "Создавайте объекты, голосуйте в битвах и участвуйте в сообществе.",
+  "web.homeFeed.bottomCtaSubtitle":
+    "Создавайте объекты, голосуйте в битвах и участвуйте в сообществе.",
   "web.homeFeed.compactSearchLabel": "Найти сервис",
   "web.homeFeed.compactSearchPlaceholder": "YouTube, GitHub, Telegram…",
   "web.homeFeed.viewAll": "Смотреть все",
@@ -851,7 +869,8 @@ export const ruMessages: MessageDictionary = {
   "web.homeFeed.quiet": "Пока тихо — загляните позже.",
   "web.homeIntent.eyebrow": "Быстрый выбор",
   "web.homeIntent.title": "Зачем ты здесь?",
-  "web.homeIntent.lead": "Можно уйти в Games или Dota — или остаться на OpinIA. Выбор необязательный.",
+  "web.homeIntent.lead":
+    "Можно уйти в Games или Dota — или остаться на OpinIA. Выбор необязательный.",
   "web.homeIntent.gamesCta": "Opinia Games",
   "web.homeIntent.gamesHint": "Поиск тиммейтов и пати",
   "web.homeIntent.dotaCta": "Dota 2",
@@ -1092,7 +1111,8 @@ export const ruMessages: MessageDictionary = {
   "web.home.searchPlaceholder": "Например: github.com, iPhone, Cursor...",
   "web.home.searchBlockEyebrow": "Поиск",
   "web.home.searchBlockTitle": "Найти в Opinia",
-  "web.home.searchBlockHint": "Ищите уже добавленные сайты, продукты и страницы по названию или ссылке.",
+  "web.home.searchBlockHint":
+    "Ищите уже добавленные сайты, продукты и страницы по названию или ссылке.",
   "web.home.searching": "Поиск...",
   "web.home.searchError": "Поиск временно недоступен. Попробуйте снова.",
   "web.home.noResults": "Ничего не найдено по запросу «{query}».",
@@ -1139,14 +1159,16 @@ export const ruMessages: MessageDictionary = {
   "web.extensionCta.title": "Видьте оценки прямо на сайтах",
   "web.extensionCta.body": "Реальные оценки, чат и предупреждения без ручного поиска.",
   "web.extensionCta.action": "Установить расширение",
-  "web.extensionCta.noInstallUrl": "Ссылка на установку появится здесь после публикации расширения.",
+  "web.extensionCta.noInstallUrl":
+    "Ссылка на установку появится здесь после публикации расширения.",
   "web.extensionCta.headerLabel": "Расширение",
   "web.extensionCta.headerTitle": "Оценивайте сайты прямо в браузере",
   "web.extensionCta.homeBanner": "Оценивайте сайты, не заходя на Opinia",
   "web.extensionCta.homeBannerAriaLabel": "Установка расширения Opinia",
   "web.extensionCta.homeBannerDismiss": "Закрыть",
   "web.extensionCta.entityTitle": "Откройте рейтинг прямо на сайте",
-  "web.extensionCta.entityBody": "Установите расширение — оценки, чат и предупреждения появятся на YouTube, Steam и других сайтах.",
+  "web.extensionCta.entityBody":
+    "Установите расширение — оценки, чат и предупреждения появятся на YouTube, Steam и других сайтах.",
   "web.profile.title": "Ваш аккаунт Opinia.",
   "web.profile.subtitle": "Управляйте именем, username, email и паролем аккаунта.",
   "web.profile.loadError": "Не удалось загрузить профиль. Войдите снова и повторите.",
@@ -1159,7 +1181,8 @@ export const ruMessages: MessageDictionary = {
   "web.profile.dashboard.heroHint": "Репутация растёт с каждым полезным действием в Opinia.",
   "web.profile.dashboard.editProfile": "Редактировать профиль",
   "web.profile.dashboard.gameProfiles": "Игровые профили",
-  "web.profile.dashboard.gameProfilesHint": "Создавайте игровые профили и собирайте репутацию от игроков.",
+  "web.profile.dashboard.gameProfilesHint":
+    "Создавайте игровые профили и собирайте репутацию от игроков.",
   "web.profile.dashboard.createGameProfile": "Создать игровой профиль",
   "web.profile.dashboard.openDotaProfile": "Открыть профиль Dota",
   "web.profile.dashboard.comingSoon": "Скоро",
@@ -1174,9 +1197,17 @@ export const ruMessages: MessageDictionary = {
   "web.profile.dashboard.activityTitle": "Активность аккаунта",
   "web.profile.dashboard.activityHint": "Ваш вклад в Opinia",
   "web.profile.dashboard.settingsTitle": "Настройки аккаунта",
+  "web.profile.telegram.title": "Telegram-бот",
+  "web.profile.telegram.hint":
+    "Привяжите аккаунт Opinia, чтобы искать пати и получать приглашения в Telegram.",
+  "web.profile.telegram.link": "Привязать Telegram",
+  "web.profile.telegram.unlink": "Отвязать Telegram",
+  "web.profile.telegram.codeInstruction": "Отправьте боту /link {code}. Код действует 10 минут.",
+  "web.profile.telegram.error": "Не удалось изменить привязку Telegram. Попробуйте ещё раз.",
   "web.profile.discordEyebrow": "Discord",
   "web.profile.discordTitle": "Привязка Discord",
-  "web.profile.discordHint": "Нужна, чтобы заходить в войс пати только тебе, а не всем на сервере. Запросим только кто ты (Identify).",
+  "web.profile.discordHint":
+    "Нужна, чтобы заходить в войс пати только тебе, а не всем на сервере. Запросим только кто ты (Identify).",
   "web.profile.discordLink": "Привязать Discord",
   "web.profile.discordUnlink": "Отвязать Discord",
   "web.profile.discordLinkError": "Не удалось начать привязку Discord. Проверь настройки OAuth.",
@@ -1246,7 +1277,8 @@ export const ruMessages: MessageDictionary = {
   "web.contribute.title": "Помогите Opinia",
   "web.contribute.subtitle": "Места, где каталогу ещё нужны отзывы, правки и другая помощь.",
   "web.contribute.needsReviewsTitle": "Сообществу нужны отзывы",
-  "web.contribute.needsReviewsSubtitle": "Оценка помогает, но без текстового отзыва объект остаётся в списке. Напишите пару строк — так другим проще решить.",
+  "web.contribute.needsReviewsSubtitle":
+    "Оценка помогает, но без текстового отзыва объект остаётся в списке. Напишите пару строк — так другим проще решить.",
   "web.contribute.needsReviewsHint": "Нужен первый отзыв",
   "web.contribute.needsReviewsRatedHint": "Оценка есть — нужен отзыв",
   "web.contribute.otherQueuesTitle": "Другие задачи",
@@ -1269,7 +1301,8 @@ export const ruMessages: MessageDictionary = {
   "web.spotlight.endorseAction": "Поддержать рекомендацию",
   "web.spotlight.endorseActionActive": "Вы поддержали",
   "web.spotlight.endorsementsCount": "Поддержали {count} участников",
-  "web.spotlight.endorseError.eligibility": "Сначала поставьте оценку или напишите отзыв об объекте.",
+  "web.spotlight.endorseError.eligibility":
+    "Сначала поставьте оценку или напишите отзыв об объекте.",
   "web.spotlight.endorseError.generic": "Не удалось обновить поддержку.",
   "web.spotlight.noReviewYet": "Отзыва или описания нет",
   "web.spotlight.endsInDays": "Активна ещё {count} дн.",
@@ -1277,7 +1310,8 @@ export const ruMessages: MessageDictionary = {
   "web.spotlight.endsSoon": "Заканчивается скоро",
   "web.spotlight.votesCount": "{count} оценок",
   "web.spotlight.recommendSectionTitle": "Рекомендовать",
-  "web.spotlight.recommendSectionSubtitle": "Потратьте заработанные кредиты, чтобы показать рекомендацию в ленте.",
+  "web.spotlight.recommendSectionSubtitle":
+    "Потратьте заработанные кредиты, чтобы показать рекомендацию в ленте.",
   "web.spotlight.recommendCta.entity": "Рекомендовать объект",
   "web.spotlight.recommendCta.battle": "Рекомендовать битву",
   "web.spotlight.recommendCta.top": "Рекомендовать топ",
@@ -1291,23 +1325,28 @@ export const ruMessages: MessageDictionary = {
   "web.spotlight.action.compare": "Сравнить",
   "web.spotlight.action.openTop": "Открыть топ",
   "web.spotlight.homeSectionTitle": "Витрина сообщества",
-  "web.spotlight.homeSectionCaption": "Помогайте проекту расти - за вклад получайте кредиты и попадайте на главную.",
+  "web.spotlight.homeSectionCaption":
+    "Помогайте проекту расти - за вклад получайте кредиты и попадайте на главную.",
   "web.spotlight.spendEyebrow": "Получить внимание",
   "web.spotlight.spendTitle": "Рекомендовать в ленту",
   "web.spotlight.spendBalance": "{balance} кредитов · +{grant}/мес",
   "web.spotlight.spendGuest": "Войдите, чтобы рекомендовать объекты в ленте.",
   "web.spotlight.spendEntityTitle": "Рекомендовать объект",
-  "web.spotlight.spendEntityDescription": "Найдите по названию или вставьте ссылку со страницы объекта.",
+  "web.spotlight.spendEntityDescription":
+    "Найдите по названию или вставьте ссылку со страницы объекта.",
   "web.spotlight.spendEntitySearchLabel": "Поиск объекта",
   "web.spotlight.spendEntitySearchPlaceholder": "GitHub, Spotify, Claude…",
-  "web.spotlight.spendEntitySearchHint": "Выберите из результатов или вставьте ссылку /entities/… из адресной строки.",
+  "web.spotlight.spendEntitySearchHint":
+    "Выберите из результатов или вставьте ссылку /entities/… из адресной строки.",
   "web.spotlight.spendEntityPasteOk": "Ссылка распознана — можно рекомендовать этот объект.",
   "web.spotlight.spendEntityPitchLabel": "Что показать в ленте",
   "web.spotlight.spendEntityPitchReview": "Мой отзыв",
   "web.spotlight.spendEntityPitchReviewEmpty": "Отзыва пока нет — напишите на странице объекта.",
   "web.spotlight.spendEntityPitchMessage": "Свой текст",
-  "web.spotlight.spendEntityPitchMessageHint": "Коротко, почему стоит обратить внимание — до {max} символов.",
-  "web.spotlight.spendEntityPitchMessagePlaceholder": "Например: лучший инструмент для TypeScript в 2026…",
+  "web.spotlight.spendEntityPitchMessageHint":
+    "Коротко, почему стоит обратить внимание — до {max} символов.",
+  "web.spotlight.spendEntityPitchMessagePlaceholder":
+    "Например: лучший инструмент для TypeScript в 2026…",
   "web.spotlight.spendEntityPitchMessageCount": "{current} / {max}",
   "web.spotlight.spendBattleTitle": "Рекомендовать битву",
   "web.spotlight.spendBattleDescription": "Выберите пару сравнения, которой не хватает внимания.",
@@ -1330,19 +1369,23 @@ export const ruMessages: MessageDictionary = {
   "web.spotlight.spendTopAction": "Рекомендовать топ ({cost})",
   "web.spotlight.spendSuccess": "Рекомендация опубликована в ленте.",
   "web.spotlight.spendError.trustBefore": "Ваш",
-  "web.spotlight.spendError.trustAfter": "слишком низкий для траты кредитов (минимум {min}). Откройте профиль, чтобы понять, как его поднять.",
+  "web.spotlight.spendError.trustAfter":
+    "слишком низкий для траты кредитов (минимум {min}). Откройте профиль, чтобы понять, как его поднять.",
   "web.spotlight.spendError.balance": "Недостаточно кредитов витрины.",
   "web.spotlight.spendError.notFound": "Цель не найдена.",
   "web.spotlight.spendError.generic": "Не удалось создать размещение.",
   "web.spotlight.spendError.pitch": "Добавьте отзыв или короткий текст для рекомендации.",
-  "web.spotlight.spendError.limit": "У вас уже {max} активных рекомендаций. Дождитесь, пока одна закончится.",
-  "web.spotlight.spendPlacementLimitHint": "Сейчас в ленте уже {max} ваших рекомендаций — новую можно будет опубликовать, когда одна из них закончится.",
+  "web.spotlight.spendError.limit":
+    "У вас уже {max} активных рекомендаций. Дождитесь, пока одна закончится.",
+  "web.spotlight.spendPlacementLimitHint":
+    "Сейчас в ленте уже {max} ваших рекомендаций — новую можно будет опубликовать, когда одна из них закончится.",
   "web.profile.spotlightCredits": "Кредиты витрины",
   "web.profile.spotlightCreditsHint": "{balance} доступно · +{grant}/мес",
   "web.profile.spotlightLink": "Открыть витрину",
   "web.profile.trustEyebrow": "Доверие",
   "web.profile.trustTitle": "Trust Score",
-  "web.profile.trustSubtitle": "Насколько платформе можно доверять вашим оценкам. Для витрины нужно минимум {min}.",
+  "web.profile.trustSubtitle":
+    "Насколько платформе можно доверять вашим оценкам. Для витрины нужно минимум {min}.",
   "web.profile.trustScoreLabel": "Trust Score",
   "web.profile.trustMissing": "Пока не рассчитан — поставьте оценки разным объектам.",
   "web.profile.trustBelowMinimum": "Ниже минимума {min} для траты кредитов витрины.",
@@ -1450,13 +1493,15 @@ export const ruMessages: MessageDictionary = {
   "web.entityCreate.alreadyExistsSlug":
     "Технический адрес страницы уже занят. Поменяй название или укажи URL.",
   "web.entityCreate.parentNotFound": "Родительская сущность не найдена.",
-  "web.entityCreate.validationCanonicalUrl": "Канонический URL должен начинаться с http:// или https://",
+  "web.entityCreate.validationCanonicalUrl":
+    "Канонический URL должен начинаться с http:// или https://",
   "web.entityCreate.validationTooLong": "Поле «{field}» слишком длинное.",
   "web.entityCreate.validationTooShort": "Поле «{field}» слишком короткое.",
   "web.entityCreate.validationInvalidType": "Выберите корректный тип сущности.",
   "web.entityCreate.validationField": "{field}: {reason}",
   "web.entityCreate.rateLimited": "Слишком много созданий. Попробуйте через {minutes} мин.",
-  "web.entityCreate.rateLimitedGeneric": "Слишком много созданий. Подождите немного и попробуйте снова.",
+  "web.entityCreate.rateLimitedGeneric":
+    "Слишком много созданий. Подождите немного и попробуйте снова.",
   "web.entityCreate.signedOut": "Вы вышли из процесса создания.",
   "web.entityCreate.step": "Шаг 2",
   "web.entityCreate.detailsTitle": "Данные сущности",
@@ -1579,10 +1624,12 @@ export const ruMessages: MessageDictionary = {
   "contributions.linkReason": "Связанные страницы об одном и том же объекте",
   "contributions.linkSummary": "Связать с «{relatedTitle}»",
   "contributions.relatedPresencesTitle": "Связанные страницы",
-  "contributions.relatedPresencesHint": "Другие присутствия этого объекта в Opinia с отдельными рейтингами.",
+  "contributions.relatedPresencesHint":
+    "Другие присутствия этого объекта в Opinia с отдельными рейтингами.",
   "contributions.relatedPresencesEmptyRating": "Нет оценок",
   "contributions.manualLinkTitle": "Связать с другой страницей",
-  "contributions.manualLinkHint": "Если это та же сущность на другом сайте, но автопоиск не нашёл совпадение.",
+  "contributions.manualLinkHint":
+    "Если это та же сущность на другом сайте, но автопоиск не нашёл совпадение.",
   "contributions.manualLinkCta": "Связать с другой…",
   "contributions.manualLinkModalTitle": "Связать с другой страницей",
   "contributions.manualLinkModalHint": "Найдите другую страницу Opinia про тот же объект.",
@@ -1590,10 +1637,12 @@ export const ruMessages: MessageDictionary = {
   "contributions.manualLinkSearchPlaceholder": "Найти в Opinia…",
   "contributions.manualLinkSearchEmpty": "Начните ввод, чтобы найти страницу для связи.",
   "contributions.manualMergeTitle": "Объединить с другой сущностью",
-  "contributions.manualMergeHint": "Если автоматический поиск дубликатов не нашёл похожую сущность.",
+  "contributions.manualMergeHint":
+    "Если автоматический поиск дубликатов не нашёл похожую сущность.",
   "contributions.manualMergeCta": "Объединить с другой…",
   "contributions.manualMergeModalTitle": "Объединить с другой сущностью",
-  "contributions.manualMergeModalHint": "Найдите сущность, которую нужно оставить. Текущая страница будет влита в неё.",
+  "contributions.manualMergeModalHint":
+    "Найдите сущность, которую нужно оставить. Текущая страница будет влита в неё.",
   "contributions.manualMergeSearchLabel": "Поиск сущности",
   "contributions.manualMergeSearchPlaceholder": "Найти в Opinia…",
   "contributions.manualMergeSearchEmpty": "Начните ввод, чтобы найти целевую сущность.",
@@ -1808,7 +1857,8 @@ export const ruMessages: MessageDictionary = {
   "web.admin.economy.usersContributorPlus": "Уровень ≥ Contributor",
   "web.admin.economy.usersSpotlightEligible": "Могут тратить spotlight (trust ≥ 35%)",
   "web.admin.economy.sourcesTitle": "Источники contribution",
-  "web.admin.economy.sourcesNote": "Доля по базовым весам по всей платформе, без diminishing на пользователя.",
+  "web.admin.economy.sourcesNote":
+    "Доля по базовым весам по всей платформе, без diminishing на пользователя.",
   "web.admin.economy.sourcesEmpty": "Пока нет activity events.",
   "web.admin.economy.contentFunnelTitle": "Воронка контента",
   "web.admin.economy.contentFunnelPeriod": "За последние {days} дней",
@@ -1844,12 +1894,14 @@ export const ruMessages: MessageDictionary = {
   "dota.create.essentialsTitle": "Минимум для старта",
   "dota.create.extraStep": "Дополнительно",
   "dota.create.extraTitle": "Сервер и детали",
-  "dota.create.moreLaterHint": "Сервер, микрофон и цель игры можно указать позже в редактировании профиля.",
+  "dota.create.moreLaterHint":
+    "Сервер, микрофон и цель игры можно указать позже в редактировании профиля.",
   "dota.create.rolesRequired": "Выбери хотя бы одну роль.",
   "dota.create.mmrRequired": "Укажи MMR.",
   "dota.create.validation.displayName": "Укажи имя.",
   "dota.create.displayName": "Ник",
-  "dota.create.displayNameHint": "Так тебя видно в поиске и пати. То же имя будет в аккаунте Opinia.",
+  "dota.create.displayNameHint":
+    "Так тебя видно в поиске и пати. То же имя будет в аккаунте Opinia.",
   "dota.create.displayNamePlaceholder": "Как тебя звать",
   "dota.create.validation.email": "Укажи email.",
   "dota.create.validation.password": "Пароль должен быть не короче 8 символов.",
@@ -1927,7 +1979,8 @@ export const ruMessages: MessageDictionary = {
   "dota.share.idText": "мой dota id {accountId}, профиль: {url}",
   "dota.profile.eyebrow": "Dota profile",
   "dota.profile.recoveryTitle": "Сохрани ссылку для восстановления",
-  "dota.profile.recoveryHint": "Если очистишь браузер или зайдёшь с другого устройства — эта ссылка вернёт доступ.",
+  "dota.profile.recoveryHint":
+    "Если очистишь браузер или зайдёшь с другого устройства — эта ссылка вернёт доступ.",
   "dota.profile.recoveryCopy": "Скопировать ссылку",
   "dota.profile.recoveryCopied": "Скопировано",
   "dota.profile.claimTitle": "Защити профиль",
@@ -1974,7 +2027,8 @@ export const ruMessages: MessageDictionary = {
   "dota.friends.inviteInvalid": "Ссылка приглашения недействительна или устарела.",
   "dota.team.eyebrow": "Dota team",
   "dota.team.lead": "Состав {current}/{max}. Заполни пятёрку и зови тиммейтов.",
-  "dota.team.searchSoon": "Удобный поиск тиммейтов скоро — пока собирай команду из друзей и делитесь ссылкой.",
+  "dota.team.searchSoon":
+    "Удобный поиск тиммейтов скоро — пока собирай команду из друзей и делитесь ссылкой.",
   "dota.team.inviteCta": "Найти игроков",
   "dota.team.copied": "Приглашение скопировано",
   "dota.team.findPlayersHint": "Скопируй приглашение и отправь друзьям в Discord или Telegram",
@@ -1991,20 +2045,23 @@ export const ruMessages: MessageDictionary = {
   "dota.team.claimSeatOpen": "Место свободно · меньше минуты",
   "dota.team.claimSeatConfirm": "Подать заявку",
   "dota.team.authSheetEyebrow": "Займи место в пати",
-  "dota.team.authSheetLead": "Укажи MMR и роли — временный профиль создастся сам, Opinia-аккаунт не нужен.",
+  "dota.team.authSheetLead":
+    "Укажи MMR и роли — временный профиль создастся сам, Opinia-аккаунт не нужен.",
   "dota.team.authSheetTitle": "Вход для места в пати",
   "dota.team.authSheetFinish": "Занять место",
   "dota.team.authSheetCreatingHint": "Создаём игровой профиль и возвращаем тебя в пати.",
   "dota.team.authSheetCreateError": "Не удалось создать профиль. Попробуй ещё раз.",
   "dota.team.lookingForPlayer": "Ищем игрока",
-  "dota.team.candidatesEmptyCta": "Пока никто не ищет пати. Можешь скопировать ссылку на пати и добавить людей.",
+  "dota.team.candidatesEmptyCta":
+    "Пока никто не ищет пати. Можешь скопировать ссылку на пати и добавить людей.",
   "dota.team.nobodyJoinedYet": "Никто пока не присоединился",
   "dota.team.quickInviteTitle": "Быстрое приглашение",
   "dota.team.quickInviteOrApp": "Или открой в приложении",
   "dota.team.metaCreated": "Пати создана {when}",
   "dota.team.shareWallEyebrow": "Пати создана",
   "dota.team.shareWallTitle": "Теперь найди игроков",
-  "dota.team.shareWallLead": "Скопируй готовое приглашение и отправь туда, где обычно ищешь тиммейтов.",
+  "dota.team.shareWallLead":
+    "Скопируй готовое приглашение и отправь туда, где обычно ищешь тиммейтов.",
   "dota.team.shareWallCopyInvite": "Скопировать приглашение",
   "dota.team.shareWallOr": "или отправь сразу",
   "dota.team.shareWallClose": "Закрыть",
@@ -2070,12 +2127,9 @@ export const ruMessages: MessageDictionary = {
   "dota.team.inviteActionError": "Не удалось обработать заявку.",
   "dota.team.candidatesEyebrow": "Поиск игроков",
   "dota.team.candidatesTitle": "Подходящие игроки",
-  "dota.team.candidatesIdleParty":
-    "Здесь появятся игроки, когда вы начнёте поиск в пати.",
-  "dota.team.candidatesIdleTeam":
-    "Здесь появятся игроки, когда команда начнёт поиск.",
-  "dota.team.candidatesEmpty":
-    "Сейчас подходящих игроков нет. Список обновляется автоматически.",
+  "dota.team.candidatesIdleParty": "Здесь появятся игроки, когда вы начнёте поиск в пати.",
+  "dota.team.candidatesIdleTeam": "Здесь появятся игроки, когда команда начнёт поиск.",
+  "dota.team.candidatesEmpty": "Сейчас подходящих игроков нет. Список обновляется автоматически.",
   "dota.team.candidatesRefresh": "Обновить",
   "dota.team.candidatesLoadError": "Не удалось обновить список игроков.",
   "dota.team.candidateMmrUnknown": "MMR не указан",
@@ -2085,10 +2139,12 @@ export const ruMessages: MessageDictionary = {
   "dota.team.candidateInvited": "{name} приглашён на позицию {role}.",
   "dota.team.candidatesQueue": "Группа {current} из {total}",
   "dota.team.createTitle": "Новая Dota-команда или пати",
-  "dota.team.createLead": "Постоянная команда до {max} человек. Страница публичная — удобно звать друзей.",
+  "dota.team.createLead":
+    "Постоянная команда до {max} человек. Страница публичная — удобно звать друзей.",
   "dota.team.createPartyLead":
     "Временное пати до {max} человек на {hours} ч. Можно состоять и в команде, и в пати одновременно.",
-  "dota.team.createNameHint": "Название подберём случайно в духе Dota — потом капитан может переименовать.",
+  "dota.team.createNameHint":
+    "Название подберём случайно в духе Dota — потом капитан может переименовать.",
   "dota.team.kindLabel": "Тип",
   "dota.team.kindTeam": "Команда",
   "dota.team.kindTeamHint": "Постоянный состав, публичная страница.",
@@ -2126,8 +2182,10 @@ export const ruMessages: MessageDictionary = {
   "dota.team.incomingInvites": "Приглашения",
   "dota.team.incomingApplications": "Заявки этого игрока",
   "dota.team.rosterApplications": "Заявки в состав",
-  "dota.team.rosterApplicationsHint": "Игроки откликнулись на набор. Прими или отклони прямо здесь.",
-  "dota.team.rosterApplicationsEmpty": "Пока нет заявок — как только кто-то откликнется, список появится здесь.",
+  "dota.team.rosterApplicationsHint":
+    "Игроки откликнулись на набор. Прими или отклони прямо здесь.",
+  "dota.team.rosterApplicationsEmpty":
+    "Пока нет заявок — как только кто-то откликнется, список появится здесь.",
   "dota.team.inviteSlotTitle": "Свободное приглашение",
   "dota.team.inviteSlotNoRoleHint": "Без роли — игрок зайдёт в состав, слот выберет позже.",
   "dota.team.inviteSlotEmptyFriends": "Нет друзей для быстрого инвайта.",
@@ -2135,7 +2193,8 @@ export const ruMessages: MessageDictionary = {
   "dota.team.slotFind": "Искать",
   "dota.team.slotStopFind": "Стоп",
   "dota.team.slotLooking": "Ищем игрока",
-  "dota.team.slotLookingHint": "Заявки появятся здесь. Принятие одного отклонит остальные на эту роль.",
+  "dota.team.slotLookingHint":
+    "Заявки появятся здесь. Принятие одного отклонит остальные на эту роль.",
   "dota.team.slotFindHint": "Включи поиск — игроки смогут подать заявку на этот слот.",
   "dota.team.slotWaitingApps": "ищем игроков",
   "dota.team.slotLookingForSeat": "Ищем игроков на этот слот",
@@ -2168,8 +2227,10 @@ export const ruMessages: MessageDictionary = {
   "dota.team.discordVoiceJoin": "Войти в войс",
   "dota.team.discordVoiceCopy": "Копировать",
   "dota.team.discordVoiceCopied": "Ссылка на войс скопирована",
-  "dota.team.discordVoiceHint": "Discord-приложение: если уже в войсе на сервере OpinIA — кинет само; иначе откроет канал",
-  "dota.team.discordVoiceHintTeam": "Временный войс команды · удалится через 6ч после создания (таймер только для войса, не команды)",
+  "dota.team.discordVoiceHint":
+    "Discord-приложение: если уже в войсе на сервере OpinIA — кинет само; иначе откроет канал",
+  "dota.team.discordVoiceHintTeam":
+    "Временный войс команды · удалится через 6ч после создания (таймер только для войса, не команды)",
   "dota.team.discordVoiceExpiresIn": "Войс команды удалится через {remaining}",
   "dota.team.discordVoiceExtendCta": "Продлить войс +{hours}ч",
   "dota.team.discordVoiceExtendError": "Не удалось продлить войс",
@@ -2178,9 +2239,12 @@ export const ruMessages: MessageDictionary = {
   "dota.team.discordVoiceLinkCta": "Привязать Discord",
   "dota.team.discordLinkEyebrow": "Discord",
   "dota.team.discordLinkTitle": "Привяжи Discord",
-  "dota.team.discordLinkLead": "Один раз — чтобы в войс пати пускали только тебя, не всех с сервера. Спросим только кто ты.",
-  "dota.team.discordLinkError": "Не удалось привязать Discord. Нажми Join ещё раз или проверь Client Secret в Discord Developer Portal.",
-  "dota.team.discordLinkNotConfigured": "OAuth Discord не настроен: в .env.development нужен DISCORD_OAUTH_CLIENT_SECRET и redirect в портале.",
+  "dota.team.discordLinkLead":
+    "Один раз — чтобы в войс пати пускали только тебя, не всех с сервера. Спросим только кто ты.",
+  "dota.team.discordLinkError":
+    "Не удалось привязать Discord. Нажми Join ещё раз или проверь Client Secret в Discord Developer Portal.",
+  "dota.team.discordLinkNotConfigured":
+    "OAuth Discord не настроен: в .env.development нужен DISCORD_OAUTH_CLIENT_SECRET и redirect в портале.",
   "dota.team.discordVoiceError": "Не удалось открыть Discord voice. Попробуй ещё раз.",
   "dota.team.extendCta": "Продлить +{hours}ч",
   "dota.team.extendBusy": "Продлеваю…",
@@ -2233,5 +2297,5 @@ export const ruMessages: MessageDictionary = {
   "dota.gender.unspecified": "Не указывать",
   "dota.create.gender": "Пол",
   "dota.create.genderHint": "По желанию. Можно не указывать.",
-  "dota.profile.gender": "Пол",
+  "dota.profile.gender": "Пол"
 };

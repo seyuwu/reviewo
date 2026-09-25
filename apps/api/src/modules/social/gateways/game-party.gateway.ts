@@ -9,6 +9,7 @@ import {
   WebSocketServer
 } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
+import { randomUUID } from "node:crypto";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
@@ -25,6 +26,7 @@ import type {
   FriendNotificationPayload
 } from "../party-realtime.types.js";
 import { GamePartiesService } from "../services/game-parties.service.js";
+import { TelegramBotService } from "../../telegram/telegram-bot.service.js";
 
 export type {
   PartyNotificationPayload,
@@ -75,7 +77,8 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
     @Inject(forwardRef(() => GamePartiesService))
     private readonly gamePartiesService: GamePartiesService,
     private readonly jwtTokenService: JwtTokenService,
-    private readonly usersService: UsersService
+    private readonly usersService: UsersService,
+    private readonly telegramBotService: TelegramBotService
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -298,6 +301,22 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   emitPartyNotification(userId: string, payload: PartyNotificationPayload): void {
     this.server.to(userRoomName(userId)).emit("party_notification", payload);
+    void this.telegramBotService
+      .enqueuePartyNotification(userId, payload)
+      .catch((error: unknown) => {
+        console.error("Failed to enqueue Telegram party notification", error);
+      });
+  }
+
+  notifyTelegramPartyRosterUpdated(userIds: string[], partySlug: string): void {
+    const eventId = randomUUID();
+    for (const userId of new Set(userIds)) {
+      void this.telegramBotService
+        .enqueuePartyRosterNotification(userId, partySlug, eventId)
+        .catch((error: unknown) => {
+          console.error("Failed to enqueue Telegram party roster update", error);
+        });
+    }
   }
 
   emitFriendNotification(userId: string, payload: FriendNotificationPayload): void {

@@ -34,6 +34,7 @@ x-app-environment: &app-environment
   DISCORD_OAUTH_REDIRECT_URI: ${DISCORD_OAUTH_REDIRECT_URI:-}
   WAITLIST_BOT_TOKEN: ${WAITLIST_BOT_TOKEN:-}
   WAITLIST_CHANNEL_URL: ${WAITLIST_CHANNEL_URL:-https://t.me/opinia_official}
+  TELEGRAM_BOT_API_SECRET: ${TELEGRAM_BOT_API_SECRET:-}
 
 x-app-common: &app-common
   init: true
@@ -64,7 +65,8 @@ services:
         NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
     command: ["sh", "-c", "corepack pnpm --filter @reviewo/api dev"]
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${API_PORT:-3000}/health || exit 1"]
+      test:
+        ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${API_PORT:-3000}/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -143,6 +145,31 @@ services:
     volumes:
       - welcome_flow_bot_data:/data
 
+  dota-bot:
+    image: reviewo-dota-bot:${IMAGE_TAG:-local}
+    logging: *default-logging
+    build:
+      context: .
+      dockerfile: apps/dota-bot/Dockerfile
+    restart: unless-stopped
+    profiles:
+      - dota-bot
+    networks:
+      - reviewo
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      DOTA_BOT_TOKEN: ${DOTA_BOT_TOKEN:-}
+      DOTA_BOT_API_BASE_URL: ${DOTA_BOT_API_BASE_URL:-http://api:${API_PORT:-3000}}
+      DOTA_BOT_SITE_URL: ${DOTA_BOT_SITE_URL:-https://dota.opinia.ru}
+      DOTA_BOT_DATABASE_PATH: /data/dota_bot.db
+      DOTA_BOT_ENCRYPTION_KEY: ${DOTA_BOT_ENCRYPTION_KEY:-}
+      TELEGRAM_BOT_API_SECRET: ${TELEGRAM_BOT_API_SECRET:-}
+      TELEGRAM_PROXY: ${TELEGRAM_PROXY:-}
+    volumes:
+      - dota_bot_data:/data
+
   postgres:
     image: ${POSTGRES_IMAGE:-postgres:17-alpine}
     restart: unless-stopped
@@ -203,6 +230,7 @@ volumes:
   minio_data:
   waitlist_bot_data:
   welcome_flow_bot_data:
+  dota_bot_data:
 
 networks:
   reviewo:

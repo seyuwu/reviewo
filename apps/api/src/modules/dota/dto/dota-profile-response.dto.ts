@@ -11,6 +11,8 @@ export class DotaProfileResponseDto {
   gender!: string | null;
   hasMic!: boolean | null;
   isOwner!: boolean;
+  looking!: boolean;
+  lfgExpiresAt!: string | null;
   language!: string | null;
   mmr!: string | null;
   ownerUserId!: string | null;

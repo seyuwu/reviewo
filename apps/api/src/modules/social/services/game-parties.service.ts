@@ -1,4 +1,11 @@
-import { HttpStatus, Inject, Injectable, Logger, OnModuleInit, HttpException } from "@nestjs/common";
+import {
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+  HttpException
+} from "@nestjs/common";
 import type { GamePartyInvite, GamePartyMember } from "#prisma/client";
 import {
   DOTA_ATTRIBUTE_KEYS,
@@ -43,10 +50,7 @@ import type {
 } from "../dto/game-party-response.dto.js";
 import { FriendshipsRepository } from "../repositories/friendships.repository.js";
 import { GamePartiesRepository } from "../repositories/game-parties.repository.js";
-import {
-  PARTY_REALTIME_PUBLISHER,
-  type PartyRealtimePublisher
-} from "../party-realtime.types.js";
+import { PARTY_REALTIME_PUBLISHER, type PartyRealtimePublisher } from "../party-realtime.types.js";
 import { DiscordVoiceService } from "./discord-voice.service.js";
 import type { PartyDiscordVoiceResponseDto } from "../dto/game-party-response.dto.js";
 import { RedisService } from "../../../redis/redis.service.js";
@@ -61,7 +65,6 @@ const PARTY_SAFETY_SYSTEM_MESSAGE = "__system__:party_safety";
 const PARTY_LINK_OPEN_DEDUPE_TTL_SECONDS = 60 * 60 * 24;
 /** Matches JWT party-join TTL (7 days). */
 const PARTY_JOIN_CODE_TTL_SECONDS = 60 * 60 * 24 * 7;
-
 
 @Injectable()
 export class GamePartiesService implements OnModuleInit {
@@ -98,13 +101,10 @@ export class GamePartiesService implements OnModuleInit {
     await this.assertNoActiveMembershipOfKind(currentUser.id, kind);
 
     const providedName = input.name?.trim();
-    const name =
-      providedName && providedName.length >= 2 ? providedName : generateDotaPartyName();
+    const name = providedName && providedName.length >= 2 ? providedName : generateDotaPartyName();
     const slug = await this.createAvailableSlug(createSlug(name), kind);
     const expiresAt =
-      kind === "PARTY"
-        ? new Date(Date.now() + DOTA_TEMP_PARTY_TTL_HOURS * 60 * 60 * 1000)
-        : null;
+      kind === "PARTY" ? new Date(Date.now() + DOTA_TEMP_PARTY_TTL_HOURS * 60 * 60 * 1000) : null;
 
     const party = await this.gamePartiesRepository.createParty({
       expiresAt,
@@ -326,10 +326,7 @@ export class GamePartiesService implements OnModuleInit {
     return this.toPartyResponse(party, viewerUserId);
   }
 
-  async recordPartyLinkOpen(
-    slug: string,
-    viewerKey: string
-  ): Promise<{ linkOpenCount: number }> {
+  async recordPartyLinkOpen(slug: string, viewerKey: string): Promise<{ linkOpenCount: number }> {
     const party = await this.gamePartiesRepository.findByVerticalAndSlug(DOTA_PARTY_VERTICAL, slug);
 
     if (!party || this.isExpired(party)) {
@@ -356,7 +353,8 @@ export class GamePartiesService implements OnModuleInit {
     const raw = await redis.get(countKey);
     const linkOpenCount = Number(raw);
     return {
-      linkOpenCount: Number.isFinite(linkOpenCount) && linkOpenCount > 0 ? Math.floor(linkOpenCount) : 0
+      linkOpenCount:
+        Number.isFinite(linkOpenCount) && linkOpenCount > 0 ? Math.floor(linkOpenCount) : 0
     };
   }
 
@@ -377,14 +375,10 @@ export class GamePartiesService implements OnModuleInit {
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const code = randomBytes(5).toString("base64url");
       const key = `party:join-code:${code}`;
-      const created = await redis.set(
-        key,
-        JSON.stringify({ slug, token }),
-        {
-          EX: PARTY_JOIN_CODE_TTL_SECONDS,
-          NX: true
-        }
-      );
+      const created = await redis.set(key, JSON.stringify({ slug, token }), {
+        EX: PARTY_JOIN_CODE_TTL_SECONDS,
+        NX: true
+      });
 
       if (created) {
         return code;
@@ -663,7 +657,10 @@ export class GamePartiesService implements OnModuleInit {
 
     await this.assertCanReceivePartyInvite(party.id, input.userId);
 
-    const existingInvite = await this.gamePartiesRepository.findPendingInvite(party.id, input.userId);
+    const existingInvite = await this.gamePartiesRepository.findPendingInvite(
+      party.id,
+      input.userId
+    );
 
     if (existingInvite) {
       throw createAppException({
@@ -754,7 +751,7 @@ export class GamePartiesService implements OnModuleInit {
 
     const party = await this.gamePartiesRepository.findById(invite.partyId);
 
-      if (!party) {
+    if (!party) {
       if (invite.status === "PENDING") {
         await this.gamePartiesRepository.cancelPendingInvite(invite.id);
       }
@@ -1112,8 +1109,7 @@ export class GamePartiesService implements OnModuleInit {
     let partyResponse: GamePartyResponseDto;
     let invite: GamePartyInviteDto;
     let inviteDirection: "incoming" | "outgoing" = "outgoing";
-    const resolvedPosition =
-      positionRole && isDotaPositionRole(positionRole) ? positionRole : null;
+    const resolvedPosition = positionRole && isDotaPositionRole(positionRole) ? positionRole : null;
 
     const recruitSlug = targetAttributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim();
 
@@ -1131,7 +1127,11 @@ export class GamePartiesService implements OnModuleInit {
         recruitSlug
       );
 
-      if (!recruitParty || recruitParty.ownerUserId !== targetUserId || this.isExpired(recruitParty)) {
+      if (
+        !recruitParty ||
+        recruitParty.ownerUserId !== targetUserId ||
+        this.isExpired(recruitParty)
+      ) {
         throw createAppException({
           code: AppErrorCode.Conflict,
           message: "Player is no longer recruiting for a party",
@@ -1232,7 +1232,9 @@ export class GamePartiesService implements OnModuleInit {
         }
 
         if (loaded.members.length >= loaded.maxMembers) {
-          const closedFull = await this.gamePartiesRepository.cancelPendingInvitesForParty(loaded.id);
+          const closedFull = await this.gamePartiesRepository.cancelPendingInvitesForParty(
+            loaded.id
+          );
           await this.emitAutoClosedNotifications(closedFull, recruitParty);
         }
 
@@ -1655,6 +1657,13 @@ export class GamePartiesService implements OnModuleInit {
     invite: GamePartyInviteDto,
     joinerUserId: string
   ): void {
+    if (invite.inviteKind !== "APPLICATION") {
+      this.partyRealtimeService.emitPartyNotification(joinerUserId, {
+        invite: { ...invite, direction: "incoming" },
+        type: "accepted"
+      });
+    }
+
     for (const member of party.members) {
       if (member.userId === joinerUserId) {
         continue;
@@ -1727,7 +1736,10 @@ export class GamePartiesService implements OnModuleInit {
       await this.assertCanReceivePartyInvite(party.id, targetUserId);
     }
 
-    const existingInvite = await this.gamePartiesRepository.findPendingInvite(party.id, targetUserId);
+    const existingInvite = await this.gamePartiesRepository.findPendingInvite(
+      party.id,
+      targetUserId
+    );
     const nextKind = options?.inviteKind ?? "INVITE";
 
     if (existingInvite) {
@@ -2015,20 +2027,12 @@ export class GamePartiesService implements OnModuleInit {
     }
 
     // Backfill TTL on older team voices created before expiresAt existed.
-    if (
-      party.kind === "TEAM" &&
-      party.discordChannelId &&
-      !party.discordVoiceExpiresAt
-    ) {
+    if (party.kind === "TEAM" && party.discordChannelId && !party.discordVoiceExpiresAt) {
       const backfillExpires = new Date(
         (party.discordVoiceCreatedAt?.getTime() ?? Date.now()) +
           DOTA_TEAM_DISCORD_VOICE_TTL_HOURS * 60 * 60 * 1000
       );
-      await this.gamePartiesRepository.updateDiscordVoiceExpiry(
-        party.id,
-        backfillExpires,
-        null
-      );
+      await this.gamePartiesRepository.updateDiscordVoiceExpiry(party.id, backfillExpires, null);
       const withExpiry = await this.gamePartiesRepository.findById(party.id);
 
       if (withExpiry) {
@@ -2198,10 +2202,7 @@ export class GamePartiesService implements OnModuleInit {
         });
       }
 
-      movedToVoice = await this.discordVoiceService.tryMoveMemberToVoice(
-        channelId,
-        discordUserId
-      );
+      movedToVoice = await this.discordVoiceService.tryMoveMemberToVoice(channelId, discordUserId);
 
       try {
         inviteUrl = await this.discordVoiceService.createJoinInvite(channelId);
@@ -2674,9 +2675,7 @@ export class GamePartiesService implements OnModuleInit {
       const refreshed = await this.gamePartiesRepository.findById(party.id);
 
       if (refreshed) {
-        this.partyRealtimeService.broadcastPartyUpdated(
-          await this.toPartyResponse(refreshed)
-        );
+        this.partyRealtimeService.broadcastPartyUpdated(await this.toPartyResponse(refreshed));
       }
     } catch {
       // Broadcast best-effort.
@@ -2784,7 +2783,9 @@ export class GamePartiesService implements OnModuleInit {
     }
   }
 
-  private async deleteDiscordVoiceIfPresent(channelId: string | null | undefined): Promise<boolean> {
+  private async deleteDiscordVoiceIfPresent(
+    channelId: string | null | undefined
+  ): Promise<boolean> {
     if (!channelId) {
       return true;
     }
@@ -2885,7 +2886,10 @@ export class GamePartiesService implements OnModuleInit {
     });
   }
 
-  private async assertCanSubmitPartyApplication(partyId: string, applicantUserId: string): Promise<void> {
+  private async assertCanSubmitPartyApplication(
+    partyId: string,
+    applicantUserId: string
+  ): Promise<void> {
     const declined = await this.gamePartiesRepository.hasDeclinedPartyInvite(
       partyId,
       applicantUserId,
@@ -2943,7 +2947,10 @@ export class GamePartiesService implements OnModuleInit {
     }
   }
 
-  private async refreshRecruitLookingAttributes(ownerUserId: string, partyId: string): Promise<void> {
+  private async refreshRecruitLookingAttributes(
+    ownerUserId: string,
+    partyId: string
+  ): Promise<void> {
     const entity = await this.entitiesRepository.findByOwnerUserId(ownerUserId);
 
     if (!entity) {
@@ -3037,9 +3044,7 @@ export class GamePartiesService implements OnModuleInit {
       return true;
     }
 
-    return party.members.some(
-      (member) => member.userId === userId && member.role === "OFFICER"
-    );
+    return party.members.some((member) => member.userId === userId && member.role === "OFFICER");
   }
 
   private async requireMemberParty(slug: string, userId: string) {
@@ -3067,7 +3072,9 @@ export class GamePartiesService implements OnModuleInit {
   }
 
   private isExpired(party: { expiresAt: Date | null; kind: GamePartyKind }): boolean {
-    return party.kind === "PARTY" && party.expiresAt !== null && party.expiresAt.getTime() <= Date.now();
+    return (
+      party.kind === "PARTY" && party.expiresAt !== null && party.expiresAt.getTime() <= Date.now()
+    );
   }
 
   private toChatMessageDto(row: {
@@ -3093,8 +3100,7 @@ export class GamePartiesService implements OnModuleInit {
     const members: GamePartyMemberDto[] = await Promise.all(
       [...party.members]
         .sort((left, right) => {
-          const rank = (role: string) =>
-            role === "OWNER" ? 0 : role === "OFFICER" ? 1 : 2;
+          const rank = (role: string) => (role === "OWNER" ? 0 : role === "OFFICER" ? 1 : 2);
           const rankDelta = rank(left.role) - rank(right.role);
 
           if (rankDelta !== 0) {
@@ -3127,9 +3133,7 @@ export class GamePartiesService implements OnModuleInit {
     const isOwner = viewerUserId === party.ownerUserId;
     const isOfficer = Boolean(
       viewerUserId &&
-        party.members.some(
-          (member) => member.userId === viewerUserId && member.role === "OFFICER"
-        )
+      party.members.some((member) => member.userId === viewerUserId && member.role === "OFFICER")
     );
     const isMember = Boolean(
       viewerUserId && party.members.some((member) => member.userId === viewerUserId)
@@ -3370,10 +3374,9 @@ export class GamePartiesService implements OnModuleInit {
       kind: party.kind,
       partyName: party.name,
       partySlug: party.slug,
-      positionRole:
-        (invite.positionRole && isDotaPositionRole(invite.positionRole)
-          ? invite.positionRole
-          : null) as DotaPositionRole | null,
+      positionRole: (invite.positionRole && isDotaPositionRole(invite.positionRole)
+        ? invite.positionRole
+        : null) as DotaPositionRole | null,
       redFlags: meta?.redFlags ?? [],
       status: invite.status
     };
@@ -3434,10 +3437,12 @@ export class GamePartiesService implements OnModuleInit {
 
   private async createAvailableSlug(baseSlug: string, kind: GamePartyKind): Promise<string> {
     const prefix = kind === "PARTY" ? "party-" : "";
-    const normalizedBase = `${prefix}${baseSlug}`.slice(0, 120) || `team-${Date.now().toString(36)}`;
+    const normalizedBase =
+      `${prefix}${baseSlug}`.slice(0, 120) || `team-${Date.now().toString(36)}`;
 
     for (let index = 0; index < 10; index += 1) {
-      const candidate = index === 0 ? normalizedBase : `${normalizedBase}-${index + 1}`.slice(0, 120);
+      const candidate =
+        index === 0 ? normalizedBase : `${normalizedBase}-${index + 1}`.slice(0, 120);
       const existing = await this.gamePartiesRepository.findSlug(DOTA_PARTY_VERTICAL, candidate);
 
       if (!existing) {

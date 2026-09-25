@@ -69,7 +69,9 @@ export class DotaProfileService {
     private readonly usersRepository: UsersRepository
   ) {}
 
-  async createGuestProfile(input: CreateDotaProfileDto): Promise<GuestDotaProfileCreateResponseDto> {
+  async createGuestProfile(
+    input: CreateDotaProfileDto
+  ): Promise<GuestDotaProfileCreateResponseDto> {
     const displayName = input.title?.trim()
       ? input.title.trim()
       : input.dotaAccountId
@@ -154,10 +156,14 @@ export class DotaProfileService {
       await this.usersRepository.updateDisplayName(currentUser.id, title);
     }
 
-    return this.buildProfileResponse(entity, await this.entityAttributesRepository.findByEntityId(entity.id), {
-      isOwner: true,
-      viewerUserId: currentUser.id
-    });
+    return this.buildProfileResponse(
+      entity,
+      await this.entityAttributesRepository.findByEntityId(entity.id),
+      {
+        isOwner: true,
+        viewerUserId: currentUser.id
+      }
+    );
   }
 
   async getMyProfile(currentUser: AuthenticatedUser): Promise<DotaProfileResponseDto> {
@@ -203,7 +209,11 @@ export class DotaProfileService {
           return null;
         }
 
-        if (input.roles && input.roles.length > 0 && !input.roles.some((role) => roles.includes(role))) {
+        if (
+          input.roles &&
+          input.roles.length > 0 &&
+          !input.roles.some((role) => roles.includes(role))
+        ) {
           return null;
         }
 
@@ -446,9 +456,7 @@ export class DotaProfileService {
 
     const isManager =
       party.ownerUserId === currentUser.id ||
-      party.members.some(
-        (member) => member.userId === currentUser.id && member.role === "OFFICER"
-      );
+      party.members.some((member) => member.userId === currentUser.id && member.role === "OFFICER");
 
     if (!isManager) {
       throw createAppException({
@@ -563,14 +571,18 @@ export class DotaProfileService {
     const callerEntity = await this.entitiesRepository.findByOwnerUserId(currentUser.id);
 
     if (callerEntity) {
-      const callerAttributes = await this.entityAttributesRepository.findByEntityId(callerEntity.id);
+      const callerAttributes = await this.entityAttributesRepository.findByEntityId(
+        callerEntity.id
+      );
       return this.buildProfileResponse(callerEntity, callerAttributes, {
         isOwner: true,
         viewerUserId: currentUser.id
       });
     }
 
-    const nextOwnerAttributes = await this.entityAttributesRepository.findByEntityId(ownerEntity.id);
+    const nextOwnerAttributes = await this.entityAttributesRepository.findByEntityId(
+      ownerEntity.id
+    );
     return this.buildProfileResponse(ownerEntity, nextOwnerAttributes, {
       isOwner: party.ownerUserId === currentUser.id,
       viewerUserId: currentUser.id
@@ -585,7 +597,10 @@ export class DotaProfileService {
     const currentAttributes = await this.entityAttributesRepository.findByEntityId(entity.id);
     const nextAttributes = this.mergeAttributes(currentAttributes, input);
 
-    if (input.dotaAccountId && input.dotaAccountId !== currentAttributes[DOTA_ATTRIBUTE_KEYS.dotaAccountId]) {
+    if (
+      input.dotaAccountId &&
+      input.dotaAccountId !== currentAttributes[DOTA_ATTRIBUTE_KEYS.dotaAccountId]
+    ) {
       const existingEntityId = await this.entityAttributesRepository.findEntityIdByDotaAccountId(
         input.dotaAccountId
       );
@@ -625,13 +640,20 @@ export class DotaProfileService {
       throw error;
     }
 
-    return this.buildProfileResponse(updatedEntity, { ...currentAttributes, ...nextAttributes }, {
-      isOwner: true,
-      viewerUserId: currentUser.id
-    });
+    return this.buildProfileResponse(
+      updatedEntity,
+      { ...currentAttributes, ...nextAttributes },
+      {
+        isOwner: true,
+        viewerUserId: currentUser.id
+      }
+    );
   }
 
-  async getPublicProfileBySlug(slug: string, viewerUserId?: string): Promise<DotaProfileResponseDto> {
+  async getPublicProfileBySlug(
+    slug: string,
+    viewerUserId?: string
+  ): Promise<DotaProfileResponseDto> {
     const entity = await this.requireDotaProfileBySlug(slug);
     const attributes = await this.entityAttributesRepository.findByEntityId(entity.id);
 
@@ -993,6 +1015,9 @@ export class DotaProfileService {
     attributes: Record<string, string>,
     options: { isOwner: boolean; viewerUserId?: string }
   ): Promise<DotaProfileResponseDto> {
+    const lfgUntil = attributes[DOTA_ATTRIBUTE_KEYS.lfgUntil] ?? "";
+    const lfgUntilMs = Date.parse(lfgUntil);
+    const isLooking = Number.isFinite(lfgUntilMs) && lfgUntilMs > Date.now();
     const [qualities, distinctConfirmers, friendship] = await Promise.all([
       this.entityQualityConfirmationsRepository.countByQualityKey(entity.id),
       this.entityQualityConfirmationsRepository.countDistinctConfirmers(entity.id),
@@ -1007,6 +1032,8 @@ export class DotaProfileService {
       gender: attributes[DOTA_ATTRIBUTE_KEYS.gender] ?? null,
       hasMic: parseOptionalBoolean(attributes[DOTA_ATTRIBUTE_KEYS.hasMic]),
       isOwner: options.isOwner,
+      looking: options.isOwner && isLooking,
+      lfgExpiresAt: options.isOwner && isLooking ? new Date(lfgUntilMs).toISOString() : null,
       language: attributes[DOTA_ATTRIBUTE_KEYS.language] ?? null,
       mmr: attributes[DOTA_ATTRIBUTE_KEYS.mmr] ?? null,
       ownerUserId: entity.ownerUserId,
@@ -1063,7 +1090,9 @@ function parseRoles(value: string | undefined): string[] {
   try {
     const parsed = JSON.parse(value) as unknown;
 
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
   } catch {
     return [];
   }

@@ -13,6 +13,7 @@ export interface EnvironmentVariables {
   REFRESH_TOKEN_TTL_SECONDS: number;
   REPUTATION_ENGINE_ENABLED: boolean;
   TRUST_PROXY_HOPS: number;
+  TELEGRAM_BOT_API_SECRET?: string;
 }
 
 const DEFAULT_API_PORT = 3000;
@@ -47,12 +48,10 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     365 * SECONDS_PER_DAY,
     "REFRESH_TOKEN_TTL_SECONDS"
   );
-  const reputationEngineEnabled = parseBooleanFlag(
-    config["REPUTATION_ENGINE_ENABLED"],
-    false
-  );
+  const reputationEngineEnabled = parseBooleanFlag(config["REPUTATION_ENGINE_ENABLED"], false);
   const redisUrl = parseRedisUrl(config["REDIS_URL"], nodeEnvironment);
   const trustProxyHops = parseTrustProxyHops(config["TRUST_PROXY_HOPS"]);
+  const telegramBotApiSecret = parseOptionalSecret(config["TELEGRAM_BOT_API_SECRET"]);
 
   return {
     API_PORT: apiPort,
@@ -64,8 +63,21 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     REDIS_URL: redisUrl,
     REFRESH_TOKEN_TTL_SECONDS: refreshTokenTtlSeconds,
     REPUTATION_ENGINE_ENABLED: reputationEngineEnabled,
-    TRUST_PROXY_HOPS: trustProxyHops
+    TRUST_PROXY_HOPS: trustProxyHops,
+    ...(telegramBotApiSecret ? { TELEGRAM_BOT_API_SECRET: telegramBotApiSecret } : {})
   };
+}
+
+function parseOptionalSecret(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || value.trim().length < 32) {
+    throw new Error("TELEGRAM_BOT_API_SECRET must be at least 32 characters long");
+  }
+
+  return value.trim();
 }
 
 function parseCorsAllowedOrigins(value: unknown, nodeEnvironment: NodeEnvironment): string[] {
@@ -89,7 +101,9 @@ function parseCorsAllowedOrigins(value: unknown, nodeEnvironment: NodeEnvironmen
   for (const origin of origins) {
     if (origin === DEVELOPMENT_CHROME_EXTENSION_WILDCARD) {
       if (nodeEnvironment === "production") {
-        throw new Error("CORS_ALLOWED_ORIGINS must not use chrome-extension wildcard in production");
+        throw new Error(
+          "CORS_ALLOWED_ORIGINS must not use chrome-extension wildcard in production"
+        );
       }
 
       continue;
@@ -104,7 +118,9 @@ function parseCorsAllowedOrigins(value: unknown, nodeEnvironment: NodeEnvironmen
         throw new Error("Invalid CORS origin protocol");
       }
     } catch {
-      throw new Error("CORS_ALLOWED_ORIGINS must contain valid HTTP, HTTPS, or chrome-extension URLs");
+      throw new Error(
+        "CORS_ALLOWED_ORIGINS must contain valid HTTP, HTTPS, or chrome-extension URLs"
+      );
     }
 
     if (nodeEnvironment === "production" && url.protocol === "http:" && !isLocalhost(url)) {

@@ -42,6 +42,7 @@ model User {
   gamePartyChatMessages  GamePartyChatMessage[]
   accountRecoveryTokens  AccountRecoveryToken[]
   refreshTokens          RefreshToken[]
+  telegramLinkCodes      TelegramLinkCode[]
 
   @@map("users")
   @@schema("users")
@@ -95,6 +96,20 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+  @@schema("auth")
+}
+
+model TelegramLinkCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @unique @map("code_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("telegram_link_codes")
   @@schema("auth")
 }
 
@@ -1200,6 +1215,22 @@ model GamePartyChatMessage {
 
   @@index([partyId, createdAt(sort: Desc)])
   @@map("game_party_chat_messages")
+  @@schema("social")
+}
+
+model TelegramBotNotification {
+  id               String    @id @default(uuid()) @db.Uuid
+  telegramUserId   String    @map("telegram_user_id") @db.VarChar(32)
+  eventKey         String    @map("event_key") @db.VarChar(160)
+  payload          Json
+  attempts         Int       @default(0)
+  nextAttemptAt    DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  deliveredAt      DateTime? @map("delivered_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([telegramUserId, eventKey])
+  @@index([telegramUserId, deliveredAt, nextAttemptAt])
+  @@map("telegram_bot_notifications")
   @@schema("social")
 }
 

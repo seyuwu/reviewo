@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, HttpCode, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Patch,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards
+} from "@nestjs/common";
 
 import { CurrentUser } from "../../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
@@ -142,6 +154,38 @@ export class AuthController {
   @Get("me")
   @UseGuards(JwtAuthGuard)
   async getCurrentUser(@CurrentUser() user: AuthenticatedUser): Promise<CurrentUserDto> {
+    return this.authService.getCurrentUserDto(user);
+  }
+
+  @Post("telegram/link-code")
+  @UseGuards(JwtAuthGuard)
+  async createTelegramLinkCode(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestLike
+  ): Promise<{ code: string; expiresAt: string }> {
+    await this.apiRateLimiterService.assertWithinLimits([
+      {
+        key: user.id,
+        limit: 10,
+        message: "Too many Telegram link codes requested",
+        namespace: "auth:telegram-link-code:user",
+        windowSeconds: 60 * 60
+      },
+      {
+        key: resolveRequestIp(request),
+        limit: 30,
+        message: "Too many Telegram link codes requested from this network",
+        namespace: "auth:telegram-link-code:ip",
+        windowSeconds: 60 * 60
+      }
+    ]);
+    return this.authService.createTelegramLinkCode(user);
+  }
+
+  @Delete("telegram")
+  @UseGuards(JwtAuthGuard)
+  async unlinkTelegram(@CurrentUser() user: AuthenticatedUser): Promise<CurrentUserDto> {
+    await this.authService.unlinkTelegram(user);
     return this.authService.getCurrentUserDto(user);
   }
 

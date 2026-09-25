@@ -196,12 +196,10 @@ export const enMessages = {
   "card.auth.error.emailExists": "This email is already registered. Switch to Login.",
   "card.settingsTip.prefix": "Tip:",
   "card.settingsTip.hotkeyEnabled": "Press {hotkey} to show or hide this card.",
-  "card.settingsTip.openSettings":
-    "Open the Opinia extension and choose Settings to customize.",
+  "card.settingsTip.openSettings": "Open the Opinia extension and choose Settings to customize.",
   "onboarding.popup.title": "Quick tips",
   "onboarding.popup.hotkeyTip": "{hotkey} — show or hide the card on any page",
-  "onboarding.popup.settingsTip":
-    "Settings — turn off auto-show, change shortcut, move the card",
+  "onboarding.popup.settingsTip": "Settings — turn off auto-show, change shortcut, move the card",
   "onboarding.popup.openSettings": "Open Settings",
   "snooze.banner.title": "Opinia is disabled on this site",
   "snooze.banner.until": "Until {date}",
@@ -323,7 +321,8 @@ export const enMessages = {
   "web.nav.gamesActivityAriaLabel": "Games navigation",
   "games.hub.eyebrow": "Opinia Games",
   "games.hub.title": "Games",
-  "games.hub.lead": "Player profiles for finding teammates. Dota 2 is live now — more games coming soon.",
+  "games.hub.lead":
+    "Player profiles for finding teammates. Dota 2 is live now — more games coming soon.",
   "games.hub.dota.title": "Dota 2",
   "games.hub.dota.lead": "Player reputation: roles, MMR, and flags from people you played with.",
   "games.hub.dota.cta": "Open Dota →",
@@ -332,8 +331,10 @@ export const enMessages = {
   "games.hub.openProfile": "Open my player profile",
   "games.hub.communityEyebrow": "Built by players",
   "games.hub.communityTitle": "Invite teammates and help fill the player database",
-  "games.hub.communityLead": "The more player profiles and confirmations we collect now, the more accurate teammate matching will be — and the sooner it will launch.",
-  "games.hub.communityInviteText": "Join Opinia Games, create your player profile, and help us build the teammate database.",
+  "games.hub.communityLead":
+    "The more player profiles and confirmations we collect now, the more accurate teammate matching will be — and the sooner it will launch.",
+  "games.hub.communityInviteText":
+    "Join Opinia Games, create your player profile, and help us build the teammate database.",
   "games.hub.searchSoon": "Fast and convenient teammate search is coming in the next few days.",
   "games.hub.openSearch": "Open teammate search",
   "games.community.pageTitle": "Community.",
@@ -403,7 +404,8 @@ export const enMessages = {
   "games.search.cinematic.askRecruitRoles": "Which positions do you need?",
   "games.search.cinematic.askRecruitRolesHint": "Pick the roles your party needs to fill.",
   "games.search.cinematic.askMatchMode": "How should we find your stack?",
-  "games.search.cinematic.askMatchModeHint": "You can let us match you, or pick from suitable parties yourself.",
+  "games.search.cinematic.askMatchModeHint":
+    "You can let us match you, or pick from suitable parties yourself.",
   "games.search.cinematic.askMatchModeRecruit": "How should we find players?",
   "games.search.cinematic.askMatchModeRecruitHint":
     "You can let us bring the best fits, or choose from suitable players yourself.",
@@ -438,8 +440,10 @@ export const enMessages = {
   "games.search.cinematic.revealHint": "There’s nothing else you need to do.",
   "games.search.cinematic.revealHintAuto": "Sit tight — we’ll surface the best fits.",
   "games.search.cinematic.createdBadge": "Created",
-  "games.search.matchMode.autoBannerJoin": "Looking for an open stack matching your roles and MMR. You’ll join instantly when we find one.",
-  "games.search.matchMode.autoBannerRecruit": "Looking for matching applicants and accepting them automatically. You can still invite from the feed.",
+  "games.search.matchMode.autoBannerJoin":
+    "Looking for an open stack matching your roles and MMR. You’ll join instantly when we find one.",
+  "games.search.matchMode.autoBannerRecruit":
+    "Looking for matching applicants and accepting them automatically. You can still invite from the feed.",
   "games.search.matchMode.switchToManual": "Choose myself",
   "games.launch.waitlist.pageTitle": "Waitlist is open.",
   "games.launch.waitlist.pageLead":
@@ -584,8 +588,7 @@ export const enMessages = {
     "Teammate search opens {date} at {time}. You can create a profile now — then we launch together.",
   "dota.profile.waitlistCta.eyebrow": "Opinia Games",
   "dota.profile.waitlistCta.title": "Want to find girls like this easily?",
-  "dota.profile.waitlistCta.lead":
-    "Join the waitlist — in two days, all the altushkas are yours",
+  "dota.profile.waitlistCta.lead": "Join the waitlist — in two days, all the altushkas are yours",
   "dota.profile.waitlistCta.when": "Search opens {date} at {time} MSK",
   "dota.profile.waitlistCta.cta": "Join the waitlist",
   "games.launch.admin.title": "Teammate search (full Games)",
@@ -604,14 +607,12 @@ export const enMessages = {
   "games.launch.admin.communityStateOff": "Now: community closed",
   "games.launch.admin.error": "Couldn’t change mode.",
   "games.launch.tip.rolesEyebrow": "Roles 1-5",
-  "games.launch.tip.rolesBody":
-    "Claim Carry-Hard Support slots. Open empty roles in search.",
+  "games.launch.tip.rolesBody": "Claim Carry-Hard Support slots. Open empty roles in search.",
   "games.launch.tip.officerEyebrow": "Sub-captains",
   "games.launch.tip.officerBody":
     "Captains can promote a sub-captain to help with apps and recruiting.",
   "games.launch.tip.communityEyebrow": "Community",
-  "games.launch.tip.communityBody":
-    "Friends, invites, and rosters in one place - less chat chaos.",
+  "games.launch.tip.communityBody": "Friends, invites, and rosters in one place - less chat chaos.",
   "games.launch.tip.notifyEyebrow": "Notifications",
   "games.launch.tip.notifyBody":
     "When someone applies or accepts an invite, you’ll see it right away.",
@@ -632,7 +633,8 @@ export const enMessages = {
   "games.search.statusOn": "In search",
   "games.search.statusOff": "Not in search",
   "games.search.statusHint": "Turn on to appear in search. Turn off to hide from the list.",
-  "games.search.lookingLockedHint": "While you’re looking, settings are locked — stop search first.",
+  "games.search.lookingLockedHint":
+    "While you’re looking, settings are locked — stop search first.",
   "games.search.startLooking": "Start search",
   "games.search.stopLooking": "Stop search",
   "games.search.startRecruitLooking": "Create party and search",
@@ -655,9 +657,11 @@ export const enMessages = {
   "games.search.recruitAsHint": "Pick the team or party you’re filling.",
   "games.search.recruitExistingPartyHint":
     "Need players for an existing party? Open its page and click “Find players”.",
-  "games.search.joinModeHint": "Start search to be found. Tap Invite on a player and choose where to invite them.",
+  "games.search.joinModeHint":
+    "Start search to be found. Tap Invite on a player and choose where to invite them.",
   "games.search.rolesNeededTitle": "Roles you need",
-  "games.search.rolesNeededHelp": "Leave empty to recruit for every unfilled role, or pick specific ones.",
+  "games.search.rolesNeededHelp":
+    "Leave empty to recruit for every unfilled role, or pick specific ones.",
   "games.search.rolesNeededCount": "Need {count} · roster {current}/{max}",
   "games.search.rolesExpand": "Expand",
   "games.search.rolesCollapse": "Collapse",
@@ -673,9 +677,11 @@ export const enMessages = {
   "games.search.noFlagsYet": "No flags yet",
   "games.search.slotsStepperTitle": "Target party size",
   "games.search.slotsLabel": "{current}/{max}",
-  "games.search.slotsHelp": "Purple = already in roster, green = still recruiting, dim = unused up to 5.",
+  "games.search.slotsHelp":
+    "Purple = already in roster, green = still recruiting, dim = unused up to 5.",
   "games.search.slotsProgress": "{current} of {desired} filled (max {max})",
-  "games.search.slotsPreview": "Target: {desired} players — pick a party above to search as that roster",
+  "games.search.slotsPreview":
+    "Target: {desired} players — pick a party above to search as that roster",
   "games.search.slotTaken": "Filled",
   "games.search.slotNeeded": "Needed",
   "games.search.slotIdle": "Unused",
@@ -724,7 +730,8 @@ export const enMessages = {
   "games.search.coach.done": "Got it",
   "games.search.coach.skip": "Skip",
   "games.search.promoTitle": "Create a profile first",
-  "games.search.promoLead": "MMR, roles, and server — about 20 seconds. Then you can search and invite.",
+  "games.search.promoLead":
+    "MMR, roles, and server — about 20 seconds. Then you can search and invite.",
   "games.search.lookingCount": "Looking now: {count}",
   "games.search.onlineCount": "Online: {count}",
   "games.search.rolesLabel": "Roles",
@@ -759,8 +766,10 @@ export const enMessages = {
   "games.search.emptyTitleParties": "No parties are recruiting right now",
   "games.search.emptyLead":
     "Help the project grow: sign up and invite friends — in a few days we can build a better search together.",
-  "games.search.emptyLeadPlayers": "When someone turns on Looking, they’ll show up here for invites.",
-  "games.search.emptyLeadParties": "When someone starts recruiting a roster, it’ll appear here to apply.",
+  "games.search.emptyLeadPlayers":
+    "When someone turns on Looking, they’ll show up here for invites.",
+  "games.search.emptyLeadParties":
+    "When someone starts recruiting a roster, it’ll appear here to apply.",
   "games.search.feedHintAll": "Parties recruiting and players looking — both.",
   "games.search.feedHintPlayers": "Showing players you can invite into your roster.",
   "games.search.feedHintParties": "Showing parties looking for teammates.",
@@ -777,11 +786,15 @@ export const enMessages = {
   "games.search.stackError": "Could not send the invite. Try again.",
   "games.search.error.alreadyMember": "This player is already on that roster.",
   "games.search.error.alreadyOnTeam": "This player already belongs to another permanent team.",
-  "games.search.error.kickedNeedInvite": "You were removed from this party. You can rejoin only with a new invite.",
+  "games.search.error.kickedNeedInvite":
+    "You were removed from this party. You can rejoin only with a new invite.",
   "games.search.error.invitePending": "An invite to this player is already pending.",
-  "games.search.error.alreadyApplied": "This player already applied to your party — accept or decline the application.",
-  "games.search.error.inviteDeclined": "This player declined an invite to this party and cannot be invited again.",
-  "games.search.error.applicationDeclined": "This party declined your application. You can't apply again.",
+  "games.search.error.alreadyApplied":
+    "This player already applied to your party — accept or decline the application.",
+  "games.search.error.inviteDeclined":
+    "This player declined an invite to this party and cannot be invited again.",
+  "games.search.error.applicationDeclined":
+    "This party declined your application. You can't apply again.",
   "games.search.error.inviteActionFailed": "Could not update this invite. Try again.",
   "games.search.error.inviteForbidden": "You can’t manage this invite.",
   "games.search.error.inviteGone": "This request is no longer available.",
@@ -811,7 +824,8 @@ export const enMessages = {
   "games.hub.suggestionsCta": "Email us",
   "games.hub.partnershipEyebrow": "Partnership",
   "games.hub.partnershipTitle": "Want to help the project?",
-  "games.hub.partnershipLead": "Partnership, support, or growth ideas — email us at the same address.",
+  "games.hub.partnershipLead":
+    "Partnership, support, or growth ideas — email us at the same address.",
   "games.hub.partnershipCta": "Email us",
   "web.footer.privacy": "Privacy",
   "web.footer.ariaLabel": "Site footer",
@@ -829,7 +843,8 @@ export const enMessages = {
   "web.homeFeed.sidebarAriaLabel": "Trending sidebar",
   "web.homeFeed.bottomCtaAriaLabel": "Join Opinia",
   "web.homeFeed.bottomCtaTitle": "Share your opinion on the services you use",
-  "web.homeFeed.bottomCtaSubtitle": "Create entities, vote in battles, and contribute to the community.",
+  "web.homeFeed.bottomCtaSubtitle":
+    "Create entities, vote in battles, and contribute to the community.",
   "web.homeFeed.compactSearchLabel": "Find a service",
   "web.homeFeed.compactSearchPlaceholder": "YouTube, GitHub, Telegram…",
   "web.homeFeed.viewAll": "View all",
@@ -909,12 +924,12 @@ export const enMessages = {
   "web.userTops.searchEmptyHint": "Type a name to find entities in Opinia.",
   "web.userTops.entityAddAction": "Add",
   "web.userTops.entityAlreadyInTop": "Added",
-  "web.userTops.createEntityHint.title": "Create \"{query}\"",
+  "web.userTops.createEntityHint.title": 'Create "{query}"',
   "web.userTops.createEntityHint.body":
     "This entity is not in Opinia yet — create it by name and add it to your top.",
   "web.userTops.createEntityHint.action": "Create and add",
   "web.userTops.createEntityHint.creating": "Creating…",
-  "web.userTops.entityAdded": "Added \"{title}\" to the top.",
+  "web.userTops.entityAdded": 'Added "{title}" to the top.',
   "web.userTops.entityAlreadyAdded": "This entity is already in the top.",
   "web.userTops.itemsLabel": "Items ({count}, min {min}, max {max})",
   "web.userTops.notePlaceholder": "Short note (optional)",
@@ -934,7 +949,8 @@ export const enMessages = {
   "web.userTops.minItems": "At least {count} items are required.",
   "web.userTops.maxItems": "A top can contain at most {count} items.",
   "web.userTops.saveFailed": "Could not save the top. Please try again.",
-  "web.userTops.itemsSaveFailed": "The top was created, but saving items failed. Finish it in the editor.",
+  "web.userTops.itemsSaveFailed":
+    "The top was created, but saving items failed. Finish it in the editor.",
   "web.userTops.forkCta": "Create your version",
   "web.userTops.forking": "Creating copy…",
   "web.userTops.forkFailed": "Could not fork this top. Please try again.",
@@ -1008,7 +1024,7 @@ export const enMessages = {
   "web.userTops.categories.social-media": "Social Media",
   "web.userTops.categories.other": "Other",
   "web.userTops.categoryNoMatches": "No matching categories.",
-  "web.userTops.categoryCreateCta": "Create category \"{title}\"",
+  "web.userTops.categoryCreateCta": 'Create category "{title}"',
   "web.userTops.categoryCreating": "Creating…",
   "web.userTops.categoryCreateFailed": "Could not create the category. Try again.",
   "web.userTops.categoryChange": "Change",
@@ -1094,14 +1110,14 @@ export const enMessages = {
   "web.home.searchBlockHint": "Search already added sites, products, and pages by name or link.",
   "web.home.searching": "Searching...",
   "web.home.searchError": "Search is temporarily unavailable. Please try again.",
-  "web.home.noResults": "No entities found for \"{query}\".",
+  "web.home.noResults": 'No entities found for "{query}".',
   "web.home.idleHint": "Start typing to search the public opinion layer.",
   "web.home.resultsAriaLabel": "Search results",
   "search.canonical.badge": "Official site",
   "search.canonical.noRatings": "No ratings yet",
   "search.canonical.ratings": "{count} ratings",
   "web.home.createHint.type": "No entity found",
-  "web.home.createHint.title": "Create a new page for \"{query}\"",
+  "web.home.createHint.title": 'Create a new page for "{query}"',
   "web.home.createHint.body":
     "Start a minimal entity page and let the backend validate the submitted data.",
   "web.home.createHint.action": "Create page",
@@ -1138,14 +1154,16 @@ export const enMessages = {
   "web.extensionCta.title": "See ratings directly on websites",
   "web.extensionCta.body": "Real ratings, chat, and warnings without manual search.",
   "web.extensionCta.action": "Install extension",
-  "web.extensionCta.noInstallUrl": "The install link will appear here after the extension is published.",
+  "web.extensionCta.noInstallUrl":
+    "The install link will appear here after the extension is published.",
   "web.extensionCta.headerLabel": "Extension",
   "web.extensionCta.headerTitle": "Rate websites right in your browser",
   "web.extensionCta.homeBanner": "Rate websites without visiting Opinia",
   "web.extensionCta.homeBannerAriaLabel": "Install the Opinia extension",
   "web.extensionCta.homeBannerDismiss": "Dismiss",
   "web.extensionCta.entityTitle": "Open ratings right on the site",
-  "web.extensionCta.entityBody": "Install the extension — ratings, chat, and warnings appear on YouTube, Steam, and more.",
+  "web.extensionCta.entityBody":
+    "Install the extension — ratings, chat, and warnings appear on YouTube, Steam, and more.",
   "web.profile.title": "Your Opinia account.",
   "web.profile.subtitle": "Manage your display name, username, email, and account password.",
   "web.profile.loadError": "Profile could not be loaded. Sign in again and retry.",
@@ -1158,7 +1176,8 @@ export const enMessages = {
   "web.profile.dashboard.heroHint": "Your reputation grows with every useful action on Opinia.",
   "web.profile.dashboard.editProfile": "Edit profile",
   "web.profile.dashboard.gameProfiles": "Game profiles",
-  "web.profile.dashboard.gameProfilesHint": "Build game profiles and earn reputation from other players.",
+  "web.profile.dashboard.gameProfilesHint":
+    "Build game profiles and earn reputation from other players.",
   "web.profile.dashboard.createGameProfile": "Create game profile",
   "web.profile.dashboard.openDotaProfile": "Open Dota profile",
   "web.profile.dashboard.comingSoon": "Coming soon",
@@ -1173,9 +1192,18 @@ export const enMessages = {
   "web.profile.dashboard.activityTitle": "Account activity",
   "web.profile.dashboard.activityHint": "Your contribution across Opinia",
   "web.profile.dashboard.settingsTitle": "Account settings",
+  "web.profile.telegram.title": "Telegram bot",
+  "web.profile.telegram.hint":
+    "Link your Opinia account to find Dota parties and get invites in Telegram.",
+  "web.profile.telegram.link": "Link Telegram",
+  "web.profile.telegram.unlink": "Unlink Telegram",
+  "web.profile.telegram.codeInstruction":
+    "In the bot, send /link {code}. This code expires in 10 minutes.",
+  "web.profile.telegram.error": "Could not update the Telegram link. Please try again.",
   "web.profile.discordEyebrow": "Discord",
   "web.profile.discordTitle": "Discord link",
-  "web.profile.discordHint": "Needed so only you can join party voice — not everyone on the server. We only ask who you are (Identify).",
+  "web.profile.discordHint":
+    "Needed so only you can join party voice — not everyone on the server. We only ask who you are (Identify).",
   "web.profile.discordLink": "Link Discord",
   "web.profile.discordUnlink": "Unlink Discord",
   "web.profile.discordLinkError": "Could not start Discord linking. Check OAuth settings.",
@@ -1245,7 +1273,8 @@ export const enMessages = {
   "web.contribute.title": "Help Opinia",
   "web.contribute.subtitle": "Places where the catalog still needs reviews, edits, and other help.",
   "web.contribute.needsReviewsTitle": "Community needs reviews",
-  "web.contribute.needsReviewsSubtitle": "A rating helps, but without a written review the object stays on this list. Add a few sentences so others can decide.",
+  "web.contribute.needsReviewsSubtitle":
+    "A rating helps, but without a written review the object stays on this list. Add a few sentences so others can decide.",
   "web.contribute.needsReviewsHint": "First review needed",
   "web.contribute.needsReviewsRatedHint": "Rated — review still needed",
   "web.contribute.otherQueuesTitle": "Other tasks",
@@ -1268,7 +1297,8 @@ export const enMessages = {
   "web.spotlight.endorseAction": "Support recommendation",
   "web.spotlight.endorseActionActive": "You supported this",
   "web.spotlight.endorsementsCount": "{count} participants supported this",
-  "web.spotlight.endorseError.eligibility": "Rate or review the target before supporting this recommendation.",
+  "web.spotlight.endorseError.eligibility":
+    "Rate or review the target before supporting this recommendation.",
   "web.spotlight.endorseError.generic": "Could not update your support.",
   "web.spotlight.noReviewYet": "No review or description yet",
   "web.spotlight.endsInDays": "Active for {count} more days",
@@ -1276,7 +1306,8 @@ export const enMessages = {
   "web.spotlight.endsSoon": "Ending soon",
   "web.spotlight.votesCount": "{count} ratings",
   "web.spotlight.recommendSectionTitle": "Recommend",
-  "web.spotlight.recommendSectionSubtitle": "Spend earned credits to show your recommendation in the feed.",
+  "web.spotlight.recommendSectionSubtitle":
+    "Spend earned credits to show your recommendation in the feed.",
   "web.spotlight.recommendCta.entity": "Recommend an object",
   "web.spotlight.recommendCta.battle": "Recommend a battle",
   "web.spotlight.recommendCta.top": "Recommend a top",
@@ -1290,7 +1321,8 @@ export const enMessages = {
   "web.spotlight.action.compare": "Compare",
   "web.spotlight.action.openTop": "Open top",
   "web.spotlight.homeSectionTitle": "Community spotlight",
-  "web.spotlight.homeSectionCaption": "Help the project grow — earn credits for contributing and get featured here.",
+  "web.spotlight.homeSectionCaption":
+    "Help the project grow — earn credits for contributing and get featured here.",
   "web.spotlight.spendEyebrow": "Get attention",
   "web.spotlight.spendTitle": "Recommend to the feed",
   "web.spotlight.spendBalance": "{balance} credits available · +{grant}/month",
@@ -1299,13 +1331,15 @@ export const enMessages = {
   "web.spotlight.spendEntityDescription": "Find it by name or paste a link from the object page.",
   "web.spotlight.spendEntitySearchLabel": "Search object",
   "web.spotlight.spendEntitySearchPlaceholder": "GitHub, Spotify, Claude…",
-  "web.spotlight.spendEntitySearchHint": "Pick from results, or paste /entities/… link from the address bar.",
+  "web.spotlight.spendEntitySearchHint":
+    "Pick from results, or paste /entities/… link from the address bar.",
   "web.spotlight.spendEntityPasteOk": "Link recognized — you can recommend this object.",
   "web.spotlight.spendEntityPitchLabel": "What to show in the feed",
   "web.spotlight.spendEntityPitchReview": "My review",
   "web.spotlight.spendEntityPitchReviewEmpty": "No review yet — write one on the object page.",
   "web.spotlight.spendEntityPitchMessage": "Custom text",
-  "web.spotlight.spendEntityPitchMessageHint": "Briefly say why it matters — up to {max} characters.",
+  "web.spotlight.spendEntityPitchMessageHint":
+    "Briefly say why it matters — up to {max} characters.",
   "web.spotlight.spendEntityPitchMessagePlaceholder": "e.g. best TypeScript tool in 2026…",
   "web.spotlight.spendEntityPitchMessageCount": "{current} / {max}",
   "web.spotlight.spendBattleTitle": "Recommend a battle",
@@ -1329,19 +1363,23 @@ export const enMessages = {
   "web.spotlight.spendTopAction": "Recommend top ({cost})",
   "web.spotlight.spendSuccess": "Recommendation published to the feed.",
   "web.spotlight.spendError.trustBefore": "Your",
-  "web.spotlight.spendError.trustAfter": "is too low to spend credits (minimum {min}). Open your profile to see how to improve it.",
+  "web.spotlight.spendError.trustAfter":
+    "is too low to spend credits (minimum {min}). Open your profile to see how to improve it.",
   "web.spotlight.spendError.balance": "Not enough spotlight credits.",
   "web.spotlight.spendError.notFound": "Target not found.",
   "web.spotlight.spendError.generic": "Could not create spotlight placement.",
   "web.spotlight.spendError.pitch": "Add a review or a short message for the recommendation.",
-  "web.spotlight.spendError.limit": "You already have {max} active recommendations. Wait until one ends.",
-  "web.spotlight.spendPlacementLimitHint": "You already have {max} recommendations in the feed. Publish a new one after one of them ends.",
+  "web.spotlight.spendError.limit":
+    "You already have {max} active recommendations. Wait until one ends.",
+  "web.spotlight.spendPlacementLimitHint":
+    "You already have {max} recommendations in the feed. Publish a new one after one of them ends.",
   "web.profile.spotlightCredits": "Spotlight credits",
   "web.profile.spotlightCreditsHint": "{balance} available · +{grant}/month",
   "web.profile.spotlightLink": "Open spotlight",
   "web.profile.trustEyebrow": "Trust",
   "web.profile.trustTitle": "Trust Score",
-  "web.profile.trustSubtitle": "Shows how much the platform trusts your ratings. Spotlight needs at least {min}.",
+  "web.profile.trustSubtitle":
+    "Shows how much the platform trusts your ratings. Spotlight needs at least {min}.",
   "web.profile.trustScoreLabel": "Trust Score",
   "web.profile.trustMissing": "Not calculated yet — rate a few different objects to build trust.",
   "web.profile.trustBelowMinimum": "Below the {min} minimum for spending spotlight credits.",
@@ -1435,7 +1473,8 @@ export const enMessages = {
   "web.entity.defaultDescription": "This entity is ready for public ratings and reviews.",
   "web.entity.viewSiteReviews": "View site reviews for {title}",
   "web.entity.unavailable": "Entity page is unavailable.",
-  "web.entity.unavailableHint": "The entity may not exist or the API may be temporarily unavailable.",
+  "web.entity.unavailableHint":
+    "The entity may not exist or the API may be temporarily unavailable.",
   "web.entity.pageEyebrow": "Entity page",
   "web.entityCreate.eyebrow": "Create entity",
   "web.entityCreate.pageTitle": "Add a page to Opinia.",
@@ -1576,12 +1615,14 @@ export const enMessages = {
   "contributions.unlinkReason": "These pages describe different subjects",
   "contributions.unlinkSummary": "Unlink from “{relatedTitle}”",
   "contributions.linkReason": "Related pages about the same subject",
-  "contributions.linkSummary": "Link with \"{relatedTitle}\"",
+  "contributions.linkSummary": 'Link with "{relatedTitle}"',
   "contributions.relatedPresencesTitle": "Related pages",
-  "contributions.relatedPresencesHint": "Other presences of this subject in Opinia, each with its own rating.",
+  "contributions.relatedPresencesHint":
+    "Other presences of this subject in Opinia, each with its own rating.",
   "contributions.relatedPresencesEmptyRating": "No ratings",
   "contributions.manualLinkTitle": "Link another page",
-  "contributions.manualLinkHint": "Use this when another Opinia page is about the same subject but duplicate search missed it.",
+  "contributions.manualLinkHint":
+    "Use this when another Opinia page is about the same subject but duplicate search missed it.",
   "contributions.manualLinkCta": "Link another page…",
   "contributions.manualLinkModalTitle": "Link another page",
   "contributions.manualLinkModalHint": "Find another Opinia page about the same subject.",
@@ -1589,15 +1630,17 @@ export const enMessages = {
   "contributions.manualLinkSearchPlaceholder": "Search Opinia…",
   "contributions.manualLinkSearchEmpty": "Start typing to find a page to link.",
   "contributions.manualMergeTitle": "Merge with another entity",
-  "contributions.manualMergeHint": "Use this if automatic duplicate detection missed a similar entity.",
+  "contributions.manualMergeHint":
+    "Use this if automatic duplicate detection missed a similar entity.",
   "contributions.manualMergeCta": "Merge with another…",
   "contributions.manualMergeModalTitle": "Merge with another entity",
-  "contributions.manualMergeModalHint": "Search for the entity that should stay. The current page will be merged into it.",
+  "contributions.manualMergeModalHint":
+    "Search for the entity that should stay. The current page will be merged into it.",
   "contributions.manualMergeSearchLabel": "Search entity",
   "contributions.manualMergeSearchPlaceholder": "Search Opinia…",
   "contributions.manualMergeSearchEmpty": "Start typing to find the target entity.",
   "contributions.mergeReason": "Same entity",
-  "contributions.mergeSummary": "Merge \"{sourceTitle}\" with \"{targetTitle}\"",
+  "contributions.mergeSummary": 'Merge "{sourceTitle}" with "{targetTitle}"',
   "contributions.fieldChangeSummary": "{oldValue} → {newValue}",
   "contributions.unknownChange": "Change details unavailable",
   "contributions.mergeSuccess": "Merge proposal submitted.",
@@ -1711,8 +1754,7 @@ export const enMessages = {
   "web.admin.analytics.path.other": "Other",
   "web.admin.gamesLaunch.eyebrow": "Launch",
   "web.admin.gamesLaunch.title": "Waitlist & signups",
-  "web.admin.gamesLaunch.subtitle":
-    "Waitlist contacts, suggestions, and the search live toggle.",
+  "web.admin.gamesLaunch.subtitle": "Waitlist contacts, suggestions, and the search live toggle.",
   "web.admin.gamesLaunch.openPanel": "Waitlist / signups",
   "web.admin.gamesLaunch.metricsTitle": "Pre-launch metrics (Games / Dota)",
   "web.admin.gamesLaunch.metricsHint":
@@ -1807,7 +1849,8 @@ export const enMessages = {
   "web.admin.economy.usersContributorPlus": "Users level ≥ Contributor",
   "web.admin.economy.usersSpotlightEligible": "Spotlight eligible (trust ≥ 35%)",
   "web.admin.economy.sourcesTitle": "Contribution sources",
-  "web.admin.economy.sourcesNote": "Platform-wide share by base point weights, without per-user diminishing.",
+  "web.admin.economy.sourcesNote":
+    "Platform-wide share by base point weights, without per-user diminishing.",
   "web.admin.economy.sourcesEmpty": "No contribution activity yet.",
   "web.admin.economy.contentFunnelTitle": "Content funnel",
   "web.admin.economy.contentFunnelPeriod": "Last {days} days",
@@ -1843,12 +1886,14 @@ export const enMessages = {
   "dota.create.essentialsTitle": "Quick start",
   "dota.create.extraStep": "Optional",
   "dota.create.extraTitle": "Server and details",
-  "dota.create.moreLaterHint": "Server, microphone, and play intent can be added later when editing your profile.",
+  "dota.create.moreLaterHint":
+    "Server, microphone, and play intent can be added later when editing your profile.",
   "dota.create.rolesRequired": "Pick at least one role.",
   "dota.create.mmrRequired": "Enter your MMR.",
   "dota.create.validation.displayName": "Enter a display name.",
   "dota.create.displayName": "Nickname",
-  "dota.create.displayNameHint": "Shown in search and parties. Also updates your Opinia account name.",
+  "dota.create.displayNameHint":
+    "Shown in search and parties. Also updates your Opinia account name.",
   "dota.create.displayNamePlaceholder": "What should we call you",
   "dota.create.validation.email": "Enter your email.",
   "dota.create.validation.password": "Password must be at least 8 characters.",
@@ -1926,7 +1971,8 @@ export const enMessages = {
   "dota.share.idText": "my dota id {accountId}, profile: {url}",
   "dota.profile.eyebrow": "Dota profile",
   "dota.profile.recoveryTitle": "Save your recovery link",
-  "dota.profile.recoveryHint": "If you clear the browser or switch devices, this link restores access.",
+  "dota.profile.recoveryHint":
+    "If you clear the browser or switch devices, this link restores access.",
   "dota.profile.recoveryCopy": "Copy link",
   "dota.profile.recoveryCopied": "Copied",
   "dota.profile.claimTitle": "Protect your profile",
@@ -1973,7 +2019,8 @@ export const enMessages = {
   "dota.friends.inviteInvalid": "This friend invite link is invalid or expired.",
   "dota.team.eyebrow": "Dota team",
   "dota.team.lead": "Roster {current}/{max}. Fill the five and invite teammates.",
-  "dota.team.searchSoon": "Convenient teammate search is coming soon — for now build your party from friends and share the link.",
+  "dota.team.searchSoon":
+    "Convenient teammate search is coming soon — for now build your party from friends and share the link.",
   "dota.team.inviteCta": "Find players",
   "dota.team.copied": "Invite copied",
   "dota.team.findPlayersHint": "Copy the invite and send it to friends on Discord or Telegram",
@@ -1990,20 +2037,24 @@ export const enMessages = {
   "dota.team.claimSeatOpen": "Seat open · under a minute",
   "dota.team.claimSeatConfirm": "Apply for seat",
   "dota.team.authSheetEyebrow": "Claim your seat",
-  "dota.team.authSheetLead": "Add MMR and roles — a temporary profile is created for you, no Opinia account needed.",
+  "dota.team.authSheetLead":
+    "Add MMR and roles — a temporary profile is created for you, no Opinia account needed.",
   "dota.team.authSheetTitle": "Sign in to join the party",
   "dota.team.authSheetFinish": "Take the seat",
-  "dota.team.authSheetCreatingHint": "Creating your game profile and bringing you back to the party.",
+  "dota.team.authSheetCreatingHint":
+    "Creating your game profile and bringing you back to the party.",
   "dota.team.authSheetCreateError": "Could not create the profile. Try again.",
   "dota.team.lookingForPlayer": "Looking for a player",
-  "dota.team.candidatesEmptyCta": "Nobody is looking for a party yet. You can copy the party link and add people.",
+  "dota.team.candidatesEmptyCta":
+    "Nobody is looking for a party yet. You can copy the party link and add people.",
   "dota.team.nobodyJoinedYet": "Nobody has joined yet",
   "dota.team.quickInviteTitle": "Quick invite",
   "dota.team.quickInviteOrApp": "Or open in the app",
   "dota.team.metaCreated": "Party created {when}",
   "dota.team.shareWallEyebrow": "Party created",
   "dota.team.shareWallTitle": "Now find players",
-  "dota.team.shareWallLead": "Copy a ready invite and send it where you usually look for teammates.",
+  "dota.team.shareWallLead":
+    "Copy a ready invite and send it where you usually look for teammates.",
   "dota.team.shareWallCopyInvite": "Copy invite",
   "dota.team.shareWallOr": "or send now",
   "dota.team.shareWallClose": "Close",
@@ -2071,10 +2122,8 @@ export const enMessages = {
   "dota.team.candidatesTitle": "Matching players",
   "dota.team.candidatesIdleParty":
     "Players will appear here when you start recruiting for this party.",
-  "dota.team.candidatesIdleTeam":
-    "Players will appear here when this team starts recruiting.",
-  "dota.team.candidatesEmpty":
-    "No matching players right now. This list refreshes automatically.",
+  "dota.team.candidatesIdleTeam": "Players will appear here when this team starts recruiting.",
+  "dota.team.candidatesEmpty": "No matching players right now. This list refreshes automatically.",
   "dota.team.candidatesRefresh": "Refresh",
   "dota.team.candidatesLoadError": "Could not refresh matching players.",
   "dota.team.candidateMmrUnknown": "MMR not set",
@@ -2087,7 +2136,8 @@ export const enMessages = {
   "dota.team.createLead": "Lasting team of up to {max}. Public page makes inviting friends easy.",
   "dota.team.createPartyLead":
     "Temporary party of up to {max} for {hours}h. You can be in a team and a party at the same time.",
-  "dota.team.createNameHint": "We'll pick a random Dota-flavored name — the captain can rename it later.",
+  "dota.team.createNameHint":
+    "We'll pick a random Dota-flavored name — the captain can rename it later.",
   "dota.team.kindLabel": "Type",
   "dota.team.kindTeam": "Team",
   "dota.team.kindTeamHint": "Lasting roster, public page.",
@@ -2125,16 +2175,19 @@ export const enMessages = {
   "dota.team.incomingInvites": "Invites",
   "dota.team.incomingApplications": "Applications for this player",
   "dota.team.rosterApplications": "Roster applications",
-  "dota.team.rosterApplicationsHint": "Players applied to your recruiting listing. Accept or decline here.",
+  "dota.team.rosterApplicationsHint":
+    "Players applied to your recruiting listing. Accept or decline here.",
   "dota.team.rosterApplicationsEmpty": "No applications yet — new ones will show up here.",
   "dota.team.inviteSlotTitle": "Open invite",
-  "dota.team.inviteSlotNoRoleHint": "No role assigned — they join the roster and pick a slot later.",
+  "dota.team.inviteSlotNoRoleHint":
+    "No role assigned — they join the roster and pick a slot later.",
   "dota.team.inviteSlotEmptyFriends": "No friends available for a quick invite.",
   "dota.team.inviteWithoutRole": "Invite without role",
   "dota.team.slotFind": "Find",
   "dota.team.slotStopFind": "Stop",
   "dota.team.slotLooking": "Looking",
-  "dota.team.slotLookingHint": "Applications show up here. Accepting one declines the rest for this role.",
+  "dota.team.slotLookingHint":
+    "Applications show up here. Accepting one declines the rest for this role.",
   "dota.team.slotFindHint": "Start search so players can apply for this slot.",
   "dota.team.slotWaitingApps": "looking for players",
   "dota.team.slotLookingForSeat": "Looking for a player for this slot",
@@ -2167,8 +2220,10 @@ export const enMessages = {
   "dota.team.discordVoiceJoin": "Join voice",
   "dota.team.discordVoiceCopy": "Copy",
   "dota.team.discordVoiceCopied": "Voice link copied",
-  "dota.team.discordVoiceHint": "Discord app: auto-moves if already in OpinIA server voice; otherwise opens the channel",
-  "dota.team.discordVoiceHintTeam": "Temporary team voice · deletes 6h after creation (timer is for voice only, not the team)",
+  "dota.team.discordVoiceHint":
+    "Discord app: auto-moves if already in OpinIA server voice; otherwise opens the channel",
+  "dota.team.discordVoiceHintTeam":
+    "Temporary team voice · deletes 6h after creation (timer is for voice only, not the team)",
   "dota.team.discordVoiceExpiresIn": "Team voice deletes in {remaining}",
   "dota.team.discordVoiceExtendCta": "Extend voice +{hours}h",
   "dota.team.discordVoiceExtendError": "Could not extend voice",
@@ -2177,9 +2232,12 @@ export const enMessages = {
   "dota.team.discordVoiceLinkCta": "Link Discord",
   "dota.team.discordLinkEyebrow": "Discord",
   "dota.team.discordLinkTitle": "Link Discord",
-  "dota.team.discordLinkLead": "One-time — so only you can join party voice, not everyone on the server. We only ask who you are.",
-  "dota.team.discordLinkError": "Could not link Discord. Click Join again, or check the OAuth client secret.",
-  "dota.team.discordLinkNotConfigured": "Discord OAuth is not configured: set DISCORD_OAUTH_CLIENT_SECRET in .env.development and add the redirect in the Discord portal.",
+  "dota.team.discordLinkLead":
+    "One-time — so only you can join party voice, not everyone on the server. We only ask who you are.",
+  "dota.team.discordLinkError":
+    "Could not link Discord. Click Join again, or check the OAuth client secret.",
+  "dota.team.discordLinkNotConfigured":
+    "Discord OAuth is not configured: set DISCORD_OAUTH_CLIENT_SECRET in .env.development and add the redirect in the Discord portal.",
   "dota.team.discordVoiceError": "Couldn’t open Discord voice. Try again.",
   "dota.team.extendCta": "Extend +{hours}h",
   "dota.team.extendBusy": "Extending…",
