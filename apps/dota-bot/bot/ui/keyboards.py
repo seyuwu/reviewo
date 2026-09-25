@@ -75,22 +75,56 @@ def role_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
     )
 
 
-def recruiting_party_keyboard(party: dict) -> InlineKeyboardMarkup:
-    return party_keyboard(party, bool(party.get("canManageParty")), is_recruiting=True)
+def recruiting_party_keyboard(party: dict, searching_roles: set[str] | None = None) -> InlineKeyboardMarkup:
+    return party_keyboard(
+        party,
+        bool(party.get("canManageParty")),
+        is_recruiting=True,
+        searching_roles=searching_roles or set(),
+    )
 
 
-def party_keyboard(party: dict, show_search: bool, is_recruiting: bool = False) -> InlineKeyboardMarkup:
+def party_keyboard(
+    party: dict,
+    show_search: bool,
+    is_recruiting: bool = False,
+    searching_roles: set[str] | None = None,
+) -> InlineKeyboardMarkup:
     occupants = party_slot_occupants(party)
+    searching_roles = searching_roles or set()
     roles = ("1", "2", "3", "4", "5")
     slots = [button(truncate(occupants.get(role, role), 12), f"party:slot:{role}") for role in roles]
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            slots,
-            *([[button("🔍" if role not in occupants else "—", f"party:search:{role}" if role not in occupants else f"party:noop:{role}") for role in roles]] if show_search else []),
-            *([[button("⏹ Остановить набор", "search:stop")]] if party.get("canManageParty") and is_recruiting else []),
-            [button("← Назад", "panel:home")],
-        ]
-    )
+    search_status = [
+        button(
+            "—" if role in occupants else ("🔎" if role in searching_roles else "FREE"),
+            (
+                f"party:noop:{role}"
+                if role in occupants
+                else f"party:searching:{role}"
+                if role in searching_roles
+                else f"party:toggle-search:{role}"
+            ),
+        )
+        for role in roles
+    ]
+    rows = [slots]
+    if show_search:
+        if is_recruiting:
+            rows.append(search_status)
+        else:
+            rows.append(
+                [
+                    button(
+                        "🔍" if role not in occupants else "—",
+                        f"party:search:{role}" if role not in occupants else f"party:noop:{role}",
+                    )
+                    for role in roles
+                ]
+            )
+    if party.get("canManageParty") and is_recruiting:
+        rows.append([button("⏹ Остановить набор", "search:stop")])
+    rows.append([button("← Назад", "panel:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def party_slot_occupants(party: dict) -> dict[str, str]:

@@ -18,6 +18,7 @@ from ..ui.keyboards import (
     kick_confirmation_keyboard,
     party_keyboard,
     party_member_keyboard,
+    party_slot_occupants,
     role_keyboard,
     recruiting_party_keyboard,
 )
@@ -270,6 +271,10 @@ async def render_screen(
             return "Пати не найдена. Вернитесь в меню и начните набор заново.", back_keyboard()
         search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
         roles = search.get("roles") or []
+        occupants = party_slot_occupants(party)
+        available_roles = {role for role in ("1", "2", "3", "4", "5") if role not in occupants}
+        searching_roles = set(roles) if roles else available_roles
+        searching_roles &= available_roles
         role_names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
         roles_text = ", ".join(role_names[role] for role in roles if role in role_names) or "все свободные позиции"
         text = (
@@ -278,7 +283,7 @@ async def render_screen(
             f"Состав: {party.get('memberCount', 0)}/{party.get('maxMembers', 5)}\n\n"
             "Нажмите на свободную позицию, чтобы выбрать игрока."
         )
-        return text, recruiting_party_keyboard(party)
+        return text, recruiting_party_keyboard(party, searching_roles)
 
     if screen in {"member", "kick_confirm"}:
         selected_member = storage.get_choice(telegram_user_id, "selected_party_member", 0) or {}
