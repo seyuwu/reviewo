@@ -12,7 +12,12 @@ class DeletePrivateMessagesMiddleware(BaseMiddleware):
         if isinstance(event, Message) and event.chat.type == "private":
             try:
                 await event.delete()
-            except TelegramAPIError:
+            except TelegramAPIError as error:
                 # The bot still handles the update if Telegram refuses deletion.
-                logger.debug("Could not delete incoming private message", exc_info=True)
+                logger.warning(
+                    "Could not delete incoming private message chat=%s message=%s: %s",
+                    event.chat.id,
+                    event.message_id,
+                    error,
+                )
         return await handler(event, data)

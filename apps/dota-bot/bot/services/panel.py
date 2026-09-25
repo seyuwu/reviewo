@@ -210,7 +210,8 @@ async def render_screen(
         state = "поиск активен" if looking else "не ищет"
         text = (
             f"<b>Поиск пати Dota 2 · Opinia</b>\n\n"
-            f"Игрок: <b>{name}</b> · {mmr} MMR\nСтатус: {state}"
+            f"Игрок: <b>{name}</b> · {mmr} MMR\n"
+            f"Статус: {state}"
         )
         if party:
             text += f"\nПати: <b>{escape_text(party.get('name', ''))}</b> · {party.get('memberCount', 0)}/{party.get('maxMembers', 5)}"
@@ -218,9 +219,8 @@ async def render_screen(
         if invites:
             text += f"\nОжидают ответа: {len(invites)}"
         text += (
-            "\n\n🎯 <b>Ищу пати</b> — покажу команды с подходящими ролями.\n"
-            "🧭 <b>Набираю игроков</b> — создам пати и помогу заполнить свободные слоты.\n"
-            "👤 В аккаунте находятся профиль, привязка и приглашения."
+            "\n\nВыберите режим поиска ниже.\n"
+            "Профиль, привязка и заявки — в «Аккаунте»."
         )
         auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
         is_recruiting = bool(looking and auto_search.get("mode") == "recruit")
