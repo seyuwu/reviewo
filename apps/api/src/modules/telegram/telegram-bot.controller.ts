@@ -66,6 +66,12 @@ class CompleteTelegramLinkDto {
   telegramUserId!: string;
 }
 
+class EnsureTelegramLinkDto {
+  @IsString()
+  @Matches(/^\d{1,32}$/)
+  telegramUserId!: string;
+}
+
 class NotificationDeliveryDto {
   @IsString()
   @Matches(/^[0-9a-f-]{36}$/i)
@@ -175,6 +181,26 @@ export class TelegramBotController {
         }
       ])
       .then(() => this.telegramBotService.completeLink(input.code, input.telegramUserId));
+  }
+
+  @Post("ensure-link")
+  @UseGuards(JwtAuthGuard)
+  async ensureTelegramLink(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() input: EnsureTelegramLinkDto,
+    @Headers("x-telegram-bot-secret") secret?: string
+  ): Promise<{ linked: true }> {
+    this.assertBotSecret(secret);
+    await this.apiRateLimiterService.assertWithinLimits([
+      {
+        key: currentUser.id,
+        limit: 30,
+        message: "Too many Telegram link checks",
+        namespace: "telegram:ensure-link:user",
+        windowSeconds: 60 * 60
+      }
+    ]);
+    return this.telegramBotService.ensureTelegramIdentity(currentUser.id, input.telegramUserId);
   }
 
   @Get("notifications")

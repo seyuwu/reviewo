@@ -12,6 +12,17 @@ from ..storage.database import BotStorage
 logger = logging.getLogger(__name__)
 
 
+async def reconcile_saved_telegram_links(api: OpiniaApi, storage: BotStorage) -> None:
+    """Repair Telegram identities for existing bot sessions after deployment/restart."""
+    for telegram_user_id in storage.session_user_ids():
+        try:
+            await api.ensure_telegram_link(telegram_user_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Could not restore Telegram identity for a saved bot session")
+
+
 async def poll_notifications(bot: Bot, api: OpiniaApi, settings: Settings, storage: BotStorage) -> None:
     while True:
         try:

@@ -9,7 +9,11 @@ from .api.client import OpiniaApi
 from .config import load_settings
 from .handlers import router
 from .middlewares import DeletePrivateMessagesMiddleware
-from .services.notifications import cleanup_temporary_messages, poll_notifications
+from .services.notifications import (
+    cleanup_temporary_messages,
+    poll_notifications,
+    reconcile_saved_telegram_links,
+)
 from .services.auto_matcher import auto_match_loop
 from .services.panel import refresh_active_search_panels
 from .storage.database import BotStorage
@@ -34,6 +38,7 @@ async def main() -> None:
     dispatcher.include_router(router)
     dispatcher.message.outer_middleware(DeletePrivateMessagesMiddleware())
     tasks = [
+        asyncio.create_task(reconcile_saved_telegram_links(api, storage)),
         asyncio.create_task(poll_notifications(bot, api, settings, storage)),
         asyncio.create_task(cleanup_temporary_messages(bot, storage)),
         asyncio.create_task(auto_match_loop(bot, api, settings, storage, match_wakeup)),

@@ -1,3 +1,6 @@
+import logging
+from html import escape
+
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
@@ -7,11 +10,11 @@ from ..services.panel import begin_panel_transition, edit_panel, edit_panel_cont
 from ..storage.database import BotStorage
 from ..services.party_notifications import deliver_join_hint
 from ..ui.keyboards import back_keyboard, invite_keyboard
-from html import escape
 from ..ui.formatters import notification_text
 from ..services.auto_matcher import remember_declined_target
 
 router = Router(name="party")
+logger = logging.getLogger(__name__)
 
 
 @router.callback_query(F.data.startswith("invite:"))
@@ -88,22 +91,34 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
         if event_type == "declined":
             remember_declined_target(storage, telegram_user_id, payload)
         if event_type == "member_joined":
-            await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
+            try:
+                await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
+            except Exception:
+                logger.warning(
+                    "Could not refresh party panel before roster notification",
+                    exc_info=True,
+                )
             message = await bot.send_message(
                 telegram_user_id,
                 notification_text(payload),
                 parse_mode="HTML",
             )
-            storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 8)
+            storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
             return True
         if event_type in {"member_left", "member_kicked"}:
-            await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
+            try:
+                await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
+            except Exception:
+                logger.warning(
+                    "Could not refresh party panel before roster notification",
+                    exc_info=True,
+                )
             message = await bot.send_message(
                 telegram_user_id,
                 notification_text(payload),
                 parse_mode="HTML",
             )
-            storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 8)
+            storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
             return True
         if event_type == "accepted":
             party_slug = invite.get("partySlug")

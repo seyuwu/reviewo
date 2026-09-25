@@ -337,13 +337,7 @@ async def complete_registration(
                 created["refreshToken"],
                 recovery_url,
             )
-            linked = await api.link_guest_account(created["accessToken"], callback.from_user.id)
-            storage.save_session(
-                callback.from_user.id,
-                linked["accessToken"],
-                linked["refreshToken"],
-                recovery_url,
-            )
+            await api.ensure_telegram_link(callback.from_user.id)
         await state.clear()
         if editing_profile:
             await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "profile")

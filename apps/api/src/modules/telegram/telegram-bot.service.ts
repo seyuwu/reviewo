@@ -1,4 +1,10 @@
-import { HttpStatus, Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  ConflictException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  UnauthorizedException
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHash, randomBytes } from "node:crypto";
 import type { EnvironmentVariables } from "../../config/environment.validation.js";
@@ -10,6 +16,8 @@ import { verifyTelegramLoginPayload, type TelegramLoginPayload } from "./telegra
 
 @Injectable()
 export class TelegramBotService {
+  private readonly logger = new Logger(TelegramBotService.name);
+
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService<EnvironmentVariables, true>,
@@ -19,6 +27,42 @@ export class TelegramBotService {
 
   async completeLink(code: string, telegramUserId: string) {
     return this.authService.completeTelegramLink({ code, telegramUserId });
+  }
+
+  async ensureTelegramIdentity(userId: string, telegramUserId: string): Promise<{ linked: true }> {
+    await this.prismaService.$transaction(async (transaction) => {
+      const identityForTelegram = await transaction.userAuthIdentity.findUnique({
+        where: {
+          provider_providerUserId: {
+            provider: "telegram",
+            providerUserId: telegramUserId
+          }
+        }
+      });
+      if (identityForTelegram && identityForTelegram.userId !== userId) {
+        throw new ConflictException("This Telegram account is linked to another Opinia account");
+      }
+
+      const identityForUser = await transaction.userAuthIdentity.findFirst({
+        where: { provider: "telegram", userId }
+      });
+      if (identityForUser && identityForUser.providerUserId !== telegramUserId) {
+        throw new ConflictException("This Opinia account is linked to another Telegram account");
+      }
+
+      if (!identityForTelegram) {
+        await transaction.userAuthIdentity.create({
+          data: {
+            passwordHash: null,
+            provider: "telegram",
+            providerUserId: telegramUserId,
+            userId
+          }
+        });
+      }
+    });
+
+    return { linked: true };
   }
 
   async loginFromTelegram(payload: TelegramLoginPayload) {
@@ -101,6 +145,7 @@ export class TelegramBotService {
     });
 
     if (!identity) {
+      this.logger.warn("Skipped a party notification because the account has no Telegram identity");
       return;
     }
 
@@ -132,6 +177,7 @@ export class TelegramBotService {
     });
 
     if (!identity) {
+      this.logger.warn("Skipped a party roster notification because the account has no Telegram identity");
       return;
     }
 

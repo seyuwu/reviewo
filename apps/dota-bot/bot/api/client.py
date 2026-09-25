@@ -35,14 +35,26 @@ class OpiniaApi:
     async def public(self, method: str, path: str, body: dict | None = None) -> Any:
         return await self._request(method, path, body=body)
 
-    async def user(self, telegram_user_id: int, method: str, path: str, body: dict | None = None) -> Any:
+    async def user(
+        self,
+        telegram_user_id: int,
+        method: str,
+        path: str,
+        body: dict | None = None,
+        *,
+        bot_secret: bool = False,
+    ) -> Any:
         credentials = self.storage.get_session(telegram_user_id)
         if credentials is None:
             raise ApiError("Аккаунт не привязан. Откройте /start и привяжите Opinia.", 401)
 
         try:
             return await self._request(
-                method, path, body=body, access_token=credentials.access_token
+                method,
+                path,
+                body=body,
+                access_token=credentials.access_token,
+                bot_secret=bot_secret,
             )
         except ApiError as error:
             if error.status != 401:
@@ -56,7 +68,11 @@ class OpiniaApi:
             if latest.access_token != credentials.access_token:
                 try:
                     return await self._request(
-                        method, path, body=body, access_token=latest.access_token
+                        method,
+                        path,
+                        body=body,
+                        access_token=latest.access_token,
+                        bot_secret=bot_secret,
                     )
                 except ApiError as error:
                     if error.status != 401:
@@ -71,7 +87,11 @@ class OpiniaApi:
                 latest.recovery_url,
             )
         return await self._request(
-            method, path, body=body, access_token=refreshed["accessToken"]
+            method,
+            path,
+            body=body,
+            access_token=refreshed["accessToken"],
+            bot_secret=bot_secret,
         )
 
     async def create_web_access_ticket(self, telegram_user_id: int) -> str:
@@ -86,13 +106,14 @@ class OpiniaApi:
             bot_secret=True,
         )
 
-    async def link_guest_account(self, access_token: str, telegram_user_id: int) -> dict:
-        pairing = await self._request(
+    async def ensure_telegram_link(self, telegram_user_id: int) -> dict:
+        return await self.user(
+            telegram_user_id,
             "POST",
-            "/auth/telegram/link-code",
-            access_token=access_token,
+            "/telegram/ensure-link",
+            {"telegramUserId": str(telegram_user_id)},
+            bot_secret=True,
         )
-        return await self.complete_link(pairing["code"], telegram_user_id)
 
     async def poll_notifications(self) -> list[dict]:
         result = await self._request(
