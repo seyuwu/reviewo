@@ -1,6 +1,6 @@
 # Dota.Opinia Telegram bot
 
-The bot is a private-chat client for the existing Dota profile, LFG, party, and invite APIs. It does not run matching logic or store Dota profile data. Account sessions and guest recovery URLs in its SQLite database are encrypted with Fernet.
+The bot is a private-chat client for the existing Dota profile, LFG, party, and invite APIs. It automatically matches solo searchers with compatible open parties and does not store Dota profile data. Account sessions and guest recovery URLs in its SQLite database are encrypted with Fernet.
 
 ## Run with Docker Compose
 
@@ -28,4 +28,4 @@ An existing user opens **Profile → Account settings → Telegram bot → Link 
 
 ## Runtime state
 
-The bot uses long polling and has no inbound port. `/data/dota_bot.db` stores encrypted auth/recovery secrets, the editable panel message ID, UI selections, automatic-match exclusions, delivered notification IDs, and temporary message deletion deadlines. Automatic recruiting checks the shared LFG list every 15 seconds and keeps at most one pending invite per party. API-side party notifications use a durable PostgreSQL outbox with bounded exponential retries.
+The bot uses long polling and has no inbound port. `/data/dota_bot.db` stores encrypted auth/recovery secrets, the editable panel message ID, UI selections, automatic-match exclusions, delivered notification IDs, and temporary message deletion deadlines. Solo matching checks the shared LFG list every 15 seconds and joins a compatible `OPEN` party on a free profile role. Starting recruitment marks every unoccupied party role as open; role assignment is randomized among the seeker's matching profile roles. API-side party notifications use a durable PostgreSQL outbox with bounded exponential retries.

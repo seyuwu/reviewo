@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
+from ..services.solo_search import PartyOwnerMustResolveMembers, start_solo_search
 from ..storage.database import BotStorage
 from ..ui.keyboards import back_keyboard
 
@@ -28,21 +29,21 @@ async def start_looking(
         callback.message.chat.id if callback.message else None,
     )
     try:
-        my_parties = await api.user(callback.from_user.id, "GET", "/social/parties/me")
-        party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
-        if party:
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
-            return
-
-        await api.user(
-            callback.from_user.id,
-            "POST",
-            "/dota/profiles/lfg/looking",
-            {"looking": True},
-        )
+        await start_solo_search(api, callback.from_user.id)
         storage.clear_auto_match_exclusions(callback.from_user.id)
         storage.set_choices(callback.from_user.id, "auto_search", [{"mode": "looking"}])
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "looking")
+    except PartyOwnerMustResolveMembers:
+        await edit_panel_content(
+            callback.bot,
+            storage,
+            api,
+            settings,
+            callback.from_user.id,
+            "notice",
+            "Вы капитан пати с другими игроками. Чтобы искать новую пати, сначала завершите текущую: попросите игроков выйти или распустите её.",
+            back_keyboard("party"),
+        )
     except ApiError as error:
         await show_error(callback, api, settings, storage, error)
 
