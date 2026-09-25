@@ -74,7 +74,7 @@ async def begin_registration(
     )
 
 
-@router.message(GuestProfileWizard.display_name)
+@router.message(GuestProfileWizard.display_name, F.text & ~F.text.startswith("/"))
 async def receive_display_name(
     message: Message,
     state: FSMContext,
@@ -111,7 +111,7 @@ async def receive_display_name(
     )
 
 
-@router.message(GuestProfileWizard.mmr)
+@router.message(GuestProfileWizard.mmr, F.text & ~F.text.startswith("/"))
 async def receive_mmr(
     message: Message,
     state: FSMContext,
