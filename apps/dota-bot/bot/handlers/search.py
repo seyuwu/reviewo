@@ -144,7 +144,7 @@ async def select_recruit_slot(
         if not party:
             await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
             return
-        occupants = party_slot_occupants(party, str(profile.get("ownerUserId") or ""))
+        occupants = party_slot_occupants(party)
         if role in occupants:
             await edit_panel_content(
                 callback.bot, storage, api, settings, callback.from_user.id,
@@ -165,6 +165,7 @@ async def refresh_candidates(callback: CallbackQuery, api: OpiniaApi, settings: 
     await show_candidates(
         callback, api, settings, storage,
         choices.get("mode", "looking"), choices.get("positionRole"),
+        choices.get("return_screen"),
     )
 
 
@@ -214,7 +215,9 @@ async def select_candidate(callback: CallbackQuery, settings: Settings, storage:
                 result["party"]["slug"],
             )
         candidates_state = storage.get_choice(callback.from_user.id, "candidates", 0) or {}
-        return_screen = "recruiting" if candidates_state.get("mode") == "recruit" else "home"
+        return_screen = candidates_state.get("return_screen") or (
+            "recruiting" if candidates_state.get("mode") == "recruit" else "home"
+        )
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, return_screen)
     except ApiError as error:
         await show_error(callback, api, settings, storage, error)
@@ -227,6 +230,7 @@ async def show_candidates(
     storage: BotStorage,
     mode: str,
     position_role: str | None = None,
+    return_screen: str | None = None,
 ) -> None:
     try:
         profile = await api.user(callback.from_user.id, "GET", "/dota/profiles/me")
@@ -257,7 +261,12 @@ async def show_candidates(
         storage.set_choices(
             callback.from_user.id,
             "candidates",
-            [{"items": candidates, "mode": mode, "positionRole": position_role}],
+            [{
+                "items": candidates,
+                "mode": mode,
+                "positionRole": position_role,
+                "return_screen": return_screen,
+            }],
         )
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "candidates")
     except ApiError as error:

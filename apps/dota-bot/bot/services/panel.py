@@ -3,6 +3,7 @@ from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 import asyncio
 import time
+from urllib.parse import quote
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
@@ -14,6 +15,9 @@ from ..ui.keyboards import (
     candidate_action_keyboard,
     candidate_keyboard,
     home_keyboard,
+    kick_confirmation_keyboard,
+    party_keyboard,
+    party_member_keyboard,
     role_keyboard,
     recruiting_party_keyboard,
 )
@@ -173,7 +177,9 @@ async def render_screen(
                 account_keyboard(False, False, False),
             )
         return (
-            "<b>Поиск пати Dota 2 · Opinia</b>\n\nСоздайте профиль или привяжите аккаунт сайта.",
+            "<b>Поиск пати Dota 2 · Opinia</b>\n\n"
+            "Найдите команду для игры или соберите состав сами.\n\n"
+            "Для начала откройте раздел «Аккаунт»: там можно создать Dota-профиль или привязать Opinia.",
             home_keyboard(False, False),
         )
 
@@ -194,7 +200,7 @@ async def render_screen(
     if screen == "home":
         if not profile:
             return (
-                "<b>Аккаунт привязан</b>\n\nСоздайте Dota-профиль, чтобы начать поиск.",
+                "<b>Аккаунт привязан</b>\n\nОткройте «Аккаунт» и создайте Dota-профиль, чтобы начать поиск.",
                 home_keyboard(False, False),
             )
         name = escape_text(profile.get("title", "Игрок"))
@@ -202,12 +208,20 @@ async def render_screen(
         party = my_parties.get("party") or (my_parties.get("parties") or [None])[-1]
         looking = profile.get("looking", False)
         state = "поиск активен" if looking else "не ищет"
-        text = f"<b>Поиск пати Dota 2 · Opinia</b>\n\nИгрок: <b>{name}</b> · {mmr} MMR\nСтатус: {state}"
+        text = (
+            f"<b>Поиск пати Dota 2 · Opinia</b>\n\n"
+            f"Игрок: <b>{name}</b> · {mmr} MMR\nСтатус: {state}"
+        )
         if party:
             text += f"\nПати: <b>{escape_text(party.get('name', ''))}</b> · {party.get('memberCount', 0)}/{party.get('maxMembers', 5)}"
         invites = [item for item in my_parties.get("invites", []) if item.get("status") == "PENDING"]
         if invites:
             text += f"\nОжидают ответа: {len(invites)}"
+        text += (
+            "\n\n🎯 <b>Ищу пати</b> — покажу команды с подходящими ролями.\n"
+            "🧭 <b>Набираю игроков</b> — создам пати и помогу заполнить свободные слоты.\n"
+            "👤 В аккаунте находятся профиль, привязка и приглашения."
+        )
         auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
         is_recruiting = bool(looking and auto_search.get("mode") == "recruit")
         return text, home_keyboard(True, bool(party), is_recruiting)
@@ -246,7 +260,9 @@ async def render_screen(
             return "Вы пока не состоите в пати.", home_keyboard(True, False)
         link = f"{settings.site_url}/dota/teams/{party.get('slug', '')}"
         text = party_text(party) + f"\n\n<a href=\"{escape_text(link)}\">Чат и Discord на сайте</a>"
-        return text, back_keyboard()
+        auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
+        is_recruiting = auto_search.get("mode") == "recruit" and auto_search.get("partySlug") == party.get("slug")
+        return text, party_keyboard(party, bool(party.get("canManageParty")), is_recruiting)
 
     if screen == "recruiting":
         party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
@@ -262,7 +278,49 @@ async def render_screen(
             f"Состав: {party.get('memberCount', 0)}/{party.get('maxMembers', 5)}\n\n"
             "Нажмите на свободную позицию, чтобы выбрать игрока."
         )
-        return text, recruiting_party_keyboard(party, str((profile or {}).get("ownerUserId") or ""))
+        return text, recruiting_party_keyboard(party)
+
+    if screen in {"member", "kick_confirm"}:
+        selected_member = storage.get_choice(telegram_user_id, "selected_party_member", 0) or {}
+        selected_user_id = selected_member.get("userId")
+        party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
+        member = next(
+            (item for item in (party or {}).get("members", []) if item.get("userId") == selected_user_id),
+            None,
+        )
+        if not party or not member:
+            return "Игрок больше не состоит в этой пати.", back_keyboard("party")
+
+        current_profile = None
+        if member.get("dotaSlug"):
+            try:
+                current_profile = await api.user(
+                    telegram_user_id, "GET", f"/dota/profiles/{quote(str(member['dotaSlug']), safe='')}"
+                )
+            except ApiError:
+                pass
+        name = escape_text((current_profile or {}).get("title") or member.get("displayName") or "Игрок")
+        mmr = escape_text((current_profile or {}).get("mmr") or member.get("mmr") or "—")
+        role = escape_text(member.get("positionRole") or "не выбрана")
+        auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
+        back_target = "recruiting" if auto_search.get("mode") == "recruit" else "party"
+        can_kick = bool(party.get("canManageParty")) and member.get("role") != "OWNER"
+        if member.get("role") == "OFFICER" and not party.get("isOwner"):
+            can_kick = False
+
+        if screen == "kick_confirm":
+            if not can_kick:
+                return "У вас нет прав удалить этого игрока.", back_keyboard(back_target)
+            return (
+                f"<b>Удалить игрока из пати?</b>\n\n{name} · {mmr} MMR\nПосле удаления слот освободится.",
+                kick_confirmation_keyboard(str(member["userId"])),
+            )
+        if current_profile:
+            text = profile_text(current_profile)
+        else:
+            text = f"<b>Профиль игрока</b>\n\nИгрок: <b>{name}</b>\nMMR: <b>{mmr}</b>"
+        text += f"\nРоль в пати: <b>{role}</b>"
+        return text, party_member_keyboard(member, can_kick, settings.site_url, back_target)
 
     if screen == "invites":
         incoming = [item for item in my_parties.get("invites", []) if item.get("status") == "PENDING"]
@@ -306,7 +364,7 @@ async def render_screen(
             candidates = choices["items"]
         mode = (choices or {}).get("mode", "looking")
         if not candidates:
-            target = "recruiting" if mode == "recruit" else "home"
+            target = (choices or {}).get("return_screen") or ("recruiting" if mode == "recruit" else "home")
             return (
                 "Пока нет подходящих игроков. Попробуйте обновить список через минуту.",
                 InlineKeyboardMarkup(

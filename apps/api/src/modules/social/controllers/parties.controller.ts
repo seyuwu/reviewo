@@ -583,6 +583,10 @@ export class PartiesController {
     // Broadcast viewer-neutral roster so clients recalculate their own flags.
     const broadcastParty = await this.gamePartiesService.getPartyBySlug(slug).catch(() => party);
     this.gamePartyGateway.broadcastPartyUpdated(broadcastParty);
+    this.gamePartyGateway.notifyTelegramPartyRosterUpdated(
+      party.members.map((member) => member.userId),
+      slug
+    );
     return party;
   }
 

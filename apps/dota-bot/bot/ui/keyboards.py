@@ -75,42 +75,50 @@ def role_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
     )
 
 
-def recruiting_party_keyboard(party: dict, owner_user_id: str | None) -> InlineKeyboardMarkup:
-    occupants = party_slot_occupants(party, owner_user_id)
-    slots = [
-        button(truncate(occupants.get(role, role), 12), f"recruit:slot:{role}")
-        for role in ("1", "2", "3", "4", "5")
-    ]
+def recruiting_party_keyboard(party: dict) -> InlineKeyboardMarkup:
+    return party_keyboard(party, bool(party.get("canManageParty")), is_recruiting=True)
+
+
+def party_keyboard(party: dict, show_search: bool, is_recruiting: bool = False) -> InlineKeyboardMarkup:
+    occupants = party_slot_occupants(party)
+    roles = ("1", "2", "3", "4", "5")
+    slots = [button(truncate(occupants.get(role, role), 12), f"party:slot:{role}") for role in roles]
     return InlineKeyboardMarkup(
         inline_keyboard=[
             slots,
-            [button("⏹ Остановить набор", "search:stop")],
+            *([[button("🔍" if role not in occupants else "—", f"party:search:{role}" if role not in occupants else f"party:noop:{role}") for role in roles]] if show_search else []),
+            *([[button("⏹ Остановить набор", "search:stop")]] if party.get("canManageParty") and is_recruiting else []),
             [button("← Назад", "panel:home")],
         ]
     )
 
 
-def party_slot_occupants(party: dict, owner_user_id: str | None) -> dict[str, str]:
+def party_slot_occupants(party: dict) -> dict[str, str]:
     occupants: dict[str, str] = {}
-    members = party.get("members") or []
-    for member in members:
+    for member in party.get("members") or []:
         role = str(member.get("positionRole") or "")
         if role in {"1", "2", "3", "4", "5"} and role not in occupants:
             occupants[role] = str(member.get("displayName") or "Игрок")
-
-    unassigned = [
-        member
-        for member in members
-        if str(member.get("positionRole") or "") not in {"1", "2", "3", "4", "5"}
-    ]
-    unassigned.sort(key=lambda member: member.get("userId") != owner_user_id)
-    for member in unassigned:
-        role = next((item for item in ("1", "2", "3", "4", "5") if item not in occupants), None)
-        if role is None:
-            break
-        occupants[role] = str(member.get("displayName") or "Игрок")
-
     return occupants
+
+
+def party_member_keyboard(member: dict, can_kick: bool, site_url: str, back_target: str = "party") -> InlineKeyboardMarkup:
+    rows = []
+    if member.get("dotaSlug"):
+        rows.append([button_url("🌐 Открыть профиль на сайте", f"{site_url}/dota/{member['dotaSlug']}")])
+    if can_kick:
+        rows.append([button("🚫 Удалить из пати", f"party:kick:confirm:{member['userId']}")])
+    rows.append([button("← К составу пати", f"panel:{back_target}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def kick_confirmation_keyboard(user_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("🚫 Да, удалить", f"party:kick:execute:{user_id}")],
+            [button("← Отмена", "panel:member")],
+        ]
+    )
 
 
 def registration_step_keyboard() -> InlineKeyboardMarkup:
@@ -163,6 +171,10 @@ def account_keyboard(
 
 def button(text: str, callback_data: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=text, callback_data=callback_data)
+
+
+def button_url(text: str, url: str) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text=text, url=url)
 
 
 def truncate(value: str, limit: int) -> str:
