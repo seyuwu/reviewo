@@ -15,5 +15,21 @@ export interface AnalyticsOverview {
     registrations: number;
     uniqueVisitorDays: number;
   };
+  telegramBot: {
+    accounts: number;
+    accountsConnectedInRange: number;
+    activeSearchUsers: number;
+    soloSearchUsers: number;
+    recruitingParties: number;
+    openSlots: number;
+  };
+  platformTotals: {
+    accounts: number;
+    activeAccounts: number;
+    accountsCreatedInRange: number;
+    dotaProfiles: number;
+    dotaParties: number;
+    activeDotaParties: number;
+  };
   topCtas: Array<{ clicks: number; ctaKey: string }>;
 }

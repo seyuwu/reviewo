@@ -92,6 +92,71 @@ export function AdminAnalyticsPageView() {
       {data ? (
         <>
           <section className={styles.adminEconomySection}>
+            <h2>{t("web.admin.analytics.platformTitle")}</h2>
+            <div className={styles.adminEconomyStatsGrid}>
+              <StatCard
+                label={t("web.admin.analytics.platformAccounts")}
+                value={data.platformTotals.accounts}
+              />
+              <StatCard
+                label={t("web.admin.analytics.platformAccountsCreated", {
+                  days: String(data.rangeDays)
+                })}
+                value={data.platformTotals.accountsCreatedInRange}
+              />
+              <StatCard
+                label={t("web.admin.analytics.platformActiveAccounts")}
+                value={data.platformTotals.activeAccounts}
+              />
+              <StatCard
+                label={t("web.admin.analytics.platformDotaProfiles")}
+                value={data.platformTotals.dotaProfiles}
+              />
+              <StatCard
+                label={t("web.admin.analytics.platformDotaParties")}
+                value={data.platformTotals.dotaParties}
+              />
+              <StatCard
+                label={t("web.admin.analytics.platformActiveDotaParties")}
+                value={data.platformTotals.activeDotaParties}
+              />
+            </div>
+          </section>
+
+          <section className={styles.adminEconomySection}>
+            <h2>{t("web.admin.analytics.telegramTitle")}</h2>
+            <p className="muted-copy">{t("web.admin.analytics.telegramHint")}</p>
+            <div className={styles.adminEconomyStatsGrid}>
+              <StatCard
+                label={t("web.admin.analytics.telegramAccounts")}
+                value={data.telegramBot.accounts}
+              />
+              <StatCard
+                label={t("web.admin.analytics.telegramNewAccounts", {
+                  days: String(data.rangeDays)
+                })}
+                value={data.telegramBot.accountsConnectedInRange}
+              />
+              <StatCard
+                label={t("web.admin.analytics.telegramSearching")}
+                value={data.telegramBot.activeSearchUsers}
+              />
+              <StatCard
+                label={t("web.admin.analytics.telegramSoloSearch")}
+                value={data.telegramBot.soloSearchUsers}
+              />
+              <StatCard
+                label={t("web.admin.analytics.telegramRecruitingParties")}
+                value={data.telegramBot.recruitingParties}
+              />
+              <StatCard
+                label={t("web.admin.analytics.telegramOpenSlots")}
+                value={data.telegramBot.openSlots}
+              />
+            </div>
+          </section>
+
+          <section className={styles.adminEconomySection}>
             <h2>{t("web.admin.analytics.totalsTitle")}</h2>
             <div className={styles.adminEconomyStatsGrid}>
               <StatCard

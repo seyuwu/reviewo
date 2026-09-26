@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import {
+  DOTA_ATTRIBUTE_KEYS,
+  DOTA_VERTICAL,
   dotaHostVisitorScopeKey,
   isAnalyticsCounterKey,
   isAnalyticsCtaKey,
@@ -138,6 +140,22 @@ export class AnalyticsRepository {
       /** Sum of per-day unique visitors (same person on 2 days counts twice). */
       uniqueVisitorDays: number;
     };
+    telegramBot: {
+      accounts: number;
+      accountsConnectedInRange: number;
+      activeSearchUsers: number;
+      soloSearchUsers: number;
+      recruitingParties: number;
+      openSlots: number;
+    };
+    platformTotals: {
+      accounts: number;
+      activeAccounts: number;
+      accountsCreatedInRange: number;
+      dotaProfiles: number;
+      dotaParties: number;
+      activeDotaParties: number;
+    };
     topCtas: Array<{ clicks: number; ctaKey: string }>;
   }> {
     const safeDays = Math.min(90, Math.max(1, Math.floor(days)));
@@ -145,7 +163,23 @@ export class AnalyticsRepository {
     const start = new Date(end);
     start.setUTCDate(start.getUTCDate() - (safeDays - 1));
 
-    const [counters, visitors, ctas, pathTimes] = await Promise.all([
+    const nextDay = new Date(end);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+
+    const [
+      counters,
+      visitors,
+      ctas,
+      pathTimes,
+      telegramAccountStats,
+      activeSearches,
+      accounts,
+      activeAccounts,
+      accountsCreatedInRange,
+      dotaProfiles,
+      dotaParties,
+      activeDotaParties
+    ] = await Promise.all([
       this.prismaService.analyticsDailyCounter.findMany({
         where: {
           day: {
@@ -178,8 +212,104 @@ export class AnalyticsRepository {
             lte: end
           }
         }
+      }),
+      this.prismaService.$queryRaw<
+        Array<{ accounts: bigint | number; accountsConnectedInRange: bigint | number }>
+      >`
+        SELECT
+          COUNT(DISTINCT identity.user_id)::int AS accounts,
+          COUNT(DISTINCT identity.user_id) FILTER (
+            WHERE identity.created_at >= ${start}
+              AND identity.created_at < ${nextDay}
+          )::int AS "accountsConnectedInRange"
+        FROM auth.user_auth_identities identity
+        JOIN users.users app_user ON app_user.id = identity.user_id
+        WHERE identity.provider = 'telegram'
+          AND app_user.status = 'active'
+      `,
+      this.prismaService.$queryRaw<
+        Array<{
+          recruitingParties: bigint | number;
+          recruitingUsers: bigint | number;
+          soloUsers: bigint | number;
+          openSlots: bigint | number;
+        }>
+      >`
+        WITH telegram_searches AS (
+          SELECT
+            e.owner_user_id,
+            MAX(CASE WHEN party_slug.key = 'lfg_party_slug' THEN party_slug.value END) AS party_slug,
+            MAX(CASE WHEN recruited_roles.key = 'lfg_recruited_roles' THEN recruited_roles.value END) AS recruited_roles
+          FROM entities.entities e
+          JOIN entities.entity_attributes vertical
+            ON vertical.entity_id = e.id
+            AND vertical.key = ${DOTA_ATTRIBUTE_KEYS.vertical}
+            AND vertical.value = ${DOTA_VERTICAL}
+          JOIN entities.entity_attributes lfg_until
+            ON lfg_until.entity_id = e.id
+            AND lfg_until.key = ${DOTA_ATTRIBUTE_KEYS.lfgUntil}
+            AND lfg_until.value > ${new Date().toISOString()}
+          JOIN auth.user_auth_identities telegram_identity
+            ON telegram_identity.user_id = e.owner_user_id
+            AND telegram_identity.provider = 'telegram'
+          JOIN users.users telegram_user
+            ON telegram_user.id = telegram_identity.user_id
+            AND telegram_user.status = 'active'
+          LEFT JOIN entities.entity_attributes party_slug
+            ON party_slug.entity_id = e.id AND party_slug.key = ${DOTA_ATTRIBUTE_KEYS.lfgPartySlug}
+          LEFT JOIN entities.entity_attributes recruited_roles
+            ON recruited_roles.entity_id = e.id AND recruited_roles.key = ${DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles}
+          WHERE e.type = 'person'
+            AND e.visibility = 'ACTIVE'
+          GROUP BY e.id, e.owner_user_id
+        )
+        SELECT
+          COUNT(DISTINCT owner_user_id) FILTER (
+            WHERE COALESCE(party_slug, '') = ''
+          )::int AS "soloUsers",
+          COUNT(DISTINCT owner_user_id) FILTER (
+            WHERE COALESCE(party_slug, '') <> '' AND COALESCE(recruited_roles, '') <> ''
+          )::int AS "recruitingUsers",
+          COUNT(DISTINCT party_slug) FILTER (
+            WHERE COALESCE(party_slug, '') <> '' AND COALESCE(recruited_roles, '') <> ''
+          )::int AS "recruitingParties",
+          COALESCE(SUM(array_length(regexp_split_to_array(recruited_roles, ','), 1)) FILTER (
+            WHERE COALESCE(party_slug, '') <> '' AND COALESCE(recruited_roles, '') <> ''
+          ), 0)::int AS "openSlots"
+        FROM telegram_searches
+      `,
+      this.prismaService.user.count(),
+      this.prismaService.user.count({ where: { status: "active" } }),
+      this.prismaService.user.count({ where: { createdAt: { gte: start, lt: nextDay } } }),
+      this.prismaService.entity.count({
+        where: {
+          attributes: {
+            some: { key: DOTA_ATTRIBUTE_KEYS.vertical, value: DOTA_VERTICAL }
+          },
+          type: "person"
+        }
+      }),
+      this.prismaService.gameParty.count({ where: { vertical: DOTA_VERTICAL } }),
+      this.prismaService.gameParty.count({
+        where: {
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          vertical: DOTA_VERTICAL
+        }
       })
     ]);
+
+    const activeSearch = activeSearches[0];
+    const telegramAccounts = telegramAccountStats[0];
+    const soloSearchUsers = Number(activeSearch?.soloUsers ?? 0);
+    const recruitingUsers = Number(activeSearch?.recruitingUsers ?? 0);
+    const platformTotals = {
+      accounts,
+      activeAccounts,
+      accountsCreatedInRange,
+      dotaProfiles,
+      dotaParties,
+      activeDotaParties
+    };
 
     const byDayMap = new Map<string, { pageviews: number; registrations: number; uniques: number }>();
 
@@ -297,6 +427,15 @@ export class AnalyticsRepository {
         registrations: totalRegistrations,
         uniqueVisitorDays
       },
+      telegramBot: {
+        accounts: Number(telegramAccounts?.accounts ?? 0),
+        accountsConnectedInRange: Number(telegramAccounts?.accountsConnectedInRange ?? 0),
+        activeSearchUsers: soloSearchUsers + recruitingUsers,
+        soloSearchUsers,
+        recruitingParties: Number(activeSearch?.recruitingParties ?? 0),
+        openSlots: Number(activeSearch?.openSlots ?? 0)
+      },
+      platformTotals,
       topCtas
     };
   }
