@@ -13,7 +13,12 @@ services:
       GOOGLE_SHEETS_PRIVATE_KEY: ${GOOGLE_SHEETS_PRIVATE_KEY:-}
       GAMES_LAUNCH_SHEET_ID: ${GAMES_LAUNCH_SHEET_ID:-}
     restart: always
-    command: ["sh", "-c", "corepack pnpm --filter @reviewo/api start:prod"]
+    command:
+      [
+        "sh",
+        "-c",
+        "cd apps/api && ./node_modules/.bin/prisma migrate deploy && node dist/main.js"
+      ]
 
   web:
     build:
@@ -26,7 +31,16 @@ services:
       API_INTERNAL_BASE_URL: http://api:${API_PORT:-3000}
       NODE_ENV: production
     restart: always
-    command: ["sh", "-c", "corepack pnpm --filter @reviewo/web start"]
+    command:
+      [
+        "node",
+        "apps/web/node_modules/next/dist/bin/next",
+        "start",
+        "--hostname",
+        "0.0.0.0",
+        "--port",
+        "3000"
+      ]
 
   extension:
     build:
