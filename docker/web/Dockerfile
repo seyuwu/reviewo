@@ -30,7 +30,8 @@ ENV NODE_ENV=production
 ENV APP_NAME=web
 
 RUN corepack pnpm --filter @reviewo/web... build
-RUN chown -R node:node /workspace
+RUN mkdir -p /workspace/apps/web/.next/cache \
+  && chown -R node:node /workspace/apps/web/.next/cache
 
 USER node
 
