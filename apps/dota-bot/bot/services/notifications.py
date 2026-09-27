@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError
 
 from ..api.client import OpiniaApi
 from ..config import Settings
@@ -47,13 +47,25 @@ async def poll_notifications(bot: Bot, api: OpiniaApi, settings: Settings, stora
 async def cleanup_temporary_messages(bot: Bot, storage: BotStorage) -> None:
     while True:
         try:
-            for _, chat_id, message_id in storage.due_temporary_messages():
+            for telegram_user_id, chat_id, message_id in storage.due_temporary_messages():
                 try:
                     await bot.delete_message(chat_id, message_id)
-                except (TelegramBadRequest, TelegramForbiddenError):
-                    pass
-                finally:
                     storage.remove_temporary_message(chat_id, message_id)
+                except (TelegramBadRequest, TelegramForbiddenError) as error:
+                    # These are terminal for this message (already deleted or no permission).
+                    logger.info(
+                        "Cannot delete temporary message for user %s: %s",
+                        telegram_user_id,
+                        error,
+                    )
+                    storage.remove_temporary_message(chat_id, message_id)
+                except TelegramAPIError as error:
+                    # Keep it in storage so transient network/API failures are retried next pass.
+                    logger.warning(
+                        "Could not delete temporary message for user %s; will retry: %s",
+                        telegram_user_id,
+                        error,
+                    )
         except asyncio.CancelledError:
             raise
         except Exception:

@@ -8,7 +8,7 @@ from urllib.parse import quote
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
@@ -333,8 +333,13 @@ async def send_dota_id_reminder(bot, storage, telegram_user_id: int, chat_id: in
     try:
         message = await bot.send_message(
             chat_id or telegram_user_id,
-            "🎮 Dota ID не указан. Его можно добавить в «Аккаунт» → «Профиль» → «Изменить». "
-            "Это необязательно; сообщение исчезнет через 10 секунд.",
+            "🎮 Dota ID не указан. Нажмите кнопку, чтобы сразу ввести его. "
+            "Это необязательно; уведомление исчезнет через 10 секунд.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="🎮 Добавить Dota ID", callback_data="profile:dota-id")]
+                ]
+            ),
         )
         storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
     except TelegramAPIError:
