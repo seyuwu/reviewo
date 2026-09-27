@@ -220,6 +220,12 @@ class BotStorage:
             )
             self._connection().commit()
 
+    def is_temporary_message(self, chat_id: int, message_id: int) -> bool:
+        return self._connection().execute(
+            "SELECT 1 FROM temporary_messages WHERE chat_id = ? AND message_id = ?",
+            (chat_id, message_id),
+        ).fetchone() is not None
+
     def has_delivered_notification(self, notification_id: str) -> bool:
         return self._connection().execute(
             "SELECT 1 FROM delivered_notifications WHERE notification_id = ?",

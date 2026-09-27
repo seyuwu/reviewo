@@ -3,6 +3,7 @@ import re
 from html import escape
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -415,6 +416,13 @@ async def begin_dota_id_edit(
     if callback.message is None:
         await callback.answer()
         return
+    if storage.is_temporary_message(callback.message.chat.id, callback.message.message_id):
+        try:
+            await callback.message.delete()
+        except TelegramAPIError:
+            pass
+        else:
+            storage.remove_temporary_message(callback.message.chat.id, callback.message.message_id)
     panel = storage.get_panel(callback.from_user.id)
     return_screen = panel.screen if panel and panel.screen in {"looking", "party", "profile"} else "profile"
     await callback.answer()
