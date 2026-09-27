@@ -13,9 +13,17 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
-from ..services.solo_search import PartyOwnerMustResolveMembers, start_solo_search
+from ..services.solo_search import (
+    PartyChangedDuringConfirmation,
+    PartyOwnerMustResolveMembers,
+    start_solo_search,
+)
 from ..storage.database import BotStorage
-from ..ui.keyboards import back_keyboard, onboarding_keyboard
+from ..ui.keyboards import (
+    back_keyboard,
+    onboarding_keyboard,
+    solo_search_confirmation_keyboard,
+)
 
 router = Router(name="search")
 logger = logging.getLogger(__name__)
@@ -43,6 +51,62 @@ async def start_looking(
         callback.message.chat.id,
         "looking",
         match_wakeup,
+    )
+
+
+@router.callback_query(F.data == "search:looking:confirm")
+async def confirm_start_looking(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+    match_wakeup: asyncio.Event,
+) -> None:
+    await callback.answer()
+    if callback.message is None:
+        return
+    confirmation = storage.get_choice(callback.from_user.id, "pending_solo_search", 0)
+    if not confirmation:
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
+        return
+    await start_selected_action(
+        callback.bot,
+        state,
+        api,
+        settings,
+        storage,
+        callback.from_user.id,
+        callback.message.chat.id,
+        "looking",
+        match_wakeup,
+        confirmation=confirmation,
+    )
+
+
+@router.callback_query(F.data == "search:looking:cancel")
+async def cancel_start_looking(
+    callback: CallbackQuery,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    await callback.answer("Остаётесь в пати")
+    storage.set_choices(callback.from_user.id, "pending_solo_search", [])
+    try:
+        memberships = await api.user(callback.from_user.id, "GET", "/social/parties/me")
+        party = memberships.get("party") or ((memberships.get("parties") or [None])[-1])
+        screen = "party" if party else "home"
+    except ApiError:
+        screen = "home"
+    await edit_panel(
+        callback.bot,
+        storage,
+        api,
+        settings,
+        callback.from_user.id,
+        screen,
+        callback.message.chat.id if callback.message else None,
     )
 
 
@@ -82,6 +146,7 @@ async def start_selected_action(
     chat_id: int,
     action: str,
     match_wakeup: asyncio.Event,
+    confirmation: dict | None = None,
 ) -> None:
     if not storage.get_session(telegram_user_id):
         storage.set_choices(telegram_user_id, "pending_onboarding_action", [{"action": action}])
@@ -117,7 +182,17 @@ async def start_selected_action(
 
     storage.set_choices(telegram_user_id, "pending_onboarding_action", [])
     if action == "looking":
-        await execute_looking(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup, profile)
+        await prepare_looking(
+            bot,
+            api,
+            settings,
+            storage,
+            telegram_user_id,
+            chat_id,
+            match_wakeup,
+            profile,
+            confirmation,
+        )
     elif action == "recruit":
         await execute_recruiting(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup)
 
@@ -154,10 +229,94 @@ async def resume_pending_onboarding_action(
 
     storage.set_choices(telegram_user_id, "pending_onboarding_action", [])
     if action == "looking":
-        await execute_looking(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup, profile)
+        await prepare_looking(
+            bot,
+            api,
+            settings,
+            storage,
+            telegram_user_id,
+            chat_id,
+            match_wakeup,
+            profile,
+        )
     else:
         await execute_recruiting(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup)
     return True
+
+
+async def prepare_looking(
+    bot,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+    telegram_user_id: int,
+    chat_id: int | None,
+    match_wakeup: asyncio.Event,
+    profile: dict,
+    confirmation: dict | None = None,
+) -> None:
+    try:
+        memberships = await api.user(telegram_user_id, "GET", "/social/parties/me")
+    except ApiError as error:
+        await show_action_error(bot, api, settings, storage, telegram_user_id, chat_id, error)
+        return
+
+    party = memberships.get("party") or ((memberships.get("parties") or [None])[-1])
+    confirmed_party = None
+    if party:
+        now = time.time()
+        expected_party = {
+            "partySlug": str(party.get("slug") or ""),
+            "isOwner": bool(party.get("isOwner")),
+            "expiresAt": now + 600,
+        }
+        confirmation_is_current = bool(
+            confirmation
+            and float(confirmation.get("expiresAt") or 0) > now
+            and str(confirmation.get("partySlug") or "") == expected_party["partySlug"]
+            and bool(confirmation.get("isOwner")) == expected_party["isOwner"]
+        )
+        if not confirmation_is_current:
+            storage.set_choices(telegram_user_id, "pending_solo_search", [expected_party])
+            party_name = escape(str(party.get("name") or "Моя пати"))
+            if party.get("isOwner"):
+                warning = (
+                    f"Пати <b>«{party_name}»</b> будет удалена у всех участников, "
+                    "а затем начнётся ваш поиск новой пати."
+                )
+            else:
+                warning = (
+                    f"Вы выйдете из пати <b>«{party_name}»</b>; остальные участники останутся. "
+                    "После этого начнётся ваш поиск новой пати."
+                )
+            await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
+            await edit_panel_content(
+                bot,
+                storage,
+                api,
+                settings,
+                telegram_user_id,
+                "search:looking:confirm",
+                f"<b>Начать поиск пати?</b>\n\n{warning}\n\nПродолжить?",
+                solo_search_confirmation_keyboard(),
+                chat_id,
+            )
+            return
+        confirmed_party = confirmation
+    else:
+        storage.set_choices(telegram_user_id, "pending_solo_search", [])
+
+    await execute_looking(
+        bot,
+        api,
+        settings,
+        storage,
+        telegram_user_id,
+        chat_id,
+        match_wakeup,
+        profile,
+        confirmed_party,
+    )
 
 
 async def execute_looking(
@@ -169,10 +328,12 @@ async def execute_looking(
     chat_id: int | None,
     match_wakeup: asyncio.Event,
     profile: dict,
+    confirmed_party: dict | None = None,
 ) -> None:
     await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
     try:
-        await start_solo_search(api, telegram_user_id)
+        await start_solo_search(api, telegram_user_id, confirmed_party=confirmed_party)
+        storage.set_choices(telegram_user_id, "pending_solo_search", [])
         storage.clear_auto_match_exclusions(telegram_user_id)
         storage.set_choices(
             telegram_user_id,
@@ -194,6 +355,18 @@ async def execute_looking(
             "Вы капитан пати с другими игроками. Чтобы искать новую пати, сначала завершите текущую: попросите игроков выйти или распустите её.",
             back_keyboard("party"),
             chat_id,
+        )
+    except PartyChangedDuringConfirmation:
+        storage.set_choices(telegram_user_id, "pending_solo_search", [])
+        await prepare_looking(
+            bot,
+            api,
+            settings,
+            storage,
+            telegram_user_id,
+            chat_id,
+            match_wakeup,
+            profile,
         )
     except ApiError as error:
         await show_action_error(bot, api, settings, storage, telegram_user_id, chat_id, error)

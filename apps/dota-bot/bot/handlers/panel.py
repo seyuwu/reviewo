@@ -26,6 +26,7 @@ async def start_panel(
     has_existing_panel = storage.get_panel(message.from_user.id) is not None
     await state.clear()
     storage.set_choices(message.from_user.id, "pending_onboarding_action", [])
+    storage.set_choices(message.from_user.id, "pending_solo_search", [])
     await begin_panel_transition(bot, storage, message.from_user.id, message.chat.id)
     await edit_panel(bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
     if has_existing_panel:
@@ -51,6 +52,7 @@ async def navigate_panel(
     if callback.message.chat.type != "private":
         return
     screen = (callback.data or "panel:home").split(":", maxsplit=1)[1]
+    storage.set_choices(callback.from_user.id, "pending_solo_search", [])
     if screen == "home":
         storage.set_choices(callback.from_user.id, "pending_onboarding_action", [])
     await begin_panel_transition(bot, storage, callback.from_user.id, callback.message.chat.id)

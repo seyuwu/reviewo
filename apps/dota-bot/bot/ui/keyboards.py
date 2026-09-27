@@ -40,6 +40,15 @@ def looking_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def solo_search_confirmation_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("✅ Да, продолжить поиск", "search:looking:confirm")],
+            [button("← Остаться в пати", "search:looking:cancel")],
+        ]
+    )
+
+
 def back_keyboard(target: str = "home") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[button("← Назад", f"panel:{target}")]])
 
