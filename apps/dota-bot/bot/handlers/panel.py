@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, Message
 
 from ..api.client import OpiniaApi
 from ..config import Settings
-from ..services.panel import begin_panel_transition, edit_panel
+from ..services.panel import begin_panel_transition, delete_start_message_after_panel, edit_panel
 from ..storage.database import BotStorage
 from .registration import start_profile_registration
 
@@ -35,8 +35,10 @@ async def start_panel(
             message.from_user.id,
             message.chat.id,
         )
+        await delete_start_message_after_panel(message, storage)
         return
     await edit_panel(bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
+    await delete_start_message_after_panel(message, storage)
 
 
 @router.callback_query(F.data.startswith("panel:"))

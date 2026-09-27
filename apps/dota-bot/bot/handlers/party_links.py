@@ -10,7 +10,12 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
-from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
+from ..services.panel import (
+    begin_panel_transition,
+    delete_start_message_after_panel,
+    edit_panel,
+    edit_panel_content,
+)
 from ..storage.database import BotStorage
 from ..ui.formatters import party_text
 from ..ui.keyboards import (
@@ -80,10 +85,12 @@ async def open_party_link(
     if code is None:
         await state.clear()
         await edit_panel(message.bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
+        await delete_start_message_after_panel(message, storage)
         return
     await state.clear()
     await begin_panel_transition(message.bot, storage, message.from_user.id, message.chat.id)
     await show_party_invitation(message.bot, api, settings, storage, message.from_user.id, message.chat.id, code)
+    await delete_start_message_after_panel(message, storage)
 
 
 @router.callback_query(F.data == "party:share")

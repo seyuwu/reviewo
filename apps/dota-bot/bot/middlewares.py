@@ -10,6 +10,11 @@ logger = logging.getLogger(__name__)
 class DeletePrivateMessagesMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
         if isinstance(event, Message) and event.chat.type == "private":
+            command = (event.text or "").split(maxsplit=1)
+            command_name = command[0].split("@", maxsplit=1)[0] if command else ""
+            if command_name == "/start":
+                # Keep /start visible until the handler has delivered the replacement panel.
+                return await handler(event, data)
             try:
                 await event.delete()
             except TelegramAPIError as error:

@@ -1,10 +1,17 @@
-from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
-from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 import asyncio
 import logging
 import time
 from urllib.parse import quote
+
+from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.types import (
+    BufferedInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+    Message,
+)
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
@@ -23,6 +30,24 @@ from ..ui.keyboards import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def delete_start_message_after_panel(message: Message, storage: BotStorage) -> None:
+    """Remove /start only after a replacement panel has been saved for this chat."""
+    if message.from_user is None:
+        return
+    panel = storage.get_panel(message.from_user.id)
+    if (
+        panel is None
+        or panel.chat_id != message.chat.id
+        or panel.message_id == message.message_id
+        or panel.screen == "loading"
+    ):
+        return
+    try:
+        await message.delete()
+    except TelegramAPIError:
+        pass
 
 
 async def edit_panel(
