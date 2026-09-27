@@ -344,6 +344,8 @@ async def execute_looking(
         match_wakeup.set()
         if not profile.get("dotaAccountId"):
             await send_dota_id_reminder(bot, storage, telegram_user_id, chat_id)
+        else:
+            await send_roles_reminder(bot, storage, telegram_user_id, chat_id)
     except PartyOwnerMustResolveMembers:
         await edit_panel_content(
             bot,
@@ -517,6 +519,19 @@ async def send_dota_id_reminder(bot, storage, telegram_user_id: int, chat_id: in
         storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
     except TelegramAPIError:
         logger.warning("Could not send Dota ID reminder to Telegram user %s", telegram_user_id)
+
+
+async def send_roles_reminder(bot, storage, telegram_user_id: int, chat_id: int | None) -> None:
+    try:
+        message = await bot.send_message(
+            chat_id or telegram_user_id,
+            "🎯 Проверьте, все ли игровые позиции указаны в профиле: автоподбор ищет пати по ним. "
+            "Изменить позиции можно в «Аккаунт» → «Профиль» → «Изменить». "
+            "Это уведомление исчезнет через 10 секунд.",
+        )
+        storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
+    except TelegramAPIError:
+        logger.warning("Could not send role reminder to Telegram user %s", telegram_user_id)
 
 
 async def show_error(

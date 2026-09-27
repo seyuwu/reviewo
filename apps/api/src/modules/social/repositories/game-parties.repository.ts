@@ -7,6 +7,12 @@ import type {
   GamePartyMember,
   Prisma
 } from "#prisma/client";
+import {
+  DOTA_ATTRIBUTE_KEYS,
+  DOTA_PARTY_RECRUIT_MMR_SPREAD,
+  DOTA_VERTICAL,
+  isDotaPositionRole
+} from "@reviewo/shared";
 
 import { PrismaService } from "../../../database/prisma.service.js";
 
@@ -31,6 +37,15 @@ export class GamePartiesRepository {
     vertical: string;
   }): Promise<GameParty> {
     return this.prismaService.$transaction(async (tx) => {
+      if (input.kind === "PARTY") {
+        // Serialize party creation with solo-search group formation and joins.
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtext(${`${input.ownerUserId}:dota-party-join`})
+          )
+        `;
+      }
+
       const party = await tx.gameParty.create({
         data: {
           expiresAt: input.expiresAt,
@@ -54,6 +69,246 @@ export class GamePartiesRepository {
 
       return party;
     });
+  }
+
+  async createAutoMatchedPartyAtomically(input: {
+    expiresAt: Date;
+    leaderUserId: string;
+    lfgExpiresAt: Date;
+    maxMembers: number;
+    members: Array<{ positionRole: string; userId: string }>;
+    name: string;
+    now: Date;
+    partySafetyMessage: string;
+    slug: string;
+    vertical: string;
+  }): Promise<
+    | { ok: true; party: PartyWithMembers }
+    | {
+        ok: false;
+        reason:
+          | "already_grouped"
+          | "invalid_profile"
+          | "mmr_spread"
+          | "party_slug_taken"
+          | "search_expired";
+      }
+  > {
+    try {
+      return await this.prismaService.$transaction(async (tx) => {
+        const userIds = input.members.map((member) => member.userId).sort();
+
+        // Match the lock used by regular party joins and solo LFG updates.
+        // Sorting makes overlapping multi-user groups acquire locks consistently.
+        for (const userId of userIds) {
+          await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtext(${`${userId}:dota-party-join`})
+          )
+        `;
+        }
+
+        const profileRows = await tx.entity.findMany({
+          include: {
+            attributes: {
+              select: { key: true, value: true }
+            }
+          },
+          where: {
+            attributes: {
+              some: {
+                key: DOTA_ATTRIBUTE_KEYS.vertical,
+                value: DOTA_VERTICAL
+              }
+            },
+            ownerUserId: { in: userIds },
+            type: "person",
+            visibility: "ACTIVE"
+          }
+        });
+        const profilesByUserId = new Map(
+          profileRows
+            .filter((profile) => profile.ownerUserId)
+            .map((profile) => [
+              profile.ownerUserId as string,
+              {
+                entityId: profile.id,
+                attributes: Object.fromEntries(
+                  profile.attributes.map((attribute) => [attribute.key, attribute.value])
+                )
+              }
+            ])
+        );
+
+        if (profilesByUserId.size !== userIds.length) {
+          return { ok: false as const, reason: "invalid_profile" as const };
+        }
+
+        const memberships = await tx.gamePartyMember.findMany({
+          select: { userId: true },
+          where: {
+            party: {
+              kind: "PARTY",
+              OR: [{ expiresAt: null }, { expiresAt: { gt: input.now } }],
+              vertical: input.vertical
+            },
+            userId: { in: userIds }
+          }
+        });
+
+        if (memberships.length > 0) {
+          return { ok: false as const, reason: "already_grouped" as const };
+        }
+
+        const mmrBounds: Array<{ high: number; low: number }> = [];
+        const servers = new Set<string>();
+
+        for (const member of input.members) {
+          if (!isDotaPositionRole(member.positionRole)) {
+            return { ok: false as const, reason: "invalid_profile" as const };
+          }
+
+          const profile = profilesByUserId.get(member.userId);
+          const attributes = profile?.attributes;
+          if (!profile || attributes?.[DOTA_ATTRIBUTE_KEYS.vertical] !== DOTA_VERTICAL) {
+            return { ok: false as const, reason: "invalid_profile" as const };
+          }
+
+          const lfgUntil = Date.parse(attributes[DOTA_ATTRIBUTE_KEYS.lfgUntil] ?? "");
+          if (
+            !Number.isFinite(lfgUntil) ||
+            lfgUntil <= input.now.getTime() ||
+            attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim()
+          ) {
+            return { ok: false as const, reason: "search_expired" as const };
+          }
+
+          const roles = parseDotaRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
+          if (!roles.includes(member.positionRole)) {
+            return { ok: false as const, reason: "invalid_profile" as const };
+          }
+
+          const bounds = parseMmrBounds(attributes[DOTA_ATTRIBUTE_KEYS.mmr]);
+          if (!bounds) {
+            return { ok: false as const, reason: "invalid_profile" as const };
+          }
+          mmrBounds.push(bounds);
+
+          const server = attributes[DOTA_ATTRIBUTE_KEYS.server]?.trim();
+          if (server) {
+            servers.add(server);
+          }
+        }
+
+        if (
+          Math.max(...mmrBounds.map((bounds) => bounds.high)) -
+            Math.min(...mmrBounds.map((bounds) => bounds.low)) >
+          DOTA_PARTY_RECRUIT_MMR_SPREAD
+        ) {
+          return { ok: false as const, reason: "mmr_spread" as const };
+        }
+        if (servers.size > 1) {
+          return { ok: false as const, reason: "invalid_profile" as const };
+        }
+
+        const party = await tx.gameParty.create({
+          data: {
+            expiresAt: input.expiresAt,
+            kind: "PARTY",
+            joinMode: "OPEN",
+            maxMembers: input.maxMembers,
+            name: input.name,
+            ownerUserId: input.leaderUserId,
+            slug: input.slug,
+            vertical: input.vertical,
+            visibility: "PUBLIC"
+          }
+        });
+
+        await tx.gamePartyMember.createMany({
+          data: input.members.map((member) => ({
+            partyId: party.id,
+            positionRole: member.positionRole,
+            role: member.userId === input.leaderUserId ? "OWNER" : "MEMBER",
+            userId: member.userId
+          }))
+        });
+
+        await tx.gamePartyChatMessage.create({
+          data: {
+            message: input.partySafetyMessage,
+            partyId: party.id,
+            userId: input.leaderUserId
+          }
+        });
+
+        const occupiedRoles = new Set(input.members.map((member) => member.positionRole));
+        const recruitedRoles = (["1", "2", "3", "4", "5"] as const)
+          .filter((role) => !occupiedRoles.has(role))
+          .join(",");
+
+        for (const member of input.members) {
+          const profile = profilesByUserId.get(member.userId);
+          if (!profile) {
+            throw new Error("Auto-match profile disappeared during transaction");
+          }
+
+          const attributes =
+            member.userId === input.leaderUserId && recruitedRoles.length > 0
+              ? {
+                  [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: String(input.maxMembers),
+                  [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: String(input.maxMembers),
+                  [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: String(input.members.length),
+                  [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: "PARTY",
+                  [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: input.name,
+                  [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: input.slug,
+                  [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: recruitedRoles,
+                  [DOTA_ATTRIBUTE_KEYS.lfgUntil]: input.lfgExpiresAt.toISOString(),
+                  [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL
+                }
+              : {
+                  [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
+                  [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: "",
+                  [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: "",
+                  [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: "",
+                  [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: "",
+                  [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: "",
+                  [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: "",
+                  [DOTA_ATTRIBUTE_KEYS.lfgUntil]: new Date(0).toISOString(),
+                  [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL
+                };
+
+          for (const [key, value] of Object.entries(attributes)) {
+            await tx.entityAttribute.upsert({
+              create: { entityId: profile.entityId, key, value },
+              update: { value },
+              where: { entityId_key: { entityId: profile.entityId, key } }
+            });
+          }
+        }
+
+        const fullParty = await tx.gameParty.findUnique({
+          include: {
+            members: {
+              include: { user: { select: { displayName: true, id: true } } },
+              orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
+            }
+          },
+          where: { id: party.id }
+        });
+
+        if (!fullParty) {
+          throw new Error("Auto-matched party was not created");
+        }
+
+        return { ok: true as const, party: fullParty };
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        return { ok: false as const, reason: "party_slug_taken" as const };
+      }
+      throw error;
+    }
   }
 
   findByVerticalAndSlug(vertical: string, slug: string): Promise<PartyWithMembers | null> {
@@ -825,10 +1080,7 @@ export class GamePartiesRepository {
     return rows.map((row) => row.slug);
   }
 
-  cancelPendingInvitesForUser(
-    partyId: string,
-    userId: string
-  ): Promise<Prisma.BatchPayload> {
+  cancelPendingInvitesForUser(partyId: string, userId: string): Promise<Prisma.BatchPayload> {
     return this.prismaService.gamePartyInvite.updateMany({
       where: {
         inviteeUserId: userId,
@@ -1122,9 +1374,7 @@ export class GamePartiesRepository {
    * Hard-delete temporary parties past TTL (members/invites/chat cascade).
    * Prefer deleting Discord channels first via the service, then call this.
    */
-  async findExpiredParties(
-    now = new Date()
-  ): Promise<
+  async findExpiredParties(now = new Date()): Promise<
     Array<{
       discordChannelId: string | null;
       discordVoiceExpiresAt: Date | null;
@@ -1170,7 +1420,9 @@ export class GamePartiesRepository {
    */
   async deleteExpiredParties(
     now = new Date()
-  ): Promise<Array<{ discordChannelId: string | null; id: string; ownerUserId: string; slug: string }>> {
+  ): Promise<
+    Array<{ discordChannelId: string | null; id: string; ownerUserId: string; slug: string }>
+  > {
     const expired = await this.findExpiredParties(now);
 
     if (expired.length === 0) {
@@ -1359,10 +1611,7 @@ export class GamePartiesRepository {
     });
   }
 
-  updatePartyJoinMode(
-    partyId: string,
-    joinMode: "OPEN" | "CONFIRM"
-  ): Promise<GameParty> {
+  updatePartyJoinMode(partyId: string, joinMode: "OPEN" | "CONFIRM"): Promise<GameParty> {
     return this.prismaService.gameParty.update({
       data: { joinMode },
       where: { id: partyId }
@@ -1479,4 +1728,49 @@ export class GamePartiesRepository {
       where: { partyId }
     });
   }
+}
+
+function parseDotaRoles(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((role): role is string => typeof role === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseMmrBounds(value: string | undefined): { high: number; low: number } | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  const parts = value.trim().replace(/\s/g, "").replace("–", "-").split("-", 2);
+  const values = parts.map(Number);
+  if (
+    values.some((number) => !Number.isFinite(number) || number < 0 || number > 18_000) ||
+    values.length < 1 ||
+    values.length > 2
+  ) {
+    return null;
+  }
+
+  return {
+    high: Math.max(...values),
+    low: Math.min(...values)
+  };
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
 }

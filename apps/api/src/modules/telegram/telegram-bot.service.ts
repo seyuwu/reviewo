@@ -6,7 +6,7 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { EnvironmentVariables } from "../../config/environment.validation.js";
 import { PrismaService } from "../../database/prisma.service.js";
 import { RedisService } from "../../redis/redis.service.js";
@@ -177,7 +177,9 @@ export class TelegramBotService {
     });
 
     if (!identity) {
-      this.logger.warn("Skipped a party roster notification because the account has no Telegram identity");
+      this.logger.warn(
+        "Skipped a party roster notification because the account has no Telegram identity"
+      );
       return;
     }
 
@@ -258,6 +260,19 @@ export class TelegramBotService {
 
   getBotSecret(): string | undefined {
     return this.configService.get("TELEGRAM_BOT_API_SECRET", { infer: true });
+  }
+
+  assertBotSecret(provided?: string): void {
+    const expected = this.getBotSecret();
+    if (!expected) {
+      throw new UnauthorizedException();
+    }
+
+    const left = Buffer.from(provided ?? "");
+    const right = Buffer.from(expected);
+    if (left.length !== right.length || !timingSafeEqual(left, right)) {
+      throw new UnauthorizedException();
+    }
   }
 
   getUnavailableStatus(): typeof HttpStatus.SERVICE_UNAVAILABLE {

@@ -7,10 +7,8 @@ import {
   HttpStatus,
   Post,
   Req,
-  UnauthorizedException,
   UseGuards
 } from "@nestjs/common";
-import { timingSafeEqual } from "node:crypto";
 import { IsBoolean, IsOptional, IsString, Matches, MaxLength } from "class-validator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../common/interfaces/authenticated-request.js";
@@ -162,7 +160,7 @@ export class TelegramBotController {
     @Req() request: RequestLike,
     @Headers("x-telegram-bot-secret") secret?: string
   ): Promise<unknown> {
-    this.assertBotSecret(secret);
+    this.telegramBotService.assertBotSecret(secret);
     return this.apiRateLimiterService
       .assertWithinLimits([
         {
@@ -190,7 +188,7 @@ export class TelegramBotController {
     @Body() input: EnsureTelegramLinkDto,
     @Headers("x-telegram-bot-secret") secret?: string
   ): Promise<{ linked: true }> {
-    this.assertBotSecret(secret);
+    this.telegramBotService.assertBotSecret(secret);
     await this.apiRateLimiterService.assertWithinLimits([
       {
         key: currentUser.id,
@@ -205,7 +203,7 @@ export class TelegramBotController {
 
   @Get("notifications")
   listNotifications(@Headers("x-telegram-bot-secret") secret?: string) {
-    this.assertBotSecret(secret);
+    this.telegramBotService.assertBotSecret(secret);
     return this.telegramBotService.listNotifications();
   }
 
@@ -215,20 +213,7 @@ export class TelegramBotController {
     @Body() input: NotificationDeliveryDto,
     @Headers("x-telegram-bot-secret") secret?: string
   ): Promise<void> {
-    this.assertBotSecret(secret);
+    this.telegramBotService.assertBotSecret(secret);
     await this.telegramBotService.recordDelivery(input.id, input.telegramUserId, input.delivered);
-  }
-
-  private assertBotSecret(provided?: string): void {
-    const expected = this.telegramBotService.getBotSecret();
-    if (!expected) {
-      throw new UnauthorizedException();
-    }
-
-    const left = Buffer.from(provided ?? "");
-    const right = Buffer.from(expected);
-    if (left.length !== right.length || !timingSafeEqual(left, right)) {
-      throw new UnauthorizedException();
-    }
   }
 }

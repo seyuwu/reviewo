@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpStatus,
   Param,
   Patch,
@@ -28,8 +29,10 @@ import {
 } from "../../../common/rate-limiting/write-rate-limit-rules.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.js";
+import { TelegramBotService } from "../../telegram/telegram-bot.service.js";
 import { GamesLaunchService } from "../../games-launch/services/games-launch.service.js";
 import { CreateGamePartyDto } from "../dto/create-game-party.dto.js";
+import { AutoMatchSoloPartyDto } from "../dto/auto-match-solo-party.dto.js";
 import { CreatePartyInviteDto } from "../dto/create-party-invite.dto.js";
 import type {
   GamePartyChatMessageDto,
@@ -56,7 +59,8 @@ export class PartiesController {
     private readonly apiRateLimiterService: ApiRateLimiterService,
     private readonly gamePartiesService: GamePartiesService,
     private readonly gamePartyGateway: GamePartyGateway,
-    private readonly gamesLaunchService: GamesLaunchService
+    private readonly gamesLaunchService: GamesLaunchService,
+    private readonly telegramBotService: TelegramBotService
   ) {}
 
   private async assertCommunityOpen(currentUser: AuthenticatedUser): Promise<void> {
@@ -225,6 +229,30 @@ export class PartiesController {
     return this.gamePartiesService.createParty(input, currentUser);
   }
 
+  @Post("auto-match/solo-group")
+  @UseGuards(JwtAuthGuard)
+  async createAutoMatchedSoloParty(
+    @Body() input: AutoMatchSoloPartyDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Headers("x-telegram-bot-secret") botSecret: string | undefined,
+    @Req() request: RequestLike
+  ): Promise<GamePartyResponseDto> {
+    this.telegramBotService.assertBotSecret(botSecret);
+    await this.assertCommunityOpen(currentUser);
+    await this.assertMatchingLive(currentUser);
+    await this.apiRateLimiterService.assertWithinLimits(
+      createPartyJoinRateLimitRules(currentUser.id, request)
+    );
+
+    const party = await this.gamePartiesService.createAutoMatchedSoloParty(input, currentUser);
+    this.gamePartyGateway.broadcastPartyUpdated(party);
+    this.gamePartyGateway.notifyTelegramPartyRosterUpdated(
+      party.members.map((member) => member.userId),
+      party.slug
+    );
+    return party;
+  }
+
   @Post("stack")
   @UseGuards(JwtAuthGuard)
   async stackInvite(
@@ -367,11 +395,7 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
-    const party = await this.gamePartiesService.updateJoinMode(
-      slug,
-      input.joinMode,
-      currentUser
-    );
+    const party = await this.gamePartiesService.updateJoinMode(slug, input.joinMode, currentUser);
     this.gamePartyGateway.broadcastPartyUpdated(party);
     return party;
   }
@@ -414,11 +438,7 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
-    const message = await this.gamePartiesService.sendChatMessage(
-      slug,
-      input.message,
-      currentUser
-    );
+    const message = await this.gamePartiesService.sendChatMessage(slug, input.message, currentUser);
     const party = await this.gamePartiesService.getPartyBySlug(slug, currentUser.id);
     this.gamePartyGateway.broadcastNewMessage(party.id, message);
     return message;
@@ -508,7 +528,9 @@ export class PartiesController {
       createSocialWriteRateLimitRules(currentUser.id, request)
     );
 
-    const party = await this.gamePartiesService.getPartyBySlug(slug, currentUser.id).catch(() => null);
+    const party = await this.gamePartiesService
+      .getPartyBySlug(slug, currentUser.id)
+      .catch(() => null);
     const result = await this.gamePartiesService.disbandParty(slug, currentUser);
 
     if (party) {

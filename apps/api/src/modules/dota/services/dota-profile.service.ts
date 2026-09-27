@@ -415,13 +415,25 @@ export class DotaProfileService {
       };
     }
 
-    await this.entityAttributesRepository.upsertMany(entity.id, {
-      [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
-        ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
-        : new Date(0).toISOString(),
-      [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
-      ...recruitAttributes
-    });
+    const savedLookingState = await this.entityAttributesRepository.upsertManyWithDotaMatchLock(
+      currentUser.id,
+      entity.id,
+      {
+        [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
+          ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
+          : new Date(0).toISOString(),
+        [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
+        ...recruitAttributes
+      }
+    );
+
+    if (!savedLookingState) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "You already joined a Dota party",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
 
     if (broadcastSlug) {
       const party = await this.gamePartiesRepository.findByVerticalAndSlug(

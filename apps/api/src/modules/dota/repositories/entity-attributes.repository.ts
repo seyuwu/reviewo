@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import { PrismaService } from "../../../database/prisma.service.js";
-import { DOTA_ATTRIBUTE_KEYS, DOTA_VERTICAL } from "@reviewo/shared";
+import { DOTA_ATTRIBUTE_KEYS, DOTA_PARTY_VERTICAL, DOTA_VERTICAL } from "@reviewo/shared";
 
 @Injectable()
 export class EntityAttributesRepository {
@@ -34,6 +34,51 @@ export class EntityAttributesRepository {
         })
       )
     );
+  }
+
+  async upsertManyWithDotaMatchLock(
+    userId: string,
+    entityId: string,
+    attributes: Record<string, string>
+  ): Promise<boolean> {
+    return this.prismaService.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtext(${`${userId}:dota-party-join`})
+        )
+      `;
+
+      const lfgUntil = Date.parse(attributes[DOTA_ATTRIBUTE_KEYS.lfgUntil] ?? "");
+      const startsSoloSearch =
+        Number.isFinite(lfgUntil) &&
+        lfgUntil > Date.now() &&
+        !attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim();
+      if (startsSoloSearch) {
+        const activeParty = await tx.gamePartyMember.findFirst({
+          select: { id: true },
+          where: {
+            party: {
+              kind: "PARTY",
+              OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+              vertical: DOTA_PARTY_VERTICAL
+            },
+            userId
+          }
+        });
+        if (activeParty) {
+          return false;
+        }
+      }
+
+      for (const [key, value] of Object.entries(attributes)) {
+        await tx.entityAttribute.upsert({
+          create: { entityId, key, value },
+          update: { value },
+          where: { entityId_key: { entityId, key } }
+        });
+      }
+      return true;
+    });
   }
 
   async findByEntityId(entityId: string): Promise<Record<string, string>> {

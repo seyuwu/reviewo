@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from random import shuffle
+import time
+from random import choice, shuffle
 from urllib.parse import urlencode
 
 from ..api.client import ApiError, OpiniaApi
@@ -11,6 +12,7 @@ from .party_notifications import deliver_join_hint
 
 logger = logging.getLogger(__name__)
 ROLE_VALUES = {"1", "2", "3", "4", "5"}
+SOLO_GROUP_MMR_SPREAD = 1500
 
 
 async def auto_match_loop(
@@ -26,6 +28,7 @@ async def auto_match_loop(
         # immediately instead of being lost when the scan finishes.
         match_wakeup.clear()
         try:
+            await _form_solo_searcher_groups(bot, api, settings, storage)
             for telegram_user_id in storage.session_user_ids():
                 try:
                     await _match_user(bot, api, settings, storage, telegram_user_id)
@@ -43,6 +46,208 @@ async def auto_match_loop(
             await asyncio.wait_for(match_wakeup.wait(), timeout=5)
         except asyncio.TimeoutError:
             pass
+
+
+async def _form_solo_searcher_groups(bot, api, settings, storage) -> None:
+    """Atomically group compatible bot users already searching as solo players."""
+    searching_users = [
+        telegram_user_id
+        for telegram_user_id in storage.session_user_ids()
+        if (storage.get_choice(telegram_user_id, "auto_search", 0) or {}).get("mode")
+        == "looking"
+    ]
+    if len(searching_users) < 2:
+        return
+
+    semaphore = asyncio.Semaphore(8)
+
+    async def load_searcher(telegram_user_id: int) -> dict | None:
+        async with semaphore:
+            try:
+                profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
+                if not profile.get("looking"):
+                    return None
+
+                memberships = await api.user(telegram_user_id, "GET", "/social/parties/me")
+                if memberships.get("party") or memberships.get("parties"):
+                    return None
+
+                mmr = mmr_interval(profile.get("mmr"))
+                roles = sorted({str(role) for role in (profile.get("roles") or [])} & ROLE_VALUES)
+                owner_user_id = str(profile.get("ownerUserId") or "")
+                if not mmr or not roles or not owner_user_id or not profile.get("slug"):
+                    return None
+
+                return {
+                    "mmr": mmr,
+                    "ownerUserId": owner_user_id,
+                    "profile": profile,
+                    "roles": roles,
+                    "server": str(profile.get("server") or "").strip(),
+                    "telegramUserId": telegram_user_id,
+                }
+            except asyncio.CancelledError:
+                raise
+            except ApiError as error:
+                logger.info(
+                    "Skipped solo group candidate %s: %s", telegram_user_id, error
+                )
+                return None
+
+    candidates = [
+        candidate
+        for candidate in await asyncio.gather(*(load_searcher(user_id) for user_id in searching_users))
+        if candidate is not None
+    ]
+    # One Opinia account can only be linked to one Telegram identity, but keep this
+    # guard in case stale local sessions remain after a link change.
+    candidates = list({candidate["ownerUserId"]: candidate for candidate in candidates}.values())
+
+    while len(candidates) >= 2:
+        group_and_roles = _build_random_solo_group(candidates)
+        if group_and_roles is None:
+            return
+        group, assigned_roles = group_and_roles
+        leader = choice(group)
+        payload = {
+            "leaderUserId": leader["ownerUserId"],
+            "members": [
+                {
+                    "positionRole": assigned_roles[candidate["ownerUserId"]],
+                    "userId": candidate["ownerUserId"],
+                }
+                for candidate in group
+            ],
+        }
+
+        try:
+            party = await api.user(
+                leader["telegramUserId"],
+                "POST",
+                "/social/parties/auto-match/solo-group",
+                payload,
+                bot_secret=True,
+            )
+        except asyncio.CancelledError:
+            raise
+        except ApiError as error:
+            logger.info("Could not form a solo search group: %s", error)
+            return
+
+        party_slug = str(party.get("slug") or "")
+        if not party_slug:
+            logger.error("Solo group endpoint returned a party without a slug")
+            return
+
+        occupied_roles = set(assigned_roles.values())
+        open_roles = sorted(ROLE_VALUES - occupied_roles)
+        now = time.time()
+        for candidate in group:
+            telegram_user_id = candidate["telegramUserId"]
+            storage.clear_auto_match_exclusions(telegram_user_id)
+            if candidate["ownerUserId"] == leader["ownerUserId"] and open_roles:
+                storage.set_choices(
+                    telegram_user_id,
+                    "auto_search",
+                    [{"mode": "recruit", "partySlug": party_slug, "roles": open_roles, "startedAt": now}],
+                )
+            else:
+                storage.set_choices(telegram_user_id, "auto_search", [])
+
+        async def refresh_party_panel(candidate: dict) -> None:
+            try:
+                await edit_panel(
+                    bot,
+                    storage,
+                    api,
+                    settings,
+                    candidate["telegramUserId"],
+                    "party",
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception(
+                    "Could not refresh party panel after solo group formation for user %s",
+                    candidate["telegramUserId"],
+                )
+
+        await asyncio.gather(*(refresh_party_panel(candidate) for candidate in group))
+        logger.info(
+            "Formed an automatic solo-search party",
+            extra={
+                "leader_telegram_user_id": leader["telegramUserId"],
+                "member_count": len(group),
+                "party_slug": party_slug,
+            },
+        )
+        grouped_ids = {candidate["ownerUserId"] for candidate in group}
+        candidates = [candidate for candidate in candidates if candidate["ownerUserId"] not in grouped_ids]
+
+
+def _build_random_solo_group(candidates: list[dict]) -> tuple[list[dict], dict[str, str]] | None:
+    shuffled = candidates.copy()
+    shuffle(shuffled)
+    possible_groups: list[tuple[list[dict], dict[str, str]]] = []
+
+    for anchor in shuffled:
+        group = [anchor]
+        remaining = [candidate for candidate in shuffled if candidate is not anchor]
+        shuffle(remaining)
+        remaining.sort(key=lambda candidate: len(candidate["roles"]))
+
+        for candidate in remaining:
+            if len(group) >= 5 or not _solo_group_mmr_compatible(group, candidate):
+                continue
+            if not _solo_group_servers_compatible(group, candidate):
+                continue
+            tentative = [*group, candidate]
+            assignments = _assign_random_roles(tentative)
+            if assignments is not None:
+                group = tentative
+
+        assignments = _assign_random_roles(group)
+        if len(group) > 1 and assignments is not None:
+            possible_groups.append((group, assignments))
+
+    if not possible_groups:
+        return None
+    largest_group_size = max(len(group) for group, _ in possible_groups)
+    return choice([item for item in possible_groups if len(item[0]) == largest_group_size])
+
+
+def _solo_group_mmr_compatible(group: list[dict], candidate: dict) -> bool:
+    low = min([player["mmr"][0] for player in group] + [candidate["mmr"][0]])
+    high = max([player["mmr"][1] for player in group] + [candidate["mmr"][1]])
+    return high - low <= SOLO_GROUP_MMR_SPREAD
+
+
+def _solo_group_servers_compatible(group: list[dict], candidate: dict) -> bool:
+    servers = {player["server"] for player in [*group, candidate] if player["server"]}
+    return len(servers) <= 1
+
+
+def _assign_random_roles(players: list[dict]) -> dict[str, str] | None:
+    ordered_players = sorted(players, key=lambda player: len(player["roles"]))
+    assignment: dict[str, str] = {}
+    occupied: set[str] = set()
+
+    def assign(index: int) -> bool:
+        if index == len(ordered_players):
+            return True
+        player = ordered_players[index]
+        available_roles = [role for role in player["roles"] if role not in occupied]
+        shuffle(available_roles)
+        for role in available_roles:
+            occupied.add(role)
+            assignment[player["ownerUserId"]] = role
+            if assign(index + 1):
+                return True
+            occupied.remove(role)
+            assignment.pop(player["ownerUserId"], None)
+        return False
+
+    return assignment if assign(0) else None
 
 
 async def _match_user(

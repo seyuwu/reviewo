@@ -33,6 +33,7 @@ from ..ui.keyboards import (
 
 logger = logging.getLogger(__name__)
 LFG_WINDOW_SECONDS = 20 * 60
+DEFAULT_PANEL_IMAGE = Path(__file__).resolve().parents[1] / "assets" / "fdp-panel-background.png"
 
 
 def party_card_cache_key(party: dict) -> str:
@@ -79,7 +80,7 @@ def save_default_panel_file_id(storage: BotStorage, telegram_user_id: int, messa
         return
     storage.set_choices(
         telegram_user_id,
-        "panel_hero_file",
+        "panel_hero_file_v2",
         [{"fileId": message.photo[-1].file_id}],
     )
 
@@ -118,15 +119,14 @@ async def edit_panel(
     is_default_panel_photo = media_photo is None
     photo: str | BufferedInputFile | None = media_photo
     if photo is None:
-        cached_hero = storage.get_choice(telegram_user_id, "panel_hero_file", 0) or {}
+        cached_hero = storage.get_choice(telegram_user_id, "panel_hero_file_v2", 0) or {}
         if cached_hero.get("fileId"):
             photo = str(cached_hero["fileId"])
         else:
             try:
-                hero_image = await api.fetch_image(f"{settings.site_url}/dota/party-hero-soft.png")
-                photo = BufferedInputFile(hero_image, filename="party-hero.png")
-            except ApiError as error:
-                logger.warning("Could not load bot panel image for user %s: %s", telegram_user_id, error)
+                photo = BufferedInputFile(DEFAULT_PANEL_IMAGE.read_bytes(), filename="fdp-panel-background.png")
+            except OSError:
+                logger.exception("Could not load default bot panel image for user %s", telegram_user_id)
     party_card_key = None
     if screen in {"party", "recruiting"}:
         party = (party_data or {}).get("party") or ((party_data or {}).get("parties") or [None])[-1]

@@ -10,6 +10,7 @@ import type { GamePartyInvite, GamePartyMember } from "#prisma/client";
 import {
   DOTA_ATTRIBUTE_KEYS,
   DOTA_PARTY_INVITE_TTL_HOURS,
+  DOTA_PARTY_RECRUIT_MMR_SPREAD,
   DOTA_PARTY_SIZE,
   DOTA_PARTY_VERTICAL,
   DOTA_TEAM_DISCORD_VOICE_EXTEND_HOURS,
@@ -18,6 +19,7 @@ import {
   DOTA_TEMP_PARTY_EXTEND_HOURS,
   DOTA_TEMP_PARTY_MAX_LIFETIME_HOURS,
   DOTA_TEMP_PARTY_TTL_HOURS,
+  DOTA_LFG_TTL_SECONDS,
   DOTA_VERTICAL,
   generateDotaPartyName,
   isDotaGreenFlagKey,
@@ -39,6 +41,7 @@ import { EntityAttributesRepository } from "../../dota/repositories/entity-attri
 import { EntityQualityConfirmationsRepository } from "../../dota/repositories/entity-quality-confirmations.repository.js";
 import { UsersRepository } from "../../users/repositories/users.repository.js";
 import type { CreateGamePartyDto } from "../dto/create-game-party.dto.js";
+import type { AutoMatchSoloPartyDto } from "../dto/auto-match-solo-party.dto.js";
 import type { CreatePartyInviteDto } from "../dto/create-party-invite.dto.js";
 import type {
   GamePartyChatMessageDto,
@@ -137,6 +140,94 @@ export class GamePartiesService implements OnModuleInit {
     }
 
     return this.toPartyResponse(full, currentUser.id);
+  }
+
+  async createAutoMatchedSoloParty(
+    input: AutoMatchSoloPartyDto,
+    currentUser: AuthenticatedUser
+  ): Promise<GamePartyResponseDto> {
+    if (input.leaderUserId !== currentUser.id) {
+      throw createAppException({
+        code: AppErrorCode.Forbidden,
+        message: "The randomly selected captain must start the match",
+        statusCode: HttpStatus.FORBIDDEN
+      });
+    }
+
+    if (!input.members.some((member) => member.userId === currentUser.id)) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "The captain must be included in the matched group",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    const name = generateDotaPartyName();
+    const slug = await this.createAvailableSlug(createSlug(name), "PARTY");
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + DOTA_TEMP_PARTY_TTL_HOURS * 60 * 60 * 1000);
+    const result = await this.gamePartiesRepository.createAutoMatchedPartyAtomically({
+      expiresAt,
+      leaderUserId: currentUser.id,
+      lfgExpiresAt: new Date(now.getTime() + DOTA_LFG_TTL_SECONDS * 1000),
+      maxMembers: DOTA_PARTY_SIZE,
+      members: input.members,
+      name,
+      now,
+      partySafetyMessage: PARTY_SAFETY_SYSTEM_MESSAGE,
+      slug,
+      vertical: DOTA_PARTY_VERTICAL
+    });
+
+    if (!result.ok) {
+      const messageByReason = {
+        already_grouped: "A player joined another party before the group formed",
+        invalid_profile: "The group no longer has compatible roles or servers",
+        mmr_spread: `Player MMR must fit within ${DOTA_PARTY_RECRUIT_MMR_SPREAD} points`,
+        party_slug_taken: "Could not create a unique party link",
+        search_expired: "A player stopped searching before the group formed"
+      };
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: messageByReason[result.reason],
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
+
+    const party = await this.toPartyResponse(result.party, currentUser.id);
+    this.partyRealtimeService.broadcastPartyRecruitUpdated({
+      looking: party.recruitedRoles.length > 0,
+      partyId: party.id,
+      partySlug: party.slug,
+      recruitedRoles: party.recruitedRoles
+    });
+
+    for (const member of result.party.members) {
+      const invite: GamePartyInviteDto = {
+        createdAt: member.joinedAt.toISOString(),
+        direction: "outgoing",
+        expiresAt: party.expiresAt,
+        greenFlags: [],
+        id: `auto-match-${party.id}-${member.userId}`,
+        inviteeDisplayName: member.user.displayName,
+        inviteeDotaSlug: null,
+        inviteeMmr: null,
+        inviteeUserId: member.userId,
+        inviteKind: "INVITE",
+        kind: "PARTY",
+        partyName: party.name,
+        partySlug: party.slug,
+        positionRole:
+          member.positionRole && isDotaPositionRole(member.positionRole)
+            ? member.positionRole
+            : null,
+        redFlags: [],
+        status: "ACCEPTED"
+      };
+      this.notifyPartyMembersJoined(party, invite, member.userId, false);
+    }
+
+    return party;
   }
 
   async renameParty(
@@ -1187,7 +1278,8 @@ export class GamePartiesService implements OnModuleInit {
           if (joined.reason === "join_blocked") {
             throw createAppException({
               code: AppErrorCode.Forbidden,
-              message: "You left or were removed from this party. Rejoin only through a new invite.",
+              message:
+                "You left or were removed from this party. Rejoin only through a new invite.",
               statusCode: HttpStatus.FORBIDDEN
             });
           }
@@ -1674,9 +1766,10 @@ export class GamePartiesService implements OnModuleInit {
   private notifyPartyMembersJoined(
     party: GamePartyResponseDto,
     invite: GamePartyInviteDto,
-    joinerUserId: string
+    joinerUserId: string,
+    notifyJoiner = true
   ): void {
-    if (invite.inviteKind !== "APPLICATION") {
+    if (notifyJoiner && invite.inviteKind !== "APPLICATION") {
       this.partyRealtimeService.emitPartyNotification(joinerUserId, {
         invite: { ...invite, direction: "incoming" },
         type: "accepted"
