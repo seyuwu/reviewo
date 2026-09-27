@@ -15,7 +15,7 @@ from .services.notifications import (
     reconcile_saved_telegram_links,
 )
 from .services.auto_matcher import auto_match_loop
-from .services.panel import refresh_active_search_panels
+from .services.panel import recover_loading_panels, refresh_active_search_panels
 from .storage.database import BotStorage
 
 
@@ -33,6 +33,7 @@ async def main() -> None:
     )
     api = OpiniaApi(settings, storage)
     await api.start()
+    await recover_loading_panels(bot, api, settings, storage)
     match_wakeup = asyncio.Event()
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)

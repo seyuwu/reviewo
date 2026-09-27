@@ -156,6 +156,25 @@ class OpiniaApi:
         except aiohttp.ClientError as error:
             raise ApiError("Не удалось загрузить карточку пати") from error
 
+    async def fetch_image(self, url: str) -> bytes:
+        """Download an image so Telegram does not need to fetch an external URL itself."""
+        if self.session is None:
+            raise RuntimeError("OpiniaApi.start() must be called first")
+        try:
+            async with self.session.get(
+                url,
+                headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
+                proxy=self.settings.telegram_proxy,
+            ) as response:
+                if response.status != 200:
+                    raise ApiError("Не удалось загрузить изображение", response.status)
+                image = await response.read()
+                if len(image) > 8 * 1024 * 1024:
+                    raise ApiError("Изображение слишком большое")
+                return image
+        except (aiohttp.ClientError, asyncio.TimeoutError) as error:
+            raise ApiError("Не удалось загрузить изображение") from error
+
     async def _request(
         self,
         method: str,

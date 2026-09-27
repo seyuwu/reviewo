@@ -74,6 +74,16 @@ def save_party_card_file_id(
     )
 
 
+def save_default_panel_file_id(storage: BotStorage, telegram_user_id: int, message) -> None:
+    if not getattr(message, "photo", None):
+        return
+    storage.set_choices(
+        telegram_user_id,
+        "panel_hero_file",
+        [{"fileId": message.photo[-1].file_id}],
+    )
+
+
 async def edit_panel(
     bot: Bot,
     storage: BotStorage,
@@ -105,11 +115,23 @@ async def edit_panel(
     panel = storage.get_panel(telegram_user_id)
     destination = chat_id or (panel.chat_id if panel else telegram_user_id)
     loading_panel = panel if panel and panel.screen == "loading" else None
-    photo: str | BufferedInputFile = media_photo or f"{settings.site_url}/dota/party-hero-soft.png"
+    is_default_panel_photo = media_photo is None
+    photo: str | BufferedInputFile | None = media_photo
+    if photo is None:
+        cached_hero = storage.get_choice(telegram_user_id, "panel_hero_file", 0) or {}
+        if cached_hero.get("fileId"):
+            photo = str(cached_hero["fileId"])
+        else:
+            try:
+                hero_image = await api.fetch_image(f"{settings.site_url}/dota/party-hero-soft.png")
+                photo = BufferedInputFile(hero_image, filename="party-hero.png")
+            except ApiError as error:
+                logger.warning("Could not load bot panel image for user %s: %s", telegram_user_id, error)
     party_card_key = None
     if screen in {"party", "recruiting"}:
         party = (party_data or {}).get("party") or ((party_data or {}).get("parties") or [None])[-1]
         if party and party.get("slug"):
+            is_default_panel_photo = False
             party_card_key = party_card_cache_key(party)
             cached_card = storage.get_choice(telegram_user_id, "party_card_file", 0) or {}
             if cached_card.get("cacheKey") == party_card_key and cached_card.get("fileId"):
@@ -124,8 +146,10 @@ async def edit_panel(
                     photo = BufferedInputFile(raw_image, filename="party-roster.png")
                 except ApiError:
                     party_card_key = None
+                    is_default_panel_photo = True
 
-    if loading_panel and loading_panel.chat_id == destination and loading_panel.is_photo:
+    panel_to_replace = panel if panel and panel.chat_id == destination else None
+    if loading_panel and loading_panel.chat_id == destination and loading_panel.is_photo and photo is not None:
         try:
             message = await bot.edit_message_media(
                 chat_id=loading_panel.chat_id,
@@ -135,17 +159,21 @@ async def edit_panel(
             )
             storage.save_panel(telegram_user_id, loading_panel.chat_id, loading_panel.message_id, screen)
             save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
+            if is_default_panel_photo:
+                save_default_panel_file_id(storage, telegram_user_id, message)
             return
         except TelegramBadRequest as error:
             if "message is not modified" in str(error).lower():
                 storage.save_panel(telegram_user_id, loading_panel.chat_id, loading_panel.message_id, screen)
                 return
             if "message to edit not found" not in str(error).lower() and "can't be edited" not in str(error).lower():
-                raise
+                logger.warning("Could not edit photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
+                photo = None
     elif loading_panel and loading_panel.chat_id == destination:
         # Text loading panels cannot be converted into a photo; replace them after sending the new panel.
         pass
-    elif panel and panel.chat_id == destination and panel.is_photo:
+    elif panel and panel.chat_id == destination and panel.is_photo and photo is not None:
+        panel_to_replace = panel
         try:
             message = await bot.edit_message_media(
                 chat_id=panel.chat_id,
@@ -155,23 +183,25 @@ async def edit_panel(
             )
             storage.save_panel(telegram_user_id, panel.chat_id, panel.message_id, screen)
             save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
+            if is_default_panel_photo:
+                save_default_panel_file_id(storage, telegram_user_id, message)
             return
         except TelegramBadRequest as error:
             if "message is not modified" in str(error).lower():
                 return
             if "message to edit not found" not in str(error).lower() and "can't be edited" not in str(error).lower():
-                raise
-            try:
-                await bot.delete_message(panel.chat_id, panel.message_id)
-            except TelegramBadRequest:
-                pass
+                logger.warning("Could not edit photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
+                photo = None
+            else:
+                try:
+                    await bot.delete_message(panel.chat_id, panel.message_id)
+                except TelegramAPIError:
+                    pass
 
     elif panel and panel.chat_id == destination and not panel.is_photo:
-        if not loading_panel and (isinstance(photo, BufferedInputFile) or screen != "party"):
-            try:
-                await bot.delete_message(panel.chat_id, panel.message_id)
-            except TelegramBadRequest:
-                pass
+        if not loading_panel and photo is not None and (isinstance(photo, BufferedInputFile) or screen != "party"):
+            # Send the replacement first; the old text panel is removed after delivery succeeds.
+            pass
         else:
             try:
                 await bot.edit_message_text(
@@ -187,11 +217,21 @@ async def edit_panel(
             except TelegramBadRequest:
                 pass
 
-    try:
-        message = await bot.send_photo(destination, photo, caption=text, reply_markup=keyboard, parse_mode="HTML")
-        storage.save_panel(telegram_user_id, message.chat.id, message.message_id, screen)
-        save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
-    except TelegramBadRequest:
+    is_photo = photo is not None
+    if photo is not None:
+        try:
+            message = await bot.send_photo(destination, photo, caption=text, reply_markup=keyboard, parse_mode="HTML")
+        except TelegramBadRequest as error:
+            logger.warning("Could not send photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
+            message = await bot.send_message(
+                destination,
+                text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+            is_photo = False
+    else:
         message = await bot.send_message(
             destination,
             text,
@@ -199,10 +239,13 @@ async def edit_panel(
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
-        storage.save_panel(telegram_user_id, message.chat.id, message.message_id, screen, False)
-    if loading_panel and loading_panel.message_id != message.message_id:
+    storage.save_panel(telegram_user_id, message.chat.id, message.message_id, screen, is_photo)
+    save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
+    if is_default_panel_photo:
+        save_default_panel_file_id(storage, telegram_user_id, message)
+    if panel_to_replace and panel_to_replace.message_id != message.message_id:
         try:
-            await bot.delete_message(loading_panel.chat_id, loading_panel.message_id)
+            await bot.delete_message(panel_to_replace.chat_id, panel_to_replace.message_id)
         except TelegramAPIError:
             pass
 
@@ -363,6 +406,23 @@ async def refresh_active_search_panels(
         except Exception:
             logger.exception("Party search panel refresh failed")
         await asyncio.sleep(15)
+
+
+async def recover_loading_panels(
+    bot: Bot,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    """Replace panels left in the transient loading state by a previous bot process."""
+    for telegram_user_id in storage.session_user_ids():
+        panel = storage.get_panel(telegram_user_id)
+        if not panel or panel.screen != "loading":
+            continue
+        try:
+            await edit_panel(bot, storage, api, settings, telegram_user_id, "home", panel.chat_id)
+        except (ApiError, TelegramAPIError) as error:
+            logger.warning("Could not recover loading panel for user %s: %s", telegram_user_id, error)
 
 
 async def render_screen(
