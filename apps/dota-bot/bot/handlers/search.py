@@ -1,10 +1,12 @@
 import asyncio
+import logging
 import time
 from html import escape
 from random import choice
 from urllib.parse import quote
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
@@ -16,7 +18,7 @@ from ..storage.database import BotStorage
 from ..ui.keyboards import back_keyboard, onboarding_keyboard
 
 router = Router(name="search")
-ROLE_NAMES = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
+logger = logging.getLogger(__name__)
 
 
 @router.callback_query(F.data == "search:looking")
@@ -101,7 +103,7 @@ async def start_selected_action(
         return
 
     try:
-        await api.user(telegram_user_id, "GET", "/dota/profiles/me")
+        profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
     except ApiError as error:
         if error.status == 404:
             storage.set_choices(telegram_user_id, "pending_onboarding_action", [{"action": action}])
@@ -115,7 +117,7 @@ async def start_selected_action(
 
     storage.set_choices(telegram_user_id, "pending_onboarding_action", [])
     if action == "looking":
-        await execute_looking(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup)
+        await execute_looking(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup, profile)
     elif action == "recruit":
         await execute_recruiting(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup)
 
@@ -136,7 +138,7 @@ async def resume_pending_onboarding_action(
         return False
 
     try:
-        await api.user(telegram_user_id, "GET", "/dota/profiles/me")
+        profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
     except ApiError as error:
         if error.status == 404:
             from .registration import start_profile_registration
@@ -152,7 +154,7 @@ async def resume_pending_onboarding_action(
 
     storage.set_choices(telegram_user_id, "pending_onboarding_action", [])
     if action == "looking":
-        await execute_looking(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup)
+        await execute_looking(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup, profile)
     else:
         await execute_recruiting(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup)
     return True
@@ -166,6 +168,7 @@ async def execute_looking(
     telegram_user_id: int,
     chat_id: int | None,
     match_wakeup: asyncio.Event,
+    profile: dict,
 ) -> None:
     await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
     try:
@@ -178,6 +181,8 @@ async def execute_looking(
         )
         await edit_panel(bot, storage, api, settings, telegram_user_id, "looking", chat_id)
         match_wakeup.set()
+        if not profile.get("dotaAccountId"):
+            await send_dota_id_reminder(bot, storage, telegram_user_id, chat_id)
     except PartyOwnerMustResolveMembers:
         await edit_panel_content(
             bot,
@@ -259,6 +264,8 @@ async def execute_recruiting(
         await edit_panel(bot, storage, api, settings, telegram_user_id, "party", chat_id)
         if open_roles:
             match_wakeup.set()
+            if not profile.get("dotaAccountId"):
+                await send_dota_id_reminder(bot, storage, telegram_user_id, chat_id)
     except ApiError as error:
         await show_action_error(bot, api, settings, storage, telegram_user_id, chat_id, error)
 
@@ -320,6 +327,18 @@ async def show_action_error(
         back_keyboard(),
         chat_id,
     )
+
+
+async def send_dota_id_reminder(bot, storage, telegram_user_id: int, chat_id: int | None) -> None:
+    try:
+        message = await bot.send_message(
+            chat_id or telegram_user_id,
+            "🎮 Dota ID не указан. Его можно добавить в «Аккаунт» → «Профиль» → «Изменить». "
+            "Это необязательно; сообщение исчезнет через 10 секунд.",
+        )
+        storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
+    except TelegramAPIError:
+        logger.warning("Could not send Dota ID reminder to Telegram user %s", telegram_user_id)
 
 
 async def show_error(

@@ -517,14 +517,13 @@ async def render_screen(
         timer = f"\n\n⏱ Поиск идёт: <b>{format_duration(elapsed)}</b>"
         if remaining is not None:
             timer += f" · осталось {format_duration(remaining)}"
-        id_hint = "\n\n🎮 Dota ID можно добавить сейчас или позже в профиле." if not profile.get("dotaAccountId") else ""
         return (
             f"<b>Ищу пати · {escape_text(profile.get('title') or 'Игрок')}</b>\n"
             f"MMR: {escape_text(profile.get('mmr') or '—')}\n"
             f"Позиции: {escape_text(roles_text)}\n\n"
             "Подбираю пати автоматически по позициям и MMR."
-            f"{timer}{id_hint}",
-            looking_keyboard(not bool(profile.get("dotaAccountId"))),
+            f"{timer}",
+            looking_keyboard(),
         )
 
     if screen == "profile":
@@ -587,8 +586,6 @@ async def render_screen(
                 profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
             except ApiError:
                 pass
-        if searching_roles and profile and not profile.get("dotaAccountId"):
-            text += "\n\n🎮 Dota ID не указан — его можно добавить сейчас или позже в профиле."
         web_access_url = None
         if settings.site_url and party.get("slug"):
             try:
@@ -628,7 +625,6 @@ async def render_screen(
             searching_roles,
             settings.site_url,
             web_access_url,
-            show_dota_id_button=bool(searching_roles and profile and not profile.get("dotaAccountId")),
         )
 
     if screen in {"member", "kick_confirm"}:

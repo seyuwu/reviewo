@@ -31,17 +31,13 @@ def onboarding_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def looking_keyboard(show_dota_id_button: bool = False) -> InlineKeyboardMarkup:
-    rows = []
-    if show_dota_id_button:
-        rows.append([button("🎮 Добавить Dota ID", "profile:dota-id")])
-    rows.extend(
-        [
+def looking_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
             [button("⏹ Остановить поиск", "search:stop")],
             [button("← В меню", "panel:home")],
         ]
     )
-    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def back_keyboard(target: str = "home") -> InlineKeyboardMarkup:
@@ -71,7 +67,6 @@ def party_keyboard(
     searching_roles: set[str] | None = None,
     site_url: str | None = None,
     web_access_url: str | None = None,
-    show_dota_id_button: bool = False,
 ) -> InlineKeyboardMarkup:
     occupants = party_slot_occupants(party)
     searching_roles = searching_roles or set()
@@ -89,8 +84,6 @@ def party_keyboard(
         for role in roles
     ]
     rows = [slots, search_status]
-    if show_dota_id_button:
-        rows.append([button("🎮 Добавить Dota ID", "profile:dota-id")])
     if site_url and party.get("slug"):
         if web_access_url:
             rows.append([button_url("💬 Чат и Discord", web_access_url)])
