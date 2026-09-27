@@ -14,7 +14,8 @@ The bot is a private-chat client for the existing Dota profile, LFG, party, and 
 
    Put the first value in `TELEGRAM_BOT_API_SECRET` and the second in `DOTA_BOT_ENCRYPTION_KEY`. Use the same API secret for the API and the bot.
 3. Set `DOTA_BOT_SITE_URL` to the public Dota.Opinia site URL. The internal API URL defaults to `http://api:3000` inside Compose.
-4. Start the bot:
+4. Optional: set `DOTA_BOT_ADMIN_IDS` to a comma-separated allowlist of numeric Telegram user IDs. Administrators can use `/admin` to preview and send announcements; `/news` lets users control announcement delivery. Username-based admin checks are not used.
+5. Start the bot:
 
    ```powershell
    docker compose --profile dota-bot up -d --build dota-bot

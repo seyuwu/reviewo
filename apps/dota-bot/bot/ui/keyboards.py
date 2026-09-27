@@ -31,6 +31,43 @@ def onboarding_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def admin_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("✉️ Создать рассылку", "admin:broadcast:new")],
+            [button("🔄 Обновить статистику", "admin:refresh")],
+        ]
+    )
+
+
+def admin_compose_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[button("← Отмена", "admin:cancel")]]
+    )
+
+
+def admin_preview_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("📨 Отправить всем", "admin:broadcast:send")],
+            [button("🧪 Отправить тест себе", "admin:broadcast:test")],
+            [button("✏️ Изменить текст", "admin:broadcast:edit")],
+            [button("← Отмена", "admin:cancel")],
+        ]
+    )
+
+
+def announcements_keyboard(enabled: bool) -> InlineKeyboardMarkup:
+    action = "news:disable" if enabled else "news:enable"
+    label = "🔕 Отключить новости" if enabled else "🔔 Включить новости"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button(label, action)],
+            [button("← В меню", "panel:home")],
+        ]
+    )
+
+
 def looking_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

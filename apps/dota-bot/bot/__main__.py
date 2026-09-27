@@ -15,6 +15,7 @@ from .services.notifications import (
     reconcile_saved_telegram_links,
 )
 from .services.auto_matcher import auto_match_loop
+from .services.broadcasts import broadcast_worker
 from .services.panel import recover_loading_panels, refresh_active_search_panels
 from .storage.database import BotStorage
 
@@ -43,6 +44,7 @@ async def main() -> None:
         asyncio.create_task(poll_notifications(bot, api, settings, storage)),
         asyncio.create_task(cleanup_temporary_messages(bot, storage)),
         asyncio.create_task(auto_match_loop(bot, api, settings, storage, match_wakeup)),
+        asyncio.create_task(broadcast_worker(bot, storage)),
         asyncio.create_task(refresh_active_search_panels(bot, api, settings, storage)),
     ]
 

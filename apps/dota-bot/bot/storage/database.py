@@ -77,6 +77,34 @@ class BotStorage:
               created_at TEXT NOT NULL,
               PRIMARY KEY (telegram_user_id, target_slug)
             );
+            CREATE TABLE IF NOT EXISTS bot_users (
+              telegram_user_id INTEGER PRIMARY KEY,
+              first_seen_at TEXT NOT NULL,
+              last_seen_at TEXT NOT NULL,
+              announcements_enabled INTEGER NOT NULL DEFAULT 1,
+              blocked_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS broadcast_campaigns (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              admin_user_id INTEGER NOT NULL,
+              text TEXT NOT NULL,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              completed_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS broadcast_recipients (
+              campaign_id INTEGER NOT NULL REFERENCES broadcast_campaigns(id) ON DELETE CASCADE,
+              telegram_user_id INTEGER NOT NULL,
+              status TEXT NOT NULL DEFAULT 'pending',
+              attempts INTEGER NOT NULL DEFAULT 0,
+              last_error TEXT,
+              sent_at TEXT,
+              PRIMARY KEY (campaign_id, telegram_user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_pending
+              ON broadcast_recipients (campaign_id, status, telegram_user_id);
+            CREATE INDEX IF NOT EXISTS idx_bot_users_announcements
+              ON bot_users (announcements_enabled, blocked_at);
             """
         )
         columns = {
@@ -86,6 +114,16 @@ class BotStorage:
             self.connection.execute(
                 "ALTER TABLE bot_panels ADD COLUMN media_type TEXT NOT NULL DEFAULT 'photo'"
             )
+        # Older installations already know users through their panel/session rows.
+        # Backfill them so the first announcement reaches existing bot users too.
+        self.connection.execute(
+            """INSERT OR IGNORE INTO bot_users (telegram_user_id, first_seen_at, last_seen_at)
+               SELECT telegram_user_id, updated_at, updated_at FROM bot_panels"""
+        )
+        self.connection.execute(
+            """INSERT OR IGNORE INTO bot_users (telegram_user_id, first_seen_at, last_seen_at)
+               SELECT telegram_user_id, updated_at, updated_at FROM telegram_sessions"""
+        )
         self.connection.commit()
 
     def close(self) -> None:
@@ -141,6 +179,190 @@ class BotStorage:
             "SELECT telegram_user_id FROM telegram_sessions"
         ).fetchall()
         return [int(row["telegram_user_id"]) for row in rows]
+
+    def record_bot_user(self, telegram_user_id: int) -> None:
+        now = timestamp()
+        with self.lock:
+            self._connection().execute(
+                """INSERT INTO bot_users (telegram_user_id, first_seen_at, last_seen_at)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(telegram_user_id) DO UPDATE SET
+                     last_seen_at=excluded.last_seen_at, blocked_at=NULL""",
+                (telegram_user_id, now, now),
+            )
+            self._connection().commit()
+
+    def set_announcements_enabled(self, telegram_user_id: int, enabled: bool) -> None:
+        self.record_bot_user(telegram_user_id)
+        with self.lock:
+            self._connection().execute(
+                "UPDATE bot_users SET announcements_enabled = ?, blocked_at = NULL WHERE telegram_user_id = ?",
+                (int(enabled), telegram_user_id),
+            )
+            self._connection().commit()
+
+    def announcements_enabled(self, telegram_user_id: int) -> bool:
+        row = self._connection().execute(
+            "SELECT announcements_enabled FROM bot_users WHERE telegram_user_id = ?",
+            (telegram_user_id,),
+        ).fetchone()
+        return bool(row["announcements_enabled"]) if row else True
+
+    def bot_user_stats(self) -> dict[str, int]:
+        row = self._connection().execute(
+            """SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN announcements_enabled = 1 AND blocked_at IS NULL THEN 1 ELSE 0 END) AS subscribers
+               FROM bot_users"""
+        ).fetchone()
+        registered = self._connection().execute("SELECT COUNT(*) FROM telegram_sessions").fetchone()[0]
+        return {
+            "total": int(row["total"] or 0),
+            "subscribers": int(row["subscribers"] or 0),
+            "registered": int(registered or 0),
+        }
+
+    def create_broadcast(self, admin_user_id: int, text: str) -> tuple[int, int]:
+        with self.lock:
+            connection = self._connection()
+            cursor = connection.execute(
+                "INSERT INTO broadcast_campaigns (admin_user_id, text, status, created_at) VALUES (?, ?, 'queued', ?)",
+                (admin_user_id, text, timestamp()),
+            )
+            campaign_id = int(cursor.lastrowid)
+            recipients = connection.execute(
+                "SELECT telegram_user_id FROM bot_users WHERE announcements_enabled = 1 AND blocked_at IS NULL"
+            ).fetchall()
+            connection.executemany(
+                "INSERT INTO broadcast_recipients (campaign_id, telegram_user_id) VALUES (?, ?)",
+                [(campaign_id, int(row["telegram_user_id"])) for row in recipients],
+            )
+            if not recipients:
+                connection.execute(
+                    "UPDATE broadcast_campaigns SET status = 'completed', completed_at = ? WHERE id = ?",
+                    (timestamp(), campaign_id),
+                )
+            connection.commit()
+            return campaign_id, len(recipients)
+
+    def next_broadcast_recipient(self) -> dict | None:
+        with self.lock:
+            connection = self._connection()
+            campaign = connection.execute(
+                "SELECT id, admin_user_id, text FROM broadcast_campaigns WHERE status IN ('queued', 'sending') ORDER BY id LIMIT 1"
+            ).fetchone()
+            if campaign is None:
+                return None
+            recipient = connection.execute(
+                """SELECT telegram_user_id FROM broadcast_recipients
+                   WHERE campaign_id = ? AND status = 'pending' ORDER BY telegram_user_id LIMIT 1""",
+                (campaign["id"],),
+            ).fetchone()
+            if recipient is None:
+                connection.execute(
+                    "UPDATE broadcast_campaigns SET status = 'completed', completed_at = ? WHERE id = ?",
+                    (timestamp(), campaign["id"]),
+                )
+                connection.commit()
+                return None
+            connection.execute(
+                "UPDATE broadcast_campaigns SET status = 'sending' WHERE id = ?",
+                (campaign["id"],),
+            )
+            connection.commit()
+            return {
+                "campaign_id": int(campaign["id"]),
+                "admin_user_id": int(campaign["admin_user_id"]),
+                "text": str(campaign["text"]),
+                "telegram_user_id": int(recipient["telegram_user_id"]),
+            }
+
+    def mark_broadcast_recipient(
+        self,
+        campaign_id: int,
+        telegram_user_id: int,
+        status: str,
+        error: str | None = None,
+        *,
+        increment_attempt: bool = True,
+    ) -> bool:
+        if status not in {"sent", "blocked", "failed", "skipped"}:
+            raise ValueError("Unsupported broadcast recipient status")
+        now = timestamp()
+        attempt_update = "attempts = attempts + 1," if increment_attempt else ""
+        with self.lock:
+            connection = self._connection()
+            connection.execute(
+                f"""UPDATE broadcast_recipients SET status = ?, {attempt_update}
+                   last_error = ?, sent_at = CASE WHEN ? = 'sent' THEN ? ELSE sent_at END
+                   WHERE campaign_id = ? AND telegram_user_id = ?""",
+                (status, error, status, now, campaign_id, telegram_user_id),
+            )
+            if status == "blocked":
+                connection.execute(
+                    "UPDATE bot_users SET announcements_enabled = 0, blocked_at = ? WHERE telegram_user_id = ?",
+                    (now, telegram_user_id),
+                )
+            pending = connection.execute(
+                "SELECT 1 FROM broadcast_recipients WHERE campaign_id = ? AND status = 'pending' LIMIT 1",
+                (campaign_id,),
+            ).fetchone()
+            completed = pending is None
+            if completed:
+                connection.execute(
+                    "UPDATE broadcast_campaigns SET status = 'completed', completed_at = ? WHERE id = ?",
+                    (now, campaign_id),
+                )
+            connection.commit()
+            return completed
+
+    def retry_broadcast_recipient(self, campaign_id: int, telegram_user_id: int, error: str) -> int:
+        with self.lock:
+            connection = self._connection()
+            connection.execute(
+                """UPDATE broadcast_recipients SET attempts = attempts + 1, last_error = ?
+                   WHERE campaign_id = ? AND telegram_user_id = ? AND status = 'pending'""",
+                (error[:500], campaign_id, telegram_user_id),
+            )
+            attempts = connection.execute(
+                "SELECT attempts FROM broadcast_recipients WHERE campaign_id = ? AND telegram_user_id = ?",
+                (campaign_id, telegram_user_id),
+            ).fetchone()
+            connection.commit()
+            return int(attempts["attempts"] if attempts else 0)
+
+    def broadcast_summary(self, campaign_id: int | None = None) -> dict | None:
+        if campaign_id is None:
+            campaign = self._connection().execute(
+                "SELECT id, status, created_at FROM broadcast_campaigns ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        else:
+            campaign = self._connection().execute(
+                "SELECT id, status, created_at FROM broadcast_campaigns WHERE id = ?",
+                (campaign_id,),
+            ).fetchone()
+        if campaign is None:
+            return None
+        counts = self._connection().execute(
+            """SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+                      SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) AS blocked,
+                      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+                      SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+                      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending
+               FROM broadcast_recipients WHERE campaign_id = ?""",
+            (campaign["id"],),
+        ).fetchone()
+        return {
+            "id": int(campaign["id"]),
+            "status": str(campaign["status"]),
+            "created_at": str(campaign["created_at"]),
+            "total": int(counts["total"] or 0),
+            "sent": int(counts["sent"] or 0),
+            "blocked": int(counts["blocked"] or 0),
+            "failed": int(counts["failed"] or 0),
+            "skipped": int(counts["skipped"] or 0),
+            "pending": int(counts["pending"] or 0),
+        }
 
     def unlink(self, telegram_user_id: int) -> None:
         with self.lock:

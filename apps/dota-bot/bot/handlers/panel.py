@@ -24,6 +24,7 @@ async def start_panel(
     if message.chat.type != "private" or message.from_user is None:
         return
     has_existing_panel = storage.get_panel(message.from_user.id) is not None
+    storage.record_bot_user(message.from_user.id)
     await state.clear()
     storage.set_choices(message.from_user.id, "pending_onboarding_action", [])
     storage.set_choices(message.from_user.id, "pending_solo_search", [])

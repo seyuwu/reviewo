@@ -14,6 +14,7 @@ class Settings:
     encryption_key: bytes
     database_path: str
     telegram_proxy: str | None
+    admin_ids: frozenset[int]
 
 
 def load_settings() -> Settings:
@@ -41,6 +42,7 @@ def load_settings() -> Settings:
         database_path=os.getenv("DOTA_BOT_DATABASE_PATH", "/data/dota_bot.db").strip()
         or "/data/dota_bot.db",
         telegram_proxy=os.getenv("TELEGRAM_PROXY", "").strip() or None,
+        admin_ids=parse_admin_ids(os.getenv("DOTA_BOT_ADMIN_IDS", "")),
     )
 
 
@@ -49,3 +51,13 @@ def required_env(name: str) -> str:
     if not value or value.lower().startswith("change_me"):
         raise RuntimeError(f"{name} is required")
     return value
+
+
+def parse_admin_ids(raw_value: str) -> frozenset[int]:
+    try:
+        admin_ids = frozenset(int(value.strip()) for value in raw_value.split(",") if value.strip())
+    except ValueError as error:
+        raise RuntimeError("DOTA_BOT_ADMIN_IDS must be a comma-separated list of Telegram numeric IDs") from error
+    if any(user_id <= 0 for user_id in admin_ids):
+        raise RuntimeError("DOTA_BOT_ADMIN_IDS must contain positive Telegram user IDs")
+    return admin_ids
