@@ -1,3 +1,5 @@
+import asyncio
+import re
 from html import escape
 
 from aiogram import F, Router
@@ -7,9 +9,15 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
-from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
+from ..services.panel import begin_panel_transition, dota_id_guide_photo, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
-from ..ui.keyboards import registration_name_keyboard, registration_roles_keyboard, registration_step_keyboard
+from ..ui.keyboards import (
+    back_keyboard,
+    registration_dota_id_keyboard,
+    registration_name_keyboard,
+    registration_roles_keyboard,
+    registration_step_keyboard,
+)
 
 router = Router(name="registration")
 
@@ -24,8 +32,13 @@ POSITION_NAMES = {
 
 class GuestProfileWizard(StatesGroup):
     display_name = State()
+    dota_id = State()
     mmr = State()
     roles = State()
+
+
+class DotaIdOnlyWizard(StatesGroup):
+    dota_id = State()
 
 
 async def start_profile_registration(
@@ -42,7 +55,7 @@ async def start_profile_registration(
 ) -> None:
     await state.clear()
     await state.set_state(GuestProfileWizard.display_name)
-    data = {"roles": []}
+    data = {"roles": [], "dota_account_id": ""}
     if invite_code and invite_role in POSITION_NAMES:
         data.update(
             roles=[invite_role],
@@ -51,14 +64,26 @@ async def start_profile_registration(
             party_invite_role=invite_role,
         )
     await state.update_data(**data)
-    has_session = bool(storage.get_session(telegram_user_id))
+    registration_heading = (
+        "Осталось немного — давайте создадим аккаунт"
+        if not storage.get_session(telegram_user_id)
+        else "Осталось немного — создадим Dota-профиль"
+    )
     if invite_role in POSITION_NAMES:
         text = (
-            f"<b>Регистрация · 1/3</b>\n\nВы выбрали роль <b>{POSITION_NAMES[invite_role]}</b>. "
-            "После регистрации бот вернёт вас в пати на эту позицию.\n\nКак вас называть?"
+            f"<b>{registration_heading}</b>\n\n"
+            f"Регистрация · 1/4. Вы выбрали роль <b>{POSITION_NAMES[invite_role]}</b>. "
+            "После регистрации бот вернёт вас в пати на эту позицию.\n\n"
+            "Как вас называть?\n\n"
+            "Уже есть аккаунт Opinia? Напишите /login для входа."
         )
     else:
-        text = "<b>Регистрация Dota-профиля · 1/3</b>\n\nКак вас называть?"
+        text = (
+            f"<b>{registration_heading}</b>\n\n"
+            "Регистрация Dota-профиля · 1/4.\n\n"
+            "Как вас называть?\n\n"
+            "Уже есть аккаунт Opinia? Напишите /login для входа."
+        )
     await edit_panel_content(
         bot,
         storage,
@@ -67,7 +92,7 @@ async def start_profile_registration(
         telegram_user_id,
         "register:name",
         text,
-        registration_name_keyboard(show_login=not has_session, allow_cancel=has_session),
+        registration_name_keyboard(),
         chat_id,
     )
 
@@ -95,7 +120,7 @@ async def begin_profile_edit(
             callback.from_user.id,
             "profile:edit:error",
             f"<b>Не получилось открыть профиль для изменения</b>\n\n{escape(str(error))}",
-            registration_name_keyboard(show_login=False, allow_cancel=True),
+            back_keyboard("profile"),
             callback.message.chat.id,
         )
         return
@@ -105,7 +130,8 @@ async def begin_profile_edit(
     await state.update_data(
         editing_profile=True,
         display_name=profile.get("title") or "",
-        mmr=profile.get("mmr") or "",
+        dota_account_id=profile.get("dotaAccountId") or "",
+        mmr=(str(profile["mmr"]) if profile.get("mmr") is not None else ""),
         roles=[str(role) for role in profile.get("roles", []) if str(role) in POSITION_NAMES],
     )
     await edit_panel_content(
@@ -115,7 +141,7 @@ async def begin_profile_edit(
         settings,
         callback.from_user.id,
         "profile:edit:name",
-        "<b>Изменение профиля · 1/3</b>\n\n"
+        "<b>Изменение профиля · 1/4</b>\n\n"
         f"Сейчас: <b>{escape(str(profile.get('title') or '—'))}</b>\n"
         "Напишите новое имя для профиля.",
         registration_step_keyboard(),
@@ -123,22 +149,12 @@ async def begin_profile_edit(
     )
 
 
-def recovery_keyboard(recovery_url: str) -> InlineKeyboardMarkup:
+def telegram_link_retry_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔐 Открыть ссылку восстановления", url=recovery_url)],
-            [InlineKeyboardButton(text="Перейти в меню", callback_data="panel:home")],
+            [InlineKeyboardButton(text="🔄 Повторить подключение", callback_data="register:retry-link")],
+            [InlineKeyboardButton(text="✖️ Отменить", callback_data="register:cancel")],
         ]
-    )
-
-
-def recovery_text(title: str, recovery_url: str) -> str:
-    return (
-        f"<b>{escape(title)}</b>\n\n"
-        "Сохраните ссылку восстановления в надёжном месте. Её можно открыть кнопкой ниже "
-        "или скопировать из блока:\n<code>"
-        f"{escape(recovery_url)}"
-        "</code>"
     )
 
 
@@ -152,6 +168,74 @@ async def begin_registration(
 ) -> None:
     await callback.answer()
     if callback.message is None:
+        return
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
+    await start_profile_registration(
+        callback.bot,
+        state,
+        api,
+        settings,
+        storage,
+        callback.from_user.id,
+        callback.message.chat.id,
+    )
+
+
+@router.callback_query(F.data == "register:retry-link")
+async def retry_telegram_link(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+    match_wakeup: asyncio.Event,
+) -> None:
+    await callback.answer()
+    if callback.message is None:
+        return
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
+    try:
+        await api.ensure_telegram_link(callback.from_user.id)
+    except ApiError as error:
+        await edit_panel_content(
+            callback.bot,
+            storage,
+            api,
+            settings,
+            callback.from_user.id,
+            "register:telegram-link-error",
+            "<b>Аккаунт уже создан, но Telegram пока не подключён.</b>\n\n"
+            f"Не удалось завершить подключение: {escape(str(error))}.\n\nПопробуйте ещё раз позже.",
+            telegram_link_retry_keyboard(),
+            callback.message.chat.id,
+        )
+        return
+    await continue_after_profile_saved(
+        callback.bot,
+        state,
+        api,
+        settings,
+        storage,
+        callback.from_user.id,
+        callback.message.chat.id,
+        await state.get_data(),
+        match_wakeup,
+    )
+
+
+@router.callback_query(F.data == "onboarding:register")
+async def begin_onboarding_registration(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    await callback.answer()
+    if callback.message is None:
+        return
+    if not storage.get_choice(callback.from_user.id, "pending_onboarding_action", 0):
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home", callback.message.chat.id)
         return
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
     await start_profile_registration(
@@ -183,26 +267,285 @@ async def receive_display_name(
             settings,
             message.from_user.id,
             "register:name",
-            f"<b>{'Изменение профиля' if editing else 'Создание Dota-профиля'} · 1/3</b>\n\nИмя должно быть длиной от 1 до 80 символов. Напишите другое имя.",
-            registration_name_keyboard(
-                show_login=not bool(storage.get_session(message.from_user.id)),
-                allow_cancel=bool(storage.get_session(message.from_user.id)),
-            ),
+            f"<b>{'Изменение профиля' if editing else 'Создание Dota-профиля'} · 1/4</b>\n\nИмя должно быть длиной от 1 до 80 символов. Напишите другое имя.",
+            registration_name_keyboard(),
             message.chat.id,
         )
         return
     await state.update_data(display_name=value)
-    await state.set_state(GuestProfileWizard.mmr)
-    await edit_panel_content(
+    await state.set_state(GuestProfileWizard.dota_id)
+    await show_registration_dota_id_panel(
         message.bot,
         storage,
         api,
         settings,
         message.from_user.id,
-        "register:mmr",
-        f"<b>{'Изменение профиля' if editing else 'Создание Dota-профиля'} · 2/3</b>\n\nИмя: <b>{escape(value)}</b>\n\nУкажите MMR числом от 0 до 18000.",
-        registration_step_keyboard(),
         message.chat.id,
+        await state.get_data(),
+    )
+
+
+async def show_registration_dota_id_panel(
+    bot,
+    storage: BotStorage,
+    api: OpiniaApi,
+    settings: Settings,
+    telegram_user_id: int,
+    chat_id: int | None,
+    data: dict,
+    error: str | None = None,
+) -> None:
+    editing = bool(data.get("editing_profile"))
+    current_id = str(data.get("dota_account_id") or "")
+    text = (
+        f"<b>{'Изменение профиля' if editing else 'Регистрация Dota-профиля'} · 2/4</b>\n\n"
+        f"Имя: <b>{escape(str(data.get('display_name') or 'Игрок'))}</b>\n\n"
+        "Укажите свой Dota ID. В Dota 2 откройте профиль: цифры находятся справа от ника, "
+        "как показано на скриншоте. ID состоит из 8–10 цифр.\n\n"
+        "Этот шаг необязательный — его можно пропустить и добавить ID позже в профиле."
+    )
+    if current_id:
+        text += f"\n\nСейчас указан: <code>{escape(current_id)}</code>"
+    if error:
+        text += f"\n\n{escape(error)}"
+    await edit_panel_content(
+        bot,
+        storage,
+        api,
+        settings,
+        telegram_user_id,
+        "register:dota-id",
+        text,
+        registration_dota_id_keyboard(bool(current_id)),
+        chat_id,
+        dota_id_guide_photo(),
+    )
+
+
+async def continue_registration_after_dota_id(
+    bot,
+    state: FSMContext,
+    storage: BotStorage,
+    api: OpiniaApi,
+    settings: Settings,
+    telegram_user_id: int,
+    chat_id: int | None,
+) -> None:
+    data = await state.get_data()
+    editing = bool(data.get("editing_profile"))
+    await state.set_state(GuestProfileWizard.mmr)
+    text = (
+        f"<b>{'Изменение профиля' if editing else 'Регистрация Dota-профиля'} · 3/4</b>\n\n"
+        f"Имя: <b>{escape(str(data.get('display_name') or 'Игрок'))}</b>\n"
+        f"Dota ID: <b>{escape(str(data.get('dota_account_id') or 'не указан'))}</b>\n\n"
+        "Укажите MMR числом от 0 до 18000."
+    )
+    await edit_panel_content(
+        bot,
+        storage,
+        api,
+        settings,
+        telegram_user_id,
+        "register:mmr",
+        text,
+        registration_step_keyboard(),
+        chat_id,
+    )
+
+
+@router.message(GuestProfileWizard.dota_id, F.text & ~F.text.startswith("/"))
+async def receive_registration_dota_id(
+    message: Message,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    value = (message.text or "").strip()
+    data = await state.get_data()
+    if not re.fullmatch(r"\d{8,10}", value):
+        await show_registration_dota_id_panel(
+            message.bot,
+            storage,
+            api,
+            settings,
+            message.from_user.id,
+            message.chat.id,
+            data,
+            "Введите 8–10 цифр без пробелов или нажмите «Пропустить пока».",
+        )
+        return
+    await state.update_data(dota_account_id=value)
+    await continue_registration_after_dota_id(
+        message.bot, state, storage, api, settings, message.from_user.id, message.chat.id
+    )
+
+
+@router.callback_query(F.data == "register:dota-id:skip")
+async def skip_registration_dota_id(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    if await state.get_state() != GuestProfileWizard.dota_id.state:
+        await callback.answer()
+        return
+    await callback.answer("Можно добавить Dota ID позже в профиле")
+    await continue_registration_after_dota_id(
+        callback.bot,
+        state,
+        storage,
+        api,
+        settings,
+        callback.from_user.id,
+        callback.message.chat.id if callback.message else None,
+    )
+
+
+@router.callback_query(F.data == "profile:dota-id")
+async def begin_dota_id_edit(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    if callback.message is None:
+        await callback.answer()
+        return
+    panel = storage.get_panel(callback.from_user.id)
+    return_screen = panel.screen if panel and panel.screen in {"looking", "party", "profile"} else "profile"
+    await callback.answer()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
+    try:
+        profile = await api.user(callback.from_user.id, "GET", "/dota/profiles/me")
+    except ApiError as error:
+        await edit_panel_content(
+            callback.bot,
+            storage,
+            api,
+            settings,
+            callback.from_user.id,
+            "profile:dota-id:error",
+            f"Не получилось открыть профиль: {escape(str(error))}",
+            back_keyboard(return_screen),
+            callback.message.chat.id,
+        )
+        return
+    await state.clear()
+    await state.set_state(DotaIdOnlyWizard.dota_id)
+    await state.update_data(return_screen=return_screen, current_dota_id=profile.get("dotaAccountId") or "")
+    await edit_panel_content(
+        callback.bot,
+        storage,
+        api,
+        settings,
+        callback.from_user.id,
+        "profile:dota-id",
+        standalone_dota_id_text(profile.get("dotaAccountId")),
+        standalone_dota_id_keyboard(bool(profile.get("dotaAccountId"))),
+        callback.message.chat.id,
+        dota_id_guide_photo(),
+    )
+
+
+def standalone_dota_id_text(current_id: object, error: str | None = None) -> str:
+    text = (
+        "<b>Добавить Dota ID</b>\n\n"
+        "Откройте свой профиль в Dota 2: ID — цифры справа от ника, как показано на скриншоте. "
+        "Введите 8–10 цифр.\n\n"
+        "Это необязательно — можно вернуться к поиску и добавить ID позже."
+    )
+    if current_id:
+        text += f"\n\nСейчас указан: <code>{escape(str(current_id))}</code>"
+    if error:
+        text += f"\n\n{escape(error)}"
+    return text
+
+
+def standalone_dota_id_keyboard(has_current_id: bool = False) -> InlineKeyboardMarkup:
+    label = "Оставить текущий ID" if has_current_id else "Пропустить пока"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=label, callback_data="profile:dota-id:skip")],
+        ]
+    )
+
+
+@router.message(DotaIdOnlyWizard.dota_id, F.text & ~F.text.startswith("/"))
+async def receive_standalone_dota_id(
+    message: Message,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    value = (message.text or "").strip()
+    data = await state.get_data()
+    if not re.fullmatch(r"\d{8,10}", value):
+        await edit_panel_content(
+            message.bot,
+            storage,
+            api,
+            settings,
+            message.from_user.id,
+            "profile:dota-id",
+            standalone_dota_id_text(data.get("current_dota_id"), "Введите 8–10 цифр без пробелов."),
+            standalone_dota_id_keyboard(bool(data.get("current_dota_id"))),
+            message.chat.id,
+            dota_id_guide_photo(),
+        )
+        return
+    try:
+        await api.user(message.from_user.id, "PATCH", "/dota/profiles/me", {"dotaAccountId": value})
+    except ApiError as error:
+        await edit_panel_content(
+            message.bot,
+            storage,
+            api,
+            settings,
+            message.from_user.id,
+            "profile:dota-id",
+            standalone_dota_id_text(data.get("current_dota_id"), str(error)),
+            standalone_dota_id_keyboard(bool(data.get("current_dota_id"))),
+            message.chat.id,
+            dota_id_guide_photo(),
+        )
+        return
+    await state.clear()
+    await edit_panel(
+        message.bot,
+        storage,
+        api,
+        settings,
+        message.from_user.id,
+        str(data.get("return_screen") or "profile"),
+    )
+
+
+@router.callback_query(F.data == "profile:dota-id:skip")
+async def skip_standalone_dota_id(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    data = await state.get_data()
+    if await state.get_state() != DotaIdOnlyWizard.dota_id.state:
+        await callback.answer()
+        return
+    await callback.answer("Возвращаюсь к поиску")
+    await state.clear()
+    await edit_panel(
+        callback.bot,
+        storage,
+        api,
+        settings,
+        callback.from_user.id,
+        str(data.get("return_screen") or "profile"),
     )
 
 
@@ -225,7 +568,7 @@ async def receive_mmr(
             settings,
             message.from_user.id,
             "register:mmr",
-            f"<b>{'Изменение профиля' if editing else 'Создание Dota-профиля'} · 2/3</b>\n\nНужен MMR числом от 0 до 18000. Напишите значение ещё раз.",
+            f"<b>{'Изменение профиля' if editing else 'Создание Dota-профиля'} · 3/4</b>\n\nНужен MMR числом от 0 до 18000. Напишите значение ещё раз.",
             registration_step_keyboard(),
             message.chat.id,
         )
@@ -280,6 +623,7 @@ async def cancel_registration(
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     data = await state.get_data()
     await state.clear()
+    storage.set_choices(callback.from_user.id, "pending_onboarding_action", [])
     await edit_panel(
         callback.bot,
         storage,
@@ -290,6 +634,55 @@ async def cancel_registration(
     )
 
 
+async def continue_after_profile_saved(
+    bot,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+    telegram_user_id: int,
+    chat_id: int | None,
+    data: dict,
+    match_wakeup: asyncio.Event,
+) -> None:
+    await state.clear()
+    if data.get("editing_profile"):
+        await edit_panel(bot, storage, api, settings, telegram_user_id, "profile", chat_id)
+        return
+
+    invite_code = data.get("party_invite_code")
+    invite_role = data.get("party_invite_role")
+    if invite_code and invite_role in POSITION_NAMES:
+        from .party_links import finish_party_join
+
+        await finish_party_join(
+            bot,
+            api,
+            settings,
+            storage,
+            telegram_user_id,
+            chat_id,
+            invite_code,
+            invite_role,
+        )
+        return
+
+    from .search import resume_pending_onboarding_action
+
+    resumed = await resume_pending_onboarding_action(
+        bot,
+        state,
+        api,
+        settings,
+        storage,
+        telegram_user_id,
+        chat_id,
+        match_wakeup,
+    )
+    if not resumed:
+        await edit_panel(bot, storage, api, settings, telegram_user_id, "home", chat_id)
+
+
 @router.callback_query(F.data == "register:complete")
 async def complete_registration(
     callback: CallbackQuery,
@@ -297,6 +690,7 @@ async def complete_registration(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    match_wakeup: asyncio.Event,
 ) -> None:
     data = await state.get_data()
     roles = [role for role in data.get("roles", []) if role in POSITION_NAMES]
@@ -315,13 +709,15 @@ async def complete_registration(
 
     await callback.answer("Сохраняю профиль…" if editing_profile else "Создаю профиль…")
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
-    recovery_url = None
+    telegram_link_pending = False
     try:
         profile = {
             "title": data["display_name"],
             "mmr": data["mmr"],
             "roles": roles,
         }
+        if data.get("dota_account_id"):
+            profile["dotaAccountId"] = data["dota_account_id"]
         if not editing_profile:
             profile["server"] = "EU"
         if editing_profile:
@@ -330,58 +726,40 @@ async def complete_registration(
             await api.user(callback.from_user.id, "POST", "/dota/profiles", profile)
         else:
             created = await api.public("POST", "/dota/profiles/guest", profile)
-            recovery_url = created["recoveryUrl"]
             storage.save_session(
                 callback.from_user.id,
                 created["accessToken"],
                 created["refreshToken"],
-                recovery_url,
+                created["recoveryUrl"],
             )
+            telegram_link_pending = True
             await api.ensure_telegram_link(callback.from_user.id)
-        await state.clear()
-        if editing_profile:
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "profile")
-            return
-        if invite_code and invite_role in POSITION_NAMES:
-            from .party_links import finish_party_join
-
-            await finish_party_join(
-                callback.bot,
-                api,
-                settings,
-                storage,
-                callback.from_user.id,
-                callback.message.chat.id if callback.message else None,
-                invite_code,
-                invite_role,
-                recovery_url,
-            )
-            return
-        if recovery_url:
-            await edit_panel_content(
-                callback.bot,
-                storage,
-                api,
-                settings,
-                callback.from_user.id,
-                "register:recovery",
-                recovery_text("Профиль готов", recovery_url),
-                recovery_keyboard(recovery_url),
-            )
-        else:
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
+            telegram_link_pending = False
+        await continue_after_profile_saved(
+            callback.bot,
+            state,
+            api,
+            settings,
+            storage,
+            callback.from_user.id,
+            callback.message.chat.id if callback.message else None,
+            data,
+            match_wakeup,
+        )
     except ApiError as error:
-        if recovery_url and storage.get_session(callback.from_user.id):
-            await state.clear()
+        if telegram_link_pending:
+            await state.update_data(**data)
             await edit_panel_content(
                 callback.bot,
                 storage,
                 api,
                 settings,
                 callback.from_user.id,
-                "register:recovery",
-                recovery_text("Профиль создан, но привязка Telegram не завершилась", recovery_url),
-                recovery_keyboard(recovery_url),
+                "register:telegram-link-error",
+                "<b>Аккаунт создан, осталось подключить Telegram.</b>\n\n"
+                f"Не удалось завершить подключение: {escape(str(error))}.\n\nПопробуйте ещё раз.",
+                telegram_link_retry_keyboard(),
+                callback.message.chat.id if callback.message else None,
             )
         else:
             data["error"] = str(error)
@@ -412,7 +790,7 @@ async def show_roles_panel(
 ) -> None:
     names = ", ".join(POSITION_NAMES[role] for role in selected) or "не выбраны"
     title = "Изменение профиля" if editing else "Создание Dota-профиля"
-    text = f"<b>{title} · 3/3</b>\n\nВыберите позиции кнопками ниже. Можно выбрать несколько."
+    text = f"<b>{title} · 4/4</b>\n\nВыберите позиции кнопками ниже. Можно выбрать несколько."
     text += f"\n\nВыбрано: <b>{escape(names)}</b>"
     if error:
         verb = "сохранить" if editing else "создать"

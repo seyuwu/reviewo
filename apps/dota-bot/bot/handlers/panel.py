@@ -5,10 +5,8 @@ from aiogram.types import CallbackQuery, Message
 
 from ..api.client import OpiniaApi
 from ..config import Settings
-from ..services.panel import begin_panel_transition, delete_start_message_after_panel, edit_panel
+from ..services.panel import begin_panel_transition, edit_panel
 from ..storage.database import BotStorage
-from .registration import start_profile_registration
-
 router = Router(name="panel")
 
 
@@ -24,21 +22,9 @@ async def start_panel(
     if message.chat.type != "private" or message.from_user is None:
         return
     await state.clear()
+    storage.set_choices(message.from_user.id, "pending_onboarding_action", [])
     await begin_panel_transition(bot, storage, message.from_user.id, message.chat.id)
-    if not storage.get_session(message.from_user.id):
-        await start_profile_registration(
-            bot,
-            state,
-            api,
-            settings,
-            storage,
-            message.from_user.id,
-            message.chat.id,
-        )
-        await delete_start_message_after_panel(message, storage)
-        return
     await edit_panel(bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
-    await delete_start_message_after_panel(message, storage)
 
 
 @router.callback_query(F.data.startswith("panel:"))
@@ -56,18 +42,9 @@ async def navigate_panel(
     if callback.message.chat.type != "private":
         return
     screen = (callback.data or "panel:home").split(":", maxsplit=1)[1]
+    if screen == "home":
+        storage.set_choices(callback.from_user.id, "pending_onboarding_action", [])
     await begin_panel_transition(bot, storage, callback.from_user.id, callback.message.chat.id)
-    if screen == "home" and not storage.get_session(callback.from_user.id):
-        await start_profile_registration(
-            bot,
-            state,
-            api,
-            settings,
-            storage,
-            callback.from_user.id,
-            callback.message.chat.id,
-        )
-        return
     await edit_panel(
         bot,
         storage,

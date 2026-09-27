@@ -1,3 +1,4 @@
+import asyncio
 import re
 from html import escape
 from urllib.parse import quote
@@ -32,9 +33,11 @@ def link_help_keyboard(settings: Settings) -> InlineKeyboardMarkup:
 async def link_account(
     message: Message,
     command: CommandObject,
+    state: FSMContext,
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    match_wakeup: asyncio.Event,
 ) -> None:
     if message.chat.type != "private" or message.from_user is None:
         return
@@ -63,7 +66,20 @@ async def link_account(
         from .party_links import resume_pending_party_invitation
 
         if await resume_pending_party_invitation(
-            message.bot, api, settings, storage, message.from_user.id, message.chat.id
+            message.bot, state, api, settings, storage, message.from_user.id, message.chat.id
+        ):
+            return
+        from .search import resume_pending_onboarding_action
+
+        if await resume_pending_onboarding_action(
+            message.bot,
+            state,
+            api,
+            settings,
+            storage,
+            message.from_user.id,
+            message.chat.id,
+            match_wakeup,
         ):
             return
         await edit_panel(message.bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
@@ -90,28 +106,71 @@ async def account_link_help(
     storage: BotStorage,
 ) -> None:
     await callback.answer()
+    if callback.message is None:
+        return
+    await show_account_link_help(
+        callback.bot,
+        state,
+        api,
+        settings,
+        storage,
+        callback.from_user.id,
+        callback.message.chat.id,
+    )
+
+
+@router.message(Command("login"))
+async def account_login_command(
+    message: Message,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    if message.chat.type != "private" or message.from_user is None:
+        return
+    await show_account_link_help(
+        message.bot,
+        state,
+        api,
+        settings,
+        storage,
+        message.from_user.id,
+        message.chat.id,
+    )
+
+
+async def show_account_link_help(
+    bot,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+    telegram_user_id: int,
+    chat_id: int,
+) -> None:
     form_data = await state.get_data()
     invite_code = form_data.get("party_invite_code")
     if invite_code:
         storage.set_choices(
-            callback.from_user.id,
+            telegram_user_id,
             "pending_party_invite",
             [{"code": invite_code, "role": form_data.get("party_invite_role")}],
         )
     await state.clear()
-    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
+    await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
     await edit_panel_content(
-        callback.bot,
+        bot,
         storage,
         api,
         settings,
-        callback.from_user.id,
+        telegram_user_id,
         "account:link",
         "<b>Привязка аккаунта Opinia</b>\n\nОткройте сайт и войдите в аккаунт. В профиле нажмите "
         "«Привязать Telegram», затем отправьте сюда код командой <code>/link 12345678</code>. "
         "Код действует 10 минут.",
         link_help_keyboard(settings),
-        callback.message.chat.id if callback.message else None,
+        chat_id,
     )
 
 

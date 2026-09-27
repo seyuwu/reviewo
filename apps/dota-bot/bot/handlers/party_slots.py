@@ -1,4 +1,5 @@
 import asyncio
+import time
 from html import escape
 from urllib.parse import quote
 
@@ -123,6 +124,7 @@ async def enable_search_for_party_slot(
             return
 
         roles = set(map(str, party.get("recruitedRoles") or []))
+        was_searching = bool(roles)
         if role in roles:
             roles.remove(role)
         else:
@@ -146,10 +148,23 @@ async def enable_search_for_party_slot(
             },
         )
         if roles:
+            previous_search = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}
+            started_at = (
+                previous_search.get("startedAt")
+                if was_searching
+                and previous_search.get("mode") == "recruit"
+                and previous_search.get("partySlug") == party["slug"]
+                else time.time()
+            )
             storage.set_choices(
                 callback.from_user.id,
                 "auto_search",
-                [{"mode": "recruit", "partySlug": party["slug"], "roles": sorted(roles)}],
+                [{
+                    "mode": "recruit",
+                    "partySlug": party["slug"],
+                    "roles": sorted(roles),
+                    "startedAt": started_at,
+                }],
             )
         else:
             storage.set_choices(callback.from_user.id, "auto_search", [])

@@ -12,7 +12,6 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.panel import (
     begin_panel_transition,
-    delete_start_message_after_panel,
     edit_panel,
     edit_panel_content,
 )
@@ -84,13 +83,13 @@ async def open_party_link(
     code = parse_party_start_payload(command.args)
     if code is None:
         await state.clear()
+        storage.set_choices(message.from_user.id, "pending_onboarding_action", [])
         await edit_panel(message.bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
-        await delete_start_message_after_panel(message, storage)
         return
     await state.clear()
+    storage.set_choices(message.from_user.id, "pending_onboarding_action", [])
     await begin_panel_transition(message.bot, storage, message.from_user.id, message.chat.id)
     await show_party_invitation(message.bot, api, settings, storage, message.from_user.id, message.chat.id, code)
-    await delete_start_message_after_panel(message, storage)
 
 
 @router.callback_query(F.data == "party:share")
@@ -247,20 +246,17 @@ async def show_party_invitation(bot, api, settings, storage, telegram_user_id: i
         )
 
 
-async def finish_party_join(bot, api, settings, storage, telegram_user_id: int, chat_id: int | None, code: str, role: str, recovery_url: str | None = None) -> None:
+async def finish_party_join(bot, api, settings, storage, telegram_user_id: int, chat_id: int | None, code: str, role: str) -> None:
     try:
         result = await api.user(telegram_user_id, "POST", "/social/parties/join", {"token": code, "positionRole": role})
         if not result.get("isMember"):
             storage.set_choices(telegram_user_id, "pending_party_invite", [])
             text = f"Заявка в пати отправлена. Вы выбрали роль <b>{ROLE_NAMES[role]}</b>; дождитесь подтверждения капитана."
-            rows = []
-            if recovery_url:
-                text += f"\n\nСсылка восстановления профиля:\n<code>{escape(recovery_url)}</code>"
-                rows.append([InlineKeyboardButton(text="🔐 Сохранить ссылку восстановления", url=recovery_url)])
-            rows.append([InlineKeyboardButton(text="← В меню", callback_data="panel:home")])
             await edit_panel_content(
                 bot, storage, api, settings, telegram_user_id, "party:application-pending",
-                text, InlineKeyboardMarkup(inline_keyboard=rows), chat_id,
+                text, InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="← В меню", callback_data="panel:home")
+                ]]), chat_id,
             )
             return
         storage.set_choices(telegram_user_id, "pending_party_invite", [])
@@ -268,30 +264,14 @@ async def finish_party_join(bot, api, settings, storage, telegram_user_id: int, 
             from ..services.party_notifications import deliver_join_hint
 
             await deliver_join_hint(bot, api, storage, telegram_user_id, settings.site_url, result["slug"])
-        if recovery_url:
-            text = (
-                "<b>Профиль готов, вы вступили в пати</b>\n\n"
-                f"Выбрана роль: <b>{ROLE_NAMES[role]}</b>\n\n"
-                "Сохраните ссылку восстановления профиля:\n<code>"
-                f"{escape(recovery_url)}</code>"
-            )
-            await edit_panel_content(
-                bot, storage, api, settings, telegram_user_id, "party:joined-recovery", text,
-                InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔐 Открыть ссылку восстановления", url=recovery_url)],
-                    [InlineKeyboardButton(text="👥 Открыть пати", callback_data="panel:party")],
-                ]),
-                chat_id,
-            )
-        else:
-            await edit_panel(bot, storage, api, settings, telegram_user_id, "party", chat_id)
+        await edit_panel(bot, storage, api, settings, telegram_user_id, "party", chat_id)
     except ApiError as error:
-        markup = party_invitation_retry_keyboard(code, role, recovery_url)
-        text = f"<b>Профиль готов, но вступить в пати не получилось</b>\n\n{escape(str(error))}\n\nМожно попробовать ещё раз или открыть свободную роль заново."
+        markup = party_invitation_retry_keyboard(code, role)
+        text = f"<b>Не получилось вступить в пати</b>\n\n{escape(str(error))}\n\nМожно попробовать ещё раз или открыть свободную роль заново."
         await edit_panel_content(bot, storage, api, settings, telegram_user_id, "party:join-error", text, markup, chat_id)
 
 
-async def resume_pending_party_invitation(bot, api, settings, storage, telegram_user_id: int, chat_id: int | None) -> bool:
+async def resume_pending_party_invitation(bot, state: FSMContext, api, settings, storage, telegram_user_id: int, chat_id: int | None) -> bool:
     pending = storage.get_choice(telegram_user_id, "pending_party_invite", 0)
     if not pending or not pending.get("code"):
         return False
@@ -300,9 +280,25 @@ async def resume_pending_party_invitation(bot, api, settings, storage, telegram_
     if role in ROLE_NAMES:
         try:
             await api.user(telegram_user_id, "GET", "/dota/profiles/me")
-            await finish_party_join(bot, api, settings, storage, telegram_user_id, chat_id, pending["code"], role)
+        except ApiError as error:
+            if error.status == 404:
+                await start_profile_registration(
+                    bot,
+                    state,
+                    api,
+                    settings,
+                    storage,
+                    telegram_user_id,
+                    chat_id,
+                    invite_code=pending["code"],
+                    invite_role=role,
+                )
+                return True
+            await show_party_invitation(
+                bot, api, settings, storage, telegram_user_id, chat_id or telegram_user_id, pending["code"]
+            )
             return True
-        except ApiError:
-            pass
+        await finish_party_join(bot, api, settings, storage, telegram_user_id, chat_id, pending["code"], role)
+        return True
     await show_party_invitation(bot, api, settings, storage, telegram_user_id, chat_id or telegram_user_id, pending["code"])
     return True

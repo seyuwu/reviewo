@@ -83,6 +83,10 @@ export interface GameParty {
   name: string;
   openSlots: number;
   ownerUserId: string;
+  /** Roles the party is currently recruiting through Dota LFG. */
+  recruitedRoles?: DotaPositionRole[];
+  /** Expiration of the current recruiting window. */
+  recruitingUntil?: string | null;
   slug: string;
   vertical: string;
   visibility: "PUBLIC" | "PRIVATE";

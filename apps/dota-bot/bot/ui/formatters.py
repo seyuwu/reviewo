@@ -7,6 +7,7 @@ def profile_text(profile: dict) -> str:
         [
             "<b>Профиль Dota 2</b>",
             f"Игрок: <b>{escape(str(profile.get('title') or '—'))}</b>",
+            f"Dota ID: <b>{escape(str(profile.get('dotaAccountId') or 'не указан'))}</b>",
             f"MMR: <b>{escape(str(profile.get('mmr') or '—'))}</b>",
             f"Позиции: <b>{escape(roles)}</b>",
             f"Сервер: <b>{escape(str(profile.get('server') or '—'))}</b>",

@@ -1,6 +1,9 @@
 import asyncio
+import hashlib
+import json
 import logging
 import time
+from pathlib import Path
 from urllib.parse import quote
 
 from aiogram import Bot
@@ -10,7 +13,6 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputMediaPhoto,
-    Message,
 )
 
 from ..api.client import ApiError, OpiniaApi
@@ -30,24 +32,46 @@ from ..ui.keyboards import (
 )
 
 logger = logging.getLogger(__name__)
+LFG_WINDOW_SECONDS = 20 * 60
 
 
-async def delete_start_message_after_panel(message: Message, storage: BotStorage) -> None:
-    """Remove /start only after a replacement panel has been saved for this chat."""
-    if message.from_user is None:
+def party_card_cache_key(party: dict) -> str:
+    card_state = {
+        "name": party.get("name"),
+        "memberCount": party.get("memberCount"),
+        "maxMembers": party.get("maxMembers"),
+        "joinMode": party.get("joinMode"),
+        "visibility": party.get("visibility"),
+        "recruitedRoles": sorted(map(str, party.get("recruitedRoles") or [])),
+        "recruitingUntil": party.get("recruitingUntil"),
+        "expiresAt": party.get("expiresAt"),
+        "members": [
+            {
+                "displayName": member.get("displayName"),
+                "positionRole": member.get("positionRole"),
+                "mmr": member.get("mmr"),
+                "role": member.get("role"),
+            }
+            for member in party.get("members") or []
+        ],
+    }
+    serialized = json.dumps(card_state, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def save_party_card_file_id(
+    storage: BotStorage,
+    telegram_user_id: int,
+    cache_key: str | None,
+    message,
+) -> None:
+    if not cache_key or not getattr(message, "photo", None):
         return
-    panel = storage.get_panel(message.from_user.id)
-    if (
-        panel is None
-        or panel.chat_id != message.chat.id
-        or panel.message_id == message.message_id
-        or panel.screen == "loading"
-    ):
-        return
-    try:
-        await message.delete()
-    except TelegramAPIError:
-        pass
+    storage.set_choices(
+        telegram_user_id,
+        "party_card_file",
+        [{"cacheKey": cache_key, "fileId": message.photo[-1].file_id}],
+    )
 
 
 async def edit_panel(
@@ -60,40 +84,77 @@ async def edit_panel(
     chat_id: int | None = None,
     *,
     content: tuple[str, InlineKeyboardMarkup] | None = None,
+    media_photo: str | BufferedInputFile | None = None,
 ) -> None:
     if screen == "recruiting":
         screen = "party"
-    text, keyboard = content or await render_screen(api, storage, settings, telegram_user_id, screen)
+    party_data = None
+    if screen == "party":
+        try:
+            party_data = await api.user(telegram_user_id, "GET", "/social/parties/me")
+        except ApiError:
+            party_data = {"parties": [], "invites": []}
+    text, keyboard = content or await render_screen(
+        api,
+        storage,
+        settings,
+        telegram_user_id,
+        screen,
+        party_data=party_data,
+    )
     panel = storage.get_panel(telegram_user_id)
     destination = chat_id or (panel.chat_id if panel else telegram_user_id)
     loading_panel = panel if panel and panel.screen == "loading" else None
-    photo: str | BufferedInputFile = f"{settings.site_url}/dota/party-hero-soft.png"
+    photo: str | BufferedInputFile = media_photo or f"{settings.site_url}/dota/party-hero-soft.png"
+    party_card_key = None
     if screen in {"party", "recruiting"}:
-        try:
-            my_parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
-            party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
-            if party and party.get("slug"):
-                raw_image = await api.fetch_party_card(
-                    settings.site_url,
-                    party["slug"],
-                    str(party.get("updatedAt") or time.time_ns()),
-                )
-                photo = BufferedInputFile(raw_image, filename="party-roster.png")
-        except ApiError:
-            pass
+        party = (party_data or {}).get("party") or ((party_data or {}).get("parties") or [None])[-1]
+        if party and party.get("slug"):
+            party_card_key = party_card_cache_key(party)
+            cached_card = storage.get_choice(telegram_user_id, "party_card_file", 0) or {}
+            if cached_card.get("cacheKey") == party_card_key and cached_card.get("fileId"):
+                photo = str(cached_card["fileId"])
+            else:
+                try:
+                    raw_image = await api.fetch_party_card(
+                        settings.site_url,
+                        party["slug"],
+                        party_card_key or str(time.time_ns()),
+                    )
+                    photo = BufferedInputFile(raw_image, filename="party-roster.png")
+                except ApiError:
+                    party_card_key = None
 
-    if loading_panel and loading_panel.chat_id == destination:
-        # Keep the instant loading message visible until the final panel is sent.
+    if loading_panel and loading_panel.chat_id == destination and loading_panel.is_photo:
+        try:
+            message = await bot.edit_message_media(
+                chat_id=loading_panel.chat_id,
+                message_id=loading_panel.message_id,
+                media=InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"),
+                reply_markup=keyboard,
+            )
+            storage.save_panel(telegram_user_id, loading_panel.chat_id, loading_panel.message_id, screen)
+            save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
+            return
+        except TelegramBadRequest as error:
+            if "message is not modified" in str(error).lower():
+                storage.save_panel(telegram_user_id, loading_panel.chat_id, loading_panel.message_id, screen)
+                return
+            if "message to edit not found" not in str(error).lower() and "can't be edited" not in str(error).lower():
+                raise
+    elif loading_panel and loading_panel.chat_id == destination:
+        # Text loading panels cannot be converted into a photo; replace them after sending the new panel.
         pass
     elif panel and panel.chat_id == destination and panel.is_photo:
         try:
-            await bot.edit_message_media(
+            message = await bot.edit_message_media(
                 chat_id=panel.chat_id,
                 message_id=panel.message_id,
                 media=InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"),
                 reply_markup=keyboard,
             )
             storage.save_panel(telegram_user_id, panel.chat_id, panel.message_id, screen)
+            save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
             return
         except TelegramBadRequest as error:
             if "message is not modified" in str(error).lower():
@@ -129,6 +190,7 @@ async def edit_panel(
     try:
         message = await bot.send_photo(destination, photo, caption=text, reply_markup=keyboard, parse_mode="HTML")
         storage.save_panel(telegram_user_id, message.chat.id, message.message_id, screen)
+        save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
     except TelegramBadRequest:
         message = await bot.send_message(
             destination,
@@ -151,11 +213,36 @@ async def begin_panel_transition(
     telegram_user_id: int,
     chat_id: int | None = None,
 ) -> None:
-    """Show immediate feedback, then remove the stale panel while data loads."""
+    """Show immediate feedback in the current panel while its replacement loads."""
     panel = storage.get_panel(telegram_user_id)
     if panel and panel.screen == "loading":
         return
     destination = chat_id or (panel.chat_id if panel else telegram_user_id)
+    if panel and panel.chat_id == destination:
+        try:
+            if panel.is_photo:
+                await bot.edit_message_caption(
+                    chat_id=panel.chat_id,
+                    message_id=panel.message_id,
+                    caption="⏳ Обновляю окно…",
+                    reply_markup=None,
+                )
+            else:
+                await bot.edit_message_text(
+                    "⏳ Обновляю окно…",
+                    chat_id=panel.chat_id,
+                    message_id=panel.message_id,
+                    reply_markup=None,
+                    disable_web_page_preview=True,
+                )
+            storage.save_panel(telegram_user_id, panel.chat_id, panel.message_id, "loading", panel.is_photo)
+            return
+        except TelegramBadRequest as error:
+            if "message is not modified" in str(error).lower():
+                storage.save_panel(telegram_user_id, panel.chat_id, panel.message_id, "loading", panel.is_photo)
+                return
+            if "message to edit not found" not in str(error).lower() and "can't be edited" not in str(error).lower():
+                raise
     try:
         message = await bot.send_message(destination, "⏳ Обновляю окно…")
     except TelegramAPIError:
@@ -178,6 +265,7 @@ async def edit_panel_content(
     text: str,
     keyboard: InlineKeyboardMarkup,
     chat_id: int | None = None,
+    media_photo: str | BufferedInputFile | None = None,
 ) -> None:
     await edit_panel(
         bot,
@@ -188,7 +276,13 @@ async def edit_panel_content(
         screen,
         chat_id,
         content=(text, keyboard),
+        media_photo=media_photo,
     )
+
+
+def dota_id_guide_photo() -> BufferedInputFile:
+    guide_path = Path(__file__).resolve().parents[1] / "assets" / "dota-id-location.png"
+    return BufferedInputFile(guide_path.read_bytes(), filename="dota-id-location.png")
 
 
 async def refresh_active_search_panels(
@@ -197,23 +291,51 @@ async def refresh_active_search_panels(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    """Refresh countdowns for active party search without re-uploading party images."""
+    """Refresh countdowns for active searches without re-uploading party images."""
     while True:
         try:
             for telegram_user_id in storage.session_user_ids():
                 search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
                 panel = storage.get_panel(telegram_user_id)
-                if search.get("mode") != "recruit" or not panel or panel.screen != "party":
+                if not panel:
                     continue
                 try:
-                    parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
-                    party = parties.get("party") or ((parties.get("parties") or [None])[-1])
-                    if not party or party.get("slug") != search.get("partySlug"):
-                        storage.set_choices(telegram_user_id, "auto_search", [])
+                    if search.get("mode") == "looking" and panel.screen == "looking":
+                        profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
+                        if not profile.get("looking"):
+                            storage.set_choices(telegram_user_id, "auto_search", [])
+                        text, keyboard = await render_screen(
+                            api,
+                            storage,
+                            settings,
+                            telegram_user_id,
+                            "looking",
+                        )
+                    elif panel.screen == "party" and (
+                        search.get("mode") == "recruit"
+                        or storage.get_choice(telegram_user_id, "party_search_watch", 0)
+                    ):
+                        parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
+                        party = parties.get("party") or ((parties.get("parties") or [None])[-1])
+                        if not party:
+                            storage.set_choices(telegram_user_id, "auto_search", [])
+                            storage.set_choices(telegram_user_id, "party_search_watch", [])
+                            await edit_panel(bot, storage, api, settings, telegram_user_id, "home")
+                            continue
+                        if search.get("mode") == "recruit" and party.get("slug") != search.get("partySlug"):
+                            storage.set_choices(telegram_user_id, "auto_search", [])
+                        if not party.get("recruitedRoles"):
+                            storage.set_choices(telegram_user_id, "auto_search", [])
+                        text, keyboard = await render_screen(
+                            api,
+                            storage,
+                            settings,
+                            telegram_user_id,
+                            "party",
+                            party_data=parties,
+                        )
+                    else:
                         continue
-                    if not party.get("recruitedRoles"):
-                        storage.set_choices(telegram_user_id, "auto_search", [])
-                    text, keyboard = await render_screen(api, storage, settings, telegram_user_id, "party")
                     if panel.is_photo:
                         await bot.edit_message_caption(
                             chat_id=panel.chat_id,
@@ -249,6 +371,8 @@ async def render_screen(
     settings: Settings,
     telegram_user_id: int,
     screen: str,
+    *,
+    party_data: dict | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
     session = storage.get_session(telegram_user_id)
     if not session:
@@ -259,8 +383,7 @@ async def render_screen(
             )
         return (
             "<b>Поиск пати Dota 2 · Opinia</b>\n\n"
-            "Найдите команду для игры или соберите состав сами.\n\n"
-            "Для начала откройте раздел «Аккаунт»: там можно создать Dota-профиль или войти в существующий аккаунт Opinia.",
+            "Найдите команду для игры или соберите свою пати. Выберите, с чего начать:",
             home_keyboard(False, False),
         )
 
@@ -276,7 +399,11 @@ async def render_screen(
         except ApiError:
             return {"parties": [], "invites": []}
 
-    profile, my_parties = await asyncio.gather(fetch_profile(), fetch_parties())
+    if screen == "party":
+        profile = None
+        my_parties = party_data if party_data is not None else await fetch_parties()
+    else:
+        profile, my_parties = await asyncio.gather(fetch_profile(), fetch_parties())
 
     if screen == "home":
         if not profile:
@@ -324,12 +451,20 @@ async def render_screen(
                     ]
                 ),
             )
+        search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
+        elapsed = search_elapsed_seconds(profile.get("lfgExpiresAt"), search.get("startedAt"))
+        remaining = remaining_seconds(profile.get("lfgExpiresAt"))
+        timer = f"\n\n⏱ Поиск идёт: <b>{format_duration(elapsed)}</b>"
+        if remaining is not None:
+            timer += f" · осталось {format_duration(remaining)}"
+        id_hint = "\n\n🎮 Dota ID можно добавить сейчас или позже в профиле." if not profile.get("dotaAccountId") else ""
         return (
             f"<b>Ищу пати · {escape_text(profile.get('title') or 'Игрок')}</b>\n"
             f"MMR: {escape_text(profile.get('mmr') or '—')}\n"
             f"Позиции: {escape_text(roles_text)}\n\n"
-            "Подбираю пати автоматически по позициям и MMR.",
-            looking_keyboard(),
+            "Подбираю пати автоматически по позициям и MMR."
+            f"{timer}{id_hint}",
+            looking_keyboard(not bool(profile.get("dotaAccountId"))),
         )
 
     if screen == "profile":
@@ -368,15 +503,32 @@ async def render_screen(
         occupants = party_slot_occupants(party)
         available_roles = {role for role in ("1", "2", "3", "4", "5") if role not in occupants}
         searching_roles = set(map(str, party.get("recruitedRoles") or [])) & available_roles
+        storage.set_choices(
+            telegram_user_id,
+            "party_search_watch",
+            [{"partySlug": party.get("slug")}] if searching_roles else [],
+        )
         role_names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
         if searching_roles:
             roles_text = ", ".join(role_names[role] for role in sorted(searching_roles))
             until = party.get("recruitingUntil")
             remaining = remaining_seconds(until)
-            timer = f" · осталось {format_duration(remaining)}" if remaining is not None else ""
+            search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
+            elapsed = search_elapsed_seconds(until, search.get("startedAt"))
+            timer = f"\n⏱ Набор идёт: <b>{format_duration(elapsed)}</b>"
+            if remaining is not None:
+                timer += f" · осталось {format_duration(remaining)}"
             text += f"\n\n🔎 <b>Ищем игроков:</b> {escape_text(roles_text)}{timer}"
         else:
             text += "\n\nПодбор сейчас не запущен. Нажмите FREE под свободной ролью, чтобы искать игрока на неё."
+        profile = None
+        if searching_roles:
+            try:
+                profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
+            except ApiError:
+                pass
+        if searching_roles and profile and not profile.get("dotaAccountId"):
+            text += "\n\n🎮 Dota ID не указан — его можно добавить сейчас или позже в профиле."
         web_access_url = None
         if settings.site_url and party.get("slug"):
             try:
@@ -416,6 +568,7 @@ async def render_screen(
             searching_roles,
             settings.site_url,
             web_access_url,
+            show_dota_id_button=bool(searching_roles and profile and not profile.get("dotaAccountId")),
         )
 
     if screen in {"member", "kick_confirm"}:
@@ -523,3 +676,13 @@ def remaining_seconds(value: object) -> int | None:
 def format_duration(seconds: int) -> str:
     minutes, remainder = divmod(seconds, 60)
     return f"{minutes:02}:{remainder:02}"
+
+
+def search_elapsed_seconds(expires_at: object, started_at: object = None) -> int:
+    try:
+        if started_at is not None:
+            return max(0, min(LFG_WINDOW_SECONDS, int(time.time() - float(started_at))))
+    except (TypeError, ValueError, OverflowError):
+        pass
+    remaining = remaining_seconds(expires_at)
+    return LFG_WINDOW_SECONDS - remaining if remaining is not None else 0

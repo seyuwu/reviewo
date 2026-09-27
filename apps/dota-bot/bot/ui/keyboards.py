@@ -17,18 +17,31 @@ def home_keyboard(
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [button(first_label, first_action), button(second_label, second_action)],
-            [button("👤 Аккаунт", "panel:account")],
+            *([[button("👤 Аккаунт", "panel:account")]] if registered else []),
         ]
     )
 
 
-def looking_keyboard() -> InlineKeyboardMarkup:
+def onboarding_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [button("Создать аккаунт", "onboarding:register")],
+            [button("← Назад", "panel:home")],
+        ]
+    )
+
+
+def looking_keyboard(show_dota_id_button: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if show_dota_id_button:
+        rows.append([button("🎮 Добавить Dota ID", "profile:dota-id")])
+    rows.extend(
+        [
             [button("⏹ Остановить поиск", "search:stop")],
             [button("← В меню", "panel:home")],
         ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def back_keyboard(target: str = "home") -> InlineKeyboardMarkup:
@@ -58,6 +71,7 @@ def party_keyboard(
     searching_roles: set[str] | None = None,
     site_url: str | None = None,
     web_access_url: str | None = None,
+    show_dota_id_button: bool = False,
 ) -> InlineKeyboardMarkup:
     occupants = party_slot_occupants(party)
     searching_roles = searching_roles or set()
@@ -75,6 +89,8 @@ def party_keyboard(
         for role in roles
     ]
     rows = [slots, search_status]
+    if show_dota_id_button:
+        rows.append([button("🎮 Добавить Dota ID", "profile:dota-id")])
     if site_url and party.get("slug"):
         if web_access_url:
             rows.append([button_url("💬 Чат и Discord", web_access_url)])
@@ -167,10 +183,18 @@ def registration_step_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[button("✖️ Отменить", "register:cancel")]])
 
 
-def registration_name_keyboard(show_login: bool = True, allow_cancel: bool = True) -> InlineKeyboardMarkup:
+def registration_dota_id_keyboard(has_current_id: bool = False) -> InlineKeyboardMarkup:
+    label = "Оставить текущий ID" if has_current_id else "Пропустить пока"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button(label, "register:dota-id:skip")],
+            [button("✖️ Отменить", "register:cancel")],
+        ]
+    )
+
+
+def registration_name_keyboard(allow_cancel: bool = True) -> InlineKeyboardMarkup:
     rows = []
-    if show_login:
-        rows.append([button("🔑 Уже есть аккаунт? Войти", "account:help")])
     if allow_cancel:
         rows.append([button("✖️ Отменить", "register:cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
