@@ -19,7 +19,8 @@ class PartyNotificationTests(unittest.IsolatedAsyncioTestCase):
             chat=SimpleNamespace(id=123), message_id=456
         )
         storage = SimpleNamespace(
-            add_temporary_message=lambda *args: events.append(("ttl", args[-1]))
+            add_temporary_message=lambda *args: events.append(("ttl", args[-1])),
+            record_party_notification=lambda *args: events.append("party_notification"),
         )
         settings = SimpleNamespace(site_url="https://dota.opinia.ru")
         row = {
@@ -37,14 +38,17 @@ class PartyNotificationTests(unittest.IsolatedAsyncioTestCase):
             delivered = await send_party_notification(bot, settings, storage, object(), row)
 
         self.assertTrue(delivered)
-        self.assertEqual(events, ["refresh", "send", ("ttl", 10)])
+        self.assertEqual(events, ["refresh", "send", ("ttl", 10), "party_notification"])
         bot.send_message.assert_awaited_once()
 
     async def test_member_joined_message_is_sent_even_if_panel_refresh_fails(self) -> None:
         bot = SimpleNamespace(send_message=AsyncMock(return_value=SimpleNamespace(
             chat=SimpleNamespace(id=123), message_id=456
         )))
-        storage = SimpleNamespace(add_temporary_message=lambda *args: None)
+        storage = SimpleNamespace(
+            add_temporary_message=lambda *args: None,
+            record_party_notification=lambda *args: None,
+        )
         settings = SimpleNamespace(site_url="https://dota.opinia.ru")
         row = {
             "telegramUserId": "123",
@@ -62,7 +66,10 @@ class PartyNotificationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_delivery_fails_if_roster_message_cannot_be_sent(self) -> None:
         bot = SimpleNamespace(send_message=AsyncMock(side_effect=RuntimeError("send failed")))
-        storage = SimpleNamespace(add_temporary_message=lambda *args: None)
+        storage = SimpleNamespace(
+            add_temporary_message=lambda *args: None,
+            record_party_notification=lambda *args: None,
+        )
         settings = SimpleNamespace(site_url="https://dota.opinia.ru")
         row = {
             "telegramUserId": "123",
