@@ -2,7 +2,6 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
-from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from .api.client import OpiniaApi
@@ -14,6 +13,7 @@ from .services.notifications import (
     poll_notifications,
     reconcile_saved_telegram_links,
 )
+from .services.telegram_session import RetryingAiohttpSession
 from .services.auto_matcher import auto_match_loop
 from .services.broadcasts import broadcast_worker
 from .services.panel import recover_loading_panels, refresh_active_search_panels
@@ -30,7 +30,7 @@ async def main() -> None:
     storage.initialize()
     bot = Bot(
         token=settings.bot_token,
-        session=AiohttpSession(proxy=settings.telegram_proxy) if settings.telegram_proxy else None,
+        session=RetryingAiohttpSession(proxy=settings.telegram_proxy),
     )
     api = OpiniaApi(settings, storage)
     await api.start()
