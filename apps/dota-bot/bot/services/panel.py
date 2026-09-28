@@ -3,11 +3,12 @@ import hashlib
 import json
 import logging
 import time
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import quote
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import (
     BufferedInputFile,
     InlineKeyboardButton,
@@ -36,6 +37,16 @@ logger = logging.getLogger(__name__)
 LFG_WINDOW_SECONDS = 20 * 60
 LONG_SEARCH_REMINDER_SECONDS = 3 * 60
 DEFAULT_PANEL_IMAGE = Path(__file__).resolve().parents[1] / "assets" / "fdp-panel-background.png"
+PANEL_POSITION_REFRESH_AFTER = timedelta(hours=48)
+PANEL_POSITION_REFRESH_SCAN_SECONDS = 60 * 60
+PANEL_POSITION_REFRESHABLE_SCREENS = (
+    "home",
+    "party",
+    "looking",
+    "profile",
+    "account",
+    "invites",
+)
 
 
 def party_card_cache_key(party: dict) -> str:
@@ -98,14 +109,20 @@ async def edit_panel(
     *,
     content: tuple[str, InlineKeyboardMarkup] | None = None,
     media_photo: str | BufferedInputFile | None = None,
+    force_new_message: bool = False,
+    disable_notification: bool = False,
+    refresh_idle_for: timedelta | None = None,
 ) -> None:
     if screen == "recruiting":
         screen = "party"
+    panel_snapshot = storage.get_panel(telegram_user_id)
     party_data = None
     if screen == "party":
         try:
             party_data = await api.user(telegram_user_id, "GET", "/social/parties/me")
         except ApiError:
+            if refresh_idle_for is not None:
+                return
             party_data = {"parties": [], "invites": []}
     text, keyboard = content or await render_screen(
         api,
@@ -151,7 +168,7 @@ async def edit_panel(
                     is_default_panel_photo = True
 
     panel_to_replace = panel if panel and panel.chat_id == destination else None
-    if loading_panel and loading_panel.chat_id == destination and loading_panel.is_photo and photo is not None:
+    if not force_new_message and loading_panel and loading_panel.chat_id == destination and loading_panel.is_photo and photo is not None:
         try:
             message = await bot.edit_message_media(
                 chat_id=loading_panel.chat_id,
@@ -171,10 +188,10 @@ async def edit_panel(
             if "message to edit not found" not in str(error).lower() and "can't be edited" not in str(error).lower():
                 logger.warning("Could not edit photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
                 photo = None
-    elif loading_panel and loading_panel.chat_id == destination:
+    elif not force_new_message and loading_panel and loading_panel.chat_id == destination:
         # Text loading panels cannot be converted into a photo; replace them after sending the new panel.
         pass
-    elif panel and panel.chat_id == destination and panel.is_photo and photo is not None:
+    elif not force_new_message and panel and panel.chat_id == destination and panel.is_photo and photo is not None:
         panel_to_replace = panel
         try:
             message = await bot.edit_message_media(
@@ -200,7 +217,7 @@ async def edit_panel(
                 except TelegramAPIError:
                     pass
 
-    elif panel and panel.chat_id == destination and not panel.is_photo:
+    elif not force_new_message and panel and panel.chat_id == destination and not panel.is_photo:
         if not loading_panel and photo is not None and (isinstance(photo, BufferedInputFile) or screen != "party"):
             # Send the replacement first; the old text panel is removed after delivery succeeds.
             pass
@@ -219,10 +236,22 @@ async def edit_panel(
             except TelegramBadRequest:
                 pass
 
+    if refresh_idle_for is not None and not _can_refresh_panel_position(
+        storage, telegram_user_id, panel_snapshot, screen, refresh_idle_for
+    ):
+        return
+
     is_photo = photo is not None
     if photo is not None:
         try:
-            message = await bot.send_photo(destination, photo, caption=text, reply_markup=keyboard, parse_mode="HTML")
+            message = await bot.send_photo(
+                destination,
+                photo,
+                caption=text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+                disable_notification=disable_notification,
+            )
         except TelegramBadRequest as error:
             logger.warning("Could not send photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
             message = await bot.send_message(
@@ -231,6 +260,7 @@ async def edit_panel(
                 reply_markup=keyboard,
                 parse_mode="HTML",
                 disable_web_page_preview=True,
+                disable_notification=disable_notification,
             )
             is_photo = False
     else:
@@ -240,7 +270,16 @@ async def edit_panel(
             reply_markup=keyboard,
             parse_mode="HTML",
             disable_web_page_preview=True,
+            disable_notification=disable_notification,
         )
+    if refresh_idle_for is not None and not _can_refresh_panel_position(
+        storage, telegram_user_id, panel_snapshot, screen, refresh_idle_for
+    ):
+        try:
+            await bot.delete_message(message.chat.id, message.message_id)
+        except TelegramAPIError:
+            pass
+        return
     storage.save_panel(telegram_user_id, message.chat.id, message.message_id, screen, is_photo)
     save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
     if is_default_panel_photo:
@@ -250,6 +289,28 @@ async def edit_panel(
             await bot.delete_message(panel_to_replace.chat_id, panel_to_replace.message_id)
         except TelegramAPIError:
             pass
+
+
+def _can_refresh_panel_position(
+    storage: BotStorage,
+    telegram_user_id: int,
+    expected_panel,
+    screen: str,
+    idle_for: timedelta,
+) -> bool:
+    current_panel = storage.get_panel(telegram_user_id)
+    return bool(
+        expected_panel
+        and current_panel
+        and expected_panel.chat_id == current_panel.chat_id
+        and expected_panel.message_id == current_panel.message_id
+        and current_panel.screen == screen
+        and storage.panel_refresh_is_due(
+            telegram_user_id,
+            idle_for,
+            PANEL_POSITION_REFRESHABLE_SCREENS,
+        )
+    )
 
 
 async def begin_panel_transition(
@@ -415,6 +476,48 @@ async def refresh_active_search_panels(
         except Exception:
             logger.exception("Party search panel refresh failed")
         await asyncio.sleep(15)
+
+
+async def refresh_stale_panels(
+    bot: Bot,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    """Move a stale panel to the bottom only after two days without user activity."""
+    while True:
+        try:
+            for telegram_user_id in storage.due_panel_refresh_user_ids(
+                PANEL_POSITION_REFRESH_AFTER,
+                PANEL_POSITION_REFRESHABLE_SCREENS,
+            ):
+                panel = storage.get_panel(telegram_user_id)
+                if not panel or panel.screen not in PANEL_POSITION_REFRESHABLE_SCREENS:
+                    continue
+                try:
+                    await edit_panel(
+                        bot,
+                        storage,
+                        api,
+                        settings,
+                        telegram_user_id,
+                        panel.screen,
+                        panel.chat_id,
+                        force_new_message=True,
+                        disable_notification=True,
+                        refresh_idle_for=PANEL_POSITION_REFRESH_AFTER,
+                    )
+                except TelegramForbiddenError:
+                    storage.mark_bot_user_blocked(telegram_user_id)
+                    logger.info("Skipped panel refresh for a user who blocked the bot")
+                except (ApiError, TelegramAPIError):
+                    logger.warning("Could not refresh an inactive user's bot panel", exc_info=True)
+                await asyncio.sleep(0.05)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Inactive panel refresh loop failed")
+        await asyncio.sleep(PANEL_POSITION_REFRESH_SCAN_SECONDS)
 
 
 async def maybe_send_long_search_reminder(

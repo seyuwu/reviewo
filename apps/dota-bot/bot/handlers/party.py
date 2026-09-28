@@ -105,6 +105,7 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
                 parse_mode="HTML",
             )
             storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
+            storage.record_party_notification(telegram_user_id)
             return True
         if event_type in {"member_left", "member_kicked"}:
             try:
@@ -120,6 +121,7 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
                 parse_mode="HTML",
             )
             storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
+            storage.record_party_notification(telegram_user_id)
             return True
         if event_type == "accepted":
             party_slug = invite.get("partySlug")
@@ -130,6 +132,7 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
             else:
                 message = await bot.send_message(telegram_user_id, notification_text(payload))
                 storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
+                storage.record_party_notification(telegram_user_id)
             return True
 
         markup = invite_keyboard(invite_id, invite.get("inviteKind", "INVITE")) if invite_id and event_type in {"invite_received", "application_received"} else None
@@ -140,6 +143,7 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
             parse_mode="HTML",
         )
         storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 300)
+        storage.record_party_notification(telegram_user_id)
         return True
     except Exception:
         return False

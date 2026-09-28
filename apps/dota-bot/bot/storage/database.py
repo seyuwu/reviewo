@@ -51,7 +51,8 @@ class BotStorage:
               message_id INTEGER NOT NULL,
               screen TEXT NOT NULL,
               media_type TEXT NOT NULL DEFAULT 'photo',
-              updated_at TEXT NOT NULL
+              updated_at TEXT NOT NULL,
+              last_panel_bumped_at TEXT
             );
             CREATE TABLE IF NOT EXISTS callback_choices (
               telegram_user_id INTEGER NOT NULL,
@@ -83,7 +84,8 @@ class BotStorage:
               last_seen_at TEXT NOT NULL,
               announcements_enabled INTEGER NOT NULL DEFAULT 1,
               blocked_at TEXT,
-              acquisition_source TEXT NOT NULL DEFAULT 'existing'
+              acquisition_source TEXT NOT NULL DEFAULT 'existing',
+              last_party_notification_at TEXT
             );
             CREATE TABLE IF NOT EXISTS bot_funnel_events (
               telegram_user_id INTEGER NOT NULL,
@@ -121,12 +123,28 @@ class BotStorage:
             self.connection.execute(
                 "ALTER TABLE bot_panels ADD COLUMN media_type TEXT NOT NULL DEFAULT 'photo'"
             )
+        if "last_panel_bumped_at" not in columns:
+            self.connection.execute(
+                "ALTER TABLE bot_panels ADD COLUMN last_panel_bumped_at TEXT"
+            )
+        self.connection.execute(
+            "UPDATE bot_panels SET last_panel_bumped_at = ? WHERE last_panel_bumped_at IS NULL",
+            (timestamp(),),
+        )
+        self.connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bot_panels_position_refresh "
+            "ON bot_panels (screen, last_panel_bumped_at)"
+        )
         user_columns = {
             row["name"] for row in self.connection.execute("PRAGMA table_info(bot_users)")
         }
         if "acquisition_source" not in user_columns:
             self.connection.execute(
                 "ALTER TABLE bot_users ADD COLUMN acquisition_source TEXT NOT NULL DEFAULT 'existing'"
+            )
+        if "last_party_notification_at" not in user_columns:
+            self.connection.execute(
+                "ALTER TABLE bot_users ADD COLUMN last_party_notification_at TEXT"
             )
         # Older installations already know users through their panel/session rows.
         # Backfill them so the first announcement reaches existing bot users too.
@@ -280,6 +298,14 @@ class BotStorage:
             (telegram_user_id,),
         ).fetchone()
         return bool(row["announcements_enabled"]) if row else True
+
+    def mark_bot_user_blocked(self, telegram_user_id: int) -> None:
+        with self.lock:
+            self._connection().execute(
+                "UPDATE bot_users SET blocked_at = ? WHERE telegram_user_id = ?",
+                (timestamp(), telegram_user_id),
+            )
+            self._connection().commit()
 
     def bot_user_stats(self) -> dict[str, int]:
         row = self._connection().execute(
@@ -447,17 +473,87 @@ class BotStorage:
     def save_panel(
         self, telegram_user_id: int, chat_id: int, message_id: int, screen: str, is_photo: bool = True
     ) -> None:
+        now = timestamp()
         with self.lock:
             self._connection().execute(
-                """INSERT INTO bot_panels (telegram_user_id, chat_id, message_id, screen, media_type, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?)
+                """INSERT INTO bot_panels
+                     (telegram_user_id, chat_id, message_id, screen, media_type, updated_at, last_panel_bumped_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(telegram_user_id) DO UPDATE SET
                      chat_id=excluded.chat_id, message_id=excluded.message_id,
                      screen=excluded.screen, media_type=excluded.media_type,
-                     updated_at=excluded.updated_at""",
-                (telegram_user_id, chat_id, message_id, screen, "photo" if is_photo else "text", timestamp()),
+                     updated_at=excluded.updated_at,
+                     last_panel_bumped_at=CASE
+                       WHEN bot_panels.chat_id != excluded.chat_id
+                         OR bot_panels.message_id != excluded.message_id
+                       THEN excluded.last_panel_bumped_at
+                       ELSE bot_panels.last_panel_bumped_at END""",
+                (telegram_user_id, chat_id, message_id, screen, "photo" if is_photo else "text", now, now),
             )
             self._connection().commit()
+
+    def due_panel_refresh_user_ids(
+        self, idle_for: timedelta, allowed_screens: tuple[str, ...]
+    ) -> list[int]:
+        rows = self._panel_refresh_rows(idle_for, allowed_screens)
+        return [int(row["telegram_user_id"]) for row in rows]
+
+    def panel_refresh_is_due(
+        self,
+        telegram_user_id: int,
+        idle_for: timedelta,
+        allowed_screens: tuple[str, ...],
+    ) -> bool:
+        return bool(self._panel_refresh_rows(idle_for, allowed_screens, telegram_user_id, limit=1))
+
+    def _panel_refresh_rows(
+        self,
+        idle_for: timedelta,
+        allowed_screens: tuple[str, ...],
+        telegram_user_id: int | None = None,
+        *,
+        limit: int | None = None,
+    ) -> list[sqlite3.Row]:
+        if not allowed_screens:
+            return []
+        cutoff = (datetime.now(UTC) - idle_for).isoformat()
+        screen_params = ", ".join("?" for _ in allowed_screens)
+        query = f"""SELECT panels.telegram_user_id
+                    FROM bot_panels AS panels
+                    JOIN bot_users AS users
+                      ON users.telegram_user_id = panels.telegram_user_id
+                    WHERE panels.screen IN ({screen_params})
+                      AND panels.last_panel_bumped_at <= ?
+                      AND users.last_seen_at <= ?
+                      AND (users.last_party_notification_at IS NULL
+                           OR users.last_party_notification_at <= ?)
+                      AND users.announcements_enabled = 1
+                      AND users.blocked_at IS NULL"""
+        parameters: list[object] = [*allowed_screens, cutoff, cutoff, cutoff]
+        if telegram_user_id is not None:
+            query += " AND panels.telegram_user_id = ?"
+            parameters.append(telegram_user_id)
+        query += " ORDER BY panels.last_panel_bumped_at"
+        if limit is not None:
+            query += " LIMIT ?"
+            parameters.append(limit)
+        return self._connection().execute(query, parameters).fetchall()
+
+    def record_party_notification(self, telegram_user_id: int) -> None:
+        now = timestamp()
+        with self.lock:
+            connection = self._connection()
+            connection.execute(
+                """INSERT OR IGNORE INTO bot_users
+                     (telegram_user_id, first_seen_at, last_seen_at, last_party_notification_at)
+                   VALUES (?, ?, ?, ?)""",
+                (telegram_user_id, now, now, now),
+            )
+            connection.execute(
+                "UPDATE bot_users SET last_party_notification_at = ? WHERE telegram_user_id = ?",
+                (now, telegram_user_id),
+            )
+            connection.commit()
 
     def get_panel(self, telegram_user_id: int) -> Panel | None:
         row = self._connection().execute(

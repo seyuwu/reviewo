@@ -37,3 +37,4 @@ async def deliver_join_hint(
         ),
     )
     storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
+    storage.record_party_notification(telegram_user_id)
