@@ -41,6 +41,29 @@ def _last_broadcast_text(summary: dict | None) -> str:
     )
 
 
+def _acquisition_text(stats: dict) -> str:
+    source_names = {
+        "seo": "SEO",
+        "community": "Сообщества",
+        "party_invite": "Приглашения",
+        "direct": "Прямой вход",
+        "existing": "До меток",
+    }
+    sources = stats["sources"]
+    funnel = stats["funnel"]
+    source_lines = [
+        f"{name}: {sources.get(source, 0)} → "
+        f"{funnel.get(source, {}).get('account_ready', 0)} аккаунт → "
+        f"{funnel.get(source, {}).get('search_started', 0)} поиск → "
+        f"{funnel.get(source, {}).get('party_joined', 0)} пати"
+        for source, name in source_names.items()
+        if sources.get(source, 0)
+    ]
+    if not source_lines:
+        return "Пока нет данных по источникам.\nСобытия начнут учитываться после запуска бота."
+    return "Источники → аккаунт → поиск → пати:\n" + "\n".join(source_lines)
+
+
 async def show_admin_panel(
     bot,
     api: OpiniaApi,
@@ -51,11 +74,13 @@ async def show_admin_panel(
     notice: str | None = None,
 ) -> None:
     stats = storage.bot_user_stats()
+    acquisition = storage.bot_acquisition_stats()
     text = (
         "<b>Администрирование FDP</b>\n\n"
         f"Запустили бота: <b>{stats['total']}</b>\n"
         f"Пользователей с сессией: <b>{stats['registered']}</b>\n"
         f"Получают объявления: <b>{stats['subscribers']}</b>\n\n"
+        f"<b>Переходы в FDP</b>\n{escape(_acquisition_text(acquisition))}\n\n"
         f"{escape(_last_broadcast_text(storage.broadcast_summary()))}"
     )
     if notice:

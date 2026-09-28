@@ -1,0 +1,152 @@
+.page {
+  display: grid;
+  gap: 1.25rem;
+  padding-block: clamp(1rem, 3vw, 2.5rem);
+}
+
+.hero,
+.card,
+.section {
+  background: var(--games-glass, var(--color-surface));
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.hero {
+  background:
+    radial-gradient(circle at 88% 14%, rgb(139 92 246 / 22%), transparent 28%),
+    radial-gradient(circle at 6% 100%, rgb(139 92 246 / 10%), transparent 35%),
+    var(--games-glass, var(--color-surface));
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1.5rem, 5vw, 4rem);
+}
+
+.eyebrow {
+  color: var(--color-accent-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.title {
+  font-size: clamp(2rem, 6vw, 4rem);
+  line-height: 1.04;
+  margin: 0;
+  max-width: 18ch;
+}
+
+.lead {
+  color: var(--color-text-muted);
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  line-height: 1.65;
+  margin: 0;
+  max-width: 55rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.actions > a,
+.section > a {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 2.8rem;
+  padding-inline: 1rem;
+  text-decoration: none;
+}
+
+.note {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.note a {
+  color: var(--color-accent-strong);
+  font-weight: 700;
+}
+
+.features {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.card,
+.section {
+  padding: clamp(1.1rem, 2.5vw, 1.75rem);
+}
+
+.card h2,
+.section h2 {
+  font-size: clamp(1.15rem, 2.4vw, 1.55rem);
+  line-height: 1.2;
+  margin: 0 0 0.65rem;
+}
+
+.card p,
+.section p {
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.section {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.steps {
+  color: var(--color-text-muted);
+  display: grid;
+  gap: 0.7rem;
+  line-height: 1.55;
+  margin: 0 0 0.35rem;
+  padding-left: 1.4rem;
+}
+
+.steps li::marker {
+  color: var(--color-accent-strong);
+  font-weight: 800;
+}
+
+.section > a {
+  justify-self: start;
+}
+
+.faq {
+  border-top: 1px solid var(--color-card-border);
+  padding-top: 0.85rem;
+}
+
+.faq summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.faq p {
+  padding-top: 0.55rem;
+}
+
+@media (max-width: 760px) {
+  .features {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    display: grid;
+  }
+
+  .actions > a {
+    width: 100%;
+  }
+}

@@ -164,6 +164,19 @@ def party_invitation_copy_keyboard(invitation_text: str) -> InlineKeyboardMarkup
     )
 
 
+def bot_invitation_copy_keyboard(invitation_text: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📋 Скопировать текст",
+                    copy_text=CopyTextButton(text=invitation_text),
+                ),
+            ]
+        ]
+    )
+
+
 def party_invitation_retry_keyboard(code: str, role: str, recovery_url: str | None = None) -> InlineKeyboardMarkup:
     rows = [[button("🔄 Повторить вступление", f"partyinvite:join:{code}:{role}")]]
     if recovery_url:

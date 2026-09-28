@@ -56,6 +56,8 @@ export class GamePartyResponseDto {
   joinMode!: GamePartyJoinMode;
   kind!: GamePartyKind;
   maxMembers!: number;
+  /** Canonical party slug when this party was merged into another one. */
+  mergedIntoSlug!: string | null;
   memberCount!: number;
   members!: GamePartyMemberDto[];
   name!: string;

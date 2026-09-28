@@ -27,6 +27,22 @@ class FormatterTests(unittest.TestCase):
         self.assertNotIn("<script>", text)
         self.assertIn("&lt;script&gt;", text)
 
+    def test_party_roster_shows_the_selected_captain(self) -> None:
+        text = party_text(
+            {
+                "name": "Dota party",
+                "memberCount": 2,
+                "maxMembers": 5,
+                "openSlots": 3,
+                "members": [
+                    {"displayName": "Captain", "role": "OWNER", "positionRole": "1", "mmr": "5000"},
+                    {"displayName": "Player", "role": "MEMBER", "positionRole": "2", "mmr": "5000"},
+                ],
+            }
+        )
+        self.assertIn("Капитан:", text)
+        self.assertIn("<b>Captain</b>", text)
+
 
 if __name__ == "__main__":
     unittest.main()

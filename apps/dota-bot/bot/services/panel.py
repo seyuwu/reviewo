@@ -22,6 +22,7 @@ from ..ui.formatters import party_text, profile_text
 from ..ui.keyboards import (
     account_keyboard,
     back_keyboard,
+    bot_invitation_copy_keyboard,
     home_keyboard,
     looking_keyboard,
     kick_confirmation_keyboard,
@@ -33,6 +34,7 @@ from ..ui.keyboards import (
 
 logger = logging.getLogger(__name__)
 LFG_WINDOW_SECONDS = 20 * 60
+LONG_SEARCH_REMINDER_SECONDS = 3 * 60
 DEFAULT_PANEL_IMAGE = Path(__file__).resolve().parents[1] / "assets" / "fdp-panel-background.png"
 
 
@@ -340,13 +342,20 @@ async def refresh_active_search_panels(
             for telegram_user_id in storage.session_user_ids():
                 search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
                 panel = storage.get_panel(telegram_user_id)
-                if not panel:
-                    continue
                 try:
-                    if search.get("mode") == "looking" and panel.screen == "looking":
+                    if search.get("mode") == "looking":
                         profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
                         if not profile.get("looking"):
                             storage.set_choices(telegram_user_id, "auto_search", [])
+                        else:
+                            await maybe_send_long_search_reminder(
+                                bot,
+                                storage,
+                                telegram_user_id,
+                                search,
+                            )
+                        if not panel or panel.screen != "looking":
+                            continue
                         text, keyboard = await render_screen(
                             api,
                             storage,
@@ -354,7 +363,7 @@ async def refresh_active_search_panels(
                             telegram_user_id,
                             "looking",
                         )
-                    elif panel.screen == "party" and (
+                    elif panel and panel.screen == "party" and (
                         search.get("mode") == "recruit"
                         or storage.get_choice(telegram_user_id, "party_search_watch", 0)
                     ):
@@ -406,6 +415,69 @@ async def refresh_active_search_panels(
         except Exception:
             logger.exception("Party search panel refresh failed")
         await asyncio.sleep(15)
+
+
+async def maybe_send_long_search_reminder(
+    bot: Bot,
+    storage: BotStorage,
+    telegram_user_id: int,
+    search: dict,
+) -> None:
+    """Send one copyable bot invitation after a solo search has lasted three minutes."""
+    try:
+        started_at = float(search.get("startedAt"))
+    except (TypeError, ValueError, OverflowError):
+        return
+    if time.time() - started_at < LONG_SEARCH_REMINDER_SECONDS:
+        return
+
+    reminder_state = storage.get_choice(telegram_user_id, "search_3m_reminder", 0) or {}
+    if reminder_state.get("startedAt") == started_at and reminder_state.get("status") == "sent":
+        return
+
+    # Persist a pending state so a transient Telegram failure is retried by the next refresh.
+    storage.set_choices(
+        telegram_user_id,
+        "search_3m_reminder",
+        [{"startedAt": started_at, "status": "pending"}],
+    )
+    try:
+        me = await bot.get_me()
+        if not me.username:
+            logger.warning("Cannot build bot invitation without a Telegram username")
+            return
+
+        invite_url = f"https://t.me/{me.username}"
+        invitation_text = (
+            "🎮 Ищем пати в Dota 2? Заходи в FDP — подберём команду по ролям и MMR: "
+            f"{invite_url}\n@{me.username}"
+        )
+        message = await bot.send_message(
+            telegram_user_id,
+            "⏳ Ищем пати уже 3 минуты\n"
+            "Мы только начинаем, поэтому игроков пока немного. Если ты уже нашёл пати в другом месте — "
+            "поделись ботом с ребятами из неё и с друзьями. Чем больше игроков здесь, тем быстрее и "
+            "удобнее будет поиск 💜",
+            reply_markup=bot_invitation_copy_keyboard(invitation_text),
+            disable_web_page_preview=True,
+        )
+        storage.add_temporary_message(
+            telegram_user_id,
+            message.chat.id,
+            message.message_id,
+            15,
+        )
+        storage.set_choices(
+            telegram_user_id,
+            "search_3m_reminder",
+            [{"startedAt": started_at, "status": "sent"}],
+        )
+    except TelegramAPIError:
+        logger.warning(
+            "Could not send three-minute search reminder to Telegram user %s; will retry",
+            telegram_user_id,
+            exc_info=True,
+        )
 
 
 async def recover_loading_panels(

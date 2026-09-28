@@ -39,7 +39,11 @@ export class EntityAttributesRepository {
   async upsertManyWithDotaMatchLock(
     userId: string,
     entityId: string,
-    attributes: Record<string, string>
+    attributes: Record<string, string>,
+    options?: {
+      activeRecruitingPartySlug?: string;
+      expectedPartySlug?: string;
+    }
   ): Promise<boolean> {
     return this.prismaService.$transaction(async (tx) => {
       await tx.$executeRaw`
@@ -47,6 +51,41 @@ export class EntityAttributesRepository {
           hashtext(${`${userId}:dota-party-join`})
         )
       `;
+
+      if (options?.expectedPartySlug) {
+        const currentPartySlug = await tx.entityAttribute.findUnique({
+          select: { value: true },
+          where: {
+            entityId_key: {
+              entityId,
+              key: DOTA_ATTRIBUTE_KEYS.lfgPartySlug
+            }
+          }
+        });
+        if (currentPartySlug?.value.trim() !== options.expectedPartySlug) {
+          return false;
+        }
+      }
+
+      if (options?.activeRecruitingPartySlug) {
+        const partyMembership = await tx.gamePartyMember.findFirst({
+          select: { id: true },
+          where: {
+            party: {
+              expiresAt: { gt: new Date() },
+              kind: "PARTY",
+              mergedIntoSlug: null,
+              slug: options.activeRecruitingPartySlug,
+              vertical: DOTA_PARTY_VERTICAL
+            },
+            role: { in: ["OWNER", "OFFICER"] },
+            userId
+          }
+        });
+        if (!partyMembership) {
+          return false;
+        }
+      }
 
       const lfgUntil = Date.parse(attributes[DOTA_ATTRIBUTE_KEYS.lfgUntil] ?? "");
       const startsSoloSearch =

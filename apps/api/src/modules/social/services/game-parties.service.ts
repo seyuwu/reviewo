@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  OnModuleDestroy,
   OnModuleInit,
   HttpException
 } from "@nestjs/common";
@@ -57,7 +58,8 @@ import { PARTY_REALTIME_PUBLISHER, type PartyRealtimePublisher } from "../party-
 import { DiscordVoiceService } from "./discord-voice.service.js";
 import type { PartyDiscordVoiceResponseDto } from "../dto/game-party-response.dto.js";
 import { RedisService } from "../../../redis/redis.service.js";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
+import { planDotaPartyMerge } from "../lib/dota-party-merge.js";
 
 const INVITE_FLAG_LIMIT = 3;
 const PARTY_CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
@@ -70,8 +72,11 @@ const PARTY_LINK_OPEN_DEDUPE_TTL_SECONDS = 60 * 60 * 24;
 const PARTY_JOIN_CODE_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 @Injectable()
-export class GamePartiesService implements OnModuleInit {
+export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(GamePartiesService.name);
+  private cleanupTimer?: NodeJS.Timeout;
+  private partyMergeTimer?: NodeJS.Timeout;
+  private partyMergeRunning = false;
 
   constructor(
     private readonly authService: AuthService,
@@ -90,10 +95,24 @@ export class GamePartiesService implements OnModuleInit {
 
   onModuleInit(): void {
     void this.runCleanupSafely();
+    void this.runRecruitPartyMergeSafely();
 
-    setInterval(() => {
+    this.cleanupTimer = setInterval(() => {
       void this.runCleanupSafely();
     }, PARTY_CLEANUP_INTERVAL_MS).unref();
+
+    this.partyMergeTimer = setInterval(() => {
+      void this.runRecruitPartyMergeSafely();
+    }, 5_000).unref();
+  }
+
+  onModuleDestroy(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+    }
+    if (this.partyMergeTimer) {
+      clearInterval(this.partyMergeTimer);
+    }
   }
 
   async createParty(
@@ -796,6 +815,13 @@ export class GamePartiesService implements OnModuleInit {
         positionRole
       });
     } catch (error) {
+      if (error instanceof Error && error.message === "PARTY_MERGED") {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "This party has merged. Open the updated party and try again.",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
       if (isPrismaErrorCode(error, "P2002")) {
         throw createAppException({
           code: AppErrorCode.Conflict,
@@ -1008,7 +1034,7 @@ export class GamePartiesService implements OnModuleInit {
 
     if (updated.members.length >= updated.maxMembers) {
       extraClosed = await this.gamePartiesRepository.cancelPendingInvitesForParty(updated.id);
-      await this.clearLookingForUser(updated.ownerUserId);
+      await this.clearLookingForUser(updated.ownerUserId, updated.slug);
     }
 
     const allClosed = [...closedInvites, ...extraClosed];
@@ -1912,6 +1938,13 @@ export class GamePartiesService implements OnModuleInit {
         positionRole
       });
     } catch (error) {
+      if (error instanceof Error && error.message === "PARTY_MERGED") {
+        throw createAppException({
+          code: AppErrorCode.Conflict,
+          message: "This party has merged. Open the updated party and try again.",
+          statusCode: HttpStatus.CONFLICT
+        });
+      }
       if (isPrismaErrorCode(error, "P2002")) {
         throw createAppException({
           code: AppErrorCode.Conflict,
@@ -2034,7 +2067,7 @@ export class GamePartiesService implements OnModuleInit {
 
       await this.assertDiscordVoiceRemoved(party.discordChannelId);
       await this.gamePartiesRepository.deleteParty(party.id);
-      await this.clearLookingForUser(currentUser.id);
+      await this.clearLookingForUser(currentUser.id, party.slug);
       return { ok: true };
     }
 
@@ -2085,7 +2118,7 @@ export class GamePartiesService implements OnModuleInit {
     await this.emitAutoClosedNotifications(closed, party);
     await this.assertDiscordVoiceRemoved(party.discordChannelId);
     await this.gamePartiesRepository.deleteParty(party.id);
-    await this.clearLookingForUser(currentUser.id);
+    await this.clearLookingForUser(currentUser.id, party.slug);
     return { ok: true };
   }
 
@@ -2710,7 +2743,7 @@ export class GamePartiesService implements OnModuleInit {
       }
     }
 
-    await this.clearLookingForUser(full.ownerUserId);
+    await this.clearLookingForUser(full.ownerUserId, full.slug);
     return true;
   }
 
@@ -2819,7 +2852,9 @@ export class GamePartiesService implements OnModuleInit {
         }
 
         expiredPartyIds.push(party.id);
-        await this.clearLookingForUser(party.ownerUserId);
+        if (!party.mergedIntoSlug) {
+          await this.clearLookingForUser(party.ownerUserId, party.slug);
+        }
       }
 
       if (expiredPartyIds.length > 0) {
@@ -2892,6 +2927,79 @@ export class GamePartiesService implements OnModuleInit {
         error instanceof Error ? error.message : "Unknown party cleanup error",
         error instanceof Error ? error.stack : undefined
       );
+    }
+  }
+
+  private async runRecruitPartyMergeSafely(): Promise<void> {
+    if (this.partyMergeRunning) {
+      return;
+    }
+    this.partyMergeRunning = true;
+
+    try {
+      const now = new Date();
+      const candidates = await this.gamePartiesRepository.listActiveRecruitingParties(now);
+
+      for (let leftIndex = 0; leftIndex < candidates.length; leftIndex += 1) {
+        for (let rightIndex = leftIndex + 1; rightIndex < candidates.length; rightIndex += 1) {
+          const left = candidates[leftIndex];
+          const right = candidates[rightIndex];
+          if (!left || !right) {
+            continue;
+          }
+          const plan = planDotaPartyMerge(left, right, now);
+          if (!plan) {
+            continue;
+          }
+
+          const leaderUserId =
+            plan.leaderCandidates[randomInt(plan.leaderCandidates.length)] ??
+            plan.leaderCandidates[0];
+          const result = await this.gamePartiesRepository.mergeRecruitingPartiesAtomically({
+            leaderUserId,
+            now,
+            retiredPartyId: plan.retiredPartyId,
+            survivorPartyId: plan.survivorPartyId
+          });
+
+          if (!result.ok && result.reason === "busy") {
+            return;
+          }
+          if (!result.ok) {
+            continue;
+          }
+
+          const mergedParty = await this.gamePartiesRepository.findById(result.party.id);
+          if (!mergedParty) {
+            return;
+          }
+
+          const partyResponse = await this.toPartyResponse(mergedParty);
+          this.partyRealtimeService.broadcastPartyMerged({
+            fromPartyId: result.retiredPartyId,
+            fromPartySlug: result.retiredPartySlug,
+            mergeMessage: this.toChatMessageDto(result.mergeMessage),
+            memberUserIds: result.memberUserIds,
+            party: partyResponse
+          });
+          this.partyRealtimeService.broadcastPartyRecruitUpdated({
+            looking: partyResponse.recruitedRoles.length > 0,
+            partyId: partyResponse.id,
+            partySlug: partyResponse.slug,
+            recruitedRoles: partyResponse.recruitedRoles
+          });
+          this.logger.log(
+            `Merged recruiting parties ${result.retiredPartySlug} into ${partyResponse.slug}`
+          );
+          return;
+        }
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Automatic recruiting-party merge failed: ${error instanceof Error ? error.message : "unknown error"}`
+      );
+    } finally {
+      this.partyMergeRunning = false;
     }
   }
 
@@ -3019,7 +3127,7 @@ export class GamePartiesService implements OnModuleInit {
     });
   }
 
-  private async clearLookingForUser(userId: string): Promise<void> {
+  private async clearLookingForUser(userId: string, expectedPartySlug?: string): Promise<void> {
     const entity = await this.entitiesRepository.findByOwnerUserId(userId);
 
     if (!entity) {
@@ -3034,16 +3142,26 @@ export class GamePartiesService implements OnModuleInit {
 
     const partySlug = attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || "";
 
-    await this.entityAttributesRepository.upsertMany(entity.id, {
-      [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
-      [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: "",
-      [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: "",
-      [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: "",
-      [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: "",
-      [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: "",
-      [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: "",
-      [DOTA_ATTRIBUTE_KEYS.lfgUntil]: new Date(0).toISOString()
-    });
+    const partySlugToClear = expectedPartySlug ?? partySlug;
+    const wasCleared = await this.entityAttributesRepository.upsertManyWithDotaMatchLock(
+      userId,
+      entity.id,
+      {
+        [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgUntil]: new Date(0).toISOString()
+      },
+      partySlugToClear ? { expectedPartySlug: partySlugToClear } : undefined
+    );
+
+    if (!wasCleared) {
+      return;
+    }
 
     if (partySlug) {
       const party = await this.gamePartiesRepository.findByVerticalAndSlug(
@@ -3077,14 +3195,20 @@ export class GamePartiesService implements OnModuleInit {
       return;
     }
 
-    if (attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() === "") {
+    const partySlug = attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || "";
+    if (!partySlug) {
       return;
     }
 
     const party = await this.gamePartiesRepository.findById(partyId);
 
-    if (!party || this.isExpired(party)) {
-      await this.clearLookingForUser(ownerUserId);
+    if (!party) {
+      await this.clearLookingForUser(ownerUserId, partySlug);
+      return;
+    }
+
+    if (this.isExpired(party)) {
+      await this.clearLookingForUser(ownerUserId, party.slug);
       return;
     }
 
@@ -3099,13 +3223,18 @@ export class GamePartiesService implements OnModuleInit {
     const openRoles = recruitedRoles.filter((role) => !claimed.has(role));
     const desiredSize = Math.min(party.maxMembers, party.members.length + openRoles.length);
 
-    await this.entityAttributesRepository.upsertMany(entity.id, {
-      [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: String(desiredSize),
-      [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: String(party.members.length)
-    });
+    await this.entityAttributesRepository.upsertManyWithDotaMatchLock(
+      ownerUserId,
+      entity.id,
+      {
+        [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: String(desiredSize),
+        [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: String(party.members.length)
+      },
+      { activeRecruitingPartySlug: party.slug, expectedPartySlug: party.slug }
+    );
 
     if (openRoles.length === 0 || party.members.length >= party.maxMembers) {
-      await this.clearLookingForUser(ownerUserId);
+      await this.clearLookingForUser(ownerUserId, party.slug);
       return;
     }
 
@@ -3308,6 +3437,7 @@ export class GamePartiesService implements OnModuleInit {
       kind: party.kind,
       linkOpenCount,
       maxMembers: party.maxMembers,
+      mergedIntoSlug: party.mergedIntoSlug,
       memberCount: members.length,
       members,
       name: party.name,

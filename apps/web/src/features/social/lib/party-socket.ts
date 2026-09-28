@@ -41,9 +41,7 @@ function readHandlers(handlersRef: PartySocketHandlersRef): PartySocketHandlers 
   return handlersRef.current;
 }
 
-function isJoinAck(
-  response: unknown
-): response is {
+function isJoinAck(response: unknown): response is {
   messages: GamePartyChatMessage[];
   nextCursor?: string | null;
   party: GameParty;
@@ -243,6 +241,7 @@ export function connectPartyWatchSocket(
   accessToken: string | null,
   handlers: {
     onConnected?: () => void;
+    onPartyMerged?: (partySlug: string) => void;
     onPartyUpdated?: (party: GameParty) => void;
     onRecruitUpdated: (payload: PartyRecruitUpdated) => void;
   }
@@ -266,6 +265,12 @@ export function connectPartyWatchSocket(
   socket.on("party_updated", (party: GameParty) => {
     if (party?.slug === partySlug) {
       handlers.onPartyUpdated?.(party);
+    }
+  });
+
+  socket.on("party_merged", (payload: { fromSlug?: string; partySlug?: string }) => {
+    if (payload?.fromSlug === partySlug && payload.partySlug) {
+      handlers.onPartyMerged?.(payload.partySlug);
     }
   });
 

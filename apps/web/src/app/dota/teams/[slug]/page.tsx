@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { DotaTeamView } from "../../../../features/dota/components/dota-team-view";
@@ -36,8 +36,7 @@ export async function generateMetadata({ params }: DotaTeamPageProps): Promise<M
   const pageUrl = buildDotaTeamUrl(party.slug);
   const ogImage = buildDotaTeamOgImageUrl(party.slug);
   const seatsLeft = Math.max(0, party.maxMembers - party.memberCount);
-  const joinMode =
-    (party.joinMode ?? "OPEN") === "OPEN" ? "сразу в команду" : "по заявке";
+  const joinMode = (party.joinMode ?? "OPEN") === "OPEN" ? "сразу в команду" : "по заявке";
   const description = `Dota-пати ${party.name}: ${party.memberCount}/${party.maxMembers}, осталось ${seatsLeft}, ${joinMode}. Собери стек на Opinia.`;
 
   return {
@@ -69,6 +68,10 @@ export default async function DotaTeamPage({ params }: DotaTeamPageProps) {
 
   if (!party) {
     notFound();
+  }
+
+  if (party.slug !== slug) {
+    redirect(`/dota/teams/${encodeURIComponent(party.slug)}`);
   }
 
   return (

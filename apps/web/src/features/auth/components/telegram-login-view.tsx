@@ -18,7 +18,7 @@ export function TelegramLoginView() {
   const searchParams = useSearchParams();
   const { authSession, isAuthSessionLoaded, storeAuthSession } = useAuthSession();
   const [error, setError] = useState<string | null>(null);
-  const loginStarted = useRef(false);
+  const completedLoginRequestKey = useRef<string | null>(null);
   const webAccessTicket = searchParams.get("ticket");
   const nextPath = useMemo(() => safePartyPath(searchParams.get("next")), [searchParams]);
 
@@ -26,18 +26,16 @@ export function TelegramLoginView() {
     if (!isAuthSessionLoaded) {
       return;
     }
-    if (authSession) {
-      router.replace(nextPath);
-      return;
-    }
-    if (loginStarted.current) {
-      return;
-    }
-
     const payload = readTelegramPayload(searchParams);
     const hasValidWebAccessTicket = Boolean(
       webAccessTicket && /^[A-Za-z0-9_-]{43}$/.test(webAccessTicket)
     );
+    // A Telegram ticket or signed Telegram Login payload identifies the account
+    // the user opened this link for. Prefer it over a possibly different browser session.
+    if (!payload && !hasValidWebAccessTicket && authSession) {
+      router.replace(nextPath);
+      return;
+    }
     if (!payload && !hasValidWebAccessTicket) {
       setError(
         "Ссылка входа недействительна. Вернитесь в бота и нажмите кнопку открытия сайта ещё раз."
@@ -45,7 +43,12 @@ export function TelegramLoginView() {
       return;
     }
 
-    loginStarted.current = true;
+    const requestKey = webAccessTicket ? `ticket:${webAccessTicket}` : `telegram:${payload?.hash}`;
+    if (completedLoginRequestKey.current === requestKey) {
+      router.replace(nextPath);
+      return;
+    }
+
     // Telegram's signed login fields must not remain in browser history or analytics URLs.
     window.history.replaceState(
       window.history.state,
@@ -54,7 +57,6 @@ export function TelegramLoginView() {
     );
 
     let cancelled = false;
-    const requestKey = webAccessTicket ? `ticket:${webAccessTicket}` : `telegram:${payload?.hash}`;
     let request = loginRequests.get(requestKey);
     if (!request) {
       request = hasValidWebAccessTicket
@@ -65,8 +67,9 @@ export function TelegramLoginView() {
 
     void request
       .then((response) => {
-        storeAuthSession(response);
         if (!cancelled) {
+          completedLoginRequestKey.current = requestKey;
+          storeAuthSession(response);
           router.replace(nextPath);
         }
       })

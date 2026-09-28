@@ -564,13 +564,26 @@ export class DotaProfileService {
       };
     }
 
-    await this.entityAttributesRepository.upsertMany(ownerEntity.id, {
-      [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
-        ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
-        : new Date(0).toISOString(),
-      [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
-      ...recruitAttributes
-    });
+    const savedRecruitState = await this.entityAttributesRepository.upsertManyWithDotaMatchLock(
+      party.ownerUserId,
+      ownerEntity.id,
+      {
+        [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
+          ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
+          : new Date(0).toISOString(),
+        [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
+        ...recruitAttributes
+      },
+      { activeRecruitingPartySlug: party.slug }
+    );
+
+    if (!savedRecruitState) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "This party has changed. Refresh and try again.",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
 
     const recruitedRoles = looking
       ? parseRecruitedRoles(recruitAttributes[DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles])

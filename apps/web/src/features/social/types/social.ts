@@ -78,6 +78,7 @@ export interface GameParty {
   /** Soft-unique invite opens; captains/officers only. */
   linkOpenCount?: number | null;
   maxMembers: number;
+  mergedIntoSlug?: string | null;
   memberCount: number;
   members: GamePartyMember[];
   name: string;

@@ -65,6 +65,48 @@ class BotStorageTests(unittest.TestCase):
         )
         self.assertIsNone(self.storage.get_session(7).recovery_url)
 
+    def test_acquisition_source_and_funnel_milestones_are_first_touch_and_deduplicated(self) -> None:
+        self.storage.record_bot_user(7, "seo")
+        self.storage.record_bot_user(7, "community")
+        self.storage.record_funnel_event(7, "account_ready")
+        self.storage.record_funnel_event(7, "account_ready")
+        self.storage.record_funnel_event(7, "search_started")
+
+        stats = self.storage.bot_acquisition_stats()
+        self.assertEqual(stats["sources"], {"seo": 1})
+        self.assertEqual(
+            stats["funnel"]["seo"],
+            {"bot_started": 1, "account_ready": 1, "search_started": 1},
+        )
+
+    def test_existing_database_users_migrate_to_unknown_source(self) -> None:
+        self.storage.close()
+        connection = sqlite3.connect(self.database_path)
+        connection.execute("DROP TABLE bot_users")
+        connection.execute(
+            """CREATE TABLE bot_users (
+                 telegram_user_id INTEGER PRIMARY KEY,
+                 first_seen_at TEXT NOT NULL,
+                 last_seen_at TEXT NOT NULL,
+                 announcements_enabled INTEGER NOT NULL DEFAULT 1,
+                 blocked_at TEXT
+               )"""
+        )
+        connection.execute(
+            "INSERT INTO bot_users (telegram_user_id, first_seen_at, last_seen_at) VALUES (7, 'old', 'old')"
+        )
+        connection.commit()
+        connection.close()
+
+        migrated = BotStorage(self.database_path, self.key)
+        migrated.initialize()
+        try:
+            stats = migrated.bot_acquisition_stats()
+            self.assertEqual(stats["sources"], {"existing": 1})
+            self.assertEqual(stats["funnel"]["existing"]["bot_started"], 1)
+        finally:
+            migrated.close()
+
     def test_auto_match_skips_previously_invited_players_until_search_restarts(self) -> None:
         self.storage.save_session(7, "access", "refresh")
         self.storage.save_session(9, "access-two", "refresh-two")

@@ -33,6 +33,10 @@ export function middleware(request: NextRequest) {
 
   // Canonicalize games/dota paths on the apex site to product hosts.
   if (APEX_HOSTS.has(host)) {
+    if (pathname === "/fdp") {
+      return redirectToSubdomain(request, "dota");
+    }
+
     if (pathname === "/games" || pathname.startsWith("/games/")) {
       return redirectToSubdomain(request, "games");
     }
@@ -40,6 +44,10 @@ export function middleware(request: NextRequest) {
     if (pathname === "/dota" || pathname.startsWith("/dota/")) {
       return redirectToSubdomain(request, "dota");
     }
+  }
+
+  if (GAMES_HOSTS.has(host) && pathname === "/fdp") {
+    return redirectToSubdomain(request, "dota");
   }
 
   // games.* → Games vertical entry (waitlist or live search)

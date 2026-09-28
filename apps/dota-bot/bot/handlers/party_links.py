@@ -1,5 +1,4 @@
 from html import escape
-import re
 from urllib.parse import quote
 
 from aiogram import F, Router
@@ -15,6 +14,7 @@ from ..services.panel import (
     edit_panel,
     edit_panel_content,
 )
+from ..services.start_links import parse_acquisition_source, parse_party_start_payload
 from ..storage.database import BotStorage
 from ..ui.formatters import party_text
 from ..ui.keyboards import (
@@ -28,15 +28,6 @@ from .registration import start_profile_registration
 
 router = Router(name="party-links")
 ROLE_NAMES = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
-
-
-def parse_party_start_payload(payload: str | None) -> str | None:
-    if not payload:
-        return None
-    match = re.fullmatch(r"party_([A-Za-z0-9_-]{6,16})", payload)
-    if not match:
-        return None
-    return match.group(1)
 
 
 async def load_party_invitation(api: OpiniaApi, code: str) -> tuple[str, dict]:
@@ -81,6 +72,11 @@ async def open_party_link(
     if message.chat.type != "private" or message.from_user is None:
         return
     code = parse_party_start_payload(command.args)
+    source = parse_acquisition_source(command.args)
+    storage.record_bot_user(
+        message.from_user.id,
+        source or ("party_invite" if code else "direct"),
+    )
     if code is None:
         await state.clear()
         storage.set_choices(message.from_user.id, "pending_onboarding_action", [])
@@ -260,6 +256,7 @@ async def finish_party_join(bot, api, settings, storage, telegram_user_id: int, 
             )
             return
         storage.set_choices(telegram_user_id, "pending_party_invite", [])
+        storage.record_funnel_event(telegram_user_id, "party_joined")
         if result.get("slug"):
             from ..services.party_notifications import deliver_join_hint
 

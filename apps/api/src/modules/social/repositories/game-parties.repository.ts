@@ -9,12 +9,15 @@ import type {
 } from "#prisma/client";
 import {
   DOTA_ATTRIBUTE_KEYS,
+  DOTA_PARTY_VERTICAL,
   DOTA_PARTY_RECRUIT_MMR_SPREAD,
   DOTA_VERTICAL,
   isDotaPositionRole
 } from "@reviewo/shared";
 
 import { PrismaService } from "../../../database/prisma.service.js";
+import type { DotaPartyMergeCandidate } from "../lib/dota-party-merge.js";
+import { planDotaPartyMerge } from "../lib/dota-party-merge.js";
 
 type PartyWithMembers = GameParty & {
   members: Array<GamePartyMember & { user: { displayName: string; id: string } }>;
@@ -26,6 +29,484 @@ const MAX_CHAT_PAGE_SIZE = 100;
 @Injectable()
 export class GamePartiesRepository {
   constructor(private readonly prismaService: PrismaService) {}
+
+  async listActiveRecruitingParties(now: Date): Promise<DotaPartyMergeCandidate[]> {
+    const activeLfgAttributes = await this.prismaService.entityAttribute.findMany({
+      select: { entityId: true },
+      where: {
+        key: DOTA_ATTRIBUTE_KEYS.lfgUntil,
+        value: { gt: now.toISOString() }
+      }
+    });
+    const lfgEntityIds = [...new Set(activeLfgAttributes.map((attribute) => attribute.entityId))];
+    if (lfgEntityIds.length === 0) {
+      return [];
+    }
+
+    const recruiterProfiles = await this.prismaService.entity.findMany({
+      include: { attributes: { select: { key: true, value: true } } },
+      where: {
+        id: { in: lfgEntityIds },
+        ownerUserId: { not: null },
+        type: "person",
+        visibility: "ACTIVE"
+      }
+    });
+    const profileByOwnerId = new Map(
+      recruiterProfiles
+        .filter((profile) => profile.ownerUserId)
+        .map((profile) => [
+          profile.ownerUserId as string,
+          {
+            entityId: profile.id,
+            attributes: Object.fromEntries(
+              profile.attributes.map((attribute) => [attribute.key, attribute.value])
+            )
+          }
+        ])
+    );
+    const recruiters = [...profileByOwnerId.entries()].flatMap(([ownerUserId, profile]) => {
+      const attributes = profile.attributes;
+      const partySlug = attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim();
+      const recruitedRoles = parseRecruitingRoles(
+        attributes[DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]
+      );
+      const lfgUntil = new Date(attributes[DOTA_ATTRIBUTE_KEYS.lfgUntil] ?? "");
+
+      if (
+        attributes[DOTA_ATTRIBUTE_KEYS.vertical] !== DOTA_VERTICAL ||
+        !partySlug ||
+        recruitedRoles.length === 0 ||
+        !Number.isFinite(lfgUntil.getTime()) ||
+        lfgUntil.getTime() <= now.getTime()
+      ) {
+        return [];
+      }
+
+      return [{ lfgUntil, ownerUserId, partySlug, recruitedRoles }];
+    });
+
+    if (recruiters.length === 0) {
+      return [];
+    }
+
+    const parties = await this.prismaService.gameParty.findMany({
+      include: {
+        invites: { select: { id: true }, where: { status: "PENDING" } },
+        members: { select: { positionRole: true, userId: true } }
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      where: {
+        expiresAt: { gt: now },
+        kind: "PARTY",
+        mergedIntoSlug: null,
+        ownerUserId: { in: recruiters.map((recruiter) => recruiter.ownerUserId) },
+        slug: { in: recruiters.map((recruiter) => recruiter.partySlug) },
+        vertical: DOTA_PARTY_VERTICAL,
+        visibility: "PUBLIC"
+      }
+    });
+    const recruiterBySlug = new Map(
+      recruiters.map((recruiter) => [recruiter.partySlug, recruiter])
+    );
+    const memberUserIds = [
+      ...new Set(parties.flatMap((party) => party.members.map((m) => m.userId)))
+    ];
+    const memberProfiles = await this.prismaService.entity.findMany({
+      include: { attributes: { select: { key: true, value: true } } },
+      where: {
+        ownerUserId: { in: memberUserIds },
+        type: "person",
+        visibility: "ACTIVE",
+        attributes: { some: { key: DOTA_ATTRIBUTE_KEYS.vertical, value: DOTA_VERTICAL } }
+      }
+    });
+    const memberProfileByUserId = new Map(
+      memberProfiles.flatMap((profile) =>
+        profile.ownerUserId
+          ? [
+              [
+                profile.ownerUserId,
+                Object.fromEntries(
+                  profile.attributes.map((attribute) => [attribute.key, attribute.value])
+                )
+              ] as const
+            ]
+          : []
+      )
+    );
+
+    return parties.flatMap((party) => {
+      const recruiter = recruiterBySlug.get(party.slug);
+      if (!recruiter || party.ownerUserId !== recruiter.ownerUserId || party.joinMode !== "OPEN") {
+        return [];
+      }
+
+      const memberAttributes = party.members.map((member) =>
+        memberProfileByUserId.get(member.userId)
+      );
+      const mmrBounds = memberAttributes.flatMap((attributes) => {
+        const bounds = parseMmrBounds(attributes?.[DOTA_ATTRIBUTE_KEYS.mmr]);
+        return bounds ? [bounds] : [];
+      });
+      const servers = memberAttributes.flatMap((attributes) => {
+        const server = attributes?.[DOTA_ATTRIBUTE_KEYS.server]?.trim();
+        return server ? [server] : [];
+      });
+
+      return [
+        {
+          createdAt: party.createdAt,
+          discordChannelId: party.discordChannelId,
+          expiresAt: party.expiresAt,
+          id: party.id,
+          joinMode: party.joinMode,
+          lfgUntil: recruiter.lfgUntil,
+          maxMembers: party.maxMembers,
+          members: party.members,
+          mmrBounds,
+          ownerUserId: party.ownerUserId,
+          pendingInviteCount: party.invites.length,
+          recruitedRoles: recruiter.recruitedRoles,
+          servers,
+          slug: party.slug
+        }
+      ];
+    });
+  }
+
+  async mergeRecruitingPartiesAtomically(input: {
+    leaderUserId: string;
+    now: Date;
+    retiredPartyId: string;
+    survivorPartyId: string;
+  }): Promise<
+    | {
+        ok: true;
+        mergeMessage: GamePartyChatMessage & { user: { displayName: string; id: string } };
+        party: PartyWithMembers;
+        retiredPartyId: string;
+        retiredPartySlug: string;
+        memberUserIds: string[];
+      }
+    | { ok: false; reason: "busy" | "changed" }
+  > {
+    return this.prismaService.$transaction(async (tx) => {
+      const matcherLock = await tx.$queryRaw<Array<{ locked: boolean }>>`
+        SELECT pg_try_advisory_xact_lock(hashtext('reviewo:dota-recruit-party-merge')) AS locked
+      `;
+      if (!matcherLock[0]?.locked) {
+        return { ok: false as const, reason: "busy" as const };
+      }
+
+      const partyIds = [input.survivorPartyId, input.retiredPartyId].sort();
+      const firstSnapshot = await tx.gameParty.findMany({
+        include: { members: { select: { userId: true } } },
+        where: { id: { in: partyIds } }
+      });
+      if (firstSnapshot.length !== 2) {
+        return { ok: false as const, reason: "changed" as const };
+      }
+
+      const lockedUserIds = [
+        ...new Set(firstSnapshot.flatMap((party) => party.members.map((m) => m.userId)))
+      ].sort();
+      for (const userId of lockedUserIds) {
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(hashtext(${`${userId}:dota-party-join`}))
+        `;
+      }
+
+      const lockedParties = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id::text AS id
+        FROM social.game_parties
+        WHERE id = ANY(ARRAY[${partyIds[0]}::uuid, ${partyIds[1]}::uuid])
+        ORDER BY id
+        FOR UPDATE
+      `;
+      if (lockedParties.length !== 2) {
+        return { ok: false as const, reason: "changed" as const };
+      }
+
+      const parties = await tx.gameParty.findMany({
+        include: {
+          invites: { select: { id: true }, where: { status: "PENDING" } },
+          members: { select: { positionRole: true, userId: true } }
+        },
+        where: { id: { in: partyIds } }
+      });
+      const survivor = parties.find((party) => party.id === input.survivorPartyId);
+      const retired = parties.find((party) => party.id === input.retiredPartyId);
+      if (!survivor || !retired) {
+        return { ok: false as const, reason: "changed" as const };
+      }
+
+      const currentUserIds = [
+        ...new Set([...survivor.members, ...retired.members].map((m) => m.userId))
+      ].sort();
+      if (currentUserIds.some((userId) => !lockedUserIds.includes(userId))) {
+        // A concurrent join added a member after the first snapshot. Retry next scan
+        // with that user's advisory lock instead of merging an unlocked roster.
+        return { ok: false as const, reason: "changed" as const };
+      }
+
+      const ownerProfiles = await tx.entity.findMany({
+        include: { attributes: { select: { key: true, value: true } } },
+        where: {
+          ownerUserId: { in: [survivor.ownerUserId, retired.ownerUserId] },
+          type: "person",
+          visibility: "ACTIVE"
+        }
+      });
+      const ownerProfileByUserId = new Map(
+        ownerProfiles.flatMap((profile) =>
+          profile.ownerUserId
+            ? [
+                [
+                  profile.ownerUserId,
+                  {
+                    entityId: profile.id,
+                    attributes: Object.fromEntries(
+                      profile.attributes.map((attribute) => [attribute.key, attribute.value])
+                    )
+                  }
+                ] as const
+              ]
+            : []
+        )
+      );
+      const recruiterProfiles = [survivor, retired].map((party) => {
+        const profile = ownerProfileByUserId.get(party.ownerUserId);
+        const attrs = profile?.attributes ?? {};
+        return {
+          party,
+          profile,
+          lfgUntil: new Date(attrs[DOTA_ATTRIBUTE_KEYS.lfgUntil] ?? ""),
+          recruitedRoles: parseRecruitingRoles(attrs[DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles])
+        };
+      });
+      const memberProfiles = await tx.entity.findMany({
+        include: { attributes: { select: { key: true, value: true } } },
+        where: {
+          ownerUserId: { in: currentUserIds },
+          type: "person",
+          visibility: "ACTIVE",
+          attributes: { some: { key: DOTA_ATTRIBUTE_KEYS.vertical, value: DOTA_VERTICAL } }
+        }
+      });
+      const memberAttributesByUserId = new Map(
+        memberProfiles.flatMap((profile) =>
+          profile.ownerUserId
+            ? [
+                [
+                  profile.ownerUserId,
+                  Object.fromEntries(
+                    profile.attributes.map((attribute) => [attribute.key, attribute.value])
+                  )
+                ] as const
+              ]
+            : []
+        )
+      );
+      const toCandidate = (party: (typeof parties)[number]): DotaPartyMergeCandidate | null => {
+        const recruiter = recruiterProfiles.find((entry) => entry.party.id === party.id);
+        const recruiterAttributes = recruiter?.profile?.attributes;
+        if (
+          !recruiter?.profile ||
+          recruiterAttributes?.[DOTA_ATTRIBUTE_KEYS.vertical] !== DOTA_VERTICAL ||
+          recruiterAttributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() !== party.slug ||
+          !recruiter.lfgUntil.getTime() ||
+          party.kind !== "PARTY" ||
+          party.vertical !== DOTA_PARTY_VERTICAL ||
+          party.visibility !== "PUBLIC" ||
+          party.mergedIntoSlug
+        ) {
+          return null;
+        }
+        const memberAttributes = party.members.map((member) =>
+          memberAttributesByUserId.get(member.userId)
+        );
+        const mmrBounds = memberAttributes.flatMap((attributes) => {
+          const bounds = parseMmrBounds(attributes?.[DOTA_ATTRIBUTE_KEYS.mmr]);
+          return bounds ? [bounds] : [];
+        });
+        const servers = memberAttributes.flatMap((attributes) => {
+          const server = attributes?.[DOTA_ATTRIBUTE_KEYS.server]?.trim();
+          return server ? [server] : [];
+        });
+        return {
+          createdAt: party.createdAt,
+          discordChannelId: party.discordChannelId,
+          expiresAt: party.expiresAt,
+          id: party.id,
+          joinMode: party.joinMode,
+          lfgUntil: recruiter.lfgUntil,
+          maxMembers: party.maxMembers,
+          members: party.members,
+          mmrBounds,
+          ownerUserId: party.ownerUserId,
+          pendingInviteCount: party.invites.length,
+          recruitedRoles: recruiter.recruitedRoles,
+          servers,
+          slug: party.slug
+        };
+      };
+      const survivorCandidate = toCandidate(survivor);
+      const retiredCandidate = toCandidate(retired);
+      if (!survivorCandidate || !retiredCandidate) {
+        return { ok: false as const, reason: "changed" as const };
+      }
+      const plan = planDotaPartyMerge(survivorCandidate, retiredCandidate, input.now);
+      if (
+        !plan ||
+        plan.survivorPartyId !== survivor.id ||
+        plan.retiredPartyId !== retired.id ||
+        !plan.leaderCandidates.includes(input.leaderUserId)
+      ) {
+        return { ok: false as const, reason: "changed" as const };
+      }
+
+      const recruitedRoles = plan.recruitedRoles;
+      const recruitedUntil = new Date(
+        Math.max(survivorCandidate.lfgUntil.getTime(), retiredCandidate.lfgUntil.getTime())
+      );
+      const expiresAt = new Date(
+        Math.max(survivor.expiresAt!.getTime(), retired.expiresAt!.getTime())
+      );
+      const mergedMemberIds = currentUserIds;
+
+      await tx.gamePartyMember.updateMany({
+        data: { partyId: survivor.id, role: "MEMBER" },
+        where: { partyId: retired.id }
+      });
+      await tx.gamePartyMember.updateMany({
+        data: { role: "MEMBER" },
+        where: { partyId: survivor.id, role: "OWNER" }
+      });
+      await tx.gamePartyMember.update({
+        data: { role: "OWNER" },
+        where: { partyId_userId: { partyId: survivor.id, userId: input.leaderUserId } }
+      });
+      await tx.gameParty.update({
+        data: {
+          expiresAt,
+          ownerUserId: input.leaderUserId,
+          updatedAt: input.now
+        },
+        where: { id: survivor.id }
+      });
+      await tx.gameParty.update({
+        data: {
+          joinMode: "CONFIRM",
+          expiresAt,
+          mergedIntoSlug: survivor.slug,
+          visibility: "PRIVATE"
+        },
+        where: { id: retired.id }
+      });
+      await tx.gameParty.updateMany({
+        data: { mergedIntoSlug: survivor.slug },
+        where: { mergedIntoSlug: retired.slug }
+      });
+      await tx.gamePartyChatMessage.updateMany({
+        data: { partyId: survivor.id },
+        where: { partyId: retired.id }
+      });
+      const retiredBlocks = await tx.gamePartyJoinBlock.findMany({
+        select: { userId: true },
+        where: { partyId: retired.id }
+      });
+      const outsideBlocks = retiredBlocks
+        .map((block) => block.userId)
+        .filter((userId) => !mergedMemberIds.includes(userId));
+      if (outsideBlocks.length > 0) {
+        await tx.gamePartyJoinBlock.createMany({
+          data: [...new Set(outsideBlocks)].map((userId) => ({ partyId: survivor.id, userId })),
+          skipDuplicates: true
+        });
+      }
+      await tx.gamePartyJoinBlock.deleteMany({ where: { partyId: retired.id } });
+      await tx.gamePartyJoinBlock.deleteMany({
+        where: { partyId: survivor.id, userId: { in: mergedMemberIds } }
+      });
+
+      const clearLfg = {
+        [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgUntil]: new Date(0).toISOString(),
+        [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL
+      };
+      for (const ownerProfile of ownerProfiles) {
+        for (const [key, value] of Object.entries(clearLfg)) {
+          await tx.entityAttribute.upsert({
+            create: { entityId: ownerProfile.id, key, value },
+            update: { value },
+            where: { entityId_key: { entityId: ownerProfile.id, key } }
+          });
+        }
+      }
+      if (recruitedRoles.length > 0) {
+        const leaderProfile = ownerProfileByUserId.get(input.leaderUserId);
+        if (!leaderProfile) {
+          throw new Error("Merged Dota party captain profile disappeared");
+        }
+        const activeLfg = {
+          ...clearLfg,
+          [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: String(survivor.maxMembers),
+          [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: String(survivor.maxMembers),
+          [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: String(mergedMemberIds.length),
+          [DOTA_ATTRIBUTE_KEYS.lfgPartyKind]: survivor.kind,
+          [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: survivor.name,
+          [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: survivor.slug,
+          [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: recruitedRoles.join(","),
+          [DOTA_ATTRIBUTE_KEYS.lfgUntil]: recruitedUntil.toISOString()
+        };
+        for (const [key, value] of Object.entries(activeLfg)) {
+          await tx.entityAttribute.upsert({
+            create: { entityId: leaderProfile.entityId, key, value },
+            update: { value },
+            where: { entityId_key: { entityId: leaderProfile.entityId, key } }
+          });
+        }
+      }
+
+      const mergeMessage = await tx.gamePartyChatMessage.create({
+        data: {
+          message: "__system__:party_merged",
+          partyId: survivor.id,
+          userId: input.leaderUserId
+        },
+        include: { user: { select: { displayName: true, id: true } } }
+      });
+
+      const party = await tx.gameParty.findUnique({
+        include: {
+          members: {
+            include: { user: { select: { displayName: true, id: true } } },
+            orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
+          }
+        },
+        where: { id: survivor.id }
+      });
+      if (!party) {
+        throw new Error("Merged party disappeared during transaction");
+      }
+
+      return {
+        ok: true as const,
+        mergeMessage,
+        party,
+        retiredPartyId: retired.id,
+        retiredPartySlug: retired.slug,
+        memberUserIds: mergedMemberIds
+      };
+    });
+  }
 
   createParty(input: {
     expiresAt: Date | null;
@@ -312,27 +793,51 @@ export class GamePartiesRepository {
   }
 
   findByVerticalAndSlug(vertical: string, slug: string): Promise<PartyWithMembers | null> {
-    return this.prismaService.gameParty.findUnique({
-      include: {
-        members: {
-          include: {
-            user: {
-              select: {
-                displayName: true,
-                id: true
-              }
-            }
-          },
-          orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
-        }
-      },
-      where: {
-        vertical_slug: {
-          slug,
-          vertical
-        }
+    return this.findByVerticalAndSlugFollowingMerges(vertical, slug);
+  }
+
+  private async findByVerticalAndSlugFollowingMerges(
+    vertical: string,
+    initialSlug: string
+  ): Promise<PartyWithMembers | null> {
+    let slug = initialSlug;
+    const visited = new Set<string>();
+
+    for (let step = 0; step < 12; step += 1) {
+      if (visited.has(slug)) {
+        return null;
       }
-    });
+      visited.add(slug);
+
+      const party = await this.prismaService.gameParty.findUnique({
+        include: {
+          members: {
+            include: {
+              user: {
+                select: {
+                  displayName: true,
+                  id: true
+                }
+              }
+            },
+            orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
+          }
+        },
+        where: {
+          vertical_slug: {
+            slug,
+            vertical
+          }
+        }
+      });
+
+      if (!party?.mergedIntoSlug) {
+        return party;
+      }
+      slug = party.mergedIntoSlug;
+    }
+
+    return null;
   }
 
   findById(id: string): Promise<PartyWithMembers | null> {
@@ -457,15 +962,27 @@ export class GamePartiesRepository {
     partyId: string;
     positionRole?: string | null;
   }): Promise<GamePartyInvite> {
-    return this.prismaService.gamePartyInvite.create({
-      data: {
-        inviteeUserId: input.inviteeUserId,
-        inviterUserId: input.inviterUserId,
-        kind: input.inviteKind ?? "INVITE",
-        partyId: input.partyId,
-        positionRole: input.positionRole ?? null,
-        status: "PENDING"
+    return this.prismaService.$transaction(async (tx) => {
+      const partyRows = await tx.$queryRaw<Array<{ mergedIntoSlug: string | null }>>`
+        SELECT merged_into_slug AS "mergedIntoSlug"
+        FROM social.game_parties
+        WHERE id = ${input.partyId}::uuid
+        FOR UPDATE
+      `;
+      if (!partyRows[0] || partyRows[0].mergedIntoSlug) {
+        throw new Error("PARTY_MERGED");
       }
+
+      return tx.gamePartyInvite.create({
+        data: {
+          inviteeUserId: input.inviteeUserId,
+          inviterUserId: input.inviterUserId,
+          kind: input.inviteKind ?? "INVITE",
+          partyId: input.partyId,
+          positionRole: input.positionRole ?? null,
+          status: "PENDING"
+        }
+      });
     });
   }
 
@@ -639,15 +1156,17 @@ export class GamePartiesRepository {
         )
       `;
 
-      const partyRows = await tx.$queryRaw<Array<{ kind: string; vertical: string }>>`
-        SELECT kind::text AS kind, vertical
+      const partyRows = await tx.$queryRaw<
+        Array<{ kind: string; mergedIntoSlug: string | null; vertical: string }>
+      >`
+        SELECT kind::text AS kind, merged_into_slug AS "mergedIntoSlug", vertical
         FROM social.game_parties
         WHERE id = ${input.partyId}::uuid
         FOR UPDATE
       `;
       const partyMeta = partyRows[0];
 
-      if (!partyMeta) {
+      if (!partyMeta || partyMeta.mergedIntoSlug) {
         return { ok: false as const, reason: "party_gone" as const };
       }
 
@@ -770,15 +1289,17 @@ export class GamePartiesRepository {
         )
       `;
 
-      const partyRows = await tx.$queryRaw<Array<{ kind: string; vertical: string }>>`
-        SELECT kind::text AS kind, vertical
+      const partyRows = await tx.$queryRaw<
+        Array<{ kind: string; mergedIntoSlug: string | null; vertical: string }>
+      >`
+        SELECT kind::text AS kind, merged_into_slug AS "mergedIntoSlug", vertical
         FROM social.game_parties
         WHERE id = ${input.partyId}::uuid
         FOR UPDATE
       `;
       const partyMeta = partyRows[0];
 
-      if (!partyMeta) {
+      if (!partyMeta || partyMeta.mergedIntoSlug) {
         return { closedInvites: [], member: null, staleInvite: true };
       }
 
@@ -1380,6 +1901,7 @@ export class GamePartiesRepository {
       discordVoiceExpiresAt: Date | null;
       expiresAt: Date | null;
       id: string;
+      mergedIntoSlug: string | null;
       ownerUserId: string;
       slug: string;
     }>
@@ -1390,6 +1912,7 @@ export class GamePartiesRepository {
         discordVoiceExpiresAt: true,
         expiresAt: true,
         id: true,
+        mergedIntoSlug: true,
         ownerUserId: true,
         slug: true
       },
@@ -1472,7 +1995,8 @@ export class GamePartiesRepository {
       },
       where: {
         discordChannelId: null,
-        id: partyId
+        id: partyId,
+        mergedIntoSlug: null
       }
     });
 
@@ -1548,13 +2072,20 @@ export class GamePartiesRepository {
     expiresAt: Date,
     discordInviteUrl?: string | null
   ): Promise<GameParty> {
-    return this.prismaService.gameParty.update({
-      data: {
-        expiresAt,
-        discordVoiceExpiresAt: expiresAt,
-        ...(discordInviteUrl !== undefined ? { discordInviteUrl } : {})
-      },
-      where: { id: partyId }
+    return this.prismaService.$transaction(async (tx) => {
+      const party = await tx.gameParty.update({
+        data: {
+          expiresAt,
+          discordVoiceExpiresAt: expiresAt,
+          ...(discordInviteUrl !== undefined ? { discordInviteUrl } : {})
+        },
+        where: { id: partyId }
+      });
+      await tx.gameParty.updateMany({
+        data: { expiresAt },
+        where: { mergedIntoSlug: party.slug }
+      });
+      return party;
     });
   }
 
@@ -1624,19 +2155,33 @@ export class GamePartiesRepository {
     expectedExpiresAt: Date,
     discordInviteUrl?: string | null
   ): Promise<boolean> {
-    const result = await this.prismaService.gameParty.updateMany({
-      data: {
-        expiresAt,
-        discordVoiceExpiresAt: expiresAt,
-        ...(discordInviteUrl !== undefined ? { discordInviteUrl } : {})
-      },
-      where: {
-        expiresAt: expectedExpiresAt,
-        id: partyId
+    return this.prismaService.$transaction(async (tx) => {
+      const result = await tx.gameParty.updateMany({
+        data: {
+          expiresAt,
+          discordVoiceExpiresAt: expiresAt,
+          ...(discordInviteUrl !== undefined ? { discordInviteUrl } : {})
+        },
+        where: {
+          expiresAt: expectedExpiresAt,
+          id: partyId
+        }
+      });
+      if (result.count > 0) {
+        const party = await tx.gameParty.findUnique({
+          select: { slug: true },
+          where: { id: partyId }
+        });
+        if (party) {
+          await tx.gameParty.updateMany({
+            data: { expiresAt },
+            where: { mergedIntoSlug: party.slug }
+          });
+        }
       }
-    });
 
-    return result.count > 0;
+      return result.count > 0;
+    });
   }
 
   createChatMessage(input: {
@@ -1743,6 +2288,15 @@ function parseDotaRoles(value: string | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+function parseRecruitingRoles(value: string | undefined): string[] {
+  return (
+    value
+      ?.split(",")
+      .map((role) => role.trim())
+      .filter(isDotaPositionRole) ?? []
+  );
 }
 
 function parseMmrBounds(value: string | undefined): { high: number; low: number } | null {

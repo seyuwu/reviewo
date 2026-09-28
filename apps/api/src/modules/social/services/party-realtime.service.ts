@@ -6,7 +6,10 @@ import type {
   PartyRealtimePublisher,
   PartyRecruitUpdatedPayload
 } from "../party-realtime.types.js";
-import type { GamePartyResponseDto } from "../dto/game-party-response.dto.js";
+import type {
+  GamePartyChatMessageDto,
+  GamePartyResponseDto
+} from "../dto/game-party-response.dto.js";
 import { GamePartyGateway } from "../gateways/game-party.gateway.js";
 
 /**
@@ -16,6 +19,16 @@ import { GamePartyGateway } from "../gateways/game-party.gateway.js";
 @Injectable()
 export class PartyRealtimeService implements PartyRealtimePublisher {
   constructor(private readonly gamePartyGateway: GamePartyGateway) {}
+
+  broadcastPartyMerged(input: {
+    fromPartyId: string;
+    fromPartySlug: string;
+    mergeMessage: GamePartyChatMessageDto;
+    memberUserIds: string[];
+    party: GamePartyResponseDto;
+  }): void {
+    this.gamePartyGateway.broadcastPartyMerged(input);
+  }
 
   emitPartyNotification(userId: string, payload: PartyNotificationPayload): void {
     this.gamePartyGateway.emitPartyNotification(userId, payload);

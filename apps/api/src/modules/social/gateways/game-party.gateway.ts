@@ -291,6 +291,24 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
     });
   }
 
+  broadcastPartyMerged(input: {
+    fromPartyId: string;
+    fromPartySlug: string;
+    mergeMessage: GamePartyChatMessageDto;
+    memberUserIds: string[];
+    party: GamePartyResponseDto;
+  }): void {
+    const payload = {
+      fromSlug: input.fromPartySlug,
+      partySlug: input.party.slug
+    };
+    this.server.to(partyRoomName(input.fromPartyId)).emit("party_merged", payload);
+    this.server.to(partyViewRoomName(input.fromPartySlug)).emit("party_merged", payload);
+    this.broadcastPartyUpdated(input.party);
+    this.broadcastNewMessage(input.party.id, input.mergeMessage);
+    this.notifyTelegramPartyRosterUpdated(input.memberUserIds, input.party.slug);
+  }
+
   broadcastPartyRecruitUpdated(payload: PartyRecruitUpdatedPayload): void {
     this.server.to(partyViewRoomName(payload.partySlug)).emit("party_recruit_updated", payload);
 
@@ -311,7 +329,11 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
   notifyTelegramPartyRosterUpdated(
     userIds: string[],
     partySlug: string,
-    activity?: { type: "member_left" | "member_kicked"; memberDisplayName: string; partyName: string }
+    activity?: {
+      type: "member_left" | "member_kicked";
+      memberDisplayName: string;
+      partyName: string;
+    }
   ): void {
     const eventId = randomUUID();
     for (const userId of new Set(userIds)) {

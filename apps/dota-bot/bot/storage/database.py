@@ -82,7 +82,14 @@ class BotStorage:
               first_seen_at TEXT NOT NULL,
               last_seen_at TEXT NOT NULL,
               announcements_enabled INTEGER NOT NULL DEFAULT 1,
-              blocked_at TEXT
+              blocked_at TEXT,
+              acquisition_source TEXT NOT NULL DEFAULT 'existing'
+            );
+            CREATE TABLE IF NOT EXISTS bot_funnel_events (
+              telegram_user_id INTEGER NOT NULL,
+              event_type TEXT NOT NULL,
+              occurred_at TEXT NOT NULL,
+              PRIMARY KEY (telegram_user_id, event_type)
             );
             CREATE TABLE IF NOT EXISTS broadcast_campaigns (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,6 +121,13 @@ class BotStorage:
             self.connection.execute(
                 "ALTER TABLE bot_panels ADD COLUMN media_type TEXT NOT NULL DEFAULT 'photo'"
             )
+        user_columns = {
+            row["name"] for row in self.connection.execute("PRAGMA table_info(bot_users)")
+        }
+        if "acquisition_source" not in user_columns:
+            self.connection.execute(
+                "ALTER TABLE bot_users ADD COLUMN acquisition_source TEXT NOT NULL DEFAULT 'existing'"
+            )
         # Older installations already know users through their panel/session rows.
         # Backfill them so the first announcement reaches existing bot users too.
         self.connection.execute(
@@ -123,6 +137,16 @@ class BotStorage:
         self.connection.execute(
             """INSERT OR IGNORE INTO bot_users (telegram_user_id, first_seen_at, last_seen_at)
                SELECT telegram_user_id, updated_at, updated_at FROM telegram_sessions"""
+        )
+        # Preserve historical totals while keeping the new acquisition funnel honest:
+        # old installs have no reliable source or event history.
+        self.connection.execute(
+            """INSERT OR IGNORE INTO bot_funnel_events (telegram_user_id, event_type, occurred_at)
+               SELECT telegram_user_id, 'bot_started', first_seen_at FROM bot_users"""
+        )
+        self.connection.execute(
+            """INSERT OR IGNORE INTO bot_funnel_events (telegram_user_id, event_type, occurred_at)
+               SELECT telegram_user_id, 'account_ready', updated_at FROM telegram_sessions"""
         )
         self.connection.commit()
 
@@ -160,6 +184,7 @@ class BotStorage:
                 ),
             )
             connection.commit()
+        self.record_funnel_event(telegram_user_id, "account_ready")
 
     def get_session(self, telegram_user_id: int) -> Session | None:
         row = self._connection().execute(
@@ -180,17 +205,65 @@ class BotStorage:
         ).fetchall()
         return [int(row["telegram_user_id"]) for row in rows]
 
-    def record_bot_user(self, telegram_user_id: int) -> None:
+    def record_bot_user(
+        self, telegram_user_id: int, acquisition_source: str = "direct"
+    ) -> None:
         now = timestamp()
+        allowed_sources = {"seo", "community", "party_invite", "direct"}
+        source = acquisition_source if acquisition_source in allowed_sources else "direct"
+        with self.lock:
+            connection = self._connection()
+            inserted = connection.execute(
+                """INSERT OR IGNORE INTO bot_users
+                     (telegram_user_id, first_seen_at, last_seen_at, acquisition_source)
+                   VALUES (?, ?, ?, ?)""",
+                (telegram_user_id, now, now, source),
+            ).rowcount
+            connection.execute(
+                """UPDATE bot_users SET last_seen_at = ?, blocked_at = NULL
+                   WHERE telegram_user_id = ?""",
+                (now, telegram_user_id),
+            )
+            if inserted:
+                connection.execute(
+                    """INSERT OR IGNORE INTO bot_funnel_events
+                         (telegram_user_id, event_type, occurred_at)
+                       VALUES (?, 'bot_started', ?)""",
+                    (telegram_user_id, now),
+                )
+            connection.commit()
+
+    def record_funnel_event(self, telegram_user_id: int, event_type: str) -> None:
+        if event_type not in {"account_ready", "search_started", "party_joined"}:
+            raise ValueError("Unsupported bot funnel event")
+        self.record_bot_user(telegram_user_id)
         with self.lock:
             self._connection().execute(
-                """INSERT INTO bot_users (telegram_user_id, first_seen_at, last_seen_at)
-                   VALUES (?, ?, ?)
-                   ON CONFLICT(telegram_user_id) DO UPDATE SET
-                     last_seen_at=excluded.last_seen_at, blocked_at=NULL""",
-                (telegram_user_id, now, now),
+                """INSERT OR IGNORE INTO bot_funnel_events
+                     (telegram_user_id, event_type, occurred_at)
+                   VALUES (?, ?, ?)""",
+                (telegram_user_id, event_type, timestamp()),
             )
             self._connection().commit()
+
+    def bot_acquisition_stats(self) -> dict:
+        connection = self._connection()
+        source_rows = connection.execute(
+            """SELECT acquisition_source, COUNT(*) AS total
+               FROM bot_users GROUP BY acquisition_source"""
+        ).fetchall()
+        event_rows = connection.execute(
+            """SELECT users.acquisition_source, events.event_type, COUNT(*) AS total
+               FROM bot_funnel_events AS events
+               JOIN bot_users AS users ON users.telegram_user_id = events.telegram_user_id
+               GROUP BY users.acquisition_source, events.event_type"""
+        ).fetchall()
+        sources = {str(row["acquisition_source"]): int(row["total"]) for row in source_rows}
+        funnel: dict[str, dict[str, int]] = {}
+        for row in event_rows:
+            source = str(row["acquisition_source"])
+            funnel.setdefault(source, {})[str(row["event_type"])] = int(row["total"])
+        return {"sources": sources, "funnel": funnel}
 
     def set_announcements_enabled(self, telegram_user_id: int, enabled: bool) -> None:
         self.record_bot_user(telegram_user_id)

@@ -34,7 +34,8 @@ export const ANALYTICS_CTA_KEYS = [
   "games_search_start_join",
   "games_search_start_recruit",
   "games_search_stop",
-  "games_party_create_from_search"
+  "games_party_create_from_search",
+  "dota_bot_cta_seo"
 ] as const;
 
 export type AnalyticsCtaKey = (typeof ANALYTICS_CTA_KEYS)[number];
@@ -84,6 +85,10 @@ export function bucketAnalyticsPath(pathname: string): AnalyticsPathKey {
 
   if (path.startsWith("/games")) {
     return "games";
+  }
+
+  if (path === "/fdp") {
+    return "dota";
   }
 
   if (path.startsWith("/dota/create")) {
@@ -149,6 +154,10 @@ export function funnelStepForPath(pathname: string): AnalyticsCounterKey | null 
   }
 
   if (path.startsWith("/dota")) {
+    return "funnel_dota";
+  }
+
+  if (path === "/fdp") {
     return "funnel_dota";
   }
 

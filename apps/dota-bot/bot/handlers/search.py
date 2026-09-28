@@ -333,6 +333,7 @@ async def execute_looking(
     await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
     try:
         await start_solo_search(api, telegram_user_id, confirmed_party=confirmed_party)
+        storage.record_funnel_event(telegram_user_id, "search_started")
         storage.set_choices(telegram_user_id, "pending_solo_search", [])
         storage.clear_auto_match_exclusions(telegram_user_id)
         storage.set_choices(
@@ -397,6 +398,7 @@ async def execute_recruiting(
             "/social/parties",
             {"kind": "PARTY"},
         )
+        storage.record_funnel_event(telegram_user_id, "party_joined")
 
         profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
         role_values = {"1", "2", "3", "4", "5"}
@@ -430,6 +432,7 @@ async def execute_recruiting(
             "/dota/profiles/lfg/looking",
             {"looking": True, "partySlug": party["slug"], "recruitedRoles": open_roles},
         )
+        storage.record_funnel_event(telegram_user_id, "search_started")
         storage.clear_auto_match_exclusions(telegram_user_id)
         storage.set_choices(
             telegram_user_id,

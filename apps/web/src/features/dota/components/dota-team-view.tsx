@@ -282,6 +282,10 @@ function resolveChatDisplayText(
     return { isSystem: true, text: t("dota.team.system.party_safety") };
   }
 
+  if (message === "__system__:party_merged") {
+    return { isSystem: true, text: t("dota.team.system.party_merged") };
+  }
+
   return { isSystem: false, text: message };
 }
 
@@ -1162,6 +1166,11 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
     const isMember = party.isMember;
 
     watchConnection = connectPartyWatchSocket(party.slug, authSession?.accessToken ?? null, {
+      onPartyMerged: (partySlug) => {
+        if (!cancelled) {
+          router.replace(`/dota/teams/${encodeURIComponent(partySlug)}`);
+        }
+      },
       onPartyUpdated: (nextParty) => {
         if (cancelled) {
           return;

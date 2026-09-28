@@ -20,6 +20,9 @@ def profile_text(profile: dict) -> str:
 def party_text(party: dict) -> str:
     role_names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
     lines = [f"<b>{escape(str(party.get('name') or 'Моя пати'))}</b>", ""]
+    captain = next((member for member in party.get("members", []) if member.get("role") == "OWNER"), None)
+    if captain:
+        lines.append(f"👑 Капитан: <b>{escape(str(captain.get('displayName') or 'Игрок'))}</b>")
     for member in party.get("members", []):
         role = role_names.get(str(member.get("positionRole")), "роль не выбрана")
         mmr = member.get("mmr") or "—"

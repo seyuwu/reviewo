@@ -1749,6 +1749,7 @@ export const enMessages = {
   "web.admin.analytics.cta.dota_create_submit": "Dota → create profile",
   "web.admin.analytics.cta.dota_share_profile": "Dota → share profile",
   "web.admin.analytics.cta.dota_share_friend": "Dota → share friend invite",
+  "web.admin.analytics.cta.dota_bot_cta_seo": "FDP landing → open Telegram bot",
   "web.admin.analytics.cta.home_quick_games": "Home → Games",
   "web.admin.analytics.cta.home_create_entity": "Home → create entity",
   "web.admin.analytics.cta.games_waitlist_form_start": "Waitlist → form start",
@@ -2171,6 +2172,8 @@ export const enMessages = {
   "dota.team.system.discord_voice_ready": "Discord voice is ready — join via the Voice button",
   "dota.team.system.party_safety":
     "⚠ Safety: do not open links from chat. Add each other in Dota only by Dota ID via in-game search — never via third-party links.",
+  "dota.team.system.party_merged":
+    "The parties merged. The captain was randomly chosen from the previous leaders.",
   "dota.team.renameEdit": "Rename",
   "dota.team.renameSave": "Save",
   "dota.team.renameCancel": "Cancel",

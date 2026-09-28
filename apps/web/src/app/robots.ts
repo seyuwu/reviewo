@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 
+import { getDotaPublicOrigin } from "../lib/config/product-hosts";
 import { publicEnv } from "../lib/config/public-env";
 
 export default function robots(): MetadataRoute.Robots {
@@ -22,6 +23,9 @@ export default function robots(): MetadataRoute.Robots {
         ]
       }
     ],
-    sitemap: new URL("/sitemap.xml", publicEnv.siteUrl).toString()
+    sitemap: [
+      new URL("/sitemap.xml", publicEnv.siteUrl).toString(),
+      `${getDotaPublicOrigin()}/sitemap-dota.xml`
+    ]
   };
 }

@@ -30,3 +30,7 @@ An existing user opens **Profile → Account settings → Telegram bot → Link 
 ## Runtime state
 
 The bot uses long polling and has no inbound port. `/data/dota_bot.db` stores encrypted auth/recovery secrets, the editable panel message ID, UI selections, automatic-match exclusions, delivered notification IDs, and temporary message deletion deadlines. Solo matching checks the shared LFG list every 15 seconds and joins a compatible `OPEN` party on a free profile role. Starting recruitment marks every unoccupied party role as open; role assignment is randomized among the seeker's matching profile roles. API-side party notifications use a durable PostgreSQL outbox with bounded exponential retries.
+
+## Acquisition links
+
+Use `https://t.me/FDPdotabot?start=src_seo` for the SEO landing page and `https://t.me/FDPdotabot?start=src_community` for posts in Dota communities. Party invitations keep their separate `party_<code>` payload. The admin panel reports first source, bot starts, accounts ready, searches started, and party joins; users who started before source tracking are grouped under “До меток”.

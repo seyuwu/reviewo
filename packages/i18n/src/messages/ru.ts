@@ -1756,6 +1756,7 @@ export const ruMessages: MessageDictionary = {
   "web.admin.analytics.cta.dota_create_submit": "Dota → создать профиль",
   "web.admin.analytics.cta.dota_share_profile": "Dota → шаринг профиля",
   "web.admin.analytics.cta.dota_share_friend": "Dota → шаринг в друзья",
+  "web.admin.analytics.cta.dota_bot_cta_seo": "Страница FDP → открыть Telegram-бота",
   "web.admin.analytics.cta.home_quick_games": "Главная → Игры",
   "web.admin.analytics.cta.home_create_entity": "Главная → создать сущность",
   "web.admin.analytics.cta.games_waitlist_form_start": "Waitlist → старт формы",
@@ -2178,6 +2179,7 @@ export const ruMessages: MessageDictionary = {
   "dota.team.system.discord_voice_ready": "Discord voice готов — зайди через кнопку «Войс»",
   "dota.team.system.party_safety":
     "⚠ Безопасность: не переходите по чужим ссылкам из чата. Друзей в Dota добавляйте только по Dota ID через поиск в игре — не по сторонним ссылкам.",
+  "dota.team.system.party_merged": "Пати объединились. Капитан выбран случайно из прежних лидеров.",
   "dota.team.renameEdit": "Переименовать",
   "dota.team.renameSave": "Сохранить",
   "dota.team.renameCancel": "Отмена",

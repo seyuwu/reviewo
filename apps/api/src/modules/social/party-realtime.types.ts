@@ -1,4 +1,7 @@
-import type { GamePartyResponseDto } from "./dto/game-party-response.dto.js";
+import type {
+  GamePartyChatMessageDto,
+  GamePartyResponseDto
+} from "./dto/game-party-response.dto.js";
 
 export const PARTY_REALTIME_PUBLISHER = Symbol("PARTY_REALTIME_PUBLISHER");
 
@@ -53,6 +56,13 @@ export interface PartyRecruitUpdatedPayload {
 }
 
 export interface PartyRealtimePublisher {
+  broadcastPartyMerged(input: {
+    fromPartyId: string;
+    fromPartySlug: string;
+    mergeMessage: GamePartyChatMessageDto;
+    memberUserIds: string[];
+    party: GamePartyResponseDto;
+  }): void;
   broadcastPartyRecruitUpdated(payload: PartyRecruitUpdatedPayload): void;
   broadcastPartyUpdated(party: GamePartyResponseDto): void;
   emitFriendNotification(userId: string, payload: FriendNotificationPayload): void;
