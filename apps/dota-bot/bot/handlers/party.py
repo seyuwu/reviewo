@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
+from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from ..services.party_notifications import deliver_join_hint
@@ -29,7 +30,7 @@ async def resolve_invite(
         await callback.answer("Приглашение не найдено", show_alert=True)
         return
     _, invite_id, action = parts
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     try:
         before = await api.user(callback.from_user.id, "GET", "/social/parties/me")

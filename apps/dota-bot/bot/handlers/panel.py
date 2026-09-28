@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery, Message
 
 from ..api.client import OpiniaApi
 from ..config import Settings
+from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel
 from ..storage.database import BotStorage
 
@@ -47,7 +48,7 @@ async def navigate_panel(
     storage: BotStorage,
     state: FSMContext,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     if callback.message is None:
         return
     if callback.message.chat.type != "private":

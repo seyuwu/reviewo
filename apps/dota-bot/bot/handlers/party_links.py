@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
+from ..services.callbacks import acknowledge_callback
 from ..services.panel import (
     begin_panel_transition,
     edit_panel,
@@ -95,7 +96,7 @@ async def share_party_link(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     try:
         parties = await api.user(callback.from_user.id, "GET", "/social/parties/me")
         party = parties.get("party") or ((parties.get("parties") or [None])[-1])
@@ -150,7 +151,7 @@ async def link_account_for_party_invite(
         await callback.answer(str(error), show_alert=True)
         return
     storage.set_choices(callback.from_user.id, "pending_party_invite", [{"code": code}])
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     await edit_panel_content(
         callback.bot, storage, api, settings, callback.from_user.id, "account:link",
@@ -200,13 +201,13 @@ async def join_party_from_link(
         await callback.answer(str(error), show_alert=True)
         return
 
-    await callback.answer("Вступаю в пати…")
+    acknowledge_callback(callback, "Вступаю в пати…")
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     await finish_party_join(callback.bot, api, settings, storage, callback.from_user.id, callback.message.chat.id if callback.message else None, code, role)
 
 
 async def start_invite_registration(callback, state: FSMContext, api, settings, storage, code: str, role: str) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     chat_id = callback.message.chat.id if callback.message else None
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, chat_id)
     await start_profile_registration(

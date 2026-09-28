@@ -146,6 +146,7 @@ class OpiniaApi:
                 url,
                 headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
                 proxy=self.settings.telegram_proxy,
+                timeout=aiohttp.ClientTimeout(total=5, connect=2),
             ) as response:
                 if response.status != 200:
                     raise ApiError("Не удалось обновить карточку пати", response.status)
@@ -153,7 +154,7 @@ class OpiniaApi:
                 if len(image) > 8 * 1024 * 1024:
                     raise ApiError("Карточка пати слишком большая")
                 return image
-        except aiohttp.ClientError as error:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as error:
             raise ApiError("Не удалось загрузить карточку пати") from error
 
     async def fetch_image(self, url: str) -> bytes:

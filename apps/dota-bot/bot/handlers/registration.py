@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
+from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, dota_id_guide_photo, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from ..ui.keyboards import (
@@ -106,7 +107,7 @@ async def begin_profile_edit(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     if callback.message is None:
         return
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
@@ -167,7 +168,7 @@ async def begin_registration(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     if callback.message is None:
         return
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
@@ -191,7 +192,7 @@ async def retry_telegram_link(
     storage: BotStorage,
     match_wakeup: asyncio.Event,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     if callback.message is None:
         return
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
@@ -232,7 +233,7 @@ async def begin_onboarding_registration(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     if callback.message is None:
         return
     if not storage.get_choice(callback.from_user.id, "pending_onboarding_action", 0):
@@ -391,9 +392,9 @@ async def skip_registration_dota_id(
     storage: BotStorage,
 ) -> None:
     if await state.get_state() != GuestProfileWizard.dota_id.state:
-        await callback.answer()
+        acknowledge_callback(callback)
         return
-    await callback.answer("Можно добавить Dota ID позже в профиле")
+    acknowledge_callback(callback, "Можно добавить Dota ID позже в профиле")
     await continue_registration_after_dota_id(
         callback.bot,
         state,
@@ -414,7 +415,7 @@ async def begin_dota_id_edit(
     storage: BotStorage,
 ) -> None:
     if callback.message is None:
-        await callback.answer()
+        acknowledge_callback(callback)
         return
     if storage.is_temporary_message(callback.message.chat.id, callback.message.message_id):
         try:
@@ -425,7 +426,7 @@ async def begin_dota_id_edit(
             storage.remove_temporary_message(callback.message.chat.id, callback.message.message_id)
     panel = storage.get_panel(callback.from_user.id)
     return_screen = panel.screen if panel and panel.screen in {"looking", "party", "profile"} else "profile"
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
     try:
         profile = await api.user(callback.from_user.id, "GET", "/dota/profiles/me")
@@ -543,9 +544,9 @@ async def skip_standalone_dota_id(
 ) -> None:
     data = await state.get_data()
     if await state.get_state() != DotaIdOnlyWizard.dota_id.state:
-        await callback.answer()
+        acknowledge_callback(callback)
         return
-    await callback.answer("Возвращаюсь к поиску")
+    acknowledge_callback(callback, "Возвращаюсь к поиску")
     await state.clear()
     await edit_panel(
         callback.bot,
@@ -596,7 +597,7 @@ async def receive_mmr(
 
 @router.callback_query(F.data.startswith("register:toggle:"))
 async def toggle_registration_role(callback: CallbackQuery, state: FSMContext, storage: BotStorage, api: OpiniaApi, settings: Settings) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     role = (callback.data or "").rsplit(":", maxsplit=1)[-1]
     if role not in POSITION_NAMES or await state.get_state() != GuestProfileWizard.roles.state:
         return
@@ -627,7 +628,7 @@ async def cancel_registration(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer("Регистрация отменена")
+    acknowledge_callback(callback, "Регистрация отменена")
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     data = await state.get_data()
     await state.clear()
@@ -715,7 +716,7 @@ async def complete_registration(
         await state.clear()
         return
 
-    await callback.answer("Сохраняю профиль…" if editing_profile else "Создаю профиль…")
+    acknowledge_callback(callback, "Сохраняю профиль…" if editing_profile else "Создаю профиль…")
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     telegram_link_pending = False
     try:

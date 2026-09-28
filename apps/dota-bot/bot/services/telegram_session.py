@@ -47,8 +47,9 @@ def is_connection_setup_failure(error: TelegramNetworkError) -> bool:
 class RetryingAiohttpSession(AiohttpSession):
     """Retry only connection-establishment failures, never uncertain writes."""
 
-    max_connection_retries = 2
-    connect_timeout_seconds = 5
+    max_connection_retries = 1
+    get_updates_connection_retries = 2
+    connect_timeout_seconds = 2
 
     def _request_timeout(self, method, timeout):
         effective_timeout = self.timeout if timeout is None else timeout
@@ -67,12 +68,17 @@ class RetryingAiohttpSession(AiohttpSession):
 
     async def make_request(self, bot: Bot, method, timeout=None):
         request_timeout = self._request_timeout(method, timeout)
-        for attempt in range(self.max_connection_retries + 1):
+        max_retries = (
+            self.get_updates_connection_retries
+            if method.__api_method__ == "getUpdates"
+            else self.max_connection_retries
+        )
+        for attempt in range(max_retries + 1):
             try:
                 return await super().make_request(bot, method, request_timeout)
             except TelegramNetworkError as error:
                 if (
-                    attempt >= self.max_connection_retries
+                    attempt >= max_retries
                     or not is_connection_setup_failure(error)
                 ):
                     raise
@@ -82,7 +88,7 @@ class RetryingAiohttpSession(AiohttpSession):
                     "Telegram connection setup failed for %s; retry %d/%d",
                     method.__api_method__,
                     retry_number,
-                    self.max_connection_retries,
+                    max_retries,
                 )
                 await asyncio.sleep(0.2 * (2**attempt))
 

@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
+from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from ..ui.keyboards import back_keyboard
@@ -105,7 +106,7 @@ async def account_link_help(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     if callback.message is None:
         return
     await show_account_link_help(
@@ -181,7 +182,7 @@ async def show_recovery_link(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     session = storage.get_session(callback.from_user.id)
     if callback.message is None:
@@ -225,7 +226,7 @@ async def open_opinia_account(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     next_path = quote("/profile", safe="")
     try:
@@ -272,7 +273,7 @@ async def unlink_account(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     if storage.get_session(callback.from_user.id):
         try:

@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
+from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from .search import show_error
@@ -31,7 +32,7 @@ async def occupied_search_slot(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("party:searching:"))
 async def already_searching_party_slot(callback: CallbackQuery) -> None:
-    await callback.answer("Поиск игроков на эту позицию уже идёт")
+    acknowledge_callback(callback, "Поиск игроков на эту позицию уже идёт")
 
 
 @router.callback_query(F.data == "party:readonly")
@@ -51,7 +52,7 @@ async def open_or_claim_slot(
         await callback.answer("Позиция не найдена", show_alert=True)
         return
 
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(
         callback.bot, storage, callback.from_user.id,
         callback.message.chat.id if callback.message else None,
@@ -106,7 +107,7 @@ async def enable_search_for_party_slot(
     if role not in {"1", "2", "3", "4", "5"}:
         await callback.answer("Позиция не найдена", show_alert=True)
         return
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(
         callback.bot, storage, callback.from_user.id,
         callback.message.chat.id if callback.message else None,
@@ -182,7 +183,7 @@ async def confirm_delete_party(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(
         callback.bot, storage, callback.from_user.id,
         callback.message.chat.id if callback.message else None,
@@ -213,7 +214,7 @@ async def delete_party(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer("Удаляю пати")
+    acknowledge_callback(callback, "Удаляю пати")
     await begin_panel_transition(
         callback.bot, storage, callback.from_user.id,
         callback.message.chat.id if callback.message else None,
@@ -242,7 +243,7 @@ async def confirm_leave_party(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(
         callback.bot, storage, callback.from_user.id,
         callback.message.chat.id if callback.message else None,
@@ -274,7 +275,7 @@ async def leave_party(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer("Покидаю пати…")
+    acknowledge_callback(callback, "Покидаю пати…")
     await begin_panel_transition(
         callback.bot, storage, callback.from_user.id,
         callback.message.chat.id if callback.message else None,
@@ -304,7 +305,7 @@ async def confirm_kick_member(
     storage: BotStorage,
 ) -> None:
     user_id = (callback.data or "").rsplit(":", 1)[-1]
-    await callback.answer()
+    acknowledge_callback(callback)
     storage.set_choices(callback.from_user.id, "selected_party_member", [{"userId": user_id}])
     await begin_panel_transition(
         callback.bot, storage, callback.from_user.id,
@@ -321,7 +322,7 @@ async def kick_party_member(
     storage: BotStorage,
 ) -> None:
     user_id = (callback.data or "").rsplit(":", 1)[-1]
-    await callback.answer("Удаляю игрока из пати")
+    acknowledge_callback(callback, "Удаляю игрока из пати")
     await begin_panel_transition(
         callback.bot, storage, callback.from_user.id,
         callback.message.chat.id if callback.message else None,

@@ -12,6 +12,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
+from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..services.solo_search import (
     PartyChangedDuringConfirmation,
@@ -38,7 +39,7 @@ async def start_looking(
     storage: BotStorage,
     match_wakeup: asyncio.Event,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     if callback.message is None:
         return
     await start_selected_action(
@@ -63,7 +64,7 @@ async def confirm_start_looking(
     storage: BotStorage,
     match_wakeup: asyncio.Event,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     if callback.message is None:
         return
     confirmation = storage.get_choice(callback.from_user.id, "pending_solo_search", 0)
@@ -91,7 +92,7 @@ async def cancel_start_looking(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer("Остаётесь в пати")
+    acknowledge_callback(callback, "Остаётесь в пати")
     storage.set_choices(callback.from_user.id, "pending_solo_search", [])
     try:
         memberships = await api.user(callback.from_user.id, "GET", "/social/parties/me")
@@ -120,7 +121,7 @@ async def begin_recruiting(
     storage: BotStorage,
     match_wakeup: asyncio.Event,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     if callback.message is None:
         return
     await start_selected_action(
@@ -455,7 +456,7 @@ async def stop_search(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    await callback.answer()
+    acknowledge_callback(callback)
     await begin_panel_transition(
         callback.bot,
         storage,

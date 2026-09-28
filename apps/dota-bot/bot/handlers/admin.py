@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, Message
 
 from ..api.client import OpiniaApi
 from ..config import Settings
+from ..services.callbacks import acknowledge_callback
 from ..services.panel import edit_panel_content
 from ..storage.database import BotStorage
 from ..ui.keyboards import (
@@ -192,10 +193,10 @@ async def admin_action(
         await callback.answer("Нет доступа", show_alert=True)
         return
     if callback.message is None or callback.message.chat.type != "private":
-        await callback.answer()
+        acknowledge_callback(callback)
         return
 
-    await callback.answer()
+    acknowledge_callback(callback)
     action = (callback.data or "").removeprefix("admin:")
     chat_id = callback.message.chat.id
     if action == "refresh":
@@ -270,7 +271,7 @@ async def set_news_preference(
 ) -> None:
     enabled = callback.data == "news:enable"
     storage.set_announcements_enabled(callback.from_user.id, enabled)
-    await callback.answer("Объявления включены" if enabled else "Объявления отключены")
+    acknowledge_callback(callback, "Объявления включены" if enabled else "Объявления отключены")
     if callback.message is None:
         return
     if callback.message.chat.type != "private":
