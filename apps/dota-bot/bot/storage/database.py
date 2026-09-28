@@ -527,7 +527,6 @@ class BotStorage:
                       AND users.last_seen_at <= ?
                       AND (users.last_party_notification_at IS NULL
                            OR users.last_party_notification_at <= ?)
-                      AND users.announcements_enabled = 1
                       AND users.blocked_at IS NULL"""
         parameters: list[object] = [*allowed_screens, cutoff, cutoff, cutoff]
         if telegram_user_id is not None:
