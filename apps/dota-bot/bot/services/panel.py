@@ -3,7 +3,7 @@ import hashlib
 import json
 import logging
 import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -37,8 +37,11 @@ logger = logging.getLogger(__name__)
 LFG_WINDOW_SECONDS = 20 * 60
 LONG_SEARCH_REMINDER_SECONDS = 3 * 60
 DEFAULT_PANEL_IMAGE = Path(__file__).resolve().parents[1] / "assets" / "fdp-panel-background.png"
-PANEL_POSITION_REFRESH_AFTER = timedelta(hours=48)
+PANEL_POSITION_REFRESH_INTERVAL = timedelta(days=2)
 PANEL_POSITION_REFRESH_SCAN_SECONDS = 60 * 60
+PANEL_POSITION_REFRESH_RETRY_SECONDS = 5 * 60
+PANEL_POSITION_REFRESH_HOUR = 4
+MOSCOW_TIMEZONE = timezone(timedelta(hours=3), name="Europe/Moscow")
 PANEL_POSITION_REFRESHABLE_SCREENS = (
     "home",
     "party",
@@ -111,7 +114,7 @@ async def edit_panel(
     media_photo: str | BufferedInputFile | None = None,
     force_new_message: bool = False,
     disable_notification: bool = False,
-    refresh_idle_for: timedelta | None = None,
+    refresh_scheduled_at: datetime | None = None,
 ) -> None:
     if screen == "recruiting":
         screen = "party"
@@ -121,8 +124,8 @@ async def edit_panel(
         try:
             party_data = await api.user(telegram_user_id, "GET", "/social/parties/me")
         except ApiError:
-            if refresh_idle_for is not None:
-                return
+            if refresh_scheduled_at is not None:
+                raise
             party_data = {"parties": [], "invites": []}
     text, keyboard = content or await render_screen(
         api,
@@ -236,8 +239,8 @@ async def edit_panel(
             except TelegramBadRequest:
                 pass
 
-    if refresh_idle_for is not None and not _can_refresh_panel_position(
-        storage, telegram_user_id, panel_snapshot, screen, refresh_idle_for
+    if refresh_scheduled_at is not None and not _can_refresh_panel_position(
+        storage, telegram_user_id, panel_snapshot, screen, refresh_scheduled_at
     ):
         return
 
@@ -272,8 +275,8 @@ async def edit_panel(
             disable_web_page_preview=True,
             disable_notification=disable_notification,
         )
-    if refresh_idle_for is not None and not _can_refresh_panel_position(
-        storage, telegram_user_id, panel_snapshot, screen, refresh_idle_for
+    if refresh_scheduled_at is not None and not _can_refresh_panel_position(
+        storage, telegram_user_id, panel_snapshot, screen, refresh_scheduled_at
     ):
         try:
             await bot.delete_message(message.chat.id, message.message_id)
@@ -296,7 +299,7 @@ def _can_refresh_panel_position(
     telegram_user_id: int,
     expected_panel,
     screen: str,
-    idle_for: timedelta,
+    scheduled_at: datetime,
 ) -> bool:
     current_panel = storage.get_panel(telegram_user_id)
     return bool(
@@ -307,10 +310,31 @@ def _can_refresh_panel_position(
         and current_panel.screen == screen
         and storage.panel_refresh_is_due(
             telegram_user_id,
-            idle_for,
+            scheduled_at,
             PANEL_POSITION_REFRESHABLE_SCREENS,
         )
     )
+
+
+def first_panel_position_refresh_at(now: datetime) -> datetime:
+    local_now = now.astimezone(MOSCOW_TIMEZONE)
+    scheduled_local = local_now.replace(
+        hour=PANEL_POSITION_REFRESH_HOUR,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    if scheduled_local <= local_now:
+        scheduled_local += timedelta(days=1)
+    return scheduled_local.astimezone(UTC)
+
+
+def following_panel_position_refresh_at(scheduled_at: datetime, now: datetime) -> datetime:
+    next_run_at = scheduled_at.astimezone(UTC) + PANEL_POSITION_REFRESH_INTERVAL
+    now_utc = now.astimezone(UTC)
+    while next_run_at <= now_utc:
+        next_run_at += PANEL_POSITION_REFRESH_INTERVAL
+    return next_run_at
 
 
 async def begin_panel_transition(
@@ -484,40 +508,94 @@ async def refresh_stale_panels(
     settings: Settings,
     storage: BotStorage,
 ) -> None:
-    """Move a stale panel to the bottom only after two days without user activity."""
+    """Move eligible panels in bulk every two days at 04:00 Moscow time."""
+    retrying_schedule: datetime | None = None
+    schedule_attempts = 0
     while True:
         try:
-            for telegram_user_id in storage.due_panel_refresh_user_ids(
-                PANEL_POSITION_REFRESH_AFTER,
-                PANEL_POSITION_REFRESHABLE_SCREENS,
-            ):
-                panel = storage.get_panel(telegram_user_id)
-                if not panel or panel.screen not in PANEL_POSITION_REFRESHABLE_SCREENS:
-                    continue
-                try:
-                    await edit_panel(
-                        bot,
-                        storage,
-                        api,
-                        settings,
-                        telegram_user_id,
-                        panel.screen,
-                        panel.chat_id,
-                        force_new_message=True,
-                        disable_notification=True,
-                        refresh_idle_for=PANEL_POSITION_REFRESH_AFTER,
+            now = datetime.now(UTC)
+            scheduled_at = storage.get_or_create_panel_refresh_schedule(
+                first_panel_position_refresh_at(now)
+            )
+            now = datetime.now(UTC)
+            if now >= scheduled_at:
+                if retrying_schedule != scheduled_at:
+                    retrying_schedule = scheduled_at
+                    schedule_attempts = 0
+                schedule_attempts += 1
+                cycle_complete = True
+                for telegram_user_id in storage.due_panel_refresh_user_ids(
+                    scheduled_at,
+                    PANEL_POSITION_REFRESHABLE_SCREENS,
+                ):
+                    panel = storage.get_panel(telegram_user_id)
+                    if not panel or panel.screen not in PANEL_POSITION_REFRESHABLE_SCREENS:
+                        continue
+                    try:
+                        await edit_panel(
+                            bot,
+                            storage,
+                            api,
+                            settings,
+                            telegram_user_id,
+                            panel.screen,
+                            panel.chat_id,
+                            force_new_message=True,
+                            disable_notification=True,
+                            refresh_scheduled_at=scheduled_at,
+                        )
+                    except TelegramForbiddenError:
+                        storage.mark_bot_user_blocked(telegram_user_id)
+                        logger.info("Skipped panel refresh for a user who blocked the bot")
+                    except (ApiError, TelegramAPIError):
+                        cycle_complete = False
+                        logger.warning("Could not refresh a scheduled bot panel", exc_info=True)
+                    else:
+                        if storage.panel_refresh_is_due(
+                            telegram_user_id,
+                            scheduled_at,
+                            PANEL_POSITION_REFRESHABLE_SCREENS,
+                        ):
+                            cycle_complete = False
+                    await asyncio.sleep(0.05)
+
+                if cycle_complete:
+                    next_run_at = following_panel_position_refresh_at(
+                        scheduled_at,
+                        datetime.now(UTC),
                     )
-                except TelegramForbiddenError:
-                    storage.mark_bot_user_blocked(telegram_user_id)
-                    logger.info("Skipped panel refresh for a user who blocked the bot")
-                except (ApiError, TelegramAPIError):
-                    logger.warning("Could not refresh an inactive user's bot panel", exc_info=True)
-                await asyncio.sleep(0.05)
+                    if not storage.advance_panel_refresh_schedule(scheduled_at, next_run_at):
+                        logger.warning("Panel refresh schedule changed before the cycle completed")
+                    retrying_schedule = None
+                    schedule_attempts = 0
+                    continue
+
+                if schedule_attempts >= 3:
+                    logger.error(
+                        "Skipping this panel refresh cycle after %s incomplete attempts",
+                        schedule_attempts,
+                    )
+                    next_run_at = following_panel_position_refresh_at(
+                        scheduled_at,
+                        datetime.now(UTC),
+                    )
+                    storage.advance_panel_refresh_schedule(scheduled_at, next_run_at)
+                    retrying_schedule = None
+                    schedule_attempts = 0
+                    continue
+
+                await asyncio.sleep(PANEL_POSITION_REFRESH_RETRY_SECONDS)
+                continue
+
+            seconds_until_refresh = max(1, (scheduled_at - now).total_seconds())
+            await asyncio.sleep(
+                min(PANEL_POSITION_REFRESH_SCAN_SECONDS, seconds_until_refresh)
+            )
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("Inactive panel refresh loop failed")
-        await asyncio.sleep(PANEL_POSITION_REFRESH_SCAN_SECONDS)
+            logger.exception("Scheduled panel refresh loop failed")
+            await asyncio.sleep(PANEL_POSITION_REFRESH_RETRY_SECONDS)
 
 
 async def maybe_send_long_search_reminder(

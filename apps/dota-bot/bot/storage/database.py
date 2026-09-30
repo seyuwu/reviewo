@@ -93,6 +93,10 @@ class BotStorage:
               occurred_at TEXT NOT NULL,
               PRIMARY KEY (telegram_user_id, event_type)
             );
+            CREATE TABLE IF NOT EXISTS bot_schedules (
+              schedule_key TEXT PRIMARY KEY,
+              next_run_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS broadcast_campaigns (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               admin_user_id INTEGER NOT NULL,
@@ -493,22 +497,29 @@ class BotStorage:
             self._connection().commit()
 
     def due_panel_refresh_user_ids(
-        self, idle_for: timedelta, allowed_screens: tuple[str, ...]
+        self, scheduled_at: datetime, allowed_screens: tuple[str, ...]
     ) -> list[int]:
-        rows = self._panel_refresh_rows(idle_for, allowed_screens)
+        rows = self._panel_refresh_rows(scheduled_at, allowed_screens)
         return [int(row["telegram_user_id"]) for row in rows]
 
     def panel_refresh_is_due(
         self,
         telegram_user_id: int,
-        idle_for: timedelta,
+        scheduled_at: datetime,
         allowed_screens: tuple[str, ...],
     ) -> bool:
-        return bool(self._panel_refresh_rows(idle_for, allowed_screens, telegram_user_id, limit=1))
+        return bool(
+            self._panel_refresh_rows(
+                scheduled_at,
+                allowed_screens,
+                telegram_user_id,
+                limit=1,
+            )
+        )
 
     def _panel_refresh_rows(
         self,
-        idle_for: timedelta,
+        scheduled_at: datetime,
         allowed_screens: tuple[str, ...],
         telegram_user_id: int | None = None,
         *,
@@ -516,19 +527,16 @@ class BotStorage:
     ) -> list[sqlite3.Row]:
         if not allowed_screens:
             return []
-        cutoff = (datetime.now(UTC) - idle_for).isoformat()
+        cutoff = scheduled_at.astimezone(UTC).isoformat()
         screen_params = ", ".join("?" for _ in allowed_screens)
         query = f"""SELECT panels.telegram_user_id
                     FROM bot_panels AS panels
                     JOIN bot_users AS users
                       ON users.telegram_user_id = panels.telegram_user_id
                     WHERE panels.screen IN ({screen_params})
-                      AND panels.last_panel_bumped_at <= ?
-                      AND users.last_seen_at <= ?
-                      AND (users.last_party_notification_at IS NULL
-                           OR users.last_party_notification_at <= ?)
+                      AND panels.last_panel_bumped_at < ?
                       AND users.blocked_at IS NULL"""
-        parameters: list[object] = [*allowed_screens, cutoff, cutoff, cutoff]
+        parameters: list[object] = [*allowed_screens, cutoff]
         if telegram_user_id is not None:
             query += " AND panels.telegram_user_id = ?"
             parameters.append(telegram_user_id)
@@ -537,6 +545,35 @@ class BotStorage:
             query += " LIMIT ?"
             parameters.append(limit)
         return self._connection().execute(query, parameters).fetchall()
+
+    def get_or_create_panel_refresh_schedule(self, first_run_at: datetime) -> datetime:
+        normalized_first_run = first_run_at.astimezone(UTC)
+        with self.lock:
+            connection = self._connection()
+            connection.execute(
+                "INSERT OR IGNORE INTO bot_schedules (schedule_key, next_run_at) VALUES (?, ?)",
+                ("panel_position_refresh", normalized_first_run.isoformat()),
+            )
+            connection.commit()
+            row = connection.execute(
+                "SELECT next_run_at FROM bot_schedules WHERE schedule_key = ?",
+                ("panel_position_refresh",),
+            ).fetchone()
+            return datetime.fromisoformat(row["next_run_at"])
+
+    def advance_panel_refresh_schedule(
+        self, expected_run_at: datetime, next_run_at: datetime
+    ) -> bool:
+        expected = expected_run_at.astimezone(UTC).isoformat()
+        following = next_run_at.astimezone(UTC).isoformat()
+        with self.lock:
+            cursor = self._connection().execute(
+                "UPDATE bot_schedules SET next_run_at = ? "
+                "WHERE schedule_key = ? AND next_run_at = ?",
+                (following, "panel_position_refresh", expected),
+            )
+            self._connection().commit()
+            return cursor.rowcount == 1
 
     def record_party_notification(self, telegram_user_id: int) -> None:
         now = timestamp()

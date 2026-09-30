@@ -56,23 +56,22 @@ class BotStorageTests(unittest.TestCase):
         self.storage.save_panel(7, 7, 101, "profile", is_photo=False)
         self.assertFalse(self.storage.get_panel(7).is_photo)
 
-    def test_panel_position_refresh_waits_until_user_is_inactive(self) -> None:
+    def test_scheduled_panel_refresh_ignores_user_activity(self) -> None:
         self._make_panel_due(7)
-        idle_for = timedelta(hours=48)
+        scheduled_at = datetime.now(UTC) - timedelta(days=1)
         screens = ("home",)
 
-        self.assertEqual(self.storage.due_panel_refresh_user_ids(idle_for, screens), [7])
         self.storage.record_bot_user(7)
-        self.assertEqual(self.storage.due_panel_refresh_user_ids(idle_for, screens), [])
+        self.assertEqual(self.storage.due_panel_refresh_user_ids(scheduled_at, screens), [7])
 
-    def test_party_notification_delays_panel_position_refresh(self) -> None:
+    def test_scheduled_panel_refresh_ignores_recent_party_notification(self) -> None:
         self._make_panel_due(7)
-        idle_for = timedelta(hours=48)
+        scheduled_at = datetime.now(UTC) - timedelta(days=1)
         screens = ("home",)
 
         self.storage.record_party_notification(7)
 
-        self.assertEqual(self.storage.due_panel_refresh_user_ids(idle_for, screens), [])
+        self.assertEqual(self.storage.due_panel_refresh_user_ids(scheduled_at, screens), [7])
 
     def test_panel_refresh_is_independent_from_broadcast_opt_out(self) -> None:
         self.storage.record_bot_user(7)
@@ -80,7 +79,10 @@ class BotStorageTests(unittest.TestCase):
         self._make_panel_due(7)
 
         self.assertEqual(
-            self.storage.due_panel_refresh_user_ids(timedelta(hours=48), ("home",)),
+            self.storage.due_panel_refresh_user_ids(
+                datetime.now(UTC) - timedelta(days=1),
+                ("home",),
+            ),
             [7],
         )
 
@@ -105,6 +107,24 @@ class BotStorageTests(unittest.TestCase):
             "SELECT last_panel_bumped_at FROM bot_panels WHERE telegram_user_id = 7"
         ).fetchone()
         self.assertGreater(row[0], old_timestamp)
+
+    def test_panel_refresh_schedule_persists_and_advances_once(self) -> None:
+        first_run = datetime.now(UTC) + timedelta(days=1)
+        next_run = first_run + timedelta(days=2)
+
+        self.assertEqual(
+            self.storage.get_or_create_panel_refresh_schedule(first_run),
+            first_run,
+        )
+        self.assertTrue(self.storage.advance_panel_refresh_schedule(first_run, next_run))
+        self.storage.close()
+        self.storage = BotStorage(self.database_path, self.key)
+        self.storage.initialize()
+        self.assertEqual(
+            self.storage.get_or_create_panel_refresh_schedule(first_run),
+            next_run,
+        )
+        self.assertFalse(self.storage.advance_panel_refresh_schedule(first_run, next_run))
 
     def test_linking_a_website_account_clears_guest_recovery_url(self) -> None:
         self.storage.save_session(7, "guest-access", "guest-refresh", "https://opinia/recover/guest")
