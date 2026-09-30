@@ -99,6 +99,47 @@ def profile_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def profile_edit_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("✏️ Имя", "profile:edit:field:name")],
+            [button("🎮 Dota ID", "profile:edit:field:dota-id")],
+            [button("🏅 MMR", "profile:edit:field:mmr")],
+            [button("🎯 Позиции", "profile:edit:field:roles")],
+            [button("← К профилю", "profile:edit:cancel")],
+        ]
+    )
+
+
+def profile_edit_field_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [button("← К параметрам", "profile:edit")],
+            [button("✖️ К профилю", "profile:edit:cancel")],
+        ]
+    )
+
+
+def profile_edit_roles_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
+    rows = []
+    names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
+    roles = ("1", "2", "3", "4", "5")
+    for index in range(0, len(roles), 2):
+        row = []
+        for role in roles[index : index + 2]:
+            marker = "✅ " if role in selected else ""
+            row.append(button(f"{marker}{role} · {names[role]}", f"profile:edit:role:toggle:{role}"))
+        rows.append(row)
+    rows.extend(
+        [
+            [button("💾 Сохранить позиции", "profile:edit:roles:save")],
+            [button("← К параметрам", "profile:edit")],
+            [button("✖️ К профилю", "profile:edit:cancel")],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def invite_keyboard(invite_id: str, invite_kind: str) -> InlineKeyboardMarkup:
     if invite_kind == "APPLICATION":
         buttons = [button("✅ Принять заявку", f"invite:{invite_id}:accept"), button("✖️ Отклонить", f"invite:{invite_id}:decline")]

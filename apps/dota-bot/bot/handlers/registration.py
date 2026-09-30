@@ -15,6 +15,9 @@ from ..services.panel import begin_panel_transition, dota_id_guide_photo, edit_p
 from ..storage.database import BotStorage
 from ..ui.keyboards import (
     back_keyboard,
+    profile_edit_field_keyboard,
+    profile_edit_keyboard,
+    profile_edit_roles_keyboard,
     registration_dota_id_keyboard,
     registration_name_keyboard,
     registration_roles_keyboard,
@@ -41,6 +44,13 @@ class GuestProfileWizard(StatesGroup):
 
 class DotaIdOnlyWizard(StatesGroup):
     dota_id = State()
+
+
+class ProfileEditWizard(StatesGroup):
+    display_name = State()
+    dota_id = State()
+    mmr = State()
+    roles = State()
 
 
 async def start_profile_registration(
@@ -128,27 +138,284 @@ async def begin_profile_edit(
         return
 
     await state.clear()
-    await state.set_state(GuestProfileWizard.display_name)
-    await state.update_data(
-        editing_profile=True,
-        display_name=profile.get("title") or "",
-        dota_account_id=profile.get("dotaAccountId") or "",
-        mmr=(str(profile["mmr"]) if profile.get("mmr") is not None else ""),
-        roles=[str(role) for role in profile.get("roles", []) if str(role) in POSITION_NAMES],
-    )
+    await state.update_data(profile_snapshot=profile)
+    roles = ", ".join(
+        POSITION_NAMES[str(role)]
+        for role in profile.get("roles", [])
+        if str(role) in POSITION_NAMES
+    ) or "не выбраны"
     await edit_panel_content(
         callback.bot,
         storage,
         api,
         settings,
         callback.from_user.id,
-        "profile:edit:name",
-        "<b>Изменение профиля · 1/4</b>\n\n"
-        f"Сейчас: <b>{escape(str(profile.get('title') or '—'))}</b>\n"
-        "Напишите новое имя для профиля.",
-        registration_step_keyboard(),
+        "profile:edit",
+        "<b>Изменение профиля</b>\n\n"
+        "Выберите, какой параметр изменить:\n"
+        f"Имя: <b>{escape(str(profile.get('title') or '—'))}</b>\n"
+        f"Dota ID: <b>{escape(str(profile.get('dotaAccountId') or '—'))}</b>\n"
+        f"MMR: <b>{escape(str(profile.get('mmr') if profile.get('mmr') is not None else '—'))}</b>\n"
+        f"Позиции: <b>{escape(roles)}</b>",
+        profile_edit_keyboard(),
         callback.message.chat.id,
     )
+
+
+PROFILE_EDIT_FIELD_CALLBACKS = {
+    "profile:edit:field:name": ("display_name", ProfileEditWizard.display_name),
+    "profile:edit:field:dota-id": ("dota_id", ProfileEditWizard.dota_id),
+    "profile:edit:field:mmr": ("mmr", ProfileEditWizard.mmr),
+    "profile:edit:field:roles": ("roles", ProfileEditWizard.roles),
+}
+
+
+@router.callback_query(F.data.in_(PROFILE_EDIT_FIELD_CALLBACKS))
+async def choose_profile_edit_field(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    if callback.message is None:
+        acknowledge_callback(callback)
+        return
+    action = PROFILE_EDIT_FIELD_CALLBACKS.get(callback.data or "")
+    if not action:
+        acknowledge_callback(callback)
+        return
+    acknowledge_callback(callback)
+
+    field, wizard_state = action
+    data = await state.get_data()
+    profile = data.get("profile_snapshot")
+    if not profile:
+        try:
+            profile = await api.user(callback.from_user.id, "GET", "/dota/profiles/me")
+        except ApiError as error:
+            acknowledge_callback(callback)
+            await edit_panel_content(
+                callback.bot,
+                storage,
+                api,
+                settings,
+                callback.from_user.id,
+                "profile:edit:error",
+                f"Не получилось открыть профиль: {escape(str(error))}",
+                back_keyboard("profile"),
+                callback.message.chat.id,
+            )
+            return
+        await state.update_data(profile_snapshot=profile)
+
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
+    await state.set_state(wizard_state)
+
+    if field == "display_name":
+        text = (
+            "<b>Изменить имя</b>\n\n"
+            f"Сейчас: <b>{escape(str(profile.get('title') or '—'))}</b>\n"
+            "Напишите новое имя для профиля."
+        )
+        await edit_panel_content(
+            callback.bot, storage, api, settings, callback.from_user.id,
+            "profile:edit:name", text, profile_edit_field_keyboard(), callback.message.chat.id,
+        )
+    elif field == "dota_id":
+        current_id = str(profile.get("dotaAccountId") or "не указан")
+        text = (
+            "<b>Изменить Dota ID</b>\n\n"
+            f"Сейчас: <b>{escape(current_id)}</b>\n"
+            "Откройте свой профиль в Dota 2 и отправьте цифры справа от ника. "
+            "Нужно 8–10 цифр."
+        )
+        await edit_panel_content(
+            callback.bot, storage, api, settings, callback.from_user.id,
+            "profile:edit:dota-id", text, profile_edit_field_keyboard(),
+            callback.message.chat.id, dota_id_guide_photo(),
+        )
+    elif field == "mmr":
+        current_mmr = profile.get("mmr") if profile.get("mmr") is not None else "—"
+        text = (
+            "<b>Изменить MMR</b>\n\n"
+            f"Сейчас: <b>{escape(str(current_mmr))}</b>\n"
+            "Напишите новое значение числом от 0 до 18000."
+        )
+        await edit_panel_content(
+            callback.bot, storage, api, settings, callback.from_user.id,
+            "profile:edit:mmr", text, profile_edit_field_keyboard(), callback.message.chat.id,
+        )
+    else:
+        roles = [str(role) for role in profile.get("roles", []) if str(role) in POSITION_NAMES]
+        await state.update_data(profile_edit_roles=roles)
+        selected = ", ".join(POSITION_NAMES[role] for role in roles) or "не выбраны"
+        await edit_panel_content(
+            callback.bot, storage, api, settings, callback.from_user.id,
+            "profile:edit:roles",
+            "<b>Изменить позиции</b>\n\n"
+            "Выберите все позиции, на которых готовы играть.\n"
+            f"Сейчас выбраны: <b>{escape(selected)}</b>",
+            profile_edit_roles_keyboard(roles), callback.message.chat.id,
+        )
+
+
+async def save_single_profile_field(
+    bot,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+    telegram_user_id: int,
+    chat_id: int,
+    patch: dict,
+    screen: str,
+    error_text: str,
+    keyboard: InlineKeyboardMarkup,
+    media_photo=None,
+) -> bool:
+    try:
+        await api.user(telegram_user_id, "PATCH", "/dota/profiles/me", patch)
+    except ApiError as error:
+        await edit_panel_content(
+            bot, storage, api, settings, telegram_user_id, screen,
+            f"{error_text}\n\nНе получилось сохранить: {escape(str(error))}",
+            keyboard, chat_id, media_photo,
+        )
+        return False
+
+    await state.clear()
+    await edit_panel(bot, storage, api, settings, telegram_user_id, "profile", chat_id)
+    return True
+
+
+@router.message(ProfileEditWizard.display_name, F.text & ~F.text.startswith("/"))
+async def receive_profile_edit_name(
+    message: Message,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    value = (message.text or "").strip()
+    text = (
+        "<b>Изменить имя</b>\n\n"
+        "Имя должно быть длиной от 1 до 80 символов. Напишите новое имя."
+    )
+    if not value or len(value) > 80:
+        await edit_panel_content(
+            message.bot, storage, api, settings, message.from_user.id,
+            "profile:edit:name", text, profile_edit_field_keyboard(), message.chat.id,
+        )
+        return
+    await save_single_profile_field(
+        message.bot, state, api, settings, storage, message.from_user.id, message.chat.id,
+        {"title": value}, "profile:edit:name", text, profile_edit_field_keyboard(),
+    )
+
+
+@router.message(ProfileEditWizard.dota_id, F.text & ~F.text.startswith("/"))
+async def receive_profile_edit_dota_id(
+    message: Message,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    value = (message.text or "").strip()
+    text = (
+        "<b>Изменить Dota ID</b>\n\n"
+        "Введите 8–10 цифр без пробелов. Посмотреть ID можно в профиле Dota 2, справа от ника."
+    )
+    if not re.fullmatch(r"\d{8,10}", value):
+        await edit_panel_content(
+            message.bot, storage, api, settings, message.from_user.id,
+            "profile:edit:dota-id", text, profile_edit_field_keyboard(),
+            message.chat.id, dota_id_guide_photo(),
+        )
+        return
+    await save_single_profile_field(
+        message.bot, state, api, settings, storage, message.from_user.id, message.chat.id,
+        {"dotaAccountId": value}, "profile:edit:dota-id", text,
+        profile_edit_field_keyboard(), dota_id_guide_photo(),
+    )
+
+
+@router.message(ProfileEditWizard.mmr, F.text & ~F.text.startswith("/"))
+async def receive_profile_edit_mmr(
+    message: Message,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    value = (message.text or "").strip().replace(" ", "")
+    text = "<b>Изменить MMR</b>\n\nВведите MMR числом от 0 до 18000."
+    if not value.isdigit() or not 0 <= int(value) <= 18000:
+        await edit_panel_content(
+            message.bot, storage, api, settings, message.from_user.id,
+            "profile:edit:mmr", text, profile_edit_field_keyboard(), message.chat.id,
+        )
+        return
+    await save_single_profile_field(
+        message.bot, state, api, settings, storage, message.from_user.id, message.chat.id,
+        {"mmr": value}, "profile:edit:mmr", text, profile_edit_field_keyboard(),
+    )
+
+
+@router.callback_query(F.data.startswith("profile:edit:role:toggle:"))
+async def toggle_profile_edit_role(callback: CallbackQuery, state: FSMContext, storage: BotStorage, api: OpiniaApi, settings: Settings) -> None:
+    role = (callback.data or "").rsplit(":", maxsplit=1)[-1]
+    if role not in POSITION_NAMES or await state.get_state() != ProfileEditWizard.roles.state:
+        acknowledge_callback(callback)
+        return
+    data = await state.get_data()
+    roles = list(data.get("profile_edit_roles") or [])
+    if role in roles:
+        roles.remove(role)
+    else:
+        roles.append(role)
+        roles.sort()
+    await state.update_data(profile_edit_roles=roles)
+    selected = ", ".join(POSITION_NAMES[item] for item in roles) or "не выбраны"
+    acknowledge_callback(callback)
+    if callback.message:
+        await edit_panel_content(
+            callback.bot, storage, api, settings, callback.from_user.id,
+            "profile:edit:roles",
+            "<b>Изменить позиции</b>\n\n"
+            "Выберите все позиции, на которых готовы играть.\n"
+            f"Сейчас выбраны: <b>{escape(selected)}</b>",
+            profile_edit_roles_keyboard(roles), callback.message.chat.id,
+        )
+
+
+@router.callback_query(F.data == "profile:edit:roles:save")
+async def save_profile_edit_roles(callback: CallbackQuery, state: FSMContext, api: OpiniaApi, settings: Settings, storage: BotStorage) -> None:
+    if await state.get_state() != ProfileEditWizard.roles.state:
+        acknowledge_callback(callback)
+        return
+    roles = [str(role) for role in (await state.get_data()).get("profile_edit_roles", []) if str(role) in POSITION_NAMES]
+    if not roles:
+        acknowledge_callback(callback, "Оставьте выбранной хотя бы одну позицию")
+        return
+    acknowledge_callback(callback, "Сохраняю позиции…")
+    if callback.message:
+        await save_single_profile_field(
+            callback.bot, state, api, settings, storage, callback.from_user.id,
+            callback.message.chat.id, {"roles": roles}, "profile:edit:roles",
+            "<b>Изменить позиции</b>\n\nВыберите все позиции, на которых готовы играть.",
+            profile_edit_roles_keyboard(roles),
+        )
+
+
+@router.callback_query(F.data == "profile:edit:cancel")
+async def cancel_profile_edit(callback: CallbackQuery, state: FSMContext, api: OpiniaApi, settings: Settings, storage: BotStorage) -> None:
+    acknowledge_callback(callback)
+    chat_id = callback.message.chat.id if callback.message else None
+    await state.clear()
+    await begin_panel_transition(callback.bot, storage, callback.from_user.id, chat_id)
+    await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "profile", chat_id)
 
 
 def telegram_link_retry_keyboard() -> InlineKeyboardMarkup:

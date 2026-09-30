@@ -26,8 +26,12 @@ def party_text(party: dict) -> str:
     for member in party.get("members", []):
         role = role_names.get(str(member.get("positionRole")), "роль не выбрана")
         mmr = member.get("mmr") or "—"
+        dota_id = member.get("dotaAccountId") or "—"
         member_name = str(member.get("displayName") or "Игрок")[:40]
-        lines.append(f"• {escape(member_name)} · {escape(role)} · {escape(str(mmr))} MMR")
+        lines.append(
+            f"• {escape(member_name)} · {escape(role)} · {escape(str(mmr))} MMR"
+            f" · Dota ID: {escape(str(dota_id))}"
+        )
     open_slots = int(party.get("openSlots") or 0)
     lines.extend(["", f"Состав: {party.get('memberCount', 0)}/{party.get('maxMembers', 5)} · свободно мест: {open_slots}"])
     return "\n".join(lines)
