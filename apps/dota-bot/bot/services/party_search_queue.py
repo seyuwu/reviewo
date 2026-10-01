@@ -71,13 +71,11 @@ class PartySearchQueue:
         self._pending.setdefault(telegram_user_id, []).append(
             PartySearchAction(kind=kind, chat_id=chat_id, role=role)
         )
-        try:
-            if message_id is not None and markup is not None:
-                await self._update_panel_immediately(
-                    telegram_user_id, chat_id, message_id, markup, kind, role
-                )
-        finally:
-            self._ensure_worker(telegram_user_id)
+        self._ensure_worker(telegram_user_id)
+        if message_id is not None and markup is not None:
+            await self._update_panel_immediately(
+                telegram_user_id, chat_id, message_id, markup, kind, role
+            )
 
     def _ensure_worker(self, telegram_user_id: int) -> None:
         worker = self._workers.get(telegram_user_id)
