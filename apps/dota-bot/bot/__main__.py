@@ -19,6 +19,7 @@ from .services.notifications import (
 from .services.telegram_session import RetryingAiohttpSession
 from .services.auto_matcher import auto_match_loop
 from .services.broadcasts import broadcast_worker
+from .services.log_safety import TelegramTokenRedactionFilter
 from .services.panel import (
     recover_loading_panels,
     refresh_active_search_panels,
@@ -32,6 +33,9 @@ async def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         level=logging.INFO,
     )
+    token_filter = TelegramTokenRedactionFilter()
+    for handler in logging.getLogger().handlers:
+        handler.addFilter(token_filter)
     settings = load_settings()
     storage = BotStorage(settings.database_path, settings.encryption_key)
     storage.initialize()
@@ -83,4 +87,10 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as error:
+        logging.getLogger(__name__).critical(
+            "Bot process stopped (%s)", type(error).__name__
+        )
+        raise SystemExit(1) from None
