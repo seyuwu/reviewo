@@ -99,11 +99,14 @@ async def search_for_all_free_slots(
     callback: CallbackQuery,
     party_search_queue: PartySearchQueue,
 ) -> None:
-    acknowledge_callback(callback, "Добавил поиск на свободные позиции в очередь")
-    party_search_queue.enqueue(
+    acknowledge_callback(callback)
+    message = callback.message
+    await party_search_queue.enqueue(
         callback.from_user.id,
-        callback.message.chat.id if callback.message else callback.from_user.id,
+        message.chat.id if message else callback.from_user.id,
         "all",
+        message_id=message.message_id if message else None,
+        markup=message.reply_markup if message else None,
     )
 
 
@@ -116,12 +119,15 @@ async def enable_search_for_party_slot(
     if role not in {"1", "2", "3", "4", "5"}:
         await callback.answer("Позиция не найдена", show_alert=True)
         return
-    acknowledge_callback(callback, "Изменение поиска поставил в очередь")
-    party_search_queue.enqueue(
+    acknowledge_callback(callback)
+    message = callback.message
+    await party_search_queue.enqueue(
         callback.from_user.id,
-        callback.message.chat.id if callback.message else callback.from_user.id,
+        message.chat.id if message else callback.from_user.id,
         "toggle",
         role,
+        message_id=message.message_id if message else None,
+        markup=message.reply_markup if message else None,
     )
 
 

@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from urllib.parse import quote
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
@@ -22,6 +23,15 @@ class PartySearchAction:
     kind: str
     chat_id: int
     role: str | None = None
+
+
+@dataclass
+class OptimisticPartyPanel:
+    chat_id: int
+    message_id: int
+    markup: InlineKeyboardMarkup
+    available_roles: set[str]
+    searching_roles: set[str]
 
 
 class PartySearchQueue:
@@ -43,25 +53,145 @@ class PartySearchQueue:
         self._pending: dict[int, list[PartySearchAction]] = {}
         self._workers: dict[int, asyncio.Task[None]] = {}
         self._reminders: set[asyncio.Task[None]] = set()
+        self._panel_locks: dict[int, asyncio.Lock] = {}
+        self._optimistic_panels: dict[int, OptimisticPartyPanel] = {}
         self._closed = False
 
-    def enqueue(
+    async def enqueue(
         self,
         telegram_user_id: int,
         chat_id: int,
         kind: str,
         role: str | None = None,
+        message_id: int | None = None,
+        markup: InlineKeyboardMarkup | None = None,
     ) -> None:
         if self._closed:
             return
         self._pending.setdefault(telegram_user_id, []).append(
             PartySearchAction(kind=kind, chat_id=chat_id, role=role)
         )
+        try:
+            if message_id is not None and markup is not None:
+                await self._update_panel_immediately(
+                    telegram_user_id, chat_id, message_id, markup, kind, role
+                )
+        finally:
+            self._ensure_worker(telegram_user_id)
+
+    def _ensure_worker(self, telegram_user_id: int) -> None:
         worker = self._workers.get(telegram_user_id)
         if worker is None or worker.done():
             self._workers[telegram_user_id] = asyncio.create_task(
                 self._drain(telegram_user_id)
             )
+
+    async def _update_panel_immediately(
+        self,
+        telegram_user_id: int,
+        chat_id: int,
+        message_id: int,
+        current_markup: InlineKeyboardMarkup,
+        kind: str,
+        role: str | None,
+    ) -> None:
+        lock = self._panel_locks.setdefault(telegram_user_id, asyncio.Lock())
+        async with lock:
+            panel = self._optimistic_panels.get(telegram_user_id)
+            if (
+                panel is None
+                or panel.chat_id != chat_id
+                or panel.message_id != message_id
+            ):
+                available, searching = self._read_search_roles(current_markup)
+                panel = OptimisticPartyPanel(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    markup=current_markup,
+                    available_roles=available,
+                    searching_roles=searching,
+                )
+                self._optimistic_panels[telegram_user_id] = panel
+            else:
+                # Keep the latest complete keyboard while preserving pending role choices.
+                available, _ = self._read_search_roles(current_markup)
+                if available:
+                    panel.markup = current_markup
+                    panel.available_roles = available
+
+            if kind == "all":
+                panel.searching_roles = set(panel.available_roles)
+            elif kind == "toggle" and role in panel.available_roles:
+                if role in panel.searching_roles:
+                    panel.searching_roles.remove(role)
+                else:
+                    panel.searching_roles.add(role)
+
+            updated_markup = self._make_search_markup(panel)
+            try:
+                await self.bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    reply_markup=updated_markup,
+                )
+            except TelegramBadRequest as error:
+                if "message is not modified" not in str(error).lower():
+                    logger.info(
+                        "Could not update party search buttons immediately for user %s: %s",
+                        telegram_user_id,
+                        error,
+                    )
+            except TelegramAPIError:
+                logger.info(
+                    "Could not update party search buttons immediately for user %s",
+                    telegram_user_id,
+                    exc_info=True,
+                )
+
+    @staticmethod
+    def _read_search_roles(markup: InlineKeyboardMarkup) -> tuple[set[str], set[str]]:
+        available: set[str] = set()
+        searching: set[str] = set()
+        prefix = "party:toggle-search:"
+        for row in markup.inline_keyboard:
+            for button in row:
+                data = button.callback_data or ""
+                if not data.startswith(prefix):
+                    continue
+                role = data.removeprefix(prefix)
+                if role not in ROLES:
+                    continue
+                available.add(role)
+                if button.text == "Ищем…":
+                    searching.add(role)
+        return available, searching
+
+    @staticmethod
+    def _make_search_markup(panel: OptimisticPartyPanel) -> InlineKeyboardMarkup:
+        rows = []
+        for row in panel.markup.inline_keyboard:
+            if any(button.callback_data == "party:search-all" for button in row):
+                continue
+            updated_row = []
+            for button in row:
+                data = button.callback_data or ""
+                if data.startswith("party:toggle-search:"):
+                    role = data.removeprefix("party:toggle-search:")
+                    label = "Ищем…" if role in panel.searching_roles else "Искать"
+                    updated_row.append(button.model_copy(update={"text": label}))
+                else:
+                    updated_row.append(button)
+            rows.append(updated_row)
+
+        if panel.available_roles - panel.searching_roles:
+            rows.insert(
+                min(2, len(rows)),
+                [InlineKeyboardButton(
+                    text="🔎 Искать на всех свободных",
+                    callback_data="party:search-all",
+                )],
+            )
+        return panel.markup.model_copy(update={"inline_keyboard": rows})
 
     async def close(self) -> None:
         self._closed = True
@@ -106,15 +236,21 @@ class PartySearchQueue:
                 if self._pending.get(telegram_user_id):
                     continue
                 try:
-                    await edit_panel(
-                        self.bot,
-                        self.storage,
-                        self.api,
-                        self.settings,
-                        telegram_user_id,
-                        screen,
-                        chat_id,
+                    lock = self._panel_locks.setdefault(
+                        telegram_user_id, asyncio.Lock()
                     )
+                    async with lock:
+                        await edit_panel(
+                            self.bot,
+                            self.storage,
+                            self.api,
+                            self.settings,
+                            telegram_user_id,
+                            screen,
+                            chat_id,
+                        )
+                        if not self._pending.get(telegram_user_id):
+                            self._optimistic_panels.pop(telegram_user_id, None)
                 except Exception:
                     logger.exception(
                         "Could not refresh queued party panel for user %s",
