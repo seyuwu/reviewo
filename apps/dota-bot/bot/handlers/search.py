@@ -14,6 +14,7 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
+from ..services.party_search_queue import PartySearchQueue
 from ..services.solo_search import (
     PartyChangedDuringConfirmation,
     PartyOwnerMustResolveMembers,
@@ -445,8 +446,20 @@ async def stop_search(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    party_search_queue: PartySearchQueue,
 ) -> None:
     acknowledge_callback(callback)
+    panel = storage.get_panel(callback.from_user.id)
+    if panel and panel.screen == "party":
+        message = callback.message
+        await party_search_queue.enqueue(
+            callback.from_user.id,
+            message.chat.id if message else callback.from_user.id,
+            "stop",
+            message_id=message.message_id if message else None,
+            markup=getattr(message, "reply_markup", None) if message else None,
+        )
+        return
     await begin_panel_transition(
         callback.bot,
         storage,

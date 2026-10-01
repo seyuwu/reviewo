@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from pathlib import Path
+from typing import Protocol
 from urllib.parse import quote
 
 from aiogram import Bot
@@ -33,6 +34,12 @@ from ..ui.keyboards import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class PanelUpdateGuard(Protocol):
+    def panel_lock_for(self, telegram_user_id: int) -> asyncio.Lock: ...
+
+    def is_processing(self, telegram_user_id: int) -> bool: ...
 LFG_WINDOW_SECONDS = 20 * 60
 LONG_SEARCH_REMINDER_SECONDS = 3 * 60
 DEFAULT_PANEL_IMAGE = Path(__file__).resolve().parents[1] / "assets" / "fdp-panel-background.png"
@@ -346,11 +353,14 @@ async def refresh_active_search_panels(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    panel_update_guard: PanelUpdateGuard | None = None,
 ) -> None:
     """Refresh countdowns for active searches without re-uploading party images."""
     while True:
         try:
             for telegram_user_id in storage.session_user_ids():
+                if panel_update_guard and panel_update_guard.is_processing(telegram_user_id):
+                    continue
                 search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
                 panel = storage.get_panel(telegram_user_id)
                 try:
@@ -399,23 +409,32 @@ async def refresh_active_search_panels(
                         )
                     else:
                         continue
-                    if panel.is_photo:
-                        await bot.edit_message_caption(
-                            chat_id=panel.chat_id,
-                            message_id=panel.message_id,
-                            caption=text,
-                            reply_markup=keyboard,
-                            parse_mode="HTML",
-                        )
+                    async def update_message() -> None:
+                        if panel.is_photo:
+                            await bot.edit_message_caption(
+                                chat_id=panel.chat_id,
+                                message_id=panel.message_id,
+                                caption=text,
+                                reply_markup=keyboard,
+                                parse_mode="HTML",
+                            )
+                        else:
+                            await bot.edit_message_text(
+                                text,
+                                chat_id=panel.chat_id,
+                                message_id=panel.message_id,
+                                reply_markup=keyboard,
+                                parse_mode="HTML",
+                                disable_web_page_preview=True,
+                            )
+
+                    if panel_update_guard:
+                        async with panel_update_guard.panel_lock_for(telegram_user_id):
+                            if panel_update_guard.is_processing(telegram_user_id):
+                                continue
+                            await update_message()
                     else:
-                        await bot.edit_message_text(
-                            text,
-                            chat_id=panel.chat_id,
-                            message_id=panel.message_id,
-                            reply_markup=keyboard,
-                            parse_mode="HTML",
-                            disable_web_page_preview=True,
-                        )
+                        await update_message()
                 except TelegramBadRequest as error:
                     if "message is not modified" not in str(error).lower():
                         logger.info("Could not refresh party search panel for %s: %s", telegram_user_id, error)

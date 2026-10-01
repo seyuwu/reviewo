@@ -106,7 +106,7 @@ async def search_for_all_free_slots(
         message.chat.id if message else callback.from_user.id,
         "all",
         message_id=message.message_id if message else None,
-        markup=message.reply_markup if message else None,
+        markup=getattr(message, "reply_markup", None) if message else None,
     )
 
 
@@ -127,7 +127,7 @@ async def enable_search_for_party_slot(
         "toggle",
         role,
         message_id=message.message_id if message else None,
-        markup=message.reply_markup if message else None,
+        markup=getattr(message, "reply_markup", None) if message else None,
     )
 
 

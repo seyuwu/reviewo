@@ -57,6 +57,15 @@ class PartySearchQueue:
         self._optimistic_panels: dict[int, OptimisticPartyPanel] = {}
         self._closed = False
 
+    def panel_lock_for(self, telegram_user_id: int) -> asyncio.Lock:
+        return self._panel_locks.setdefault(telegram_user_id, asyncio.Lock())
+
+    def is_processing(self, telegram_user_id: int) -> bool:
+        worker = self._workers.get(telegram_user_id)
+        return bool(self._pending.get(telegram_user_id)) or bool(
+            worker and not worker.done()
+        )
+
     async def enqueue(
         self,
         telegram_user_id: int,
@@ -93,7 +102,7 @@ class PartySearchQueue:
         kind: str,
         role: str | None,
     ) -> None:
-        lock = self._panel_locks.setdefault(telegram_user_id, asyncio.Lock())
+        lock = self.panel_lock_for(telegram_user_id)
         async with lock:
             panel = self._optimistic_panels.get(telegram_user_id)
             if (
@@ -234,9 +243,7 @@ class PartySearchQueue:
                 if self._pending.get(telegram_user_id):
                     continue
                 try:
-                    lock = self._panel_locks.setdefault(
-                        telegram_user_id, asyncio.Lock()
-                    )
+                    lock = self.panel_lock_for(telegram_user_id)
                     async with lock:
                         await edit_panel(
                             self.bot,
@@ -291,6 +298,8 @@ class PartySearchQueue:
         for action in actions:
             if action.kind == "all":
                 roles = set(available_roles)
+            elif action.kind == "stop":
+                roles.clear()
             elif action.kind == "toggle" and action.role in available_roles:
                 if action.role in roles:
                     roles.remove(action.role)

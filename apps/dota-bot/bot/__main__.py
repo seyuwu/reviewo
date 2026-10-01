@@ -54,7 +54,11 @@ async def main() -> None:
         asyncio.create_task(cleanup_temporary_messages(bot, storage)),
         asyncio.create_task(auto_match_loop(bot, api, settings, storage, match_wakeup)),
         asyncio.create_task(broadcast_worker(bot, storage)),
-        asyncio.create_task(refresh_active_search_panels(bot, api, settings, storage)),
+        asyncio.create_task(
+            refresh_active_search_panels(
+                bot, api, settings, storage, party_search_queue
+            )
+        ),
     ]
 
     try:

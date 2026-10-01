@@ -39,7 +39,7 @@ class SoloSearchSwitchTests(unittest.IsolatedAsyncioTestCase):
             [
                 ("GET", "/social/parties/me", None),
                 ("DELETE", "/social/parties/party-current/members/me", None),
-                ("POST", "/dota/profiles/lfg/looking", {"looking": True}),
+                ("POST", "/dota/profiles/lfg/looking", {"looking": True, "source": "telegram"}),
             ],
         )
 
@@ -48,7 +48,10 @@ class SoloSearchSwitchTests(unittest.IsolatedAsyncioTestCase):
 
         await start_solo_search(api, 42)
 
-        self.assertEqual(api.calls[-1], ("POST", "/dota/profiles/lfg/looking", {"looking": True}))
+        self.assertEqual(
+            api.calls[-1],
+            ("POST", "/dota/profiles/lfg/looking", {"looking": True, "source": "telegram"}),
+        )
         self.assertEqual(api.calls[1][0:2], ("DELETE", "/social/parties/party-current/members/me"))
 
     async def test_party_owner_with_other_members_is_not_removed_or_queued(self) -> None:
