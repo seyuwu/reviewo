@@ -161,7 +161,7 @@ def party_keyboard(
     slots = [button(truncate(occupants.get(role, role), 12), f"party:slot:{role}") for role in roles]
     search_status = [
         button(
-            "—" if role in occupants else ("Ищем…" if role in searching_roles else "Начать поиск"),
+            "—" if role in occupants else ("Ищем…" if role in searching_roles else "Искать"),
             (
                 f"party:noop:{role}"
                 if role in occupants
