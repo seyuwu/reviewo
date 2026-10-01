@@ -23,6 +23,7 @@ from .services.panel import (
     recover_loading_panels,
     refresh_active_search_panels,
 )
+from .services.party_search_queue import PartySearchQueue
 from .storage.database import BotStorage
 
 
@@ -42,6 +43,7 @@ async def main() -> None:
     await api.start()
     await recover_loading_panels(bot, api, settings, storage)
     match_wakeup = asyncio.Event()
+    party_search_queue = PartySearchQueue(bot, api, settings, storage, match_wakeup)
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher.include_router(router)
     dispatcher.message.outer_middleware(DeletePrivateMessagesMiddleware())
@@ -64,8 +66,10 @@ async def main() -> None:
             settings=settings,
             storage=storage,
             match_wakeup=match_wakeup,
+            party_search_queue=party_search_queue,
         )
     finally:
+        await party_search_queue.close()
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)

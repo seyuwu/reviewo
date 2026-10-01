@@ -1,5 +1,3 @@
-import asyncio
-import time
 from html import escape
 from urllib.parse import quote
 
@@ -10,8 +8,9 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
+from ..services.party_search_queue import PartySearchQueue
 from ..storage.database import BotStorage
-from .search import send_dota_id_reminder, show_error
+from .search import show_error
 from ..ui.keyboards import delete_party_confirmation_keyboard, leave_party_confirmation_keyboard
 
 router = Router(name="party-slots")
@@ -98,187 +97,32 @@ async def search_for_party_slot(
 @router.callback_query(F.data == "party:search-all")
 async def search_for_all_free_slots(
     callback: CallbackQuery,
-    api: OpiniaApi,
-    settings: Settings,
-    storage: BotStorage,
-    match_wakeup: asyncio.Event,
+    party_search_queue: PartySearchQueue,
 ) -> None:
-    acknowledge_callback(callback, "Включаю поиск на всех свободных позициях")
-    await begin_panel_transition(
-        callback.bot, storage, callback.from_user.id,
-        callback.message.chat.id if callback.message else None,
+    acknowledge_callback(callback, "Добавил поиск на свободные позиции в очередь")
+    party_search_queue.enqueue(
+        callback.from_user.id,
+        callback.message.chat.id if callback.message else callback.from_user.id,
+        "all",
     )
-    try:
-        party = current_party(await api.user(callback.from_user.id, "GET", "/social/parties/me"))
-        if not party:
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
-            return
-        if not party.get("canManageParty"):
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
-            return
-
-        all_roles = {"1", "2", "3", "4", "5"}
-        occupied_roles = {
-            str(member.get("positionRole"))
-            for member in party.get("members", [])
-            if member.get("positionRole")
-        }
-        available_roles = all_roles - occupied_roles
-        if not available_roles:
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
-            return
-
-        current_roles = set(map(str, party.get("recruitedRoles") or [])) & available_roles
-        roles = available_roles
-        was_searching = bool(current_roles)
-        slug = quote(str(party["slug"]), safe="")
-        await api.user(
-            callback.from_user.id,
-            "PATCH",
-            f"/social/parties/{slug}/join-mode",
-            {"joinMode": "OPEN"},
-        )
-        await api.user(
-            callback.from_user.id,
-            "POST",
-            "/dota/profiles/lfg/looking",
-            {"looking": True, "partySlug": party["slug"], "recruitedRoles": sorted(roles), "source": "telegram"},
-        )
-        previous_search = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}
-        started_at = (
-            previous_search.get("startedAt")
-            if was_searching
-            and previous_search.get("mode") == "recruit"
-            and previous_search.get("partySlug") == party["slug"]
-            else time.time()
-        )
-        storage.set_choices(
-            callback.from_user.id,
-            "auto_search",
-            [{"mode": "recruit", "partySlug": party["slug"], "roles": sorted(roles), "startedAt": started_at}],
-        )
-        if not was_searching:
-            storage.record_search_started(callback.from_user.id)
-            storage.clear_auto_match_exclusions(callback.from_user.id)
-        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
-        match_wakeup.set()
-        if not was_searching:
-            try:
-                profile = await api.user(callback.from_user.id, "GET", "/dota/profiles/me")
-                if not profile.get("dotaAccountId"):
-                    await send_dota_id_reminder(
-                        callback.bot,
-                        storage,
-                        callback.from_user.id,
-                        callback.message.chat.id if callback.message else None,
-                    )
-            except ApiError:
-                pass
-    except ApiError as error:
-        await show_error(callback, api, settings, storage, error)
 
 
 @router.callback_query(F.data.startswith("party:toggle-search:"))
 async def enable_search_for_party_slot(
     callback: CallbackQuery,
-    api: OpiniaApi,
-    settings: Settings,
-    storage: BotStorage,
-    match_wakeup: asyncio.Event,
+    party_search_queue: PartySearchQueue,
 ) -> None:
     role = (callback.data or "").rsplit(":", 1)[-1]
     if role not in {"1", "2", "3", "4", "5"}:
         await callback.answer("Позиция не найдена", show_alert=True)
         return
-    acknowledge_callback(callback)
-    await begin_panel_transition(
-        callback.bot, storage, callback.from_user.id,
-        callback.message.chat.id if callback.message else None,
+    acknowledge_callback(callback, "Изменение поиска поставил в очередь")
+    party_search_queue.enqueue(
+        callback.from_user.id,
+        callback.message.chat.id if callback.message else callback.from_user.id,
+        "toggle",
+        role,
     )
-    try:
-        party = current_party(await api.user(callback.from_user.id, "GET", "/social/parties/me"))
-        if not party:
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
-            return
-        if not party.get("canManageParty"):
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
-            return
-        if role in {str(member.get("positionRole")) for member in party.get("members", [])}:
-            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
-            return
-
-        occupied_roles = {
-            str(member.get("positionRole"))
-            for member in party.get("members", [])
-            if member.get("positionRole")
-        }
-        roles = set(map(str, party.get("recruitedRoles") or [])) - occupied_roles
-        was_searching = bool(roles)
-        if role in roles:
-            roles.remove(role)
-        else:
-            roles.add(role)
-        slug = quote(str(party["slug"]), safe="")
-        if roles:
-            await api.user(
-                callback.from_user.id,
-                "PATCH",
-                f"/social/parties/{slug}/join-mode",
-                {"joinMode": "OPEN"},
-            )
-        await api.user(
-            callback.from_user.id,
-            "POST",
-            "/dota/profiles/lfg/looking",
-            {
-                "looking": bool(roles),
-                "partySlug": party["slug"],
-                "source": "telegram",
-                **({"recruitedRoles": sorted(roles)} if roles else {}),
-            },
-        )
-        if roles:
-            previous_search = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}
-            started_at = (
-                previous_search.get("startedAt")
-                if was_searching
-                and previous_search.get("mode") == "recruit"
-                and previous_search.get("partySlug") == party["slug"]
-                else time.time()
-            )
-            storage.set_choices(
-                callback.from_user.id,
-                "auto_search",
-                [{
-                    "mode": "recruit",
-                    "partySlug": party["slug"],
-                    "roles": sorted(roles),
-                    "startedAt": started_at,
-                }],
-            )
-            if not was_searching:
-                storage.record_search_started(callback.from_user.id)
-                storage.clear_auto_match_exclusions(callback.from_user.id)
-        else:
-            storage.set_choices(callback.from_user.id, "auto_search", [])
-            storage.clear_search_timer(callback.from_user.id)
-        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
-        if roles:
-            match_wakeup.set()
-            if not was_searching:
-                try:
-                    profile = await api.user(callback.from_user.id, "GET", "/dota/profiles/me")
-                    if not profile.get("dotaAccountId"):
-                        await send_dota_id_reminder(
-                            callback.bot,
-                            storage,
-                            callback.from_user.id,
-                            callback.message.chat.id if callback.message else None,
-                        )
-                except ApiError:
-                    pass
-    except ApiError as error:
-        await show_error(callback, api, settings, storage, error)
 
 
 @router.callback_query(F.data == "party:delete:confirm")
