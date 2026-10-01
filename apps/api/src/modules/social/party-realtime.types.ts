@@ -13,6 +13,7 @@ export type PartyNotificationType =
   | "member_joined";
 
 export interface PartyNotificationPayload {
+  inviterDisplayName?: string;
   invite: {
     createdAt: string;
     direction?: "incoming" | "outgoing";

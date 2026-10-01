@@ -109,6 +109,7 @@ export class DotaController {
     }
 
     return this.dotaProfileService.setLooking(input.looking, currentUser, {
+      ...(input.source ? { source: input.source } : {}),
       ...(input.recruitedRoles !== undefined ? { recruitedRoles: input.recruitedRoles } : {}),
       ...(input.partySlug ? { partySlug: input.partySlug } : {})
     });
@@ -125,7 +126,9 @@ export class DotaController {
 
   @Get("me")
   @UseGuards(JwtAuthGuard)
-  async getMyProfile(@CurrentUser() currentUser: AuthenticatedUser): Promise<DotaProfileResponseDto> {
+  async getMyProfile(
+    @CurrentUser() currentUser: AuthenticatedUser
+  ): Promise<DotaProfileResponseDto> {
     return this.dotaProfileService.getMyProfile(currentUser);
   }
 
@@ -184,7 +187,12 @@ export class DotaController {
 
     await this.apiRateLimiterService.checkWithinLimits(rateLimitRules);
 
-    const response = await this.dotaProfileService.confirmQualities(slug, input, request, currentUser);
+    const response = await this.dotaProfileService.confirmQualities(
+      slug,
+      input,
+      request,
+      currentUser
+    );
 
     await this.apiRateLimiterService.recordLimits(rateLimitRules);
 

@@ -35,7 +35,34 @@ export const ANALYTICS_CTA_KEYS = [
   "games_search_start_recruit",
   "games_search_stop",
   "games_party_create_from_search",
-  "dota_bot_cta_seo"
+  "dota_bot_cta_seo",
+  "dota_bot_cta_community",
+  "dota_bot_cta_telegram",
+  "dota_bot_cta_discord",
+  "dota_bot_cta_vk",
+  "dota_bot_cta_tiktok",
+  "dota_bot_cta_youtube",
+  "dota_bot_cta_twitch",
+  "dota_bot_cta_steam",
+  "dota_bot_cta_search",
+  "dota_bot_cta_referral",
+  "dota_bot_cta_streamer",
+  "dota_bot_cta_site",
+  "dota_bot_cta_other",
+  "dota_bot_landing_view_seo",
+  "dota_bot_landing_view_community",
+  "dota_bot_landing_view_telegram",
+  "dota_bot_landing_view_discord",
+  "dota_bot_landing_view_vk",
+  "dota_bot_landing_view_tiktok",
+  "dota_bot_landing_view_youtube",
+  "dota_bot_landing_view_twitch",
+  "dota_bot_landing_view_steam",
+  "dota_bot_landing_view_search",
+  "dota_bot_landing_view_referral",
+  "dota_bot_landing_view_streamer",
+  "dota_bot_landing_view_site",
+  "dota_bot_landing_view_other"
 ] as const;
 
 export type AnalyticsCtaKey = (typeof ANALYTICS_CTA_KEYS)[number];
@@ -179,4 +206,3 @@ export function isDotaHostVisitorScopeKey(visitorHash: string): boolean {
 
 export const WAITLIST_INVITE_QUERY = "from";
 export const WAITLIST_INVITE_VALUE = "waitlist_invite";
-

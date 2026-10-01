@@ -19,7 +19,7 @@ export function DotaBotLandingView() {
           позиции — бот подберёт совместимую пати, покажет состав и сообщит об изменениях.
         </p>
         <div className={styles.actions}>
-          <TrackedDotaBotLink className="button-primary" source="seo">
+          <TrackedDotaBotLink className="button-primary" source="site">
             Открыть FDP в Telegram
           </TrackedDotaBotLink>
           <Link className="button-secondary" href={searchUrl}>
@@ -53,7 +53,7 @@ export function DotaBotLandingView() {
           <li>Укажи MMR и свои позиции. Dota ID можно добавить позже.</li>
           <li>Нажми «Ищу пати» или «Собрать пати» и дождись подходящих игроков.</li>
         </ol>
-        <TrackedDotaBotLink className="button-primary" source="seo">
+        <TrackedDotaBotLink className="button-primary" source="site">
           Начать в Telegram
         </TrackedDotaBotLink>
       </section>

@@ -15,7 +15,7 @@ from ..services.panel import (
     edit_panel,
     edit_panel_content,
 )
-from ..services.start_links import parse_acquisition_source, parse_party_start_payload
+from ..services.start_links import parse_acquisition_tag, parse_party_start_payload
 from ..storage.database import BotStorage
 from ..ui.formatters import party_text
 from ..ui.keyboards import (
@@ -73,10 +73,11 @@ async def open_party_link(
     if message.chat.type != "private" or message.from_user is None:
         return
     code = parse_party_start_payload(command.args)
-    source = parse_acquisition_source(command.args)
+    acquisition_tag = parse_acquisition_tag(command.args)
     storage.record_bot_user(
         message.from_user.id,
-        source or ("party_invite" if code else "direct"),
+        acquisition_tag[0] if acquisition_tag else ("party_invite" if code else "direct"),
+        acquisition_tag[1] if acquisition_tag else None,
     )
     if code is None:
         await state.clear()
@@ -257,7 +258,7 @@ async def finish_party_join(bot, api, settings, storage, telegram_user_id: int, 
             )
             return
         storage.set_choices(telegram_user_id, "pending_party_invite", [])
-        storage.record_funnel_event(telegram_user_id, "party_joined")
+        storage.record_party_joined(telegram_user_id, completes_search=True)
         if result.get("slug"):
             from ..services.party_notifications import deliver_join_hint
 

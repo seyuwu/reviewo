@@ -558,13 +558,14 @@ export class GamePartiesRepository {
     lfgExpiresAt: Date;
     maxMembers: number;
     members: Array<{ positionRole: string; userId: string }>;
+    searchSource: "telegram" | "web";
     name: string;
     now: Date;
     partySafetyMessage: string;
     slug: string;
     vertical: string;
   }): Promise<
-    | { ok: true; party: PartyWithMembers }
+    | { ok: true; party: PartyWithMembers; telegramSearchUserIds: string[] }
     | {
         ok: false;
         reason:
@@ -640,6 +641,15 @@ export class GamePartiesRepository {
         if (memberships.length > 0) {
           return { ok: false as const, reason: "already_grouped" as const };
         }
+
+        const telegramSearchUserIds = input.members
+          .filter((member) => {
+            const source = profilesByUserId.get(member.userId)?.attributes[
+              DOTA_ATTRIBUTE_KEYS.lfgSource
+            ];
+            return source === "telegram";
+          })
+          .map((member) => member.userId);
 
         const mmrBounds: Array<{ high: number; low: number }> = [];
         const servers = new Set<string>();
@@ -745,6 +755,7 @@ export class GamePartiesRepository {
                   [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: input.slug,
                   [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: recruitedRoles,
                   [DOTA_ATTRIBUTE_KEYS.lfgUntil]: input.lfgExpiresAt.toISOString(),
+                  [DOTA_ATTRIBUTE_KEYS.lfgSource]: input.searchSource,
                   [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL
                 }
               : {
@@ -756,6 +767,7 @@ export class GamePartiesRepository {
                   [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: "",
                   [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: "",
                   [DOTA_ATTRIBUTE_KEYS.lfgUntil]: new Date(0).toISOString(),
+                  [DOTA_ATTRIBUTE_KEYS.lfgSource]: "",
                   [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL
                 };
 
@@ -782,7 +794,7 @@ export class GamePartiesRepository {
           throw new Error("Auto-matched party was not created");
         }
 
-        return { ok: true as const, party: fullParty };
+        return { ok: true as const, party: fullParty, telegramSearchUserIds };
       });
     } catch (error) {
       if (isUniqueConstraintError(error)) {

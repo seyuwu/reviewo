@@ -11,7 +11,7 @@ import {
 
 import { DOTA_POSITION_ROLES } from "@reviewo/shared";
 
-class AutoMatchSoloPartyMemberDto {
+export class AutoMatchSoloPartyMemberDto {
   @IsUUID("4")
   userId!: string;
 
@@ -19,10 +19,7 @@ class AutoMatchSoloPartyMemberDto {
   positionRole!: (typeof DOTA_POSITION_ROLES)[number];
 }
 
-export class AutoMatchSoloPartyDto {
-  @IsUUID("4")
-  leaderUserId!: string;
-
+export class AutoMatchSoloPartyMembersDto {
   @IsArray()
   @ArrayMinSize(2)
   @ArrayMaxSize(5)
@@ -31,4 +28,9 @@ export class AutoMatchSoloPartyDto {
   @ValidateNested({ each: true })
   @Type(() => AutoMatchSoloPartyMemberDto)
   members!: AutoMatchSoloPartyMemberDto[];
+}
+
+export class AutoMatchSoloPartyDto extends AutoMatchSoloPartyMembersDto {
+  @IsUUID("4")
+  leaderUserId!: string;
 }

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
+import re
 import sqlite3
 from threading import RLock
 
@@ -84,6 +85,7 @@ class BotStorage:
               announcements_enabled INTEGER NOT NULL DEFAULT 1,
               blocked_at TEXT,
               acquisition_source TEXT NOT NULL DEFAULT 'existing',
+              acquisition_campaign TEXT,
               last_party_notification_at TEXT
             );
             CREATE TABLE IF NOT EXISTS bot_funnel_events (
@@ -91,6 +93,19 @@ class BotStorage:
               event_type TEXT NOT NULL,
               occurred_at TEXT NOT NULL,
               PRIMARY KEY (telegram_user_id, event_type)
+            );
+            CREATE TABLE IF NOT EXISTS bot_activity_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              telegram_user_id INTEGER NOT NULL,
+              event_type TEXT NOT NULL,
+              occurred_at TEXT NOT NULL,
+              duration_seconds INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_bot_activity_type_time
+              ON bot_activity_events (event_type, occurred_at);
+            CREATE TABLE IF NOT EXISTS active_search_timers (
+              telegram_user_id INTEGER PRIMARY KEY,
+              started_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS broadcast_campaigns (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,6 +143,10 @@ class BotStorage:
         if "acquisition_source" not in user_columns:
             self.connection.execute(
                 "ALTER TABLE bot_users ADD COLUMN acquisition_source TEXT NOT NULL DEFAULT 'existing'"
+            )
+        if "acquisition_campaign" not in user_columns:
+            self.connection.execute(
+                "ALTER TABLE bot_users ADD COLUMN acquisition_campaign TEXT"
             )
         if "last_party_notification_at" not in user_columns:
             self.connection.execute(
@@ -211,18 +230,27 @@ class BotStorage:
         return [int(row["telegram_user_id"]) for row in rows]
 
     def record_bot_user(
-        self, telegram_user_id: int, acquisition_source: str = "direct"
+        self,
+        telegram_user_id: int,
+        acquisition_source: str = "direct",
+        acquisition_campaign: str | None = None,
     ) -> None:
         now = timestamp()
-        allowed_sources = {"seo", "community", "party_invite", "direct"}
+        allowed_sources = {
+            "seo", "community", "telegram", "discord", "vk", "tiktok",
+            "youtube", "twitch", "steam", "search", "referral", "streamer",
+            "site", "other", "party_invite", "direct", "existing",
+        }
         source = acquisition_source if acquisition_source in allowed_sources else "direct"
+        campaign = self._campaign_code(acquisition_campaign)
         with self.lock:
             connection = self._connection()
             inserted = connection.execute(
                 """INSERT OR IGNORE INTO bot_users
-                     (telegram_user_id, first_seen_at, last_seen_at, acquisition_source)
-                   VALUES (?, ?, ?, ?)""",
-                (telegram_user_id, now, now, source),
+                     (telegram_user_id, first_seen_at, last_seen_at, acquisition_source,
+                      acquisition_campaign)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (telegram_user_id, now, now, source, campaign),
             ).rowcount
             connection.execute(
                 """UPDATE bot_users SET last_seen_at = ?, blocked_at = NULL
@@ -239,7 +267,12 @@ class BotStorage:
             connection.commit()
 
     def record_funnel_event(self, telegram_user_id: int, event_type: str) -> None:
-        if event_type not in {"account_ready", "search_started", "party_joined"}:
+        if event_type not in {
+            "account_ready",
+            "search_started",
+            "party_joined",
+            "party_created",
+        }:
             raise ValueError("Unsupported bot funnel event")
         self.record_bot_user(telegram_user_id)
         with self.lock:
@@ -248,6 +281,81 @@ class BotStorage:
                      (telegram_user_id, event_type, occurred_at)
                    VALUES (?, ?, ?)""",
                 (telegram_user_id, event_type, timestamp()),
+            )
+            self._connection().commit()
+
+    def record_party_created(self, telegram_user_id: int) -> None:
+        self.record_funnel_event(telegram_user_id, "party_created")
+        with self.lock:
+            self._connection().execute(
+                """INSERT INTO bot_activity_events
+                     (telegram_user_id, event_type, occurred_at)
+                   VALUES (?, 'party_created', ?)""",
+                (telegram_user_id, timestamp()),
+            )
+            self._connection().commit()
+
+    def record_search_started(self, telegram_user_id: int) -> None:
+        """Record every successful search start and reset its time-to-party clock."""
+        self.record_funnel_event(telegram_user_id, "search_started")
+        now = timestamp()
+        with self.lock:
+            connection = self._connection()
+            connection.execute(
+                """INSERT INTO bot_activity_events
+                     (telegram_user_id, event_type, occurred_at)
+                   VALUES (?, 'search_started', ?)""",
+                (telegram_user_id, now),
+            )
+            connection.execute(
+                """INSERT INTO active_search_timers (telegram_user_id, started_at)
+                   VALUES (?, ?)
+                   ON CONFLICT(telegram_user_id) DO UPDATE SET started_at=excluded.started_at""",
+                (telegram_user_id, now),
+            )
+            connection.commit()
+
+    def record_party_joined(self, telegram_user_id: int, *, completes_search: bool = False) -> None:
+        """Record a party entry and, when it came from matchmaking, its elapsed search time."""
+        self.record_funnel_event(telegram_user_id, "party_joined")
+        now = timestamp()
+        duration_seconds = None
+        with self.lock:
+            connection = self._connection()
+            if completes_search:
+                timer = connection.execute(
+                    "SELECT started_at FROM active_search_timers WHERE telegram_user_id = ?",
+                    (telegram_user_id,),
+                ).fetchone()
+                if timer:
+                    try:
+                        elapsed = int(
+                            (
+                                datetime.fromisoformat(now)
+                                - datetime.fromisoformat(timer["started_at"])
+                            ).total_seconds()
+                        )
+                        if 0 <= elapsed <= 30 * 24 * 60 * 60:
+                            duration_seconds = elapsed
+                    except (TypeError, ValueError):
+                        duration_seconds = None
+                connection.execute(
+                    "DELETE FROM active_search_timers WHERE telegram_user_id = ?",
+                    (telegram_user_id,),
+                )
+            connection.execute(
+                """INSERT INTO bot_activity_events
+                     (telegram_user_id, event_type, occurred_at, duration_seconds)
+                   VALUES (?, 'party_joined', ?, ?)""",
+                (telegram_user_id, now, duration_seconds),
+            )
+            connection.commit()
+
+    def clear_search_timer(self, telegram_user_id: int) -> None:
+        with self.lock:
+            self._connection().execute(
+                "DELETE FROM active_search_timers WHERE telegram_user_id = ?",
+                (telegram_user_id,),
             )
             self._connection().commit()
 
@@ -268,7 +376,82 @@ class BotStorage:
         for row in event_rows:
             source = str(row["acquisition_source"])
             funnel.setdefault(source, {})[str(row["event_type"])] = int(row["total"])
-        return {"sources": sources, "funnel": funnel}
+        recent_since = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+        campaign_rows = connection.execute(
+            """SELECT acquisition_source, acquisition_campaign, COUNT(*) AS starts,
+                      SUM(CASE WHEN first_seen_at >= ? THEN 1 ELSE 0 END) AS starts_30d
+               FROM bot_users
+               GROUP BY acquisition_source, acquisition_campaign
+               ORDER BY starts_30d DESC, starts DESC, acquisition_source, acquisition_campaign""",
+            (recent_since,),
+        ).fetchall()
+        campaign_funnel_rows = connection.execute(
+            """SELECT users.acquisition_source, users.acquisition_campaign,
+                      events.event_type, COUNT(*) AS total,
+                      SUM(CASE WHEN events.occurred_at >= ? THEN 1 ELSE 0 END) AS total_30d
+               FROM bot_funnel_events AS events
+               JOIN bot_users AS users ON users.telegram_user_id = events.telegram_user_id
+               GROUP BY users.acquisition_source, users.acquisition_campaign, events.event_type""",
+            (recent_since,),
+        ).fetchall()
+        campaigns: dict[tuple[str, str | None], dict] = {
+            (str(row["acquisition_source"]), row["acquisition_campaign"]): {
+                "source": str(row["acquisition_source"]),
+                "campaign": row["acquisition_campaign"],
+                "starts": int(row["starts"]),
+                "starts_30d": int(row["starts_30d"] or 0),
+                "funnel": {},
+                "funnel_30d": {},
+                "search_events_30d": 0,
+                "party_events_30d": 0,
+                "party_created_30d": 0,
+                "avg_seconds_to_party": None,
+            }
+            for row in campaign_rows
+        }
+        for row in campaign_funnel_rows:
+            key = (str(row["acquisition_source"]), row["acquisition_campaign"])
+            campaigns.setdefault(
+                key,
+                {
+                    "source": key[0], "campaign": key[1], "starts": 0,
+                    "starts_30d": 0, "funnel": {}, "funnel_30d": {},
+                },
+            )
+            campaigns[key]["funnel"][str(row["event_type"])] = int(row["total"])
+            campaigns[key]["funnel_30d"][str(row["event_type"])] = int(row["total_30d"] or 0)
+        activity_rows = connection.execute(
+            """SELECT users.acquisition_source, users.acquisition_campaign,
+                      SUM(CASE WHEN events.event_type = 'search_started'
+                                    AND events.occurred_at >= ? THEN 1 ELSE 0 END) AS searches_30d,
+                      SUM(CASE WHEN events.event_type = 'party_joined'
+                                    AND events.occurred_at >= ? THEN 1 ELSE 0 END) AS parties_30d,
+                      SUM(CASE WHEN events.event_type = 'party_created'
+                                    AND events.occurred_at >= ? THEN 1 ELSE 0 END) AS party_creations_30d,
+                      AVG(CASE WHEN events.event_type = 'party_joined'
+                                    AND events.duration_seconds IS NOT NULL
+                                    AND events.occurred_at >= ?
+                               THEN events.duration_seconds END) AS avg_seconds
+               FROM bot_activity_events AS events
+               JOIN bot_users AS users ON users.telegram_user_id = events.telegram_user_id
+               GROUP BY users.acquisition_source, users.acquisition_campaign""",
+            (recent_since, recent_since, recent_since, recent_since),
+        ).fetchall()
+        for row in activity_rows:
+            key = (str(row["acquisition_source"]), row["acquisition_campaign"])
+            campaign = campaigns.setdefault(
+                key,
+                {
+                    "source": key[0], "campaign": key[1], "starts": 0,
+                    "starts_30d": 0, "funnel": {}, "funnel_30d": {},
+                },
+            )
+            campaign["search_events_30d"] = int(row["searches_30d"] or 0)
+            campaign["party_events_30d"] = int(row["parties_30d"] or 0)
+            campaign["party_created_30d"] = int(row["party_creations_30d"] or 0)
+            average = row["avg_seconds"]
+            campaign["avg_seconds_to_party"] = int(average) if average is not None else None
+        return {"sources": sources, "funnel": funnel, "campaigns": list(campaigns.values())}
 
     def set_announcements_enabled(self, telegram_user_id: int, enabled: bool) -> None:
         self.record_bot_user(telegram_user_id)
@@ -594,6 +777,15 @@ class BotStorage:
 
     def _decrypt(self, value: bytes) -> str:
         return self.cipher.decrypt(value).decode("utf-8")
+
+    @staticmethod
+    def _campaign_code(value: str | None) -> str | None:
+        if not value:
+            return None
+        value = value.lower()
+        if len(value) > 48 or not re.fullmatch(r"[a-z0-9_-]+", value):
+            return None
+        return value
 
     def _connection(self) -> sqlite3.Connection:
         if self.connection is None:

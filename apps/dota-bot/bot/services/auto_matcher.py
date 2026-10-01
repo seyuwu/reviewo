@@ -144,7 +144,7 @@ async def _form_solo_searcher_groups(bot, api, settings, storage) -> None:
         now = time.time()
         for candidate in group:
             telegram_user_id = candidate["telegramUserId"]
-            storage.record_funnel_event(telegram_user_id, "party_joined")
+            storage.record_party_joined(telegram_user_id, completes_search=True)
             storage.clear_auto_match_exclusions(telegram_user_id)
             if candidate["ownerUserId"] == leader["ownerUserId"] and open_roles:
                 storage.set_choices(
@@ -344,7 +344,7 @@ async def _match_user(
                 storage.exclude_auto_match_target(telegram_user_id, candidate["slug"])
                 continue
 
-            storage.record_funnel_event(telegram_user_id, "party_joined")
+            storage.record_party_joined(telegram_user_id, completes_search=True)
             storage.set_choices(telegram_user_id, "auto_search", [])
             storage.clear_auto_match_exclusions(telegram_user_id)
             await edit_panel(bot, storage, api, settings, telegram_user_id, "party")

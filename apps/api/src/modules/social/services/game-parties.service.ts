@@ -42,7 +42,10 @@ import { EntityAttributesRepository } from "../../dota/repositories/entity-attri
 import { EntityQualityConfirmationsRepository } from "../../dota/repositories/entity-quality-confirmations.repository.js";
 import { UsersRepository } from "../../users/repositories/users.repository.js";
 import type { CreateGamePartyDto } from "../dto/create-game-party.dto.js";
-import type { AutoMatchSoloPartyDto } from "../dto/auto-match-solo-party.dto.js";
+import type {
+  AutoMatchSoloPartyDto,
+  AutoMatchSoloPartyMembersDto
+} from "../dto/auto-match-solo-party.dto.js";
 import type { CreatePartyInviteDto } from "../dto/create-party-invite.dto.js";
 import type {
   GamePartyChatMessageDto,
@@ -173,7 +176,46 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
+    return (await this.createAutoMatchedSoloPartyInternal(input, currentUser, "telegram", true))
+      .party;
+  }
+
+  async createSiteAutoMatchedSoloParty(
+    input: AutoMatchSoloPartyMembersDto,
+    currentUser: AuthenticatedUser
+  ): Promise<{ party: GamePartyResponseDto; telegramSearchUserIds: string[] }> {
     if (!input.members.some((member) => member.userId === currentUser.id)) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "You must be included in the matched group",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    const leaderUserId = input.members[randomInt(input.members.length)]!.userId;
+    return this.createAutoMatchedSoloPartyInternal(
+      { leaderUserId, members: input.members },
+      currentUser,
+      "web",
+      false
+    );
+  }
+
+  private async createAutoMatchedSoloPartyInternal(
+    input: AutoMatchSoloPartyDto,
+    currentUser: AuthenticatedUser,
+    searchSource: "telegram" | "web",
+    notifyMembersJoined: boolean
+  ): Promise<{ party: GamePartyResponseDto; telegramSearchUserIds: string[] }> {
+    if (!input.members.some((member) => member.userId === currentUser.id)) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "You must be included in the matched group",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    if (!input.members.some((member) => member.userId === input.leaderUserId)) {
       throw createAppException({
         code: AppErrorCode.ValidationError,
         message: "The captain must be included in the matched group",
@@ -187,13 +229,14 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     const expiresAt = new Date(now.getTime() + DOTA_TEMP_PARTY_TTL_HOURS * 60 * 60 * 1000);
     const result = await this.gamePartiesRepository.createAutoMatchedPartyAtomically({
       expiresAt,
-      leaderUserId: currentUser.id,
+      leaderUserId: input.leaderUserId,
       lfgExpiresAt: new Date(now.getTime() + DOTA_LFG_TTL_SECONDS * 1000),
       maxMembers: DOTA_PARTY_SIZE,
       members: input.members,
       name,
       now,
       partySafetyMessage: PARTY_SAFETY_SYSTEM_MESSAGE,
+      searchSource,
       slug,
       vertical: DOTA_PARTY_VERTICAL
     });
@@ -221,32 +264,34 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       recruitedRoles: party.recruitedRoles
     });
 
-    for (const member of result.party.members) {
-      const invite: GamePartyInviteDto = {
-        createdAt: member.joinedAt.toISOString(),
-        direction: "outgoing",
-        expiresAt: party.expiresAt,
-        greenFlags: [],
-        id: `auto-match-${party.id}-${member.userId}`,
-        inviteeDisplayName: member.user.displayName,
-        inviteeDotaSlug: null,
-        inviteeMmr: null,
-        inviteeUserId: member.userId,
-        inviteKind: "INVITE",
-        kind: "PARTY",
-        partyName: party.name,
-        partySlug: party.slug,
-        positionRole:
-          member.positionRole && isDotaPositionRole(member.positionRole)
-            ? member.positionRole
-            : null,
-        redFlags: [],
-        status: "ACCEPTED"
-      };
-      this.notifyPartyMembersJoined(party, invite, member.userId, false);
+    if (notifyMembersJoined) {
+      for (const member of result.party.members) {
+        const invite: GamePartyInviteDto = {
+          createdAt: member.joinedAt.toISOString(),
+          direction: "outgoing",
+          expiresAt: party.expiresAt,
+          greenFlags: [],
+          id: `auto-match-${party.id}-${member.userId}`,
+          inviteeDisplayName: member.user.displayName,
+          inviteeDotaSlug: null,
+          inviteeMmr: null,
+          inviteeUserId: member.userId,
+          inviteKind: "INVITE",
+          kind: "PARTY",
+          partyName: party.name,
+          partySlug: party.slug,
+          positionRole:
+            member.positionRole && isDotaPositionRole(member.positionRole)
+              ? member.positionRole
+              : null,
+          redFlags: [],
+          status: "ACCEPTED"
+        };
+        this.notifyPartyMembersJoined(party, invite, member.userId, false);
+      }
     }
 
-    return party;
+    return { party, telegramSearchUserIds: result.telegramSearchUserIds };
   }
 
   async renameParty(
@@ -1180,7 +1225,8 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     targetSlug: string,
     currentUser: AuthenticatedUser,
     fromPartySlug?: string,
-    positionRole?: string
+    positionRole?: string,
+    options?: { notifyMembersJoined?: boolean }
   ): Promise<{ invite: GamePartyInviteDto; party: GamePartyResponseDto }> {
     const targetEntity = await this.entitiesRepository.findBySlug(targetSlug);
 
@@ -1383,7 +1429,9 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
         );
         inviteDirection = "incoming";
         partyResponse = loaded;
-        this.notifyPartyMembersJoined(partyResponse, invite, currentUser.id);
+        if (options?.notifyMembersJoined !== false) {
+          this.notifyPartyMembersJoined(partyResponse, invite, currentUser.id);
+        }
       } else {
         await this.assertNotJoinBlocked(recruitParty.id, currentUser.id);
         invite = await this.inviteWithoutFriendshipCheck(

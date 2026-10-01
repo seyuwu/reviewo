@@ -32,7 +32,10 @@ import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.
 import { TelegramBotService } from "../../telegram/telegram-bot.service.js";
 import { GamesLaunchService } from "../../games-launch/services/games-launch.service.js";
 import { CreateGamePartyDto } from "../dto/create-game-party.dto.js";
-import { AutoMatchSoloPartyDto } from "../dto/auto-match-solo-party.dto.js";
+import {
+  AutoMatchSoloPartyDto,
+  AutoMatchSoloPartyMembersDto
+} from "../dto/auto-match-solo-party.dto.js";
 import { CreatePartyInviteDto } from "../dto/create-party-invite.dto.js";
 import type {
   GamePartyChatMessageDto,
@@ -253,6 +256,34 @@ export class PartiesController {
     return party;
   }
 
+  @Post("auto-match/solo-group/web")
+  @UseGuards(JwtAuthGuard)
+  async createWebAutoMatchedSoloParty(
+    @Body() input: AutoMatchSoloPartyMembersDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ): Promise<GamePartyResponseDto> {
+    await this.assertCommunityOpen(currentUser);
+    await this.assertMatchingLive(currentUser);
+    await this.apiRateLimiterService.assertWithinLimits(
+      createPartyJoinRateLimitRules(currentUser.id, request)
+    );
+
+    const result = await this.gamePartiesService.createSiteAutoMatchedSoloParty(input, currentUser);
+    this.gamePartyGateway.broadcastPartyUpdated(result.party);
+    this.gamePartyGateway.notifyTelegramSitePartyMatch(
+      result.telegramSearchUserIds.filter((userId) => userId !== currentUser.id),
+      {
+        activity: "solo_group",
+        clearSearch: true,
+        eventKeySuffix: `group-${result.party.id}`,
+        partyName: result.party.name,
+        partySlug: result.party.slug
+      }
+    );
+    return result.party;
+  }
+
   @Post("stack")
   @UseGuards(JwtAuthGuard)
   async stackInvite(
@@ -269,7 +300,8 @@ export class PartiesController {
       input.targetSlug,
       currentUser,
       input.partySlug,
-      input.positionRole
+      input.positionRole,
+      input.source === "web" ? { notifyMembersJoined: false } : undefined
     );
 
     if (result.invite.status === "ACCEPTED") {
@@ -277,6 +309,20 @@ export class PartiesController {
         .getPartyBySlug(result.party.slug)
         .catch(() => result.party);
       this.gamePartyGateway.broadcastPartyUpdated(broadcastParty);
+      if (input.source === "web") {
+        this.gamePartyGateway.notifyTelegramSitePartyMatch(
+          result.party.members
+            .map((member) => member.userId)
+            .filter((userId) => userId !== currentUser.id),
+          {
+            activity: "player_joined",
+            clearSearch: false,
+            eventKeySuffix: `join-${result.invite.id}`,
+            partyName: result.party.name,
+            partySlug: result.party.slug
+          }
+        );
+      }
     } else if (result.invite.inviteKind === "APPLICATION") {
       const managers = new Set<string>([result.party.ownerUserId]);
       for (const member of result.party.members) {
@@ -293,6 +339,7 @@ export class PartiesController {
       }
     } else {
       this.gamePartyGateway.emitPartyNotification(result.invite.inviteeUserId, {
+        inviterDisplayName: currentUser.displayName,
         invite: { ...result.invite, direction: "incoming" },
         type: "invite_received"
       });
@@ -458,6 +505,7 @@ export class PartiesController {
 
     const invite = await this.gamePartiesService.inviteFriend(slug, input, currentUser);
     this.gamePartyGateway.emitPartyNotification(invite.inviteeUserId, {
+      inviterDisplayName: currentUser.displayName,
       invite: { ...invite, direction: "incoming" },
       type: "invite_received"
     });

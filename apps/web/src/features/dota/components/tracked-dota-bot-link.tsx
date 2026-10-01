@@ -1,9 +1,12 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import {
   buildDotaBotStartUrl,
+  captureDotaBotAttributionFromCurrentUrl,
+  getDotaBotAttributionForVisit,
+  getDotaBotClickCtaKey,
   type DotaBotAcquisitionSource
 } from "../../../lib/config/dota-bot";
 import { trackAnalyticsCta } from "../../analytics/components/product-analytics-listener";
@@ -14,16 +17,26 @@ type TrackedDotaBotLinkProps = {
   source: DotaBotAcquisitionSource;
 };
 
-export function TrackedDotaBotLink({
-  children,
-  className,
-  source
-}: TrackedDotaBotLinkProps) {
+export function TrackedDotaBotLink({ children, className, source }: TrackedDotaBotLinkProps) {
+  const [link, setLink] = useState(() => ({
+    href: buildDotaBotStartUrl(source),
+    source
+  }));
+
+  useEffect(() => {
+    captureDotaBotAttributionFromCurrentUrl();
+    const attribution = getDotaBotAttributionForVisit(source);
+    setLink({
+      href: buildDotaBotStartUrl(attribution.source, attribution.campaign),
+      source: attribution.source
+    });
+  }, [source]);
+
   return (
     <a
       className={className}
-      href={buildDotaBotStartUrl(source)}
-      onClick={() => void trackAnalyticsCta("dota_bot_cta_seo")}
+      href={link.href}
+      onClick={() => void trackAnalyticsCta(getDotaBotClickCtaKey(link.source))}
       rel="noreferrer"
       target="_blank"
     >

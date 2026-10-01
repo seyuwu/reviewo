@@ -197,6 +197,37 @@ export class TelegramBotService {
     });
   }
 
+  async enqueueSitePartyMatchNotification(
+    userId: string,
+    input: {
+      activity: "solo_group" | "player_joined";
+      clearSearch: boolean;
+      eventKeySuffix: string;
+      partyName: string;
+      partySlug: string;
+    }
+  ): Promise<void> {
+    const identity = await this.prismaService.userAuthIdentity.findFirst({
+      select: { providerUserId: true },
+      where: { provider: "telegram", userId }
+    });
+
+    if (!identity) {
+      return;
+    }
+
+    await this.prismaService.telegramBotNotification.createMany({
+      data: [
+        {
+          eventKey: `site-match:${input.partySlug}:${input.eventKeySuffix}`,
+          payload: { ...input, type: "site_party_match" },
+          telegramUserId: identity.providerUserId
+        }
+      ],
+      skipDuplicates: true
+    });
+  }
+
   async listNotifications(): Promise<
     Array<{ id: string; telegramUserId: string; payload: unknown }>
   > {

@@ -46,23 +46,61 @@ def _acquisition_text(stats: dict) -> str:
     source_names = {
         "seo": "SEO",
         "community": "Сообщества",
+        "telegram": "Telegram",
+        "discord": "Discord",
+        "vk": "VK",
+        "tiktok": "TikTok",
+        "youtube": "YouTube",
+        "twitch": "Twitch",
+        "steam": "Steam",
+        "search": "Поиск",
+        "referral": "Рекомендации",
+        "streamer": "Стример",
+        "site": "Сайт",
+        "other": "Другой канал",
         "party_invite": "Приглашения",
         "direct": "Прямой вход",
         "existing": "До меток",
     }
-    sources = stats["sources"]
-    funnel = stats["funnel"]
-    source_lines = [
-        f"{name}: {sources.get(source, 0)} → "
-        f"{funnel.get(source, {}).get('account_ready', 0)} аккаунт → "
-        f"{funnel.get(source, {}).get('search_started', 0)} поиск → "
-        f"{funnel.get(source, {}).get('party_joined', 0)} пати"
-        for source, name in source_names.items()
-        if sources.get(source, 0)
-    ]
-    if not source_lines:
+    campaigns = stats.get("campaigns", [])
+    if not campaigns:
         return "Пока нет данных по источникам.\nСобытия начнут учитываться после запуска бота."
-    return "Источники → аккаунт → поиск → пати:\n" + "\n".join(source_lines)
+    lines = []
+    shown_count = min(len(campaigns), 12)
+    for campaign in campaigns[:shown_count]:
+        source = campaign["source"]
+        label = source_names.get(source, source)
+        code = campaign.get("campaign")
+        if code:
+            label += f" / {code}"
+        recent_funnel = campaign.get("funnel_30d", {})
+        search_events = campaign.get("search_events_30d", 0)
+        party_events = campaign.get("party_events_30d", 0)
+        party_created = campaign.get("party_created_30d", 0)
+        activity = (
+            f"поиск ×{search_events} · вступления ×{party_events} · "
+            f"создано ×{party_created} за 30 дн."
+        )
+        average = campaign.get("avg_seconds_to_party")
+        if average is not None:
+            minutes, seconds = divmod(average, 60)
+            activity += f" · до найденной пати ~{minutes}:{seconds:02d}"
+        lines.append(
+            f"{label}: за 30 дн. {campaign.get('starts_30d', 0)} стартов → "
+            f"{recent_funnel.get('account_ready', 0)} аккаунт → "
+            f"{recent_funnel.get('search_started', 0)} поиск → "
+            f"{recent_funnel.get('party_joined', 0)} вступили, "
+            f"{recent_funnel.get('party_created', 0)} создали "
+            f"({campaign['starts']} старта всего)\n"
+            f"  {activity}"
+        )
+    if len(campaigns) > shown_count:
+        lines.append(f"Ещё кампаний: {len(campaigns) - shown_count}")
+    return (
+        "Источники (первый переход) → аккаунт → поиск → пати:\n"
+        + "\n".join(lines)
+        + "\n\nДо обновления аналитики создание пати также попадало в старый счётчик вступлений."
+    )
 
 
 async def show_admin_panel(

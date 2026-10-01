@@ -66,18 +66,38 @@ class BotStorageTests(unittest.TestCase):
         self.assertIsNone(self.storage.get_session(7).recovery_url)
 
     def test_acquisition_source_and_funnel_milestones_are_first_touch_and_deduplicated(self) -> None:
-        self.storage.record_bot_user(7, "seo")
-        self.storage.record_bot_user(7, "community")
+        self.storage.record_bot_user(7, "telegram", "group_1")
+        self.storage.record_bot_user(7, "discord", "lfg")
         self.storage.record_funnel_event(7, "account_ready")
         self.storage.record_funnel_event(7, "account_ready")
         self.storage.record_funnel_event(7, "search_started")
 
         stats = self.storage.bot_acquisition_stats()
-        self.assertEqual(stats["sources"], {"seo": 1})
+        self.assertEqual(stats["sources"], {"telegram": 1})
         self.assertEqual(
-            stats["funnel"]["seo"],
+            stats["funnel"]["telegram"],
             {"bot_started": 1, "account_ready": 1, "search_started": 1},
         )
+        campaign = stats["campaigns"][0]
+        self.assertEqual((campaign["source"], campaign["campaign"]), ("telegram", "group_1"))
+
+    def test_repeated_search_activity_and_time_to_party_are_recorded(self) -> None:
+        self.storage.record_bot_user(7, "streamer", "creator_01")
+        self.storage.record_search_started(7)
+        self.storage.record_search_started(7)
+        self.storage.record_party_joined(7, completes_search=True)
+        self.storage.record_party_created(7)
+
+        stats = self.storage.bot_acquisition_stats()
+        campaign = stats["campaigns"][0]
+        self.assertEqual(campaign["funnel"]["search_started"], 1)
+        self.assertEqual(campaign["search_events_30d"], 2)
+        self.assertEqual(campaign["party_events_30d"], 1)
+        self.assertEqual(campaign["party_created_30d"], 1)
+        self.assertEqual(campaign["funnel"]["party_created"], 1)
+        self.assertGreaterEqual(campaign["avg_seconds_to_party"], 0)
+
+        self.storage.clear_search_timer(7)
 
     def test_existing_database_users_migrate_to_unknown_source(self) -> None:
         self.storage.close()

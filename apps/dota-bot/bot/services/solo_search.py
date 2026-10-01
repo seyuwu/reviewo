@@ -50,5 +50,5 @@ async def start_solo_search(
         telegram_user_id,
         "POST",
         "/dota/profiles/lfg/looking",
-        {"looking": True},
+        {"looking": True, "source": "telegram"},
     )

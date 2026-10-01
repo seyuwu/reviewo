@@ -1,4 +1,5 @@
 import logging
+import time
 from html import escape
 
 from aiogram import F, Router
@@ -16,6 +17,7 @@ from ..services.auto_matcher import remember_declined_target
 
 router = Router(name="party")
 logger = logging.getLogger(__name__)
+PARTY_INVITATION_MESSAGE_TTL_SECONDS = 3 * 60 * 60
 
 
 @router.callback_query(F.data.startswith("invite:"))
@@ -89,6 +91,64 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
             screen = "party" if active and active.get("slug") == payload.get("partySlug") else "home"
             await edit_panel(bot, storage, api, settings, telegram_user_id, screen)
             return True
+        if event_type == "site_party_match":
+            activity = payload.get("activity")
+            party_name = escape(str(payload.get("partyName") or "пати"))
+            if payload.get("clearSearch"):
+                storage.clear_auto_match_exclusions(telegram_user_id)
+                storage.record_party_joined(telegram_user_id, completes_search=True)
+                try:
+                    parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
+                    active = parties.get("party") or ((parties.get("parties") or [None])[-1])
+                    if (
+                        active
+                        and active.get("slug") == payload.get("partySlug")
+                        and active.get("canManageParty")
+                        and active.get("recruitedRoles")
+                    ):
+                        storage.set_choices(
+                            telegram_user_id,
+                            "auto_search",
+                            [
+                                {
+                                    "mode": "recruit",
+                                    "partySlug": active["slug"],
+                                    "roles": active["recruitedRoles"],
+                                    "startedAt": time.time(),
+                                }
+                            ],
+                        )
+                    else:
+                        storage.set_choices(telegram_user_id, "auto_search", [])
+                except Exception:
+                    storage.set_choices(telegram_user_id, "auto_search", [])
+            try:
+                await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
+            except Exception:
+                logger.warning(
+                    "Could not refresh party panel before website match notification",
+                    exc_info=True,
+                )
+            if activity == "solo_group":
+                message_text = (
+                    f"🎮 Пати нашлась! Вы в стаке «<b>{party_name}</b>» вместе с игроком, который искал на сайте FDP.\n"
+                    "Откройте сайт, чтобы посмотреть состав пати и перейти в чат или Discord."
+                )
+            else:
+                message_text = (
+                    f"🎮 В пати «<b>{party_name}</b>» вступил игрок из поиска на сайте.\n"
+                    "Откройте сайт, чтобы посмотреть состав и перейти в чат или Discord."
+                )
+            await deliver_join_hint(
+                bot,
+                api,
+                storage,
+                telegram_user_id,
+                settings.site_url,
+                str(payload.get("partySlug") or ""),
+                message_text=message_text,
+            )
+            return True
         if event_type == "declined":
             remember_declined_target(storage, telegram_user_id, payload)
         if event_type == "member_joined":
@@ -142,7 +202,16 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
             reply_markup=markup,
             parse_mode="HTML",
         )
-        storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 300)
+        if event_type in {"invite_received", "application_received"}:
+            # Match the three-hour pending invitation lifetime in the party service.
+            storage.add_temporary_message(
+                telegram_user_id,
+                message.chat.id,
+                message.message_id,
+                PARTY_INVITATION_MESSAGE_TTL_SECONDS,
+            )
+        else:
+            storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 300)
         storage.record_party_notification(telegram_user_id)
         return True
     except Exception:

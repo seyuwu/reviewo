@@ -42,12 +42,21 @@ def notification_text(payload: dict) -> str:
     name = escape(str(invite.get("partyName") or "пати"))
     player = escape(str(invite.get("inviteeDisplayName") or "игрок"))
     role = invite.get("positionRole")
-    role_line = f"\nПозиция: {escape(str(role))}" if role else ""
+    role_names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
+    role_line = f"\n🎯 Позиция: {escape(role_names.get(str(role), str(role)))}" if role else ""
     event_type = payload.get("type")
     if event_type == "application_received":
-        return f"<b>Новая заявка в {name}</b>\nИгрок: {player}{role_line}"
+        mmr = invite.get("inviteeMmr")
+        mmr_line = f"\n🏅 {escape(str(mmr))} MMR" if mmr else ""
+        return f"🎮 <b>Новая заявка в пати</b>\n\n<b>{name}</b>\n👤 Игрок: {player}{mmr_line}{role_line}"
     if event_type == "invite_received":
-        return f"<b>Приглашение в пати {name}</b>{role_line}"
+        inviter = escape(str(payload.get("inviterDisplayName") or "Игрок"))
+        return (
+            f"🎮 <b>Тебя приглашают в пати</b>\n\n"
+            f"<b>{name}</b>\n"
+            f"👤 Приглашает: {inviter}{role_line}\n\n"
+            "Выбери действие кнопкой ниже."
+        )
     if event_type == "accepted":
         return f"<b>Заявку в {name} приняли!</b>\nТеперь вы в пати. Откройте сайт, чтобы перейти в чат или Discord."
     if event_type == "declined":

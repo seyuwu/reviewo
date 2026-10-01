@@ -9,6 +9,7 @@ import type {
   GamePartyChatMessagesPage,
   GamePartyInvite,
   GamePartyKind,
+  DotaPositionRole,
   MyPartiesResponse
 } from "../types/social";
 
@@ -39,13 +40,19 @@ export function sendFriendRequest(userId: string, accessToken: string): Promise<
 }
 
 export function acceptFriendRequest(requestId: string, accessToken: string): Promise<FriendUser> {
-  return apiRequest<FriendUser>(`/social/friends/requests/${encodeURIComponent(requestId)}/accept`, {
-    headers: authHeaders(accessToken),
-    method: "POST"
-  });
+  return apiRequest<FriendUser>(
+    `/social/friends/requests/${encodeURIComponent(requestId)}/accept`,
+    {
+      headers: authHeaders(accessToken),
+      method: "POST"
+    }
+  );
 }
 
-export function declineFriendRequest(requestId: string, accessToken: string): Promise<{ ok: true }> {
+export function declineFriendRequest(
+  requestId: string,
+  accessToken: string
+): Promise<{ ok: true }> {
   return apiRequest<{ ok: true }>(
     `/social/friends/requests/${encodeURIComponent(requestId)}/decline`,
     {
@@ -79,6 +86,17 @@ export function removeFriend(userId: string, accessToken: string): Promise<{ ok:
 export function createGameParty(kind: GamePartyKind, accessToken: string): Promise<GameParty> {
   return apiRequest<GameParty>("/social/parties", {
     body: { kind },
+    headers: authHeaders(accessToken),
+    method: "POST"
+  });
+}
+
+export function createAutoMatchedSoloPartyFromSite(
+  members: Array<{ positionRole: DotaPositionRole; userId: string }>,
+  accessToken: string
+): Promise<GameParty> {
+  return apiRequest<GameParty>("/social/parties/auto-match/solo-group/web", {
+    body: { members },
     headers: authHeaders(accessToken),
     method: "POST"
   });
@@ -185,14 +203,11 @@ export function updatePartyMemberPosition(
   positionRole: "1" | "2" | "3" | "4" | "5" | null,
   accessToken: string
 ): Promise<GameParty> {
-  return apiRequest<GameParty>(
-    `/social/parties/${encodeURIComponent(slug)}/members/me/position`,
-    {
-      body: { positionRole },
-      headers: authHeaders(accessToken),
-      method: "PATCH"
-    }
-  );
+  return apiRequest<GameParty>(`/social/parties/${encodeURIComponent(slug)}/members/me/position`, {
+    body: { positionRole },
+    headers: authHeaders(accessToken),
+    method: "PATCH"
+  });
 }
 
 export function leaveGameParty(slug: string, accessToken: string): Promise<{ ok: true }> {
@@ -248,6 +263,7 @@ export function stackWithPlayer(
   return apiRequest<{ invite: GamePartyInvite; party: GameParty }>("/social/parties/stack", {
     body: {
       targetSlug,
+      source: "web",
       ...(partySlug ? { partySlug } : {}),
       ...(positionRole ? { positionRole } : {})
     },

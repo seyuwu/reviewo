@@ -12,6 +12,7 @@ export type PartyNotificationType =
   | "member_joined";
 
 export interface PartyNotificationPayload {
+  inviterDisplayName?: string;
   invite: GamePartyInvite;
   type: PartyNotificationType;
 }

@@ -13,6 +13,7 @@ export const DOTA_ATTRIBUTE_KEYS = {
   /** How the player wants stack matching: auto (we pick) vs manual (browse feed). */
   matchMode: "match_mode",
   lfgUntil: "lfg_until",
+  lfgSource: "lfg_source",
   lfgPartySlug: "lfg_party_slug",
   lfgDesiredSize: "lfg_desired_size",
   lfgRecruitedRoles: "lfg_recruited_roles",

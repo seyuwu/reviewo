@@ -201,6 +201,9 @@ export class DotaProfileService {
         const roles = parseRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
         const server = attributes[DOTA_ATTRIBUTE_KEYS.server] ?? null;
         const partySlug = attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || null;
+        const source = attributes[DOTA_ATTRIBUTE_KEYS.lfgSource];
+        const matchSource: "telegram" | "web" | null =
+          source === "telegram" ? "telegram" : source === "web" ? "web" : null;
         const recruitedRoles = parseRecruitedRoles(
           attributes[DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]
         );
@@ -225,6 +228,7 @@ export class DotaProfileService {
           desiredSize: parseOptionalPositiveInt(attributes[DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]),
           entityId: row.id,
           memberCount: parseOptionalPositiveInt(attributes[DOTA_ATTRIBUTE_KEYS.lfgMemberCount]),
+          matchSource,
           mmr: attributes[DOTA_ATTRIBUTE_KEYS.mmr] ?? null,
           ownerUserId: row.ownerUserId,
           partyKind: parsePartyKind(attributes[DOTA_ATTRIBUTE_KEYS.lfgPartyKind]),
@@ -355,6 +359,7 @@ export class DotaProfileService {
             greenFlags: pickTopFlags(qualities, isDotaGreenFlagKey),
             joinMode,
             memberCount,
+            matchSource: candidate.matchSource,
             mmr,
             ownerUserId: candidate.ownerUserId,
             partyKind: candidate.partyKind,
@@ -379,14 +384,21 @@ export class DotaProfileService {
   async setLooking(
     looking: boolean,
     currentUser: AuthenticatedUser,
-    options?: { partySlug?: string; recruitedRoles?: string[] }
+    options?: { partySlug?: string; recruitedRoles?: string[]; source?: "telegram" | "web" }
   ): Promise<DotaProfileResponseDto> {
     const partySlug = options?.partySlug?.trim() || "";
+    const source = options?.source ?? "telegram";
 
     // Party recruit: write LFG attrs on the captain's profile so one card exists
     // even when a sub-captain toggles looking (idempotent last-write-wins).
     if (partySlug) {
-      return this.setPartyRecruitLooking(looking, currentUser, partySlug, options?.recruitedRoles);
+      return this.setPartyRecruitLooking(
+        looking,
+        currentUser,
+        partySlug,
+        options?.recruitedRoles,
+        source
+      );
     }
 
     const entity = await this.requireOwnedProfile(currentUser.id);
@@ -422,6 +434,7 @@ export class DotaProfileService {
         [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
           ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
           : new Date(0).toISOString(),
+        [DOTA_ATTRIBUTE_KEYS.lfgSource]: looking ? source : "",
         [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
         ...recruitAttributes
       }
@@ -468,7 +481,8 @@ export class DotaProfileService {
     looking: boolean,
     currentUser: AuthenticatedUser,
     partySlug: string,
-    recruitedRolesInput?: string[]
+    recruitedRolesInput?: string[],
+    source: "telegram" | "web" = "telegram"
   ): Promise<DotaProfileResponseDto> {
     const party = await this.gamePartiesRepository.findByVerticalAndSlug(
       DOTA_PARTY_VERTICAL,
@@ -571,6 +585,7 @@ export class DotaProfileService {
         [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
           ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
           : new Date(0).toISOString(),
+        [DOTA_ATTRIBUTE_KEYS.lfgSource]: looking ? source : "",
         [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
         ...recruitAttributes
       },

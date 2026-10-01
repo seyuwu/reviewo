@@ -14,10 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getOrCreateVisitorId } from "../../../lib/site-presence";
 import { isApiError, readApiErrorMessage } from "../../../lib/api/read-api-error";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
-import {
-  fetchDiscoveryStats,
-  pingSitePresence
-} from "../../discovery/api/discovery-api";
+import { fetchDiscoveryStats, pingSitePresence } from "../../discovery/api/discovery-api";
 import {
   fetchDotaLfg,
   fetchMyDotaProfile,
@@ -36,6 +33,7 @@ import { useTranslation } from "../../i18n/locale-provider";
 import { trackAnalyticsCta } from "../../analytics/components/product-analytics-listener";
 import {
   acceptPartyInvite,
+  createAutoMatchedSoloPartyFromSite,
   createGameParty,
   declinePartyInvite,
   disbandGameParty,
@@ -45,11 +43,11 @@ import {
 } from "../../social/api/social-api";
 import { PARTY_NOTIFICATION_EVENT } from "../../social/lib/party-notifications-socket";
 import type { DotaPositionRole, GameParty, GamePartyInvite } from "../../social/types/social";
-import { resolveInviteDecisionError, resolveStackInviteError } from "../lib/resolve-stack-invite-error";
 import {
-  gamesSearchCoachSeenKey,
-  GamesSearchOnboarding
-} from "./games-search-onboarding";
+  resolveInviteDecisionError,
+  resolveStackInviteError
+} from "../lib/resolve-stack-invite-error";
+import { gamesSearchCoachSeenKey, GamesSearchOnboarding } from "./games-search-onboarding";
 import { GamesSearchCinematic } from "./games-search-cinematic";
 import type {
   GamesSearchCinematicResult,
@@ -97,6 +95,130 @@ function mmrMidpoint(mmr: string | null): number | null {
   return (low + high) / 2;
 }
 
+interface SoloGroupCandidate {
+  mmr: string | null;
+  ownerUserId: string;
+  roles: DotaPositionRole[];
+  server: string | null;
+}
+
+function mmrBounds(mmr: string | null): { high: number; low: number } | null {
+  const { from, to } = parseDotaMmrRange(mmr);
+  const first = Number(from);
+  const second = Number(to || from);
+
+  if (
+    !Number.isFinite(first) ||
+    !Number.isFinite(second) ||
+    first < 0 ||
+    second < 0 ||
+    first > 18_000 ||
+    second > 18_000
+  ) {
+    return null;
+  }
+
+  return { high: Math.max(first, second), low: Math.min(first, second) };
+}
+
+function assignSoloGroupRoles(players: SoloGroupCandidate[]): Map<string, DotaPositionRole> | null {
+  const ordered = [...players].sort((left, right) => left.roles.length - right.roles.length);
+  const assignments = new Map<string, DotaPositionRole>();
+  const occupied = new Set<DotaPositionRole>();
+
+  function assign(index: number): boolean {
+    if (index >= ordered.length) {
+      return true;
+    }
+
+    const player = ordered[index]!;
+    const available = [...player.roles].filter((role) => !occupied.has(role));
+    available.sort(() => Math.random() - 0.5);
+
+    for (const role of available) {
+      occupied.add(role);
+      assignments.set(player.ownerUserId, role);
+      if (assign(index + 1)) {
+        return true;
+      }
+      occupied.delete(role);
+      assignments.delete(player.ownerUserId);
+    }
+
+    return false;
+  }
+
+  return assign(0) ? assignments : null;
+}
+
+function buildSoloGroup(
+  me: SoloGroupCandidate,
+  players: DotaLfgHit[],
+  myUserId: string
+): Array<{ positionRole: DotaPositionRole; userId: string }> | null {
+  const candidates = players
+    .filter((player) => !player.partySlug && player.ownerUserId !== myUserId)
+    .map((player) => ({
+      mmr: player.mmr,
+      ownerUserId: player.ownerUserId,
+      roles: player.roles.filter((role): role is DotaPositionRole =>
+        ROLE_POSITIONS.includes(role as DotaPositionRole)
+      ),
+      server: player.server
+    }))
+    .filter((player) => player.roles.length > 0 && mmrBounds(player.mmr) !== null)
+    .filter(
+      (player, index, all) =>
+        all.findIndex((candidate) => candidate.ownerUserId === player.ownerUserId) === index
+    );
+  const myBounds = mmrBounds(me.mmr);
+
+  if (me.roles.length === 0 || !myBounds) {
+    return null;
+  }
+
+  const myMid = mmrMidpoint(me.mmr);
+  candidates.sort((left, right) => {
+    if (left.roles.length !== right.roles.length) {
+      return left.roles.length - right.roles.length;
+    }
+
+    const leftMid = mmrMidpoint(left.mmr) ?? Number.POSITIVE_INFINITY;
+    const rightMid = mmrMidpoint(right.mmr) ?? Number.POSITIVE_INFINITY;
+    return Math.abs(leftMid - (myMid ?? leftMid)) - Math.abs(rightMid - (myMid ?? rightMid));
+  });
+
+  const group: SoloGroupCandidate[] = [me];
+  for (const candidate of candidates) {
+    if (group.length >= 5) {
+      break;
+    }
+
+    const tentative = [...group, candidate];
+    const bounds = tentative.map((player) => mmrBounds(player.mmr)!);
+    const servers = new Set(tentative.map((player) => player.server?.trim()).filter(Boolean));
+    const spread =
+      Math.max(...bounds.map((bound) => bound.high)) -
+      Math.min(...bounds.map((bound) => bound.low));
+
+    if (spread <= 1_500 && servers.size <= 1 && assignSoloGroupRoles(tentative)) {
+      group.push(candidate);
+    }
+  }
+
+  if (group.length < 2) {
+    return null;
+  }
+
+  const assignments = assignSoloGroupRoles(group);
+  return assignments
+    ? group.map((player) => ({
+        positionRole: assignments.get(player.ownerUserId)!,
+        userId: player.ownerUserId
+      }))
+    : null;
+}
+
 function rankByMmr(players: DotaLfgHit[], myMmr: string | null): DotaLfgHit[] {
   const myMid = mmrMidpoint(myMmr);
 
@@ -108,10 +230,8 @@ function rankByMmr(players: DotaLfgHit[], myMmr: string | null): DotaLfgHit[] {
       return left.title.localeCompare(right.title);
     }
 
-    const leftDistance =
-      leftMid === null ? Number.POSITIVE_INFINITY : Math.abs(leftMid - myMid);
-    const rightDistance =
-      rightMid === null ? Number.POSITIVE_INFINITY : Math.abs(rightMid - myMid);
+    const leftDistance = leftMid === null ? Number.POSITIVE_INFINITY : Math.abs(leftMid - myMid);
+    const rightDistance = rightMid === null ? Number.POSITIVE_INFINITY : Math.abs(rightMid - myMid);
 
     if (leftDistance !== rightDistance) {
       return leftDistance - rightDistance;
@@ -134,8 +254,12 @@ function pickBestAutoJoinTarget(
   }
 
   const myMid = mmrMidpoint(myMmr);
-  let best: { partySlug: string; role: DotaPositionRole; score: number; targetSlug: string } | null =
-    null;
+  let best: {
+    partySlug: string;
+    role: DotaPositionRole;
+    score: number;
+    targetSlug: string;
+  } | null = null;
 
   for (const hit of players) {
     if (!hit.partySlug || hit.ownerUserId === myUserId) {
@@ -213,9 +337,7 @@ function pickBestAutoRecruitTarget(
     const role = openRoles.find((item) => overlap.includes(item)) ?? overlap[0]!;
     const theirMid = mmrMidpoint(hit.mmr);
     const score =
-      myMid !== null && theirMid !== null
-        ? 50 - Math.min(90, Math.abs(myMid - theirMid) / 40)
-        : 30;
+      myMid !== null && theirMid !== null ? 50 - Math.min(90, Math.abs(myMid - theirMid) / 40) : 30;
 
     if (!best || score > best.score) {
       best = { role, score, targetSlug: hit.slug };
@@ -244,10 +366,7 @@ function playerInitial(title: string): string {
   return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
 }
 
-function outgoingInviteClass(
-  status: GamePartyInvite["status"],
-  stylesMap: typeof styles
-): string {
+function outgoingInviteClass(status: GamePartyInvite["status"], stylesMap: typeof styles): string {
   if (status === "ACCEPTED") {
     return stylesMap.inviteAccepted ?? "";
   }
@@ -300,6 +419,7 @@ export function GamesSearchView() {
   const [results, setResults] = useState<DotaLfgHit[]>([]);
   const [myMmr, setMyMmr] = useState<string | null>(null);
   const [myRoles, setMyRoles] = useState<DotaPositionRole[]>([]);
+  const [myServer, setMyServer] = useState<string | null>(null);
   const [ownedParties, setOwnedParties] = useState<GameParty[]>([]);
   const [invites, setInvites] = useState<GamePartyInvite[]>([]);
   const [outgoingInvites, setOutgoingInvites] = useState<GamePartyInvite[]>([]);
@@ -344,6 +464,7 @@ export function GamesSearchView() {
   const railRef = useRef<HTMLElement | null>(null);
   const autoMatchKeyRef = useRef<string | null>(null);
   const autoMatchInFlightRef = useRef(false);
+  const autoMatchRoutedPartyRef = useRef<string | null>(null);
 
   const refreshList = useCallback(
     async (options?: { advanceBatch?: boolean; quiet?: boolean }) => {
@@ -386,6 +507,7 @@ export function GamesSearchView() {
     if (!authSession?.accessToken || !myDotaProfile.hasProfile) {
       setMyMmr(null);
       setMyRoles([]);
+      setMyServer(null);
       setOwnedParties([]);
       setInvites([]);
       setOutgoingInvites([]);
@@ -395,19 +517,31 @@ export function GamesSearchView() {
 
     try {
       const parties = await fetchMyParties(authSession.accessToken);
+      const activeMemberParty =
+        parties.party ??
+        [...(parties.parties ?? [])].reverse().find((party) => party.isMember) ??
+        null;
+      if (
+        isLooking &&
+        intentMode === "join" &&
+        activeMemberParty?.isMember &&
+        autoMatchRoutedPartyRef.current !== activeMemberParty.slug
+      ) {
+        autoMatchRoutedPartyRef.current = activeMemberParty.slug;
+        router.push(`/dota/teams/${activeMemberParty.slug}`);
+      }
       const owned = [
         parties.team,
         ...(parties.parties?.length ? parties.parties : parties.party ? [parties.party] : [])
       ].filter((party): party is GameParty => Boolean(party?.canManageParty ?? party?.isOwner));
       setOwnedParties(owned);
       setInvites(parties.invites.filter((invite) => invite.status === "PENDING"));
-      setOutgoingInvites((current) =>
-        mergeOutgoingInvites(current, parties.outgoingInvites ?? [])
-      );
+      setOutgoingInvites((current) => mergeOutgoingInvites(current, parties.outgoingInvites ?? []));
 
       try {
         const profile = await fetchMyDotaProfile(authSession.accessToken);
         setMyMmr(profile.mmr);
+        setMyServer(profile.server);
         setMyRoles(
           (profile.roles ?? []).filter((role): role is DotaPositionRole =>
             ["1", "2", "3", "4", "5"].includes(role)
@@ -428,7 +562,7 @@ export function GamesSearchView() {
     } catch {
       // Keep previous invites on transient /social/parties/me failures.
     }
-  }, [authSession?.accessToken, myDotaProfile.hasProfile]);
+  }, [authSession?.accessToken, intentMode, isLooking, myDotaProfile.hasProfile, router]);
 
   useEffect(() => {
     if (!searchLive) {
@@ -445,6 +579,7 @@ export function GamesSearchView() {
     if (!searchLive) {
       setMyMmr(null);
       setMyRoles([]);
+      setMyServer(null);
       setOwnedParties([]);
       setInvites([]);
       setOutgoingInvites([]);
@@ -467,12 +602,7 @@ export function GamesSearchView() {
 
       return myDotaProfile.hasProfile ? "done" : "active";
     });
-  }, [
-    isAuthSessionLoaded,
-    myDotaProfile.hasProfile,
-    myDotaProfile.isLoading,
-    searchLive
-  ]);
+  }, [isAuthSessionLoaded, myDotaProfile.hasProfile, myDotaProfile.isLoading, searchLive]);
 
   useEffect(() => {
     if (
@@ -494,13 +624,16 @@ export function GamesSearchView() {
       return;
     }
 
-    const timerId = window.setTimeout(() => {
-      if (!intentCoachRef.current) {
-        return;
-      }
+    const timerId = window.setTimeout(
+      () => {
+        if (!intentCoachRef.current) {
+          return;
+        }
 
-      setCoachOpen(true);
-    }, cinematicProfileReady ? 1800 : 700);
+        setCoachOpen(true);
+      },
+      cinematicProfileReady ? 1800 : 700
+    );
 
     return () => {
       window.clearTimeout(timerId);
@@ -548,8 +681,7 @@ export function GamesSearchView() {
       return;
     }
 
-    const intervalMs =
-      isLooking && matchMode === "auto" ? AUTO_MATCH_REFRESH_MS : REFRESH_MS;
+    const intervalMs = isLooking && matchMode === "auto" ? AUTO_MATCH_REFRESH_MS : REFRESH_MS;
 
     const intervalId = window.setInterval(() => {
       void refreshList({ quiet: true });
@@ -1112,11 +1244,91 @@ export function GamesSearchView() {
         autoMatchExcludedPartySlugs
       );
 
-      if (!pick) {
+      if (pick) {
+        const key = `join:${pick.targetSlug}:${pick.role}`;
+
+        if (autoMatchKeyRef.current === key) {
+          return;
+        }
+
+        autoMatchKeyRef.current = key;
+        autoMatchInFlightRef.current = true;
+        setStackBusySlug(`${pick.targetSlug}:${pick.role}`);
+
+        void (async () => {
+          try {
+            const stacked = await stackWithPlayer(
+              pick.targetSlug,
+              authSession.accessToken,
+              undefined,
+              pick.role
+            );
+
+            if (stacked.invite.status === "ACCEPTED" || stacked.party.isMember) {
+              setStackMessage(t("dota.team.joinSuccess"));
+              router.push(`/dota/teams/${stacked.party.slug}`);
+              return;
+            }
+
+            if (stacked.invite.inviteKind === "APPLICATION") {
+              setStackMessage(t("games.search.applicationSent"));
+              setInvites((current) => {
+                const nextInvite: GamePartyInvite = {
+                  ...stacked.invite,
+                  direction: "incoming"
+                };
+                return [nextInvite, ...current.filter((item) => item.id !== nextInvite.id)];
+              });
+              void refreshParties();
+              return;
+            }
+
+            setStackMessage(t("games.search.stackSent"));
+          } catch (error) {
+            autoMatchKeyRef.current = null;
+
+            if (isApiError(error)) {
+              const apiMessage = readApiErrorMessage(error.body);
+
+              if (
+                apiMessage === "Your application to this party was declined" ||
+                apiMessage === "This role is not open on that party" ||
+                apiMessage === "This role is already taken" ||
+                apiMessage === "Invite already pending"
+              ) {
+                setRejectedApplicationPartySlugs((current) => new Set(current).add(pick.partySlug));
+              }
+            }
+
+            setStackError(resolveStackInviteError(error, t));
+          } finally {
+            autoMatchInFlightRef.current = false;
+            setStackBusySlug(null);
+            void refreshList({ quiet: true });
+          }
+        })();
         return;
       }
 
-      const key = `join:${pick.targetSlug}:${pick.role}`;
+      const members = buildSoloGroup(
+        {
+          mmr: myMmr,
+          ownerUserId: authSession.userId,
+          roles: myRoles,
+          server: myServer
+        },
+        results,
+        authSession.userId
+      );
+
+      if (!members) {
+        return;
+      }
+
+      const key = `solo-group:${members
+        .map((member) => member.userId)
+        .sort()
+        .join(",")}`;
 
       if (autoMatchKeyRef.current === key) {
         return;
@@ -1124,59 +1336,24 @@ export function GamesSearchView() {
 
       autoMatchKeyRef.current = key;
       autoMatchInFlightRef.current = true;
-      setStackBusySlug(`${pick.targetSlug}:${pick.role}`);
+      setStackBusySlug("solo-group");
 
       void (async () => {
         try {
-          const stacked = await stackWithPlayer(
-            pick.targetSlug,
-            authSession.accessToken,
-            undefined,
-            pick.role
-          );
-
-          if (stacked.invite.status === "ACCEPTED" || stacked.party.isMember) {
-            setStackMessage(t("dota.team.joinSuccess"));
-            router.push(`/dota/teams/${stacked.party.slug}`);
-            return;
-          }
-
-          if (stacked.invite.inviteKind === "APPLICATION") {
-            setStackMessage(t("games.search.applicationSent"));
-            setInvites((current) => {
-              const nextInvite: GamePartyInvite = {
-                ...stacked.invite,
-                direction: "incoming"
-              };
-              return [nextInvite, ...current.filter((item) => item.id !== nextInvite.id)];
-            });
-            // Keep key so we do not re-fire while pending; exclusion list also covers party.
-            void refreshParties();
-            return;
-          }
-
-          setStackMessage(t("games.search.stackSent"));
+          const party = await createAutoMatchedSoloPartyFromSite(members, authSession.accessToken);
+          setStackMessage(t("dota.team.joinSuccess"));
+          autoMatchRoutedPartyRef.current = party.slug;
+          router.push(`/dota/teams/${party.slug}`);
         } catch (error) {
-          autoMatchKeyRef.current = null;
-
-          if (isApiError(error)) {
-            const apiMessage = readApiErrorMessage(error.body);
-
-            if (
-              apiMessage === "Your application to this party was declined" ||
-              apiMessage === "This role is not open on that party" ||
-              apiMessage === "This role is already taken" ||
-              apiMessage === "Invite already pending"
-            ) {
-              setRejectedApplicationPartySlugs((current) => new Set(current).add(pick.partySlug));
-            }
+          if (isApiError(error) && error.status === 409) {
+            setStackError(null);
+          } else {
+            setStackError(resolveStackInviteError(error, t));
           }
-
-          setStackError(resolveStackInviteError(error, t));
         } finally {
           autoMatchInFlightRef.current = false;
           setStackBusySlug(null);
-          void refreshList({ quiet: true });
+          void Promise.all([refreshList({ quiet: true }), refreshParties()]);
         }
       })();
       return;
@@ -1186,8 +1363,7 @@ export function GamesSearchView() {
       const myRecruit = results.find(
         (hit) => hit.ownerUserId === authSession.userId && hit.partySlug
       );
-      const partySlug =
-        myRecruit?.partySlug ?? (selectedPartySlug || ownedParties[0]?.slug || "");
+      const partySlug = myRecruit?.partySlug ?? (selectedPartySlug || ownedParties[0]?.slug || "");
 
       if (!partySlug) {
         return;
@@ -1206,10 +1382,7 @@ export function GamesSearchView() {
           return false;
         }
 
-        if (
-          invite.inviteeDotaSlug &&
-          autoMatchExcludedTargetSlugs.has(invite.inviteeDotaSlug)
-        ) {
+        if (invite.inviteeDotaSlug && autoMatchExcludedTargetSlugs.has(invite.inviteeDotaSlug)) {
           return false;
         }
 
@@ -1341,6 +1514,7 @@ export function GamesSearchView() {
     matchMode,
     myMmr,
     myRoles,
+    myServer,
     ownedParties,
     autoMatchExcludedPartySlugsKey,
     autoMatchExcludedTargetSlugs,
@@ -1469,637 +1643,568 @@ export function GamesSearchView() {
           aria-hidden={cinematicMode !== "done"}
           className={`${styles.layout}${
             cinematicMode !== "done" ? ` ${styles.layoutCinematic}` : ""
-          }${
-            cinematicVisualPhase !== "hidden" ? ` ${styles.layoutShowLeft}` : ""
-          }${
+          }${cinematicVisualPhase !== "hidden" ? ` ${styles.layoutShowLeft}` : ""}${
             cinematicVisualPhase === "feed" || cinematicVisualPhase === "rail"
               ? ` ${styles.layoutShowFeed}`
               : ""
           }${cinematicVisualPhase === "rail" ? ` ${styles.layoutShowRail}` : ""}`}
           inert={cinematicMode !== "done" ? true : undefined}
         >
-        <aside
-          className={styles.sidebar}
-          ref={(node) => {
-            controlsRef.current = node;
-          }}
-        >
-          {!hasSearchProfile ? (
-            <section className={`${styles.panel} ${styles.promoPanel}`}>
-              <p className={styles.promoTitle}>{t("games.search.promoTitle")}</p>
-              <p className={styles.promoLead}>{t("games.search.promoLead")}</p>
-              <Link className="button-primary" href="/dota/create?intent=search">
-                {t("games.search.createCta")}
-              </Link>
-            </section>
-          ) : (
-            <section className={styles.panel} data-cinematic-left-target>
-              <div className={styles.searchProfileSummary}>
-                <div className={styles.searchProfileMmr} data-cinematic-target="mmr">
-                  <span>MMR</span>
-                  <strong>{formatDotaMmr(myMmr)}</strong>
-                </div>
-                <div
-                  aria-label={t("games.search.cinematic.yourRoles")}
-                  className={styles.searchProfileRoles}
-                >
-                  {myRoles.map((role) => (
-                    <span data-cinematic-target={`role-${role}`} key={`my-role-${role}`}>
-                      {t("games.search.cinematic.positionShort", { role })}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className={styles.controlDivider} />
-              <div className={styles.controlBlock} ref={intentCoachRef}>
-                <h2 className={styles.panelTitle}>{t("games.search.intentTitle")}</h2>
-                <div className={styles.modeList} aria-label={t("games.search.intentTitle")}>
-                  {isLooking && intentMode === "join" ? (
-                    <button
-                      aria-pressed
-                      className={`${styles.modeCard} ${styles.modeCardActive}`}
-                      disabled={lookingBusy}
-                      onClick={() => void handleIntentAction("join")}
-                      type="button"
-                    >
-                      <strong>{t("games.search.intentLooking")}</strong>
-                      <span>
-                        {lookingBusy
-                          ? t("games.search.toggleLookingBusy")
-                          : t("games.search.stopLooking")}
-                      </span>
-                    </button>
-                  ) : (
-                    <div
-                      className={`${styles.modeSplit}${
-                        lookingBusy || (isLooking && intentMode !== "join")
-                          ? ` ${styles.modeSplitDisabled}`
-                          : ""
-                      }`}
-                    >
-                      <div className={styles.modeSplitFace} aria-hidden="true">
-                        <strong>{t("games.search.intentLooking")}</strong>
-                        <span>{t("games.search.intentLookingHint")}</span>
-                      </div>
-                      <div className={styles.modeSplitChoices}>
-                        <button
-                          className={styles.modeSplitChoice}
-                          disabled={lookingBusy || (isLooking && intentMode !== "join")}
-                          onClick={() => void handleIntentAction("join", { matchMode: "auto" })}
-                          type="button"
-                        >
-                          <strong>{t("games.search.intentSplit.findMe")}</strong>
-                          <span>{t("games.search.intentSplit.findMeHint")}</span>
-                        </button>
-                        <button
-                          className={styles.modeSplitChoice}
-                          disabled={lookingBusy || (isLooking && intentMode !== "join")}
-                          onClick={() => void handleIntentAction("join", { matchMode: "manual" })}
-                          type="button"
-                        >
-                          <strong>{t("games.search.intentSplit.findMyself")}</strong>
-                          <span>{t("games.search.intentSplit.findMyselfHint")}</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {isLooking && intentMode === "recruit" ? (
-                    <button
-                      aria-pressed
-                      className={`${styles.modeCard} ${styles.modeCardActive}`}
-                      disabled={lookingBusy}
-                      onClick={() => void handleIntentAction("recruit")}
-                      type="button"
-                    >
-                      <strong>{t("games.search.intentInvite")}</strong>
-                      <span>
-                        {lookingBusy
-                          ? t("games.search.toggleLookingBusy")
-                          : t("games.search.stopRecruitLooking")}
-                      </span>
-                    </button>
-                  ) : (
-                    <div
-                      className={`${styles.modeSplit}${
-                        lookingBusy || (isLooking && intentMode !== "recruit")
-                          ? ` ${styles.modeSplitDisabled}`
-                          : ""
-                      }`}
-                    >
-                      <div className={styles.modeSplitFace} aria-hidden="true">
-                        <strong>{t("games.search.intentInvite")}</strong>
-                        <span>{t("games.search.intentInviteHint")}</span>
-                      </div>
-                      <div className={styles.modeSplitChoices}>
-                        <button
-                          className={styles.modeSplitChoice}
-                          disabled={lookingBusy || (isLooking && intentMode !== "recruit")}
-                          onClick={() =>
-                            void handleIntentAction("recruit", { joinMode: "OPEN" })
-                          }
-                          type="button"
-                        >
-                          <strong>{t("games.search.intentSplit.openJoin")}</strong>
-                          <span>{t("games.search.intentSplit.openJoinHint")}</span>
-                        </button>
-                        <button
-                          className={styles.modeSplitChoice}
-                          disabled={lookingBusy || (isLooking && intentMode !== "recruit")}
-                          onClick={() =>
-                            void handleIntentAction("recruit", { joinMode: "CONFIRM" })
-                          }
-                          type="button"
-                        >
-                          <strong>{t("games.search.intentSplit.confirmJoin")}</strong>
-                          <span>{t("games.search.intentSplit.confirmJoinHint")}</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <button
-                className={styles.profileEditBtn}
-                onClick={() => router.push("/dota/create?intent=search")}
-                type="button"
-              >
-                {t("games.search.editProfileCta")}
-              </button>
-            </section>
-          )}
-        </aside>
-
-        <div className={styles.main} ref={feedRef}>
-          <div className={styles.statusBar}>
-            <div className={styles.statsRow}>
-              <p className={styles.statusText}>
-                {t("games.search.lookingCount", { count: lookingCount })}
-              </p>
-              <p className={styles.statusText}>
-                {t("games.search.onlineCount", {
-                  count: onlineNow === null ? "—" : String(onlineNow)
-                })}
-              </p>
-              <p className={styles.refreshNote}>
-                {feedMode === "players"
-                  ? t("games.search.feedHintPlayers")
-                  : feedMode === "parties"
-                    ? t("games.search.feedHintParties")
-                    : t("games.search.feedHintAll")}
-              </p>
-            </div>
-            <div className={styles.statusActions}>
-              {canFindOthers ? (
-                <button
-                  className="button-secondary"
-                  onClick={() => setBatchIndex((current) => current + 1)}
-                  type="button"
-                >
-                  {t("games.search.findOthers")}
-                </button>
-              ) : null}
-              <button
-                className="button-secondary"
-                disabled={isLoading}
-                onClick={() => void refreshList({ advanceBatch: true })}
-                type="button"
-              >
-                {isLoading ? t("common.loadingEllipsis") : t("games.search.refresh")}
-              </button>
-            </div>
-          </div>
-
-          {loadError ? <p className={styles.error}>{loadError}</p> : null}
-          {stackError ? <p className={styles.error}>{stackError}</p> : null}
-          {stackMessage ? <p className={styles.feedback}>{stackMessage}</p> : null}
-          {isLooking && matchMode === "auto" ? (
-            <div className={styles.matchModeBanner} role="status">
-              <p>
-                {intentMode === "recruit"
-                  ? t("games.search.matchMode.autoBannerRecruit")
-                  : t("games.search.matchMode.autoBannerJoin")}
-              </p>
-              <button
-                className="button-secondary"
-                onClick={() => {
-                  setMatchMode("manual");
-                  if (typeof window !== "undefined") {
-                    window.sessionStorage.setItem("opinia.matchMode", "manual");
-                  }
-                }}
-                type="button"
-              >
-                {t("games.search.matchMode.switchToManual")}
-              </button>
-            </div>
-          ) : null}
-
-          {isLoading && !hasLoadedOnce ? (
-            <p className={styles.feedback}>{t("common.loadingEllipsis")}</p>
-          ) : visiblePlayers.length === 0 ? (
-            <div className={styles.empty}>
-              <div className={styles.emptyIcon} aria-hidden="true">
-                ⌕
-              </div>
-              <h2 className={styles.emptyTitle}>
-                {feedMode === "players"
-                  ? t("games.search.emptyTitlePlayers")
-                  : feedMode === "parties"
-                    ? t("games.search.emptyTitleParties")
-                    : t("games.search.emptyTitle")}
-              </h2>
-              <p className={styles.emptyLead}>
-                {feedMode === "players"
-                  ? t("games.search.emptyLeadPlayers")
-                  : feedMode === "parties"
-                    ? t("games.search.emptyLeadParties")
-                    : t("games.search.emptyLead")}
-              </p>
-              {!isLooking ? (
-                <button
-                  className={`button-primary ${styles.emptyCta}`}
-                  disabled={lookingBusy}
-                  onClick={() => void handleIntentAction("join")}
-                  type="button"
-                >
-                  {lookingBusy
-                    ? t("games.search.toggleLookingBusy")
-                    : t("games.search.startLooking")}
-                </button>
-              ) : (
-                <p className={styles.waitingInviteText}>{t("games.search.invitesWaiting")}</p>
-              )}
-            </div>
-          ) : (
-            <ul className={styles.list}>
-              {visiblePlayers.map((player) => {
-                const isRecruitParty = Boolean(player.partySlug && player.partyName);
-                const claimedRoles = new Set(player.claimedRoles ?? []);
-                const openRecruitRoles = openRecruitRolesForHit(player);
-                const lookingRoles = new Set(openRecruitRoles);
-                const rosterTitle = player.partyName ?? player.title;
-                const rosterHref = player.partySlug
-                  ? `/dota/teams/${player.partySlug}`
-                  : `/dota/${player.slug}`;
-
-                return (
-                <li
-                  className={`${styles.card}${
-                    invitePickerSlug === player.slug ? ` ${styles.cardInviteOpen}` : ""
-                  }`}
-                  key={player.slug}
-                >
-                  <div className={styles.cardTop}>
-                    <Link
-                      aria-label={t("games.search.openRoster")}
-                      className={styles.avatarLink}
-                      href={rosterHref}
-                    >
-                      <span aria-hidden="true" className={styles.avatar}>
-                        {playerInitial(rosterTitle)}
-                      </span>
-                    </Link>
-                    <div className={styles.cardIdentity}>
-                      <Link className={styles.cardTitle} href={rosterHref}>
-                        {isRecruitParty
-                          ? t("games.search.recruitCardSlots", {
-                              current: String(player.memberCount ?? 1),
-                              desired: String(player.desiredSize ?? player.memberCount ?? 1),
-                              name: player.partyName ?? player.title
-                            })
-                          : player.title}
-                      </Link>
-                      <p className={styles.cardMmr}>
-                        {isRecruitParty
-                          ? t("games.search.recruitCardAvgMmr", {
-                              mmr: formatDotaMmr(player.mmr)
-                            })
-                          : `${formatDotaMmr(player.mmr)} MMR`}
-                      </p>
-                      {isRecruitParty ? (
-                        <p
-                          className={`${styles.joinModeStatus}${
-                            (player.joinMode ?? "OPEN") === "OPEN"
-                              ? ` ${styles.joinModeStatusOpen}`
-                              : ` ${styles.joinModeStatusConfirm}`
-                          }`}
-                        >
-                          {(player.joinMode ?? "OPEN") === "OPEN"
-                            ? t("games.search.joinModeOpen")
-                            : t("games.search.joinModeConfirm")}
-                        </p>
-                      ) : null}
-                      {isRecruitParty ? (
-                        <p className={styles.recruitCaptain}>
-                          {t("games.search.recruitCardCaptain", { name: player.title })}
-                        </p>
-                      ) : null}
-                    </div>
-                    <span
-                      className={`${styles.badge}${
-                        isRecruitParty
-                          ? (player.joinMode ?? "OPEN") === "OPEN"
-                            ? ` ${styles.badgeJoinOpen}`
-                            : ` ${styles.badgeJoinConfirm}`
-                          : ""
-                      }`}
-                    >
-                      {isRecruitParty
-                        ? (player.joinMode ?? "OPEN") === "OPEN"
-                          ? t("games.search.joinModeOpenShort")
-                          : t("games.search.joinModeConfirmShort")
-                        : t("games.search.lookingBadge")}
-                    </span>
+          <aside
+            className={styles.sidebar}
+            ref={(node) => {
+              controlsRef.current = node;
+            }}
+          >
+            {!hasSearchProfile ? (
+              <section className={`${styles.panel} ${styles.promoPanel}`}>
+                <p className={styles.promoTitle}>{t("games.search.promoTitle")}</p>
+                <p className={styles.promoLead}>{t("games.search.promoLead")}</p>
+                <Link className="button-primary" href="/dota/create?intent=search">
+                  {t("games.search.createCta")}
+                </Link>
+              </section>
+            ) : (
+              <section className={styles.panel} data-cinematic-left-target>
+                <div className={styles.searchProfileSummary}>
+                  <div className={styles.searchProfileMmr} data-cinematic-target="mmr">
+                    <span>MMR</span>
+                    <strong>{formatDotaMmr(myMmr)}</strong>
                   </div>
-                  {isRecruitParty && openRecruitRoles.length > 0 ? (
-                    <p className={styles.recruitRoles}>
-                      {t("games.search.recruitCardRoles", {
-                        roles: openRecruitRoles
-                          .map((role) => `${role} ${getDotaPositionLabel(role, t)}`)
-                          .join(" · ")
-                      })}
-                    </p>
-                  ) : null}
-                  <div className={styles.cardMeta}>
-                    <div className={styles.roleChips} aria-label={t("games.search.rolesLabel")}>
-                      {ROLE_POSITIONS.map((role) => {
-                        const claimed = isRecruitParty && claimedRoles.has(role);
-                        const looking = isRecruitParty && lookingRoles.has(role);
-                        const personal = !isRecruitParty && player.roles.includes(role);
-
-                        return (
-                          <span
-                            className={`${styles.roleChip}${
-                              claimed
-                                ? ` ${styles.roleChipClaimed}`
-                                : looking
-                                  ? ` ${styles.roleChipLooking}`
-                                  : personal
-                                    ? ` ${styles.roleChipActive}`
-                                    : ""
-                            }`}
-                            key={`${player.slug}-role-${role}`}
-                            title={
-                              claimed
-                                ? getDotaPositionLabel(role, t)
-                                : looking
-                                  ? t("games.search.applyForRole", {
-                                      role: `${role} ${getDotaPositionLabel(role, t)}`
-                                    })
-                                  : undefined
-                            }
-                          >
-                            {role}
-                          </span>
-                        );
-                      })}
-                    </div>
-                    <span>{player.server ?? "—"}</span>
-                  </div>
-                  <div className={styles.flagRow}>
-                    {(player.greenFlags ?? []).map((flag) => (
-                      <span className={styles.flagGreen} key={`${player.slug}-g-${flag.key}`}>
-                        {getDotaGreenFlagLabel(flag.key as DotaGreenFlagKey, t)}
-                        {flag.count > 1 ? ` · ${flag.count}` : ""}
+                  <div
+                    aria-label={t("games.search.cinematic.yourRoles")}
+                    className={styles.searchProfileRoles}
+                  >
+                    {myRoles.map((role) => (
+                      <span data-cinematic-target={`role-${role}`} key={`my-role-${role}`}>
+                        {t("games.search.cinematic.positionShort", { role })}
                       </span>
                     ))}
-                    {(player.redFlags ?? []).map((flag) => (
-                      <span className={styles.flagRed} key={`${player.slug}-r-${flag.key}`}>
-                        {getDotaRedFlagLabel(flag.key as DotaRedFlagKey, t)}
-                        {flag.count > 1 ? ` · ${flag.count}` : ""}
-                      </span>
-                    ))}
-                    {(player.redFlags?.length ?? 0) === 0 && (player.greenFlags?.length ?? 0) === 0 ? (
-                      <span className={styles.flagEmpty}>{t("games.search.noFlagsYet")}</span>
-                    ) : null}
                   </div>
-                  {isRecruitParty && openRecruitRoles.length > 0 ? (
-                    <div className={styles.applyRoleRow}>
-                      {openRecruitRoles.map((role) => {
-                        const busyKey = `${player.slug}:${role}`;
-                        return (
-                          <button
-                            className={`button-primary ${styles.applyRoleBtn}`}
-                            disabled={stackBusySlug === busyKey}
-                            key={busyKey}
-                            onClick={() => void handleStack(player.slug, role as DotaPositionRole)}
-                            type="button"
-                          >
-                            {stackBusySlug === busyKey
-                              ? t("games.search.stackBusy")
-                              : (player.joinMode ?? "OPEN") === "OPEN"
-                                ? t("games.search.joinForRole", {
-                                    role: `${role} ${getDotaPositionLabel(role, t)}`
-                                  })
-                                : t("games.search.applyForRole", {
-                                    role: `${role} ${getDotaPositionLabel(role, t)}`
-                                  })}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div
-                      className={styles.inviteWrap}
-                      data-invite-picker={player.slug}
-                    >
+                </div>
+                <div className={styles.controlDivider} />
+                <div className={styles.controlBlock} ref={intentCoachRef}>
+                  <h2 className={styles.panelTitle}>{t("games.search.intentTitle")}</h2>
+                  <div className={styles.modeList} aria-label={t("games.search.intentTitle")}>
+                    {isLooking && intentMode === "join" ? (
                       <button
-                        aria-expanded={invitePickerSlug === player.slug}
-                        aria-haspopup="dialog"
-                        className={`button-primary ${styles.stackCta}`}
-                        disabled={stackBusySlug === player.slug}
-                        onClick={() =>
-                          setInvitePickerSlug((current) =>
-                            current === player.slug ? null : player.slug
-                          )
-                        }
+                        aria-pressed
+                        className={`${styles.modeCard} ${styles.modeCardActive}`}
+                        disabled={lookingBusy}
+                        onClick={() => void handleIntentAction("join")}
                         type="button"
                       >
-                        {stackBusySlug === player.slug
-                          ? t("games.search.stackBusy")
-                          : t("games.search.stackCta")}
+                        <strong>{t("games.search.intentLooking")}</strong>
+                        <span>
+                          {lookingBusy
+                            ? t("games.search.toggleLookingBusy")
+                            : t("games.search.stopLooking")}
+                        </span>
                       </button>
-                      {invitePickerSlug === player.slug ? (
-                        <div
-                          aria-label={t("games.search.stackAs")}
-                          className={styles.invitePopover}
-                          role="dialog"
-                        >
-                          <p className={styles.invitePopoverTitle}>{t("games.search.stackAs")}</p>
+                    ) : (
+                      <div
+                        className={`${styles.modeSplit}${
+                          lookingBusy || (isLooking && intentMode !== "join")
+                            ? ` ${styles.modeSplitDisabled}`
+                            : ""
+                        }`}
+                      >
+                        <div className={styles.modeSplitFace} aria-hidden="true">
+                          <strong>{t("games.search.intentLooking")}</strong>
+                          <span>{t("games.search.intentLookingHint")}</span>
+                        </div>
+                        <div className={styles.modeSplitChoices}>
                           <button
-                            className={styles.invitePopoverOption}
-                            disabled={Boolean(stackBusySlug)}
-                            onClick={() => void handleStack(player.slug, undefined, "")}
+                            className={styles.modeSplitChoice}
+                            disabled={lookingBusy || (isLooking && intentMode !== "join")}
+                            onClick={() => void handleIntentAction("join", { matchMode: "auto" })}
                             type="button"
                           >
-                            {t("games.search.stackAsNewParty")}
+                            <strong>{t("games.search.intentSplit.findMe")}</strong>
+                            <span>{t("games.search.intentSplit.findMeHint")}</span>
                           </button>
-                          {ownedParties.map((party) => {
-                            const full = party.openSlots <= 0;
+                          <button
+                            className={styles.modeSplitChoice}
+                            disabled={lookingBusy || (isLooking && intentMode !== "join")}
+                            onClick={() => void handleIntentAction("join", { matchMode: "manual" })}
+                            type="button"
+                          >
+                            <strong>{t("games.search.intentSplit.findMyself")}</strong>
+                            <span>{t("games.search.intentSplit.findMyselfHint")}</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {isLooking && intentMode === "recruit" ? (
+                      <button
+                        aria-pressed
+                        className={`${styles.modeCard} ${styles.modeCardActive}`}
+                        disabled={lookingBusy}
+                        onClick={() => void handleIntentAction("recruit")}
+                        type="button"
+                      >
+                        <strong>{t("games.search.intentInvite")}</strong>
+                        <span>
+                          {lookingBusy
+                            ? t("games.search.toggleLookingBusy")
+                            : t("games.search.stopRecruitLooking")}
+                        </span>
+                      </button>
+                    ) : (
+                      <div
+                        className={`${styles.modeSplit}${
+                          lookingBusy || (isLooking && intentMode !== "recruit")
+                            ? ` ${styles.modeSplitDisabled}`
+                            : ""
+                        }`}
+                      >
+                        <div className={styles.modeSplitFace} aria-hidden="true">
+                          <strong>{t("games.search.intentInvite")}</strong>
+                          <span>{t("games.search.intentInviteHint")}</span>
+                        </div>
+                        <div className={styles.modeSplitChoices}>
+                          <button
+                            className={styles.modeSplitChoice}
+                            disabled={lookingBusy || (isLooking && intentMode !== "recruit")}
+                            onClick={() => void handleIntentAction("recruit", { joinMode: "OPEN" })}
+                            type="button"
+                          >
+                            <strong>{t("games.search.intentSplit.openJoin")}</strong>
+                            <span>{t("games.search.intentSplit.openJoinHint")}</span>
+                          </button>
+                          <button
+                            className={styles.modeSplitChoice}
+                            disabled={lookingBusy || (isLooking && intentMode !== "recruit")}
+                            onClick={() =>
+                              void handleIntentAction("recruit", { joinMode: "CONFIRM" })
+                            }
+                            type="button"
+                          >
+                            <strong>{t("games.search.intentSplit.confirmJoin")}</strong>
+                            <span>{t("games.search.intentSplit.confirmJoinHint")}</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  className={styles.profileEditBtn}
+                  onClick={() => router.push("/dota/create?intent=search")}
+                  type="button"
+                >
+                  {t("games.search.editProfileCta")}
+                </button>
+              </section>
+            )}
+          </aside>
+
+          <div className={styles.main} ref={feedRef}>
+            <div className={styles.statusBar}>
+              <div className={styles.statsRow}>
+                <p className={styles.statusText}>
+                  {t("games.search.lookingCount", { count: lookingCount })}
+                </p>
+                <p className={styles.statusText}>
+                  {t("games.search.onlineCount", {
+                    count: onlineNow === null ? "—" : String(onlineNow)
+                  })}
+                </p>
+                <p className={styles.refreshNote}>
+                  {feedMode === "players"
+                    ? t("games.search.feedHintPlayers")
+                    : feedMode === "parties"
+                      ? t("games.search.feedHintParties")
+                      : t("games.search.feedHintAll")}
+                </p>
+              </div>
+              <div className={styles.statusActions}>
+                {canFindOthers ? (
+                  <button
+                    className="button-secondary"
+                    onClick={() => setBatchIndex((current) => current + 1)}
+                    type="button"
+                  >
+                    {t("games.search.findOthers")}
+                  </button>
+                ) : null}
+                <button
+                  className="button-secondary"
+                  disabled={isLoading}
+                  onClick={() => void refreshList({ advanceBatch: true })}
+                  type="button"
+                >
+                  {isLoading ? t("common.loadingEllipsis") : t("games.search.refresh")}
+                </button>
+              </div>
+            </div>
+
+            {loadError ? <p className={styles.error}>{loadError}</p> : null}
+            {stackError ? <p className={styles.error}>{stackError}</p> : null}
+            {stackMessage ? <p className={styles.feedback}>{stackMessage}</p> : null}
+            {isLooking && matchMode === "auto" ? (
+              <div className={styles.matchModeBanner} role="status">
+                <p>
+                  {intentMode === "recruit"
+                    ? t("games.search.matchMode.autoBannerRecruit")
+                    : t("games.search.matchMode.autoBannerJoin")}
+                </p>
+                <button
+                  className="button-secondary"
+                  onClick={() => {
+                    setMatchMode("manual");
+                    if (typeof window !== "undefined") {
+                      window.sessionStorage.setItem("opinia.matchMode", "manual");
+                    }
+                  }}
+                  type="button"
+                >
+                  {t("games.search.matchMode.switchToManual")}
+                </button>
+              </div>
+            ) : null}
+
+            {isLoading && !hasLoadedOnce ? (
+              <p className={styles.feedback}>{t("common.loadingEllipsis")}</p>
+            ) : visiblePlayers.length === 0 ? (
+              <div className={styles.empty}>
+                <div className={styles.emptyIcon} aria-hidden="true">
+                  ⌕
+                </div>
+                <h2 className={styles.emptyTitle}>
+                  {feedMode === "players"
+                    ? t("games.search.emptyTitlePlayers")
+                    : feedMode === "parties"
+                      ? t("games.search.emptyTitleParties")
+                      : t("games.search.emptyTitle")}
+                </h2>
+                <p className={styles.emptyLead}>
+                  {feedMode === "players"
+                    ? t("games.search.emptyLeadPlayers")
+                    : feedMode === "parties"
+                      ? t("games.search.emptyLeadParties")
+                      : t("games.search.emptyLead")}
+                </p>
+                {!isLooking ? (
+                  <button
+                    className={`button-primary ${styles.emptyCta}`}
+                    disabled={lookingBusy}
+                    onClick={() => void handleIntentAction("join")}
+                    type="button"
+                  >
+                    {lookingBusy
+                      ? t("games.search.toggleLookingBusy")
+                      : t("games.search.startLooking")}
+                  </button>
+                ) : (
+                  <p className={styles.waitingInviteText}>{t("games.search.invitesWaiting")}</p>
+                )}
+              </div>
+            ) : (
+              <ul className={styles.list}>
+                {visiblePlayers.map((player) => {
+                  const isRecruitParty = Boolean(player.partySlug && player.partyName);
+                  const claimedRoles = new Set(player.claimedRoles ?? []);
+                  const openRecruitRoles = openRecruitRolesForHit(player);
+                  const lookingRoles = new Set(openRecruitRoles);
+                  const rosterTitle = player.partyName ?? player.title;
+                  const rosterHref = player.partySlug
+                    ? `/dota/teams/${player.partySlug}`
+                    : `/dota/${player.slug}`;
+
+                  return (
+                    <li
+                      className={`${styles.card}${
+                        invitePickerSlug === player.slug ? ` ${styles.cardInviteOpen}` : ""
+                      }`}
+                      key={player.slug}
+                    >
+                      <div className={styles.cardTop}>
+                        <Link
+                          aria-label={t("games.search.openRoster")}
+                          className={styles.avatarLink}
+                          href={rosterHref}
+                        >
+                          <span aria-hidden="true" className={styles.avatar}>
+                            {playerInitial(rosterTitle)}
+                          </span>
+                        </Link>
+                        <div className={styles.cardIdentity}>
+                          <Link className={styles.cardTitle} href={rosterHref}>
+                            {isRecruitParty
+                              ? t("games.search.recruitCardSlots", {
+                                  current: String(player.memberCount ?? 1),
+                                  desired: String(player.desiredSize ?? player.memberCount ?? 1),
+                                  name: player.partyName ?? player.title
+                                })
+                              : player.title}
+                          </Link>
+                          <p className={styles.cardMmr}>
+                            {isRecruitParty
+                              ? t("games.search.recruitCardAvgMmr", {
+                                  mmr: formatDotaMmr(player.mmr)
+                                })
+                              : `${formatDotaMmr(player.mmr)} MMR`}
+                          </p>
+                          {isRecruitParty ? (
+                            <p
+                              className={`${styles.joinModeStatus}${
+                                (player.joinMode ?? "OPEN") === "OPEN"
+                                  ? ` ${styles.joinModeStatusOpen}`
+                                  : ` ${styles.joinModeStatusConfirm}`
+                              }`}
+                            >
+                              {(player.joinMode ?? "OPEN") === "OPEN"
+                                ? t("games.search.joinModeOpen")
+                                : t("games.search.joinModeConfirm")}
+                            </p>
+                          ) : null}
+                          {isRecruitParty ? (
+                            <p className={styles.recruitCaptain}>
+                              {t("games.search.recruitCardCaptain", { name: player.title })}
+                            </p>
+                          ) : null}
+                        </div>
+                        <span
+                          className={`${styles.badge}${
+                            isRecruitParty
+                              ? (player.joinMode ?? "OPEN") === "OPEN"
+                                ? ` ${styles.badgeJoinOpen}`
+                                : ` ${styles.badgeJoinConfirm}`
+                              : ""
+                          }`}
+                        >
+                          {isRecruitParty
+                            ? (player.joinMode ?? "OPEN") === "OPEN"
+                              ? t("games.search.joinModeOpenShort")
+                              : t("games.search.joinModeConfirmShort")
+                            : t("games.search.lookingBadge")}
+                        </span>
+                      </div>
+                      {isRecruitParty && openRecruitRoles.length > 0 ? (
+                        <p className={styles.recruitRoles}>
+                          {t("games.search.recruitCardRoles", {
+                            roles: openRecruitRoles
+                              .map((role) => `${role} ${getDotaPositionLabel(role, t)}`)
+                              .join(" · ")
+                          })}
+                        </p>
+                      ) : null}
+                      <div className={styles.cardMeta}>
+                        <div className={styles.roleChips} aria-label={t("games.search.rolesLabel")}>
+                          {ROLE_POSITIONS.map((role) => {
+                            const claimed = isRecruitParty && claimedRoles.has(role);
+                            const looking = isRecruitParty && lookingRoles.has(role);
+                            const personal = !isRecruitParty && player.roles.includes(role);
+
+                            return (
+                              <span
+                                className={`${styles.roleChip}${
+                                  claimed
+                                    ? ` ${styles.roleChipClaimed}`
+                                    : looking
+                                      ? ` ${styles.roleChipLooking}`
+                                      : personal
+                                        ? ` ${styles.roleChipActive}`
+                                        : ""
+                                }`}
+                                key={`${player.slug}-role-${role}`}
+                                title={
+                                  claimed
+                                    ? getDotaPositionLabel(role, t)
+                                    : looking
+                                      ? t("games.search.applyForRole", {
+                                          role: `${role} ${getDotaPositionLabel(role, t)}`
+                                        })
+                                      : undefined
+                                }
+                              >
+                                {role}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <span>{player.server ?? "—"}</span>
+                      </div>
+                      <div className={styles.flagRow}>
+                        {(player.greenFlags ?? []).map((flag) => (
+                          <span className={styles.flagGreen} key={`${player.slug}-g-${flag.key}`}>
+                            {getDotaGreenFlagLabel(flag.key as DotaGreenFlagKey, t)}
+                            {flag.count > 1 ? ` · ${flag.count}` : ""}
+                          </span>
+                        ))}
+                        {(player.redFlags ?? []).map((flag) => (
+                          <span className={styles.flagRed} key={`${player.slug}-r-${flag.key}`}>
+                            {getDotaRedFlagLabel(flag.key as DotaRedFlagKey, t)}
+                            {flag.count > 1 ? ` · ${flag.count}` : ""}
+                          </span>
+                        ))}
+                        {(player.redFlags?.length ?? 0) === 0 &&
+                        (player.greenFlags?.length ?? 0) === 0 ? (
+                          <span className={styles.flagEmpty}>{t("games.search.noFlagsYet")}</span>
+                        ) : null}
+                      </div>
+                      {isRecruitParty && openRecruitRoles.length > 0 ? (
+                        <div className={styles.applyRoleRow}>
+                          {openRecruitRoles.map((role) => {
+                            const busyKey = `${player.slug}:${role}`;
                             return (
                               <button
-                                className={styles.invitePopoverOption}
-                                disabled={full || Boolean(stackBusySlug)}
-                                key={`invite-to-${party.id}`}
+                                className={`button-primary ${styles.applyRoleBtn}`}
+                                disabled={stackBusySlug === busyKey}
+                                key={busyKey}
                                 onClick={() =>
-                                  void handleStack(player.slug, undefined, party.slug)
+                                  void handleStack(player.slug, role as DotaPositionRole)
                                 }
                                 type="button"
                               >
-                                {party.kind === "TEAM"
-                                  ? t("games.search.stackAsTeam", { name: party.name })
-                                  : t("games.search.stackAsParty", { name: party.name })}
-                                {full ? ` · ${t("games.search.partyFullCta")}` : ""}
+                                {stackBusySlug === busyKey
+                                  ? t("games.search.stackBusy")
+                                  : (player.joinMode ?? "OPEN") === "OPEN"
+                                    ? t("games.search.joinForRole", {
+                                        role: `${role} ${getDotaPositionLabel(role, t)}`
+                                      })
+                                    : t("games.search.applyForRole", {
+                                        role: `${role} ${getDotaPositionLabel(role, t)}`
+                                      })}
                               </button>
                             );
                           })}
                         </div>
-                      ) : null}
-                    </div>
-                  )}
-                </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        <aside
-          className={styles.sidebar}
-          ref={(node) => {
-            railRef.current = node;
-          }}
-        >
-          <section className={styles.panel}>
-            <div className={styles.panelHead}>
-              <h2 className={styles.panelTitle}>{t("games.search.invitesTitle")}</h2>
-              {invites.length > 0 ? (
-                <span className={styles.countBadge}>{invites.length}</span>
-              ) : null}
-            </div>
-            {invites.length === 0 && isLooking ? (
-              <div className={styles.waitingInvite} role="status">
-                <div aria-hidden="true" className={styles.waitingDots}>
-                  <span />
-                  <span />
-                  <span />
-                </div>
-                <p className={styles.waitingInviteText}>{t("games.search.invitesWaiting")}</p>
-              </div>
-            ) : invites.length === 0 ? (
-              <p className={styles.panelEmpty}>{t("games.search.invitesEmpty")}</p>
-            ) : (
-              <ul className={styles.inviteList}>
-                {invites.map((invite) => {
-                  const isApplication = invite.inviteKind === "APPLICATION";
-                  return (
-                    <li className={`${styles.inviteItem} ${styles.inviteIncoming}`} key={invite.id}>
-                      <div className={styles.inviteRow}>
-                        <span aria-hidden="true" className={styles.inviteAvatar}>
-                          {playerInitial(invite.partyName)}
-                        </span>
-                        <div className={styles.inviteCopy}>
-                          <strong>{invite.partyName}</strong>
-                          <span className={styles.inviteWant}>
-                            {isApplication
-                              ? t("games.search.applicationPending", {
-                                  role: invite.positionRole
-                                    ? `${invite.positionRole} ${getDotaPositionLabel(invite.positionRole, t)}`
-                                    : "—"
-                                })
-                              : t("games.search.inviteWantsYou")}
-                          </span>
-                        </div>
-                        <div className={styles.inviteActions}>
-                          {!isApplication ? (
-                            <button
-                              aria-label={t("games.search.inviteAccept")}
-                              className={styles.acceptBtn}
-                              disabled={inviteBusyId !== null}
-                              onClick={() => void handleAcceptInvite(invite)}
-                              type="button"
-                            >
-                              ✓
-                            </button>
-                          ) : null}
+                      ) : (
+                        <div className={styles.inviteWrap} data-invite-picker={player.slug}>
                           <button
-                            aria-label={
-                              isApplication
-                                ? t("games.search.withdrawApplication")
-                                : t("games.search.inviteDecline")
+                            aria-expanded={invitePickerSlug === player.slug}
+                            aria-haspopup="dialog"
+                            className={`button-primary ${styles.stackCta}`}
+                            disabled={stackBusySlug === player.slug}
+                            onClick={() =>
+                              setInvitePickerSlug((current) =>
+                                current === player.slug ? null : player.slug
+                              )
                             }
-                            className={styles.declineBtn}
-                            disabled={inviteBusyId !== null}
-                            onClick={() => void handleDeclineInvite(invite)}
                             type="button"
                           >
-                            ✕
+                            {stackBusySlug === player.slug
+                              ? t("games.search.stackBusy")
+                              : t("games.search.stackCta")}
                           </button>
+                          {invitePickerSlug === player.slug ? (
+                            <div
+                              aria-label={t("games.search.stackAs")}
+                              className={styles.invitePopover}
+                              role="dialog"
+                            >
+                              <p className={styles.invitePopoverTitle}>
+                                {t("games.search.stackAs")}
+                              </p>
+                              <button
+                                className={styles.invitePopoverOption}
+                                disabled={Boolean(stackBusySlug)}
+                                onClick={() => void handleStack(player.slug, undefined, "")}
+                                type="button"
+                              >
+                                {t("games.search.stackAsNewParty")}
+                              </button>
+                              {ownedParties.map((party) => {
+                                const full = party.openSlots <= 0;
+                                return (
+                                  <button
+                                    className={styles.invitePopoverOption}
+                                    disabled={full || Boolean(stackBusySlug)}
+                                    key={`invite-to-${party.id}`}
+                                    onClick={() =>
+                                      void handleStack(player.slug, undefined, party.slug)
+                                    }
+                                    type="button"
+                                  >
+                                    {party.kind === "TEAM"
+                                      ? t("games.search.stackAsTeam", { name: party.name })
+                                      : t("games.search.stackAsParty", { name: party.name })}
+                                    {full ? ` · ${t("games.search.partyFullCta")}` : ""}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
                         </div>
-                      </div>
+                      )}
                     </li>
                   );
                 })}
               </ul>
             )}
-          </section>
+          </div>
 
-          <section className={styles.panel}>
-            <h2 className={styles.panelTitle}>{t("games.search.outgoingTitle")}</h2>
-            {visibleOutgoing.length === 0 ? (
-              <p className={styles.panelEmpty}>{t("games.search.outgoingEmpty")}</p>
-            ) : (
-              <ul className={styles.inviteList}>
-                {visibleOutgoing.map((invite) => {
-                  const isApplication = invite.inviteKind === "APPLICATION";
-                  const canDecide =
-                    isApplication && invite.status === "PENDING" && invite.direction === "outgoing";
-                  return (
-                    <li
-                      className={`${styles.inviteItem} ${outgoingInviteClass(invite.status, styles)}`}
-                      key={invite.id}
-                    >
-                      <div className={styles.inviteRow}>
-                        <span aria-hidden="true" className={styles.inviteAvatar}>
-                          {playerInitial(invite.inviteeDisplayName)}
-                        </span>
-                        <div className={styles.inviteCopy}>
-                          {invite.inviteeDotaSlug ? (
-                            <Link href={`/dota/${invite.inviteeDotaSlug}`}>
-                              <strong>{invite.inviteeDisplayName}</strong>
-                            </Link>
-                          ) : (
-                            <strong>{invite.inviteeDisplayName}</strong>
-                          )}
-                          <span>
-                            {invite.status === "PENDING"
-                              ? isApplication
-                                ? t("games.search.applicationForRole", {
+          <aside
+            className={styles.sidebar}
+            ref={(node) => {
+              railRef.current = node;
+            }}
+          >
+            <section className={styles.panel}>
+              <div className={styles.panelHead}>
+                <h2 className={styles.panelTitle}>{t("games.search.invitesTitle")}</h2>
+                {invites.length > 0 ? (
+                  <span className={styles.countBadge}>{invites.length}</span>
+                ) : null}
+              </div>
+              {invites.length === 0 && isLooking ? (
+                <div className={styles.waitingInvite} role="status">
+                  <div aria-hidden="true" className={styles.waitingDots}>
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <p className={styles.waitingInviteText}>{t("games.search.invitesWaiting")}</p>
+                </div>
+              ) : invites.length === 0 ? (
+                <p className={styles.panelEmpty}>{t("games.search.invitesEmpty")}</p>
+              ) : (
+                <ul className={styles.inviteList}>
+                  {invites.map((invite) => {
+                    const isApplication = invite.inviteKind === "APPLICATION";
+                    return (
+                      <li
+                        className={`${styles.inviteItem} ${styles.inviteIncoming}`}
+                        key={invite.id}
+                      >
+                        <div className={styles.inviteRow}>
+                          <span aria-hidden="true" className={styles.inviteAvatar}>
+                            {playerInitial(invite.partyName)}
+                          </span>
+                          <div className={styles.inviteCopy}>
+                            <strong>{invite.partyName}</strong>
+                            <span className={styles.inviteWant}>
+                              {isApplication
+                                ? t("games.search.applicationPending", {
                                     role: invite.positionRole
                                       ? `${invite.positionRole} ${getDotaPositionLabel(invite.positionRole, t)}`
                                       : "—"
                                   })
-                                : t("games.search.outgoingPending")
-                              : invite.status === "ACCEPTED"
-                                ? t("games.search.outgoingAccepted")
-                                : t("games.search.outgoingDeclined")}
-                          </span>
-                        </div>
-                        {canDecide ? (
+                                : t("games.search.inviteWantsYou")}
+                            </span>
+                          </div>
                           <div className={styles.inviteActions}>
+                            {!isApplication ? (
+                              <button
+                                aria-label={t("games.search.inviteAccept")}
+                                className={styles.acceptBtn}
+                                disabled={inviteBusyId !== null}
+                                onClick={() => void handleAcceptInvite(invite)}
+                                type="button"
+                              >
+                                ✓
+                              </button>
+                            ) : null}
                             <button
-                              aria-label={t("games.search.acceptApplication")}
-                              className={styles.acceptBtn}
-                              disabled={inviteBusyId !== null}
-                              onClick={() => void handleAcceptInvite(invite)}
-                              type="button"
-                            >
-                              ✓
-                            </button>
-                            <button
-                              aria-label={t("games.search.declineApplication")}
+                              aria-label={
+                                isApplication
+                                  ? t("games.search.withdrawApplication")
+                                  : t("games.search.inviteDecline")
+                              }
                               className={styles.declineBtn}
                               disabled={inviteBusyId !== null}
                               onClick={() => void handleDeclineInvite(invite)}
@@ -2108,45 +2213,118 @@ export function GamesSearchView() {
                               ✕
                             </button>
                           </div>
-                        ) : null}
-                      </div>
-                      {(invite.redFlags?.length ?? 0) > 0 || (invite.greenFlags?.length ?? 0) > 0 ? (
-                        <div className={styles.inviteFlags}>
-                          {(invite.redFlags ?? []).map((flag) => (
-                            <span className={styles.flagRed} key={`${invite.id}-r-${flag.key}`}>
-                              {getDotaRedFlagLabel(flag.key as DotaRedFlagKey, t)}
-                              {flag.count > 1 ? ` · ${flag.count}` : ""}
-                            </span>
-                          ))}
-                          {(invite.greenFlags ?? []).map((flag) => (
-                            <span className={styles.flagGreen} key={`${invite.id}-g-${flag.key}`}>
-                              {getDotaGreenFlagLabel(flag.key as DotaGreenFlagKey, t)}
-                              {flag.count > 1 ? ` · ${flag.count}` : ""}
-                            </span>
-                          ))}
                         </div>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
 
-          <section className={styles.panel}>
-            <h2 className={styles.panelTitle}>{t("games.search.howTitle")}</h2>
-            <ol className={styles.howList}>
-              <li>{t("games.search.howStep1")}</li>
-              <li>{t("games.search.howStep2")}</li>
-              <li>{t("games.search.howStep3")}</li>
-              <li>{t("games.search.howStep4")}</li>
-            </ol>
-          </section>
+            <section className={styles.panel}>
+              <h2 className={styles.panelTitle}>{t("games.search.outgoingTitle")}</h2>
+              {visibleOutgoing.length === 0 ? (
+                <p className={styles.panelEmpty}>{t("games.search.outgoingEmpty")}</p>
+              ) : (
+                <ul className={styles.inviteList}>
+                  {visibleOutgoing.map((invite) => {
+                    const isApplication = invite.inviteKind === "APPLICATION";
+                    const canDecide =
+                      isApplication &&
+                      invite.status === "PENDING" &&
+                      invite.direction === "outgoing";
+                    return (
+                      <li
+                        className={`${styles.inviteItem} ${outgoingInviteClass(invite.status, styles)}`}
+                        key={invite.id}
+                      >
+                        <div className={styles.inviteRow}>
+                          <span aria-hidden="true" className={styles.inviteAvatar}>
+                            {playerInitial(invite.inviteeDisplayName)}
+                          </span>
+                          <div className={styles.inviteCopy}>
+                            {invite.inviteeDotaSlug ? (
+                              <Link href={`/dota/${invite.inviteeDotaSlug}`}>
+                                <strong>{invite.inviteeDisplayName}</strong>
+                              </Link>
+                            ) : (
+                              <strong>{invite.inviteeDisplayName}</strong>
+                            )}
+                            <span>
+                              {invite.status === "PENDING"
+                                ? isApplication
+                                  ? t("games.search.applicationForRole", {
+                                      role: invite.positionRole
+                                        ? `${invite.positionRole} ${getDotaPositionLabel(invite.positionRole, t)}`
+                                        : "—"
+                                    })
+                                  : t("games.search.outgoingPending")
+                                : invite.status === "ACCEPTED"
+                                  ? t("games.search.outgoingAccepted")
+                                  : t("games.search.outgoingDeclined")}
+                            </span>
+                          </div>
+                          {canDecide ? (
+                            <div className={styles.inviteActions}>
+                              <button
+                                aria-label={t("games.search.acceptApplication")}
+                                className={styles.acceptBtn}
+                                disabled={inviteBusyId !== null}
+                                onClick={() => void handleAcceptInvite(invite)}
+                                type="button"
+                              >
+                                ✓
+                              </button>
+                              <button
+                                aria-label={t("games.search.declineApplication")}
+                                className={styles.declineBtn}
+                                disabled={inviteBusyId !== null}
+                                onClick={() => void handleDeclineInvite(invite)}
+                                type="button"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                        {(invite.redFlags?.length ?? 0) > 0 ||
+                        (invite.greenFlags?.length ?? 0) > 0 ? (
+                          <div className={styles.inviteFlags}>
+                            {(invite.redFlags ?? []).map((flag) => (
+                              <span className={styles.flagRed} key={`${invite.id}-r-${flag.key}`}>
+                                {getDotaRedFlagLabel(flag.key as DotaRedFlagKey, t)}
+                                {flag.count > 1 ? ` · ${flag.count}` : ""}
+                              </span>
+                            ))}
+                            {(invite.greenFlags ?? []).map((flag) => (
+                              <span className={styles.flagGreen} key={`${invite.id}-g-${flag.key}`}>
+                                {getDotaGreenFlagLabel(flag.key as DotaGreenFlagKey, t)}
+                                {flag.count > 1 ? ` · ${flag.count}` : ""}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
 
-          <section className={`${styles.panel} ${styles.tipPanel}`}>
-            <GamesSearchTipRotator embedded />
-          </section>
-        </aside>
+            <section className={styles.panel}>
+              <h2 className={styles.panelTitle}>{t("games.search.howTitle")}</h2>
+              <ol className={styles.howList}>
+                <li>{t("games.search.howStep1")}</li>
+                <li>{t("games.search.howStep2")}</li>
+                <li>{t("games.search.howStep3")}</li>
+                <li>{t("games.search.howStep4")}</li>
+              </ol>
+            </section>
+
+            <section className={`${styles.panel} ${styles.tipPanel}`}>
+              <GamesSearchTipRotator embedded />
+            </section>
+          </aside>
         </div>
 
         {cinematicMode === "active" ? (
@@ -2158,11 +2336,7 @@ export function GamesSearchView() {
         ) : null}
       </div>
 
-      <GamesSearchOnboarding
-        onClose={closeCoach}
-        open={coachOpen}
-        targetRef={intentCoachRef}
-      />
+      <GamesSearchOnboarding onClose={closeCoach} open={coachOpen} targetRef={intentCoachRef} />
 
       {gateSlug ? (
         <div className={styles.modalBackdrop} role="presentation">

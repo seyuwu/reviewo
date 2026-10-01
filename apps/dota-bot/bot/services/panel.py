@@ -669,7 +669,7 @@ async def render_screen(
                 timer += f" · осталось {format_duration(remaining)}"
             text += f"\n\n🔎 <b>Ищем игроков:</b> {escape_text(roles_text)}{timer}"
         else:
-            text += "\n\nПодбор сейчас не запущен. Нажмите FREE под свободной ролью, чтобы искать игрока на неё."
+            text += "\n\nНабор не запущен. Нажмите «Поиск» под нужными позициями или «Искать на всех свободных»."
         profile = None
         if searching_roles:
             try:

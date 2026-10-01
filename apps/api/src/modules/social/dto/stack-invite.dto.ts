@@ -3,6 +3,10 @@ import { IsIn, IsOptional, IsString, MinLength, ValidateIf } from "class-validat
 import { DOTA_POSITION_ROLES } from "@reviewo/shared";
 
 export class StackInviteDto {
+  @IsOptional()
+  @IsIn(["web", "telegram"])
+  source?: "web" | "telegram";
+
   /** Optional existing TEAM/PARTY slug to invite from (must be owned by caller). */
   @IsOptional()
   @IsString()

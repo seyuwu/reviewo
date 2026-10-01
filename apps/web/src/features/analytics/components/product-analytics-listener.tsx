@@ -12,6 +12,11 @@ import {
 } from "@reviewo/shared";
 
 import { isGamesVerticalHostname } from "../../../lib/config/product-hosts";
+import {
+  captureDotaBotAttributionFromCurrentUrl,
+  getDotaBotAttributionForVisit,
+  getDotaBotLandingViewCtaKey
+} from "../../../lib/config/dota-bot";
 import { publicEnv } from "../../../lib/config/public-env";
 
 const VISITOR_KEY = "opinia.analytics.visitorId";
@@ -145,6 +150,11 @@ function commitPageTime(): void {
 }
 
 function trackPageview(pathname: string): void {
+  captureDotaBotAttributionFromCurrentUrl();
+  if (pathname === "/fdp") {
+    const source = getDotaBotAttributionForVisit("site").source;
+    enqueue({ key: getDotaBotLandingViewCtaKey(source), type: "cta" });
+  }
   commitPageTime();
 
   // Guard against React Strict Mode / fast remount double pageviews.

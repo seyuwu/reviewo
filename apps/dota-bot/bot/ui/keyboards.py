@@ -161,7 +161,7 @@ def party_keyboard(
     slots = [button(truncate(occupants.get(role, role), 12), f"party:slot:{role}") for role in roles]
     search_status = [
         button(
-            "—" if role in occupants else ("🔎" if role in searching_roles else "FREE"),
+            "—" if role in occupants else ("Ищем…" if role in searching_roles else "Поиск"),
             (
                 f"party:noop:{role}"
                 if role in occupants
@@ -171,6 +171,9 @@ def party_keyboard(
         for role in roles
     ]
     rows = [slots, search_status]
+    available_roles = set(roles) - occupants.keys()
+    if show_search and available_roles - searching_roles:
+        rows.append([button("🔎 Искать на всех свободных", "party:search-all")])
     if site_url and party.get("slug"):
         if web_access_url:
             rows.append([button_url("💬 Чат и Discord", web_access_url)])

@@ -121,7 +121,18 @@ async def begin_recruiting(
     storage: BotStorage,
     match_wakeup: asyncio.Event,
 ) -> None:
-    acknowledge_callback(callback)
+    if storage.get_choice(callback.from_user.id, "party_slot_search_tip_seen", 0) is None:
+        storage.set_choices(
+            callback.from_user.id,
+            "party_slot_search_tip_seen",
+            [{"seenAt": time.time()}],
+        )
+        acknowledge_callback(
+            callback,
+            "Поиск сам не начнётся: нажмите «Поиск» под нужным слотом или «Искать на всех свободных».",
+        )
+    else:
+        acknowledge_callback(callback)
     if callback.message is None:
         return
     await start_selected_action(
@@ -195,7 +206,7 @@ async def start_selected_action(
             confirmation,
         )
     elif action == "recruit":
-        await execute_recruiting(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup)
+        await execute_recruiting(bot, api, settings, storage, telegram_user_id, chat_id)
 
 
 async def resume_pending_onboarding_action(
@@ -241,7 +252,7 @@ async def resume_pending_onboarding_action(
             profile,
         )
     else:
-        await execute_recruiting(bot, api, settings, storage, telegram_user_id, chat_id, match_wakeup)
+        await execute_recruiting(bot, api, settings, storage, telegram_user_id, chat_id)
     return True
 
 
@@ -334,7 +345,7 @@ async def execute_looking(
     await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
     try:
         await start_solo_search(api, telegram_user_id, confirmed_party=confirmed_party)
-        storage.record_funnel_event(telegram_user_id, "search_started")
+        storage.record_search_started(telegram_user_id)
         storage.set_choices(telegram_user_id, "pending_solo_search", [])
         storage.clear_auto_match_exclusions(telegram_user_id)
         storage.set_choices(
@@ -383,7 +394,6 @@ async def execute_recruiting(
     storage: BotStorage,
     telegram_user_id: int,
     chat_id: int | None,
-    match_wakeup: asyncio.Event,
 ) -> None:
     await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
     try:
@@ -399,7 +409,8 @@ async def execute_recruiting(
             "/social/parties",
             {"kind": "PARTY"},
         )
-        storage.record_funnel_event(telegram_user_id, "party_joined")
+        storage.clear_search_timer(telegram_user_id)
+        storage.record_party_created(telegram_user_id)
 
         profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
         role_values = {"1", "2", "3", "4", "5"}
@@ -421,30 +432,9 @@ async def execute_recruiting(
             f"/social/parties/{slug}/join-mode",
             {"joinMode": "OPEN"},
         )
-        occupants = {
-            str(member.get("positionRole"))
-            for member in party.get("members", [])
-            if member.get("positionRole")
-        }
-        open_roles = sorted(role_values - occupants)
-        await api.user(
-            telegram_user_id,
-            "POST",
-            "/dota/profiles/lfg/looking",
-            {"looking": True, "partySlug": party["slug"], "recruitedRoles": open_roles},
-        )
-        storage.record_funnel_event(telegram_user_id, "search_started")
+        storage.set_choices(telegram_user_id, "auto_search", [])
         storage.clear_auto_match_exclusions(telegram_user_id)
-        storage.set_choices(
-            telegram_user_id,
-            "auto_search",
-            [{"mode": "recruit", "partySlug": party["slug"], "roles": open_roles, "startedAt": time.time()}],
-        )
         await edit_panel(bot, storage, api, settings, telegram_user_id, "party", chat_id)
-        if open_roles:
-            match_wakeup.set()
-            if not profile.get("dotaAccountId"):
-                await send_dota_id_reminder(bot, storage, telegram_user_id, chat_id)
     except ApiError as error:
         await show_action_error(bot, api, settings, storage, telegram_user_id, chat_id, error)
 
@@ -471,6 +461,7 @@ async def stop_search(
             payload["partySlug"] = party["slug"]
         await api.user(callback.from_user.id, "POST", "/dota/profiles/lfg/looking", payload)
         storage.set_choices(callback.from_user.id, "auto_search", [])
+        storage.clear_search_timer(callback.from_user.id)
         storage.clear_auto_match_exclusions(callback.from_user.id)
         screen = "party" if party else "home"
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, screen)

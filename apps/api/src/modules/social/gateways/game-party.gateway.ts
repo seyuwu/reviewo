@@ -345,6 +345,25 @@ export class GamePartyGateway implements OnGatewayConnection, OnGatewayDisconnec
     }
   }
 
+  notifyTelegramSitePartyMatch(
+    userIds: string[],
+    input: {
+      activity: "solo_group" | "player_joined";
+      clearSearch: boolean;
+      eventKeySuffix: string;
+      partyName: string;
+      partySlug: string;
+    }
+  ): void {
+    for (const userId of new Set(userIds)) {
+      void this.telegramBotService
+        .enqueueSitePartyMatchNotification(userId, input)
+        .catch((error: unknown) => {
+          console.error("Failed to enqueue website party match notification", error);
+        });
+    }
+  }
+
   emitFriendNotification(userId: string, payload: FriendNotificationPayload): void {
     this.server.to(userRoomName(userId)).emit("friend_notification", payload);
   }

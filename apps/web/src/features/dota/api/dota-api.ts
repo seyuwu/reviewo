@@ -119,6 +119,7 @@ export interface DotaLfgHit {
   greenFlags: DotaLfgFlag[];
   joinMode?: "OPEN" | "CONFIRM";
   memberCount: number | null;
+  matchSource?: "telegram" | "web" | null;
   mmr: string | null;
   ownerUserId: string;
   partyKind: "TEAM" | "PARTY" | null;
@@ -172,6 +173,7 @@ export function setDotaLfgLooking(
   return apiRequest<DotaProfile>("/dota/profiles/lfg/looking", {
     body: {
       looking,
+      source: "web",
       ...(options?.recruitedRoles !== undefined ? { recruitedRoles: options.recruitedRoles } : {}),
       ...(options?.partySlug ? { partySlug: options.partySlug } : {})
     },

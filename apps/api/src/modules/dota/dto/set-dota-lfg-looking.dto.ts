@@ -18,6 +18,10 @@ export class SetDotaLfgLookingDto {
   looking!: boolean;
 
   @IsOptional()
+  @IsIn(["telegram", "web"])
+  source?: "telegram" | "web";
+
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(120)

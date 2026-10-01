@@ -33,4 +33,8 @@ The bot uses long polling and has no inbound port. `/data/dota_bot.db` stores en
 
 ## Acquisition links
 
-Use `https://t.me/FDPdotabot?start=src_seo` for the SEO landing page and `https://t.me/FDPdotabot?start=src_community` for posts in Dota communities. Party invitations keep their separate `party_<code>` payload. The admin panel reports first source, bot starts, accounts ready, searches started, and party joins; users who started before source tracking are grouped under “До меток”.
+Create a short lowercase campaign code for each placement, for example `https://t.me/FDPdotabot?start=src_telegram_group_01`, `https://t.me/FDPdotabot?start=src_tiktok_clip_01`, or `https://t.me/FDPdotabot?start=src_streamer_creator_01`. Supported source prefixes include `seo`, `community`, `telegram`, `discord`, `vk`, `tiktok`, `youtube`, `twitch`, `steam`, `search`, `referral`, `streamer`, and `site`. Keep codes anonymous and within Telegram's 64-character start-payload limit. Party invitations keep their separate `party_<code>` payload.
+
+The FDP website preserves the first UTM/referrer attribution for 30 days and appends the channel and campaign to the Telegram start link. The web admin analytics records tagged FDP landing visits and bot-button clicks per channel. The bot's `/admin` panel reports unique first-touch starts, account setup, searches, entries into parties, and separately created parties by campaign; it also shows repeated searches, party entries, creations, and average elapsed search time for the last 30 days. Users who started before source tracking remain grouped under “До меток”. Historic party milestones included party creation, so those old counts cannot be split retroactively.
+
+See [`docs/marketing/fdp-growth-90-day-execution.md`](../../docs/marketing/fdp-growth-90-day-execution.md) for the campaign-code register, UTM conventions, pilot schedule, budgets, and consent-first outreach templates.

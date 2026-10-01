@@ -11,6 +11,7 @@ export class DotaLfgHitDto {
   /** OPEN = instant join; CONFIRM = application. Solo looking defaults OPEN. */
   joinMode!: "OPEN" | "CONFIRM";
   memberCount!: number | null;
+  matchSource!: "telegram" | "web" | null;
   /** Captain MMR for solo looking; average party MMR when recruiting. */
   mmr!: string | null;
   /** Allowed recruit MMR band computed from the current party roster. */
