@@ -2,7 +2,6 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
-from datetime import UTC, datetime, timedelta
 
 from cryptography.fernet import Fernet
 
@@ -55,76 +54,6 @@ class BotStorageTests(unittest.TestCase):
         self.storage.save_panel(7, 7, 101, "home", is_photo=True)
         self.storage.save_panel(7, 7, 101, "profile", is_photo=False)
         self.assertFalse(self.storage.get_panel(7).is_photo)
-
-    def test_scheduled_panel_refresh_ignores_user_activity(self) -> None:
-        self._make_panel_due(7)
-        scheduled_at = datetime.now(UTC) - timedelta(days=1)
-        screens = ("home",)
-
-        self.storage.record_bot_user(7)
-        self.assertEqual(self.storage.due_panel_refresh_user_ids(scheduled_at, screens), [7])
-
-    def test_scheduled_panel_refresh_ignores_recent_party_notification(self) -> None:
-        self._make_panel_due(7)
-        scheduled_at = datetime.now(UTC) - timedelta(days=1)
-        screens = ("home",)
-
-        self.storage.record_party_notification(7)
-
-        self.assertEqual(self.storage.due_panel_refresh_user_ids(scheduled_at, screens), [7])
-
-    def test_panel_refresh_is_independent_from_broadcast_opt_out(self) -> None:
-        self.storage.record_bot_user(7)
-        self.storage.set_announcements_enabled(7, False)
-        self._make_panel_due(7)
-
-        self.assertEqual(
-            self.storage.due_panel_refresh_user_ids(
-                datetime.now(UTC) - timedelta(days=1),
-                ("home",),
-            ),
-            [7],
-        )
-
-    def test_editing_panel_does_not_reset_position_timer_but_replacing_does(self) -> None:
-        self.storage.save_panel(7, 7, 101, "home")
-        old_timestamp = (datetime.now(UTC) - timedelta(days=3)).isoformat()
-        connection = self.storage._connection()
-        connection.execute(
-            "UPDATE bot_panels SET last_panel_bumped_at = ? WHERE telegram_user_id = 7",
-            (old_timestamp,),
-        )
-        connection.commit()
-
-        self.storage.save_panel(7, 7, 101, "profile")
-        row = connection.execute(
-            "SELECT last_panel_bumped_at FROM bot_panels WHERE telegram_user_id = 7"
-        ).fetchone()
-        self.assertEqual(row[0], old_timestamp)
-
-        self.storage.save_panel(7, 7, 102, "profile")
-        row = connection.execute(
-            "SELECT last_panel_bumped_at FROM bot_panels WHERE telegram_user_id = 7"
-        ).fetchone()
-        self.assertGreater(row[0], old_timestamp)
-
-    def test_panel_refresh_schedule_persists_and_advances_once(self) -> None:
-        first_run = datetime.now(UTC) + timedelta(days=1)
-        next_run = first_run + timedelta(days=2)
-
-        self.assertEqual(
-            self.storage.get_or_create_panel_refresh_schedule(first_run),
-            first_run,
-        )
-        self.assertTrue(self.storage.advance_panel_refresh_schedule(first_run, next_run))
-        self.storage.close()
-        self.storage = BotStorage(self.database_path, self.key)
-        self.storage.initialize()
-        self.assertEqual(
-            self.storage.get_or_create_panel_refresh_schedule(first_run),
-            next_run,
-        )
-        self.assertFalse(self.storage.advance_panel_refresh_schedule(first_run, next_run))
 
     def test_linking_a_website_account_clears_guest_recovery_url(self) -> None:
         self.storage.save_session(7, "guest-access", "guest-refresh", "https://opinia/recover/guest")
@@ -188,23 +117,6 @@ class BotStorageTests(unittest.TestCase):
         self.assertEqual(self.storage.auto_match_exclusions(7), {"player-one"})
         self.storage.clear_auto_match_exclusions(7)
         self.assertEqual(self.storage.auto_match_exclusions(7), set())
-
-    def _make_panel_due(self, telegram_user_id: int) -> None:
-        self.storage.record_bot_user(telegram_user_id)
-        self.storage.save_panel(telegram_user_id, telegram_user_id, 101, "home")
-        old_timestamp = (datetime.now(UTC) - timedelta(days=3)).isoformat()
-        connection = self.storage._connection()
-        connection.execute(
-            "UPDATE bot_panels SET last_panel_bumped_at = ? WHERE telegram_user_id = ?",
-            (old_timestamp, telegram_user_id),
-        )
-        connection.execute(
-            "UPDATE bot_users SET last_seen_at = ?, last_party_notification_at = NULL "
-            "WHERE telegram_user_id = ?",
-            (old_timestamp, telegram_user_id),
-        )
-        connection.commit()
-
 
 if __name__ == "__main__":
     unittest.main()
