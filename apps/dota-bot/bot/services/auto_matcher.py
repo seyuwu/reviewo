@@ -15,6 +15,14 @@ ROLE_VALUES = {"1", "2", "3", "4", "5"}
 SOLO_GROUP_MMR_SPREAD = 1500
 
 
+def _is_current_solo_search(storage, telegram_user_id: int, search: dict) -> bool:
+    current = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
+    return (
+        current.get("mode") == "looking"
+        and current.get("startedAt") == search.get("startedAt")
+    )
+
+
 async def auto_match_loop(
     bot,
     api: OpiniaApi,
@@ -264,14 +272,35 @@ async def _match_user(
 
     try:
         profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
+        # The user may have started creating a party while this background pass
+        # was waiting on the API. Do not let this stale pass redraw their panel.
+        if not _is_current_solo_search(storage, telegram_user_id, search):
+            return
         if not profile.get("looking"):
             storage.set_choices(telegram_user_id, "auto_search", [])
             storage.clear_auto_match_exclusions(telegram_user_id)
-            await edit_panel(bot, storage, api, settings, telegram_user_id, "home")
+            my_parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
+            panel = storage.get_panel(telegram_user_id)
+            if panel and panel.screen != "looking":
+                return
+            party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
+            await edit_panel(
+                bot,
+                storage,
+                api,
+                settings,
+                telegram_user_id,
+                "party" if party else "home",
+            )
             return
 
         my_parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
+        if not _is_current_solo_search(storage, telegram_user_id, search):
+            return
         if my_parties.get("party") or my_parties.get("parties"):
+            panel = storage.get_panel(telegram_user_id)
+            if panel and panel.screen == "loading":
+                return
             storage.set_choices(telegram_user_id, "auto_search", [])
             await edit_panel(bot, storage, api, settings, telegram_user_id, "party")
             return
@@ -289,6 +318,8 @@ async def _match_user(
             "GET",
             f"/dota/profiles/lfg?{urlencode(params)}",
         )
+        if not _is_current_solo_search(storage, telegram_user_id, search):
+            return
         excluded = storage.auto_match_exclusions(telegram_user_id)
         candidates = []
         for candidate in candidates_response.get("results", []):

@@ -393,11 +393,27 @@ async def execute_recruiting(
     telegram_user_id: int,
     chat_id: int | None,
 ) -> None:
-    await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
+    previous_search = storage.get_choice(telegram_user_id, "auto_search", 0)
+    restore_search_on_failure = bool(
+        previous_search and previous_search.get("mode") == "looking"
+    )
+    # Stop the solo matcher before any network wait. It may already be checking
+    # this user and otherwise redraw a stale home/party panel over this action.
+    storage.set_choices(telegram_user_id, "auto_search", [])
+    party_created = False
+    try:
+        await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
+    except Exception:
+        if restore_search_on_failure:
+            storage.set_choices(telegram_user_id, "auto_search", [previous_search])
+        raise
+
     try:
         my_parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
         party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
         if party:
+            storage.clear_auto_match_exclusions(telegram_user_id)
+            storage.clear_search_timer(telegram_user_id)
             await edit_panel(bot, storage, api, settings, telegram_user_id, "party", chat_id)
             await send_party_search_tip_if_pending(bot, storage, telegram_user_id, chat_id)
             return
@@ -408,6 +424,9 @@ async def execute_recruiting(
             "/social/parties",
             {"kind": "PARTY"},
         )
+        party_created = True
+        # Party creation clears the server-side solo-search flag too.
+        storage.clear_auto_match_exclusions(telegram_user_id)
         storage.clear_search_timer(telegram_user_id)
         storage.record_party_created(telegram_user_id)
 
@@ -431,12 +450,16 @@ async def execute_recruiting(
             f"/social/parties/{slug}/join-mode",
             {"joinMode": "OPEN"},
         )
-        storage.set_choices(telegram_user_id, "auto_search", [])
-        storage.clear_auto_match_exclusions(telegram_user_id)
         await edit_panel(bot, storage, api, settings, telegram_user_id, "party", chat_id)
         await send_party_search_tip_if_pending(bot, storage, telegram_user_id, chat_id)
     except ApiError as error:
+        if restore_search_on_failure and not party_created:
+            storage.set_choices(telegram_user_id, "auto_search", [previous_search])
         await show_action_error(bot, api, settings, storage, telegram_user_id, chat_id, error)
+    except Exception:
+        if restore_search_on_failure and not party_created:
+            storage.set_choices(telegram_user_id, "auto_search", [previous_search])
+        raise
 
 
 async def send_party_search_tip_if_pending(

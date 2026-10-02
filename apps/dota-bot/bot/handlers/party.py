@@ -89,7 +89,9 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
         if event_type == "party_updated":
             parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
             active = parties.get("party") or ((parties.get("parties") or [None])[-1])
-            screen = "party" if active and active.get("slug") == payload.get("partySlug") else "home"
+            # Membership is authoritative: a delayed event for an old party
+            # must not replace the user's current party panel with the home screen.
+            screen = "party" if active else "home"
             await edit_panel(bot, storage, api, settings, telegram_user_id, screen)
             return True
         if event_type == "site_party_match":

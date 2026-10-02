@@ -249,10 +249,8 @@ export class PartiesController {
 
     const party = await this.gamePartiesService.createAutoMatchedSoloParty(input, currentUser);
     this.gamePartyGateway.broadcastPartyUpdated(party);
-    this.gamePartyGateway.notifyTelegramPartyRosterUpdated(
-      party.members.map((member) => member.userId),
-      party.slug
-    );
+    // The bot caller refreshes all matched users' panels after this response.
+    // The service already enqueues per-player member_joined notifications.
     return party;
   }
 
