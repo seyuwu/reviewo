@@ -1716,6 +1716,25 @@ export const ruMessages: MessageDictionary = {
   "web.admin.analytics.telegramSoloSearch": "Ищут пати",
   "web.admin.analytics.telegramRecruitingParties": "Пати набирают игроков",
   "web.admin.analytics.telegramOpenSlots": "Открытые слоты в поиске",
+  "web.admin.analytics.searchHistoryTitle": "История поиска Dota",
+  "web.admin.analytics.searchHistoryHint":
+    "Точка — один поиск. По вертикали показано его время, по горизонтали — когда он начался. Зелёный цвет означает, что игрок вступил в пати; красный — поиск завершился без результата. Показаны последние 200 поисков за выбранный период.",
+  "web.admin.analytics.searchHistorySolo": "Ищу пати",
+  "web.admin.analytics.searchHistoryRecruit": "Набор игроков в пати",
+  "web.admin.analytics.searchHistoryFound": "Найден игрок / пати",
+  "web.admin.analytics.searchHistoryFoundPlayers": "Нашлись игроки: {count}",
+  "web.admin.analytics.searchHistoryNotFound": "Не нашёл пати",
+  "web.admin.analytics.searchHistoryActive": "Ищет сейчас",
+  "web.admin.analytics.searchHistoryEmpty": "За этот период поисков пока нет.",
+  "web.admin.analytics.searchHistoryCount": "Показано поисков: {count}",
+  "web.admin.analytics.searchHistoryChart": "График длительности поисков",
+  "web.admin.analytics.searchHistoryDuration": "Длительность поиска",
+  "web.admin.analytics.searchHistoryPlayer": "Игрок / пати",
+  "web.admin.analytics.searchHistoryStarted": "Начало поиска",
+  "web.admin.analytics.searchHistoryResult": "Результат",
+  "web.admin.analytics.searchHistorySource": "Где искал",
+  "web.admin.analytics.searchHistorySource.telegram": "Telegram",
+  "web.admin.analytics.searchHistorySource.web": "Сайт",
   "web.admin.analytics.totalsTitle": "Итого за период",
   "web.admin.analytics.uniques": "Уники за день",
   "web.admin.analytics.uniqueVisitorDays": "Уник·дни",
@@ -2202,7 +2221,8 @@ export const ruMessages: MessageDictionary = {
   "dota.team.expiryWarnBody": "Продли, если ещё играете",
   "dota.team.extendWhileVoiceHint": "Войс жив — продли пати, чтобы не сдохло mid-game",
   "dota.team.discordVoiceReadyToast": "Войс пати готов",
-  "dota.team.discordVoiceReadyBody": "Зайди через кнопку «Войс» или открой созданный канал по ссылке в уведомлении",
+  "dota.team.discordVoiceReadyBody":
+    "Зайди через кнопку «Войс» или открой созданный канал по ссылке в уведомлении",
   "dota.team.discordVoiceReadyOpen": "Открыть канал",
   "dota.team.system.discord_voice_ready": "Discord voice готов — зайди через кнопку «Войс»",
   "dota.team.system.discord_voice_ready_link": " или перейди прямо в канал:",
@@ -2288,8 +2308,7 @@ export const ruMessages: MessageDictionary = {
   "dota.team.discordLinkTitle": "Привяжи Discord",
   "dota.team.discordLinkLead":
     "Один раз — чтобы в войс пати пускали только тебя, не всех с сервера. Спросим только кто ты.",
-  "dota.team.discordLinkError":
-    "Не удалось завершить привязку Discord. Попробуй ещё раз позже.",
+  "dota.team.discordLinkError": "Не удалось завершить привязку Discord. Попробуй ещё раз позже.",
   "dota.team.discordLinkAlreadyUsed":
     "Этот Discord уже привязан к другому аккаунту Opinia. Войди в тот аккаунт и отвяжи Discord в профиле, затем попробуй снова.",
   "dota.team.discordLinkNotConfigured":

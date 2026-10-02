@@ -1709,6 +1709,25 @@ export const enMessages = {
   "web.admin.analytics.telegramSoloSearch": "Looking for a party",
   "web.admin.analytics.telegramRecruitingParties": "Parties recruiting",
   "web.admin.analytics.telegramOpenSlots": "Open slots being searched",
+  "web.admin.analytics.searchHistoryTitle": "Dota search history",
+  "web.admin.analytics.searchHistoryHint":
+    "Each point is one search. The vertical axis shows its duration; the horizontal axis shows when it started. Green means a player joined a party; red means the search ended without a match. Shows the latest 200 searches in the selected period.",
+  "web.admin.analytics.searchHistorySolo": "Looking for a party",
+  "web.admin.analytics.searchHistoryRecruit": "Party recruiting players",
+  "web.admin.analytics.searchHistoryFound": "Match found",
+  "web.admin.analytics.searchHistoryFoundPlayers": "Players found: {count}",
+  "web.admin.analytics.searchHistoryNotFound": "No party found",
+  "web.admin.analytics.searchHistoryActive": "Searching now",
+  "web.admin.analytics.searchHistoryEmpty": "No searches in this period yet.",
+  "web.admin.analytics.searchHistoryCount": "Searches shown: {count}",
+  "web.admin.analytics.searchHistoryChart": "Search duration chart",
+  "web.admin.analytics.searchHistoryDuration": "Search duration",
+  "web.admin.analytics.searchHistoryPlayer": "Player / party",
+  "web.admin.analytics.searchHistoryStarted": "Search started",
+  "web.admin.analytics.searchHistoryResult": "Result",
+  "web.admin.analytics.searchHistorySource": "Source",
+  "web.admin.analytics.searchHistorySource.telegram": "Telegram",
+  "web.admin.analytics.searchHistorySource.web": "Website",
   "web.admin.analytics.totalsTitle": "Totals for period",
   "web.admin.analytics.uniques": "Daily uniques",
   "web.admin.analytics.uniqueVisitorDays": "Unique·days",
@@ -2195,7 +2214,8 @@ export const enMessages = {
   "dota.team.expiryWarnBody": "Extend now if you’re still playing",
   "dota.team.extendWhileVoiceHint": "Voice is live — extend so the party doesn’t die mid-game",
   "dota.team.discordVoiceReadyToast": "Party voice is ready",
-  "dota.team.discordVoiceReadyBody": "Join via the Voice button or open the created channel using this notification",
+  "dota.team.discordVoiceReadyBody":
+    "Join via the Voice button or open the created channel using this notification",
   "dota.team.discordVoiceReadyOpen": "Open channel",
   "dota.team.system.discord_voice_ready": "Discord voice is ready — join via the Voice button",
   "dota.team.system.discord_voice_ready_link": " or go directly to the channel:",
@@ -2282,8 +2302,7 @@ export const enMessages = {
   "dota.team.discordLinkTitle": "Link Discord",
   "dota.team.discordLinkLead":
     "One-time — so only you can join party voice, not everyone on the server. We only ask who you are.",
-  "dota.team.discordLinkError":
-    "Could not complete Discord linking. Please try again later.",
+  "dota.team.discordLinkError": "Could not complete Discord linking. Please try again later.",
   "dota.team.discordLinkAlreadyUsed":
     "This Discord account is already linked to another Opinia account. Sign in to that account and unlink Discord from its profile, then try again.",
   "dota.team.discordLinkNotConfigured":

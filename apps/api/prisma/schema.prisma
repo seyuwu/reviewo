@@ -1150,6 +1150,31 @@ model GameParty {
   @@schema("social")
 }
 
+/// Tracks solo and party-recruit searches across the site and Telegram bot.
+/// Partial unique indexes are migration-managed.
+model DotaSearchSession {
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  partyId            String?   @map("party_id") @db.Uuid
+  partyName          String?   @map("party_name") @db.VarChar(80)
+  searchType         String    @default("SOLO") @map("search_type") @db.VarChar(16)
+  source             String    @db.VarChar(16)
+  status             String    @default("SEARCHING") @db.VarChar(16)
+  initialMemberCount Int       @default(1) @map("initial_member_count")
+  matchedCount       Int       @default(0) @map("matched_count")
+  startedAt          DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  expiresAt          DateTime  @map("expires_at") @db.Timestamptz(6)
+  finishedAt         DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  @@index([startedAt])
+  @@index([status, expiresAt])
+  @@index([searchType, startedAt])
+  @@index([userId, searchType, status], map: "dota_search_sessions_user_search_type_status_idx")
+  @@index([partyId, searchType, status], map: "dota_search_sessions_party_search_type_status_idx")
+  @@map("dota_search_sessions")
+  @@schema("social")
+}
+
 model GamePartyMember {
   id           String              @id @default(uuid()) @db.Uuid
   partyId      String              @map("party_id") @db.Uuid

@@ -34,6 +34,7 @@ import {
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
+import { DotaSearchHistoryService } from "../../analytics/services/dota-search-history.service.js";
 import { AuthService } from "../../auth/services/auth.service.js";
 import { JwtTokenService } from "../../auth/services/jwt-token.service.js";
 import { EntitiesRepository } from "../../entities/repositories/entities.repository.js";
@@ -84,6 +85,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly authService: AuthService,
     private readonly discordVoiceService: DiscordVoiceService,
+    private readonly dotaSearchHistoryService: DotaSearchHistoryService,
     private readonly entityAttributesRepository: EntityAttributesRepository,
     private readonly entityQualityConfirmationsRepository: EntityQualityConfirmationsRepository,
     private readonly entitiesRepository: EntitiesRepository,
@@ -256,6 +258,10 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
+    for (const member of input.members) {
+      this.dotaSearchHistoryService.finishSoloSearch(member.userId, "JOINED");
+    }
+
     const party = await this.toPartyResponse(result.party, currentUser.id);
     this.partyRealtimeService.broadcastPartyRecruitUpdated({
       looking: party.recruitedRoles.length > 0,
@@ -263,6 +269,17 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       partySlug: party.slug,
       recruitedRoles: party.recruitedRoles
     });
+
+    if (party.recruitedRoles.length > 0) {
+      this.dotaSearchHistoryService.startPartyRecruitSearch({
+        expiresAt: new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000),
+        initialMemberCount: result.party.members.length,
+        partyId: result.party.id,
+        partyName: result.party.name,
+        source: searchSource,
+        userId: result.party.ownerUserId
+      });
+    }
 
     if (notifyMembersJoined) {
       for (const member of result.party.members) {
@@ -1061,7 +1078,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    await this.clearLookingForUser(joiningUserId);
+    await this.clearLookingForUser(joiningUserId, undefined, "JOINED");
     await this.refreshRecruitLookingAttributes(party.ownerUserId, party.id);
     await this.gamePartiesRepository.deleteJoinBlock(party.id, joiningUserId);
 
@@ -1390,7 +1407,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
         );
         await this.emitAutoClosedNotifications(closedSameRole, recruitParty);
 
-        await this.clearLookingForUser(currentUser.id);
+        await this.clearLookingForUser(currentUser.id, undefined, "JOINED");
         await this.refreshRecruitLookingAttributes(recruitParty.ownerUserId, recruitParty.id);
 
         const loaded = await this.loadPartyResponse(recruitParty.id, currentUser.id);
@@ -1790,7 +1807,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     await this.emitCrossPartyApplicationCancellations(joined.cancelledApplications);
 
     if (party.kind === "PARTY") {
-      await this.clearLookingForUser(currentUser.id);
+      await this.clearLookingForUser(currentUser.id, undefined, "JOINED");
     }
 
     const updated = await this.gamePartiesRepository.findById(party.id);
@@ -2115,6 +2132,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
 
       await this.assertDiscordVoiceRemoved(party.discordChannelId);
       await this.gamePartiesRepository.deleteParty(party.id);
+      this.dotaSearchHistoryService.stopPartyRecruitSearch(party.id);
       await this.clearLookingForUser(currentUser.id, party.slug);
       return { ok: true };
     }
@@ -2166,6 +2184,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     await this.emitAutoClosedNotifications(closed, party);
     await this.assertDiscordVoiceRemoved(party.discordChannelId);
     await this.gamePartiesRepository.deleteParty(party.id);
+    this.dotaSearchHistoryService.stopPartyRecruitSearch(party.id);
     await this.clearLookingForUser(currentUser.id, party.slug);
     return { ok: true };
   }
@@ -2783,6 +2802,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       }
 
       await this.gamePartiesRepository.deleteParty(full.id);
+      this.dotaSearchHistoryService.stopPartyRecruitSearch(full.id);
     } catch (error) {
       if (isPrismaErrorCode(error, "P2025")) {
         // Already deleted concurrently.
@@ -3175,7 +3195,11 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async clearLookingForUser(userId: string, expectedPartySlug?: string): Promise<void> {
+  private async clearLookingForUser(
+    userId: string,
+    expectedPartySlug?: string,
+    searchOutcome: "JOINED" | "CANCELLED" = "CANCELLED"
+  ): Promise<void> {
     const entity = await this.entitiesRepository.findByOwnerUserId(userId);
 
     if (!entity) {
@@ -3204,11 +3228,19 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
         [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: "",
         [DOTA_ATTRIBUTE_KEYS.lfgUntil]: new Date(0).toISOString()
       },
-      partySlugToClear ? { expectedPartySlug: partySlugToClear } : undefined
+      {
+        ...(partySlugToClear ? { expectedPartySlug: partySlugToClear } : {})
+      }
     );
 
     if (!wasCleared) {
       return;
+    }
+
+    if (partySlugToClear) {
+      this.dotaSearchHistoryService.stopPartyRecruitSearchBySlug(partySlugToClear);
+    } else {
+      this.dotaSearchHistoryService.finishSoloSearch(userId, searchOutcome);
     }
 
     if (partySlug) {
@@ -3254,6 +3286,8 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       await this.clearLookingForUser(ownerUserId, partySlug);
       return;
     }
+
+    this.dotaSearchHistoryService.updatePartyRecruitMemberCount(party.id, party.members.length);
 
     if (this.isExpired(party)) {
       await this.clearLookingForUser(ownerUserId, party.slug);

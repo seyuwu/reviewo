@@ -116,8 +116,35 @@ export class EntityAttributesRepository {
           where: { entityId_key: { entityId, key } }
         });
       }
+
       return true;
     });
+  }
+
+  async getDotaSearchConversionStats(): Promise<{
+    completedSearches30d: number;
+    searchesJoinedParty30d: number;
+  }> {
+    const startedAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [row] = await this.prismaService.$queryRaw<
+      Array<{ completed_searches: number; joined_searches: number }>
+    >`
+      SELECT
+        COUNT(*)::int AS completed_searches,
+        COUNT(*) FILTER (WHERE status = 'JOINED')::int AS joined_searches
+      FROM social.dota_search_sessions
+      WHERE search_type = 'SOLO'
+        AND started_at >= ${startedAfter}
+        AND (
+          status IN ('JOINED', 'CANCELLED', 'EXPIRED')
+          OR (status = 'SEARCHING' AND expires_at <= NOW())
+        )
+    `;
+
+    return {
+      completedSearches30d: Number(row?.completed_searches ?? 0),
+      searchesJoinedParty30d: Number(row?.joined_searches ?? 0)
+    };
   }
 
   async findByEntityId(entityId: string): Promise<Record<string, string>> {
@@ -283,6 +310,48 @@ export class EntityAttributesRepository {
         visibility: "ACTIVE"
       }
     });
+  }
+
+  async countLookingDotaPlayers(): Promise<number> {
+    const nowIso = new Date().toISOString();
+    const [row] = await this.prismaService.$queryRaw<Array<{ player_count: number }>>`
+      SELECT COALESCE(
+        SUM(
+          CASE
+            WHEN COALESCE(recruiting.value, '') = '' THEN 1
+            WHEN active_party.id IS NULL THEN 0
+            ELSE (
+              SELECT COUNT(*)::int
+              FROM social.game_party_members AS member
+              WHERE member.party_id = active_party.id
+            )
+          END
+        ),
+        0
+      )::int AS player_count
+      FROM entities.entities AS profile
+      JOIN entities.entity_attributes AS vertical
+        ON vertical.entity_id = profile.id
+        AND vertical.key = ${DOTA_ATTRIBUTE_KEYS.vertical}
+        AND vertical.value = ${DOTA_VERTICAL}
+      JOIN entities.entity_attributes AS lfg
+        ON lfg.entity_id = profile.id
+        AND lfg.key = ${DOTA_ATTRIBUTE_KEYS.lfgUntil}
+        AND lfg.value > ${nowIso}
+      LEFT JOIN entities.entity_attributes AS recruiting
+        ON recruiting.entity_id = profile.id
+        AND recruiting.key = ${DOTA_ATTRIBUTE_KEYS.lfgPartySlug}
+      LEFT JOIN social.game_parties AS active_party
+        ON active_party.slug = recruiting.value
+        AND active_party.vertical = ${DOTA_PARTY_VERTICAL}
+        AND active_party.merged_into_slug IS NULL
+        AND (active_party.expires_at IS NULL OR active_party.expires_at > NOW())
+      WHERE profile.type = 'person'
+        AND profile.visibility = 'ACTIVE'
+        AND profile.owner_user_id IS NOT NULL
+    `;
+
+    return Number(row?.player_count ?? 0);
   }
 
   isUniqueConstraintError(error: unknown): boolean {

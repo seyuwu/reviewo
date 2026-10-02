@@ -1,5 +1,9 @@
 import { apiRequest } from "../../../lib/api/api-client";
-import type { AnalyticsOverview } from "../types/admin-analytics";
+import type {
+  AnalyticsOverview,
+  DotaSearchHistoryItem,
+  DotaSearchType
+} from "../types/admin-analytics";
 
 export function fetchAdminAnalyticsOverview(
   accessToken: string,
@@ -10,4 +14,19 @@ export function fetchAdminAnalyticsOverview(
       authorization: `Bearer ${accessToken}`
     }
   });
+}
+
+export function fetchAdminDotaSearchHistory(
+  accessToken: string,
+  days: number,
+  type: DotaSearchType
+): Promise<DotaSearchHistoryItem[]> {
+  return apiRequest<DotaSearchHistoryItem[]>(
+    `/admin/analytics/dota-searches?days=${days}&type=${type}&limit=200`,
+    {
+      headers: {
+        authorization: `Bearer ${accessToken}`
+      }
+    }
+  );
 }

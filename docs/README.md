@@ -22,6 +22,13 @@ This directory is the long-term home for project documentation. Content is being
 | [11-rfc/0014-community-recommendations.md](./11-rfc/0014-community-recommendations.md) | RFC 0014: Community Recommendations — recommendation vs placement, enriched `/spotlight` feed, endorsements |
 | [11-rfc/0015-person-entities-and-quality-confirmations.md](./11-rfc/0015-person-entities-and-quality-confirmations.md) | RFC 0015: Person entities, quality confirmations, Dota vertical API |
 
+## FDP growth
+
+| Path | Description |
+| ---- | ----------- |
+| [marketing/fdp-growth-90-day-execution.md](./marketing/fdp-growth-90-day-execution.md) | FDP: текущая продовая аналитика, источники, ссылки кампаний и план продвижения |
+| [marketing/growth-strategy-tiers.md](./marketing/growth-strategy-tiers.md) | Актуальные приоритеты продвижения FDP по тирам и критерии оценки каналов |
+
 ## RFCs
 
 Request for Comments documents propose architectural changes before implementation.

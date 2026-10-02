@@ -121,6 +121,12 @@ class OpiniaApi:
         )
         return result if isinstance(result, list) else []
 
+    async def search_metrics(self) -> dict:
+        result = await self._request(
+            "GET", "/dota/profiles/admin/search-metrics", bot_secret=True
+        )
+        return result if isinstance(result, dict) else {}
+
     async def record_notification_delivery(
         self, notification_id: str, telegram_user_id: int, delivered: bool
     ) -> None:

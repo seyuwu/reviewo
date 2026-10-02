@@ -22,6 +22,7 @@ import type { RequestLike } from "../../../common/rate-limiting/api-rate-limiter
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
 import type { AuthenticatedUser } from "../../../common/interfaces/authenticated-request.js";
+import { DotaSearchHistoryService } from "../../analytics/services/dota-search-history.service.js";
 import { AuthService } from "../../auth/services/auth.service.js";
 import { EntitiesRepository } from "../../entities/repositories/entities.repository.js";
 import { createSlug } from "../../entities/services/entity-slug.js";
@@ -59,6 +60,7 @@ interface DotaAttributeInput {
 export class DotaProfileService {
   constructor(
     private readonly authService: AuthService,
+    private readonly dotaSearchHistoryService: DotaSearchHistoryService,
     private readonly entitiesRepository: EntitiesRepository,
     private readonly entityAttributesRepository: EntityAttributesRepository,
     private readonly entityQualityConfirmationsRepository: EntityQualityConfirmationsRepository,
@@ -381,6 +383,21 @@ export class DotaProfileService {
     return { results };
   }
 
+  async getSearchMetrics(): Promise<{
+    completedSearches30d: number;
+    searchesJoinedParty30d: number;
+    searchingPlayers: number;
+  }> {
+    const [conversion, searchingPlayers] = await Promise.all([
+      this.entityAttributesRepository.getDotaSearchConversionStats(),
+      this.entityAttributesRepository.countLookingDotaPlayers()
+    ]);
+    return {
+      ...conversion,
+      searchingPlayers
+    };
+  }
+
   async setLooking(
     looking: boolean,
     currentUser: AuthenticatedUser,
@@ -448,11 +465,25 @@ export class DotaProfileService {
       });
     }
 
+    if (looking) {
+      this.dotaSearchHistoryService.startSoloSearch({
+        expiresAt: new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000),
+        source,
+        userId: currentUser.id
+      });
+    } else {
+      this.dotaSearchHistoryService.finishSoloSearch(currentUser.id, "CANCELLED");
+    }
+
     if (broadcastSlug) {
       const party = await this.gamePartiesRepository.findByVerticalAndSlug(
         DOTA_PARTY_VERTICAL,
         broadcastSlug
       );
+
+      if (party) {
+        this.dotaSearchHistoryService.stopPartyRecruitSearch(party.id);
+      }
 
       this.partyRealtimeService.broadcastPartyRecruitUpdated({
         looking: false,
@@ -598,6 +629,29 @@ export class DotaProfileService {
         message: "This party has changed. Refresh and try again.",
         statusCode: HttpStatus.CONFLICT
       });
+    }
+
+    if (previousPartySlug && previousPartySlug !== party.slug) {
+      const previousParty = await this.gamePartiesRepository.findByVerticalAndSlug(
+        DOTA_PARTY_VERTICAL,
+        previousPartySlug
+      );
+      if (previousParty) {
+        this.dotaSearchHistoryService.stopPartyRecruitSearch(previousParty.id);
+      }
+    }
+
+    if (looking) {
+      this.dotaSearchHistoryService.startPartyRecruitSearch({
+        expiresAt: new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000),
+        initialMemberCount: party.members.length,
+        partyId: party.id,
+        partyName: party.name,
+        source,
+        userId: party.ownerUserId
+      });
+    } else {
+      this.dotaSearchHistoryService.stopPartyRecruitSearch(party.id);
     }
 
     const recruitedRoles = looking

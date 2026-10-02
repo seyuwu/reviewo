@@ -216,7 +216,12 @@ async def edit_panel(
                     pass
 
     elif panel and panel.chat_id == destination and not panel.is_photo:
-        if not loading_panel and photo is not None and (isinstance(photo, BufferedInputFile) or screen != "party"):
+        if (
+            screen != "admin"
+            and not loading_panel
+            and photo is not None
+            and (isinstance(photo, BufferedInputFile) or screen != "party")
+        ):
             # Send the replacement first; the old text panel is removed after delivery succeeds.
             pass
         else:

@@ -1002,6 +1002,7 @@ async def complete_registration(
             await api.user(callback.from_user.id, "POST", "/dota/profiles", profile)
         else:
             created = await api.public("POST", "/dota/profiles/guest", profile)
+            storage.record_funnel_event(callback.from_user.id, "account_created")
             storage.save_session(
                 callback.from_user.id,
                 created["accessToken"],

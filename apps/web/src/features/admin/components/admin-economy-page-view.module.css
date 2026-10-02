@@ -57,6 +57,58 @@
   text-transform: uppercase;
 }
 
+.searchHistoryLegendItem {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  gap: 0.45rem;
+}
+
+.searchHistoryJoinedMark,
+.searchHistoryMissedMark,
+.searchHistoryActiveMark {
+  border-radius: 50%;
+  display: inline-block;
+  height: 0.65rem;
+  width: 0.65rem;
+}
+
+.searchHistoryJoinedMark {
+  background: #22c55e;
+}
+
+.searchHistoryMissedMark {
+  background: #ef4444;
+}
+
+.searchHistoryActiveMark {
+  background: #94a3b8;
+}
+
+.searchHistoryChartWrap {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.searchHistoryChart {
+  display: block;
+  height: auto;
+  min-width: 42rem;
+  overflow: visible;
+  width: 100%;
+}
+
+.searchHistoryChartGrid {
+  stroke: var(--color-card-border);
+  stroke-dasharray: 3 5;
+  stroke-width: 1;
+}
+
+.searchHistoryChartLabel {
+  fill: var(--color-text-muted);
+  font-size: 11px;
+}
+
 .adminContributorList {
   display: grid;
   gap: 0.75rem;

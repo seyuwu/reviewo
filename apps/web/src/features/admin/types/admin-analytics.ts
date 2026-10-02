@@ -33,3 +33,17 @@ export interface AnalyticsOverview {
   };
   topCtas: Array<{ clicks: number; ctaKey: string }>;
 }
+
+export type DotaSearchType = "SOLO" | "RECRUIT";
+
+export interface DotaSearchHistoryItem {
+  durationSeconds: number;
+  id: string;
+  matchedCount: number;
+  partyName: string | null;
+  searchType: DotaSearchType;
+  source: "telegram" | "web";
+  startedAt: string;
+  status: "ACTIVE" | "JOINED" | "CANCELLED" | "EXPIRED";
+  userName: string;
+}

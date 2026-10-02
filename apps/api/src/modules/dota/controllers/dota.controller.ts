@@ -26,6 +26,7 @@ import { createDotaConfirmationRateLimitRules } from "../../../common/rate-limit
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
 import { OptionalJwtAuthGuard } from "../../auth/guards/optional-jwt-auth.guard.js";
 import { GamesLaunchService } from "../../games-launch/services/games-launch.service.js";
+import { TelegramBotService } from "../../telegram/telegram-bot.service.js";
 import { ConfirmDotaQualitiesDto } from "../dto/confirm-dota-qualities.dto.js";
 import { CreateDotaProfileDto } from "../dto/create-dota-profile.dto.js";
 import { DotaProfileResponseDto } from "../dto/dota-profile-response.dto.js";
@@ -43,7 +44,8 @@ export class DotaController {
   constructor(
     private readonly apiRateLimiterService: ApiRateLimiterService,
     private readonly dotaProfileService: DotaProfileService,
-    private readonly gamesLaunchService: GamesLaunchService
+    private readonly gamesLaunchService: GamesLaunchService,
+    private readonly telegramBotService: TelegramBotService
   ) {}
 
   @Post("guest")
@@ -90,6 +92,18 @@ export class DotaController {
       ...(query.server ? { server: query.server } : {}),
       ...(currentUser?.id ? { viewerUserId: currentUser.id } : {})
     });
+  }
+
+  @Get("admin/search-metrics")
+  async getAdminSearchMetrics(
+    @Headers("x-telegram-bot-secret") botSecret?: string
+  ): Promise<{
+    completedSearches30d: number;
+    searchesJoinedParty30d: number;
+    searchingPlayers: number;
+  }> {
+    this.telegramBotService.assertBotSecret(botSecret);
+    return this.dotaProfileService.getSearchMetrics();
   }
 
   @Post("lfg/looking")

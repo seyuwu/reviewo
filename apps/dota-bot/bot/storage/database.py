@@ -268,6 +268,7 @@ class BotStorage:
 
     def record_funnel_event(self, telegram_user_id: int, event_type: str) -> None:
         if event_type not in {
+            "account_created",
             "account_ready",
             "search_started",
             "party_joined",
@@ -391,6 +392,62 @@ class BotStorage:
             source = str(row["acquisition_source"])
             funnel.setdefault(source, {})[str(row["event_type"])] = int(row["total"])
         recent_since = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+        metric_row = connection.execute(
+            """WITH search_events AS (
+                     SELECT telegram_user_id, occurred_at
+                     FROM bot_funnel_events
+                     WHERE event_type = 'search_started'
+                     UNION ALL
+                     SELECT telegram_user_id, occurred_at
+                     FROM bot_activity_events
+                     WHERE event_type = 'search_started'
+                 ),
+                 party_created_events AS (
+                     SELECT telegram_user_id, occurred_at
+                     FROM bot_funnel_events
+                     WHERE event_type = 'party_created'
+                     UNION ALL
+                     SELECT telegram_user_id, occurred_at
+                     FROM bot_activity_events
+                     WHERE event_type = 'party_created'
+                 ),
+                 party_joined_events AS (
+                     SELECT telegram_user_id, occurred_at
+                     FROM bot_funnel_events
+                     WHERE event_type = 'party_joined'
+                     UNION ALL
+                     SELECT telegram_user_id, occurred_at
+                     FROM bot_activity_events
+                     WHERE event_type = 'party_joined'
+                 )
+                 SELECT
+                   (SELECT COUNT(DISTINCT telegram_user_id)
+                    FROM bot_funnel_events
+                    WHERE event_type = 'account_created' AND occurred_at >= ?)
+                     AS accounts_created_30d,
+                   (SELECT COUNT(DISTINCT account.telegram_user_id)
+                    FROM bot_funnel_events AS account
+                    WHERE account.event_type = 'account_created'
+                      AND account.occurred_at >= ?
+                      AND EXISTS (
+                        SELECT 1 FROM search_events AS search
+                        WHERE search.telegram_user_id = account.telegram_user_id
+                          AND search.occurred_at >= account.occurred_at
+                          AND search.occurred_at >= ?
+                      )) AS account_search_users_30d,
+                   (SELECT COUNT(DISTINCT telegram_user_id)
+                    FROM search_events WHERE occurred_at >= ?) AS search_users_30d,
+                   (SELECT COUNT(DISTINCT telegram_user_id)
+                    FROM party_created_events WHERE occurred_at >= ?) AS party_created_users_30d,
+                   (SELECT COUNT(DISTINCT telegram_user_id)
+                    FROM party_joined_events WHERE occurred_at >= ?) AS party_joined_users_30d,
+                   (SELECT AVG(duration_seconds)
+                    FROM bot_activity_events
+                    WHERE event_type = 'search_result'
+                      AND duration_seconds IS NOT NULL
+                      AND occurred_at >= ?) AS avg_search_seconds_30d""",
+            (recent_since,) * 7,
+        ).fetchone()
         campaign_rows = connection.execute(
             """SELECT acquisition_source, acquisition_campaign, COUNT(*) AS starts,
                       SUM(CASE WHEN first_seen_at >= ? THEN 1 ELSE 0 END) AS starts_30d
@@ -513,7 +570,20 @@ class BotStorage:
             )
             average = row["avg_seconds"]
             campaign["avg_seconds_to_party"] = int(average) if average is not None else None
-        return {"sources": sources, "funnel": funnel, "campaigns": list(campaigns.values())}
+        return {
+            "sources": sources,
+            "funnel": funnel,
+            "campaigns": list(campaigns.values()),
+            "accounts_created_30d": int(metric_row["accounts_created_30d"] or 0),
+            "account_search_users_30d": int(metric_row["account_search_users_30d"] or 0),
+            "search_users_30d": int(metric_row["search_users_30d"] or 0),
+            "party_created_users_30d": int(metric_row["party_created_users_30d"] or 0),
+            "party_joined_users_30d": int(metric_row["party_joined_users_30d"] or 0),
+            "avg_search_seconds_30d": (
+                int(metric_row["avg_search_seconds_30d"])
+                if metric_row["avg_search_seconds_30d"] is not None else None
+            ),
+        }
 
     def set_announcements_enabled(self, telegram_user_id: int, enabled: bool) -> None:
         self.record_bot_user(telegram_user_id)

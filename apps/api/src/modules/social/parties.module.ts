@@ -1,6 +1,7 @@
 import { Module, forwardRef } from "@nestjs/common";
 
 import { RateLimitingModule } from "../../common/rate-limiting/rate-limiting.module.js";
+import { AnalyticsModule } from "../analytics/analytics.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { DotaModule } from "../dota/dota.module.js";
 import { EntitiesModule } from "../entities/entities.module.js";
@@ -27,6 +28,7 @@ import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
     PARTY_REALTIME_PUBLISHER
   ],
   imports: [
+    AnalyticsModule,
     AuthModule,
     forwardRef(() => DotaModule),
     EntitiesModule,
