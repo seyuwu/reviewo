@@ -11,6 +11,7 @@ from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
 from ..services.party_notifications import deliver_join_hint
+from ..services.temporary_notifications import send_temporary_notification
 from ..ui.keyboards import back_keyboard, invite_keyboard
 from ..ui.formatters import notification_text
 from ..services.auto_matcher import remember_declined_target
@@ -159,12 +160,15 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
                     "Could not refresh party panel before roster notification",
                     exc_info=True,
                 )
-            message = await bot.send_message(
+            await send_temporary_notification(
+                bot,
+                storage,
+                telegram_user_id,
                 telegram_user_id,
                 notification_text(payload),
+                10,
                 parse_mode="HTML",
             )
-            storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
             storage.record_party_notification(telegram_user_id)
             return True
         if event_type in {"member_left", "member_kicked"}:
@@ -175,12 +179,15 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
                     "Could not refresh party panel before roster notification",
                     exc_info=True,
                 )
-            message = await bot.send_message(
+            await send_temporary_notification(
+                bot,
+                storage,
+                telegram_user_id,
                 telegram_user_id,
                 notification_text(payload),
+                10,
                 parse_mode="HTML",
             )
-            storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
             storage.record_party_notification(telegram_user_id)
             return True
         if event_type == "accepted":
@@ -190,8 +197,14 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
                     bot, api, storage, telegram_user_id, settings.site_url, party_slug
                 )
             else:
-                message = await bot.send_message(telegram_user_id, notification_text(payload))
-                storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
+                await send_temporary_notification(
+                    bot,
+                    storage,
+                    telegram_user_id,
+                    telegram_user_id,
+                    notification_text(payload),
+                    10,
+                )
                 storage.record_party_notification(telegram_user_id)
             return True
 

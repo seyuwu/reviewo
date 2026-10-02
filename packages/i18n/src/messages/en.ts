@@ -2195,8 +2195,10 @@ export const enMessages = {
   "dota.team.expiryWarnBody": "Extend now if you’re still playing",
   "dota.team.extendWhileVoiceHint": "Voice is live — extend so the party doesn’t die mid-game",
   "dota.team.discordVoiceReadyToast": "Party voice is ready",
-  "dota.team.discordVoiceReadyBody": "Teammates join via the Voice button",
+  "dota.team.discordVoiceReadyBody": "Join via the Voice button or open the created channel using this notification",
+  "dota.team.discordVoiceReadyOpen": "Open channel",
   "dota.team.system.discord_voice_ready": "Discord voice is ready — join via the Voice button",
+  "dota.team.system.discord_voice_ready_link": " or go directly to the channel:",
   "dota.team.system.party_safety":
     "⚠ Safety: do not open links from chat. Add each other in Dota only by Dota ID via in-game search — never via third-party links.",
   "dota.team.system.party_merged":
@@ -2281,7 +2283,9 @@ export const enMessages = {
   "dota.team.discordLinkLead":
     "One-time — so only you can join party voice, not everyone on the server. We only ask who you are.",
   "dota.team.discordLinkError":
-    "Could not link Discord. Click Join again, or check the OAuth client secret.",
+    "Could not complete Discord linking. Please try again later.",
+  "dota.team.discordLinkAlreadyUsed":
+    "This Discord account is already linked to another Opinia account. Sign in to that account and unlink Discord from its profile, then try again.",
   "dota.team.discordLinkNotConfigured":
     "Discord OAuth is not configured: set DISCORD_OAUTH_CLIENT_SECRET in .env.development and add the redirect in the Discord portal.",
   "dota.team.discordVoiceError": "Couldn’t open Discord voice. Try again.",

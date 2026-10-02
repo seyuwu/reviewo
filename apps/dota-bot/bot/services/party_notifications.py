@@ -5,6 +5,7 @@ from aiogram.types import InlineKeyboardMarkup
 from ..api.client import ApiError
 from ..storage.database import BotStorage
 from ..ui.keyboards import button_login, button_url
+from .temporary_notifications import send_temporary_notification
 
 
 async def deliver_join_hint(
@@ -30,14 +31,17 @@ async def deliver_join_hint(
         # Keep the existing Telegram Login flow as a fallback if ticket issuance is unavailable.
         link = f"{site_url.rstrip('/')}/telegram/access?next={quote(next_path, safe='')}"
         open_button = button_login(button_text, link)
-    message = await bot.send_message(
+    await send_temporary_notification(
+        bot,
+        storage,
+        telegram_user_id,
         telegram_user_id,
         message_text,
+        10,
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [open_button]
             ]
         ),
     )
-    storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
     storage.record_party_notification(telegram_user_id)

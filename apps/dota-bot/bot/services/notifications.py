@@ -70,4 +70,4 @@ async def cleanup_temporary_messages(bot: Bot, storage: BotStorage) -> None:
             raise
         except Exception:
             logger.exception("Temporary message cleanup failed")
-        await asyncio.sleep(3)
+        await asyncio.sleep(1)

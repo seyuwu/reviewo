@@ -259,7 +259,17 @@ export class AuthController {
             ? error.message
             : "unknown";
       console.warn(`[discord-oauth] callback failed: ${message}`);
-      response.redirect(this.authService.resolveDiscordLinkFailureRedirect(stateValue, "exchange"));
+      const statusCode =
+        error &&
+        typeof error === "object" &&
+        "getStatus" in error &&
+        typeof (error as { getStatus?: unknown }).getStatus === "function"
+          ? (error as { getStatus: () => number }).getStatus()
+          : null;
+      const failureReason = statusCode === 409 ? "already_linked" : "exchange";
+      response.redirect(
+        this.authService.resolveDiscordLinkFailureRedirect(stateValue, failureReason)
+      );
     }
   }
 

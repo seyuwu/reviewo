@@ -19,6 +19,7 @@ from aiogram.types import (
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..storage.database import BotStorage
+from .temporary_notifications import send_temporary_notification
 from ..ui.formatters import party_text, profile_text
 from ..ui.keyboards import (
     account_keyboard,
@@ -489,20 +490,18 @@ async def maybe_send_long_search_reminder(
             "🎮 Ищем пати в Dota 2? Заходи в FDP — подберём команду по ролям и MMR: "
             f"{invite_url}\n@{me.username}"
         )
-        message = await bot.send_message(
+        await send_temporary_notification(
+            bot,
+            storage,
+            telegram_user_id,
             telegram_user_id,
             "⏳ Ищем пати уже 3 минуты\n"
             "Мы только начинаем, поэтому игроков пока немного. Если ты уже нашёл пати в другом месте — "
             "поделись ботом с ребятами из неё и с друзьями. Чем больше игроков здесь, тем быстрее и "
             "удобнее будет поиск 💜",
+            15,
             reply_markup=bot_invitation_copy_keyboard(invitation_text),
             disable_web_page_preview=True,
-        )
-        storage.add_temporary_message(
-            telegram_user_id,
-            message.chat.id,
-            message.message_id,
-            15,
         )
         storage.set_choices(
             telegram_user_id,

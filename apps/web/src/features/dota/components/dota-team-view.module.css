@@ -2234,6 +2234,16 @@
   font-size: 0.84rem;
 }
 
+.chatMessageLink {
+  color: #c4b5fd;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.chatMessageLink:hover {
+  color: #e9d5ff;
+}
+
 .chatForm {
   align-items: stretch;
   display: grid;

@@ -12,6 +12,7 @@ from aiogram.exceptions import (
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..storage.database import BotStorage
+from .temporary_notifications import send_temporary_notification
 
 logger = logging.getLogger(__name__)
 SEND_INTERVAL_SECONDS = 0.05
@@ -100,9 +101,13 @@ async def _send_completion_report(bot: Bot, storage: BotStorage, campaign: dict)
         f"Ошибок: {summary['failed']}."
     )
     try:
-        message = await bot.send_message(campaign["admin_user_id"], report)
-        storage.add_temporary_message(
-            campaign["admin_user_id"], message.chat.id, message.message_id, 10
+        await send_temporary_notification(
+            bot,
+            storage,
+            campaign["admin_user_id"],
+            campaign["admin_user_id"],
+            report,
+            10,
         )
     except TelegramAPIError:
         logger.warning("Could not send completion report for broadcast %s", campaign["campaign_id"])

@@ -16,6 +16,7 @@ from ..services.panel import (
     edit_panel_content,
 )
 from ..services.start_links import parse_acquisition_tag, parse_party_start_payload
+from ..services.temporary_notifications import send_temporary_notification
 from ..storage.database import BotStorage
 from ..ui.formatters import party_text
 from ..ui.keyboards import (
@@ -122,14 +123,17 @@ async def share_party_link(
             roles_text = ", ".join(ROLE_NAMES[role] for role in roles) or "мест пока нет"
         share_text = f"🎮 Заходи ко мне в пати Dota 2!\nИщем: {roles_text}.\nВыбери роль в боте:"
         copy_text = f"{share_text}\n\n{invite_url}"
-        message = await callback.bot.send_message(
+        await send_temporary_notification(
+            callback.bot,
+            storage,
+            callback.from_user.id,
             callback.from_user.id,
             f"{escape(share_text)}\n\n<a href=\"{escape(telegram_app_url)}\">{escape(invite_url)}</a>\n\nЭто сообщение удалится через 10 секунд. Нажмите «Скопировать текст», чтобы отправить приглашение.",
+            10,
             reply_markup=party_invitation_copy_keyboard(copy_text),
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
-        storage.add_temporary_message(callback.from_user.id, message.chat.id, message.message_id, 10)
     except ApiError as error:
         await edit_panel_content(
             callback.bot, storage, api, settings, callback.from_user.id, "party:share-error",

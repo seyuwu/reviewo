@@ -721,6 +721,14 @@ class BotStorage:
         ).fetchall()
         return [(row["telegram_user_id"], row["chat_id"], row["message_id"]) for row in rows]
 
+    def has_short_lived_temporary_message(self, telegram_user_id: int) -> bool:
+        cutoff = (datetime.now(UTC) + timedelta(seconds=30)).isoformat()
+        return self._connection().execute(
+            """SELECT 1 FROM temporary_messages
+               WHERE telegram_user_id = ? AND delete_at <= ? LIMIT 1""",
+            (telegram_user_id, cutoff),
+        ).fetchone() is not None
+
     def remove_temporary_message(self, chat_id: int, message_id: int) -> None:
         with self.lock:
             self._connection().execute(

@@ -20,6 +20,7 @@ from ..services.solo_search import (
     PartyOwnerMustResolveMembers,
     start_solo_search,
 )
+from ..services.temporary_notifications import send_temporary_notification
 from ..storage.database import BotStorage
 from ..ui.keyboards import (
     back_keyboard,
@@ -29,6 +30,7 @@ from ..ui.keyboards import (
 
 router = Router(name="search")
 logger = logging.getLogger(__name__)
+_party_search_tip_locks: dict[int, asyncio.Lock] = {}
 
 
 @router.callback_query(F.data == "search:looking")
@@ -122,18 +124,13 @@ async def begin_recruiting(
     storage: BotStorage,
     match_wakeup: asyncio.Event,
 ) -> None:
-    if storage.get_choice(callback.from_user.id, "party_slot_search_tip_seen", 0) is None:
+    if storage.get_choice(callback.from_user.id, "party_slot_search_tip_message_sent", 0) is None:
         storage.set_choices(
             callback.from_user.id,
-            "party_slot_search_tip_seen",
-            [{"seenAt": time.time()}],
+            "party_slot_search_tip_message_pending",
+            [{"requestedAt": time.time()}],
         )
-        acknowledge_callback(
-            callback,
-            "Поиск сам не начнётся: нажмите «Искать» под нужным слотом или «Искать на всех свободных».",
-        )
-    else:
-        acknowledge_callback(callback)
+    acknowledge_callback(callback)
     if callback.message is None:
         return
     await start_selected_action(
@@ -402,6 +399,7 @@ async def execute_recruiting(
         party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
         if party:
             await edit_panel(bot, storage, api, settings, telegram_user_id, "party", chat_id)
+            await send_party_search_tip_if_pending(bot, storage, telegram_user_id, chat_id)
             return
 
         party = await api.user(
@@ -436,8 +434,53 @@ async def execute_recruiting(
         storage.set_choices(telegram_user_id, "auto_search", [])
         storage.clear_auto_match_exclusions(telegram_user_id)
         await edit_panel(bot, storage, api, settings, telegram_user_id, "party", chat_id)
+        await send_party_search_tip_if_pending(bot, storage, telegram_user_id, chat_id)
     except ApiError as error:
         await show_action_error(bot, api, settings, storage, telegram_user_id, chat_id, error)
+
+
+async def send_party_search_tip_if_pending(
+    bot,
+    storage,
+    telegram_user_id: int,
+    chat_id: int | None,
+) -> None:
+    lock = _party_search_tip_locks.setdefault(telegram_user_id, asyncio.Lock())
+    async with lock:
+        if (
+            storage.get_choice(telegram_user_id, "party_slot_search_tip_message_sent", 0)
+            is not None
+            or storage.get_choice(
+                telegram_user_id, "party_slot_search_tip_message_pending", 0
+            )
+            is None
+        ):
+            return
+
+        try:
+            await send_temporary_notification(
+                bot,
+                storage,
+                telegram_user_id,
+                chat_id or telegram_user_id,
+                "ℹ️ <b>Как запустить поиск игроков</b>\n\n"
+                "Создание пати не запускает поиск автоматически. Нажмите «Искать» под нужной свободной ролью, "
+                "чтобы искать игрока на неё. Или нажмите «🔎 Искать на всех свободных», "
+                "чтобы искать сразу на все свободные роли.",
+                7,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except TelegramAPIError:
+            logger.warning("Could not send party search tip to Telegram user %s", telegram_user_id)
+            return
+
+        storage.set_choices(
+            telegram_user_id,
+            "party_slot_search_tip_message_sent",
+            [{"sentAt": time.time()}],
+        )
+        storage.set_choices(telegram_user_id, "party_slot_search_tip_message_pending", [])
 
 
 @router.callback_query(F.data == "search:stop")
@@ -514,30 +557,36 @@ async def show_action_error(
 
 async def send_dota_id_reminder(bot, storage, telegram_user_id: int, chat_id: int | None) -> None:
     try:
-        message = await bot.send_message(
+        await send_temporary_notification(
+            bot,
+            storage,
+            telegram_user_id,
             chat_id or telegram_user_id,
             "🎮 Dota ID не указан. Нажмите кнопку, чтобы сразу ввести его. "
             "Это необязательно; уведомление исчезнет через 10 секунд.",
+            10,
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [InlineKeyboardButton(text="🎮 Добавить Dota ID", callback_data="profile:dota-id")]
                 ]
             ),
         )
-        storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
     except TelegramAPIError:
         logger.warning("Could not send Dota ID reminder to Telegram user %s", telegram_user_id)
 
 
 async def send_roles_reminder(bot, storage, telegram_user_id: int, chat_id: int | None) -> None:
     try:
-        message = await bot.send_message(
+        await send_temporary_notification(
+            bot,
+            storage,
+            telegram_user_id,
             chat_id or telegram_user_id,
             "🎯 Проверьте, все ли игровые позиции указаны в профиле: автоподбор ищет пати по ним. "
             "Изменить позиции можно в «Аккаунт» → «Профиль» → «Изменить». "
             "Это уведомление исчезнет через 10 секунд.",
+            10,
         )
-        storage.add_temporary_message(telegram_user_id, message.chat.id, message.message_id, 10)
     except TelegramAPIError:
         logger.warning("Could not send role reminder to Telegram user %s", telegram_user_id)
 

@@ -6,12 +6,13 @@
 
 .hero {
   background:
-    radial-gradient(circle at 86% 22%, rgb(236 72 153 / 12%), transparent 24%),
-    radial-gradient(circle at 72% 75%, rgb(139 92 246 / 14%), transparent 30%),
-    linear-gradient(135deg, #fff 0%, #fdfaff 52%, #f8f2ff 100%);
+    radial-gradient(circle at 86% 22%, rgb(236 72 153 / 18%), transparent 24%),
+    radial-gradient(circle at 72% 75%, rgb(139 92 246 / 24%), transparent 30%),
+    linear-gradient(135deg, #171321 0%, #20152f 52%, #281735 100%);
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card-lg);
   box-shadow: var(--shadow-card);
+  color: #f4f4f8;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(15rem, 32%);
   min-height: 18rem;
@@ -71,6 +72,7 @@
 }
 
 .heroCopy h1 {
+  color: #fff;
   font-size: clamp(1.8rem, 3vw, 2.6rem);
   letter-spacing: -0.04em;
   line-height: 1;
@@ -79,7 +81,7 @@
 }
 
 .heroCopy > p {
-  color: var(--color-text-muted);
+  color: #d1c8df;
   font-size: 0.85rem;
   margin: 0;
 }
@@ -98,18 +100,22 @@
   justify-content: space-between;
 }
 
+.heroTrustLabel strong {
+  color: #e5ddf0;
+}
+
 .heroTrustLabel span {
-  color: var(--color-accent-strong);
+  color: #c4a5ff;
   font-weight: 800;
 }
 
 .heroTrust small {
-  color: var(--color-text-muted);
+  color: #bdb2ce;
   font-size: 0.7rem;
 }
 
 .progressTrack {
-  background: #ececf3;
+  background: rgb(255 255 255 / 16%);
   border-radius: 999px;
   height: 0.38rem;
   overflow: hidden;
@@ -136,7 +142,7 @@
 }
 
 .heroOrb {
-  background: radial-gradient(circle, rgb(255 255 255 / 94%), rgb(233 213 255 / 72%) 46%, transparent 68%);
+  background: radial-gradient(circle, rgb(196 165 255 / 38%), rgb(124 58 237 / 20%) 46%, transparent 68%);
   height: 17rem;
   left: 50%;
   position: absolute;
@@ -367,10 +373,10 @@
 
 .gameCard {
   align-items: center;
-  background: linear-gradient(180deg, #fff, #fafafa);
+  background: linear-gradient(180deg, rgb(255 255 255 / 7%), rgb(255 255 255 / 3%));
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
-  color: inherit;
+  color: var(--color-text);
   display: grid;
   gap: 0.4rem;
   justify-items: center;
@@ -381,7 +387,7 @@
 }
 
 .dotaCard {
-  background: linear-gradient(145deg, rgb(239 68 68 / 8%), #fff 65%);
+  background: linear-gradient(145deg, rgb(239 68 68 / 13%), var(--color-surface) 70%);
   border-color: rgb(239 68 68 / 18%);
 }
 
@@ -403,6 +409,7 @@
 }
 
 .gameCard strong {
+  color: var(--color-text);
   font-size: 0.78rem;
 }
 

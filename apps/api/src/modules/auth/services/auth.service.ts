@@ -797,7 +797,13 @@ function createInvalidRecoveryTokenException(): Error {
   });
 }
 
-const SAFE_DISCORD_FAILURE_REASONS = new Set(["access_denied", "denied", "error", "exchange"]);
+const SAFE_DISCORD_FAILURE_REASONS = new Set([
+  "access_denied",
+  "already_linked",
+  "denied",
+  "error",
+  "exchange"
+]);
 
 function sanitizeDiscordFailureReason(reason: string): string {
   const normalized = reason.trim().toLowerCase().slice(0, 64);

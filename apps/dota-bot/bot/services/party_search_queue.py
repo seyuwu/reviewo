@@ -12,6 +12,7 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..storage.database import BotStorage
 from .panel import edit_panel
+from .temporary_notifications import send_temporary_notification
 
 logger = logging.getLogger(__name__)
 ROLES = {"1", "2", "3", "4", "5"}
@@ -362,12 +363,13 @@ class PartySearchQueue:
 
     async def _send_error(self, telegram_user_id: int, chat_id: int) -> None:
         try:
-            message = await self.bot.send_message(
+            await send_temporary_notification(
+                self.bot,
+                self.storage,
+                telegram_user_id,
                 chat_id,
                 "Не удалось обновить поиск. Попробуйте нажать ещё раз.",
-            )
-            self.storage.add_temporary_message(
-                telegram_user_id, message.chat.id, message.message_id, 10
+                10,
             )
         except TelegramAPIError:
             logger.info(

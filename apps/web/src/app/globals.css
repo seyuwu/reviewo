@@ -3839,6 +3839,7 @@ h1 {
 .profile-details {
   display: grid;
   gap: 1.25rem;
+  min-width: 0;
 }
 
 .profile-avatar {
@@ -4842,12 +4843,15 @@ h1 {
   border: 1px solid var(--color-card-border);
   border-radius: 1.25rem;
   background: rgb(255 255 255 / 78%);
+  min-width: 0;
   padding: 1rem;
+  width: 100%;
 }
 
 .profile-settings-panel {
   display: grid;
   gap: 1rem;
+  min-width: 0;
   scroll-margin-top: 5rem;
 }
 
@@ -4859,6 +4863,20 @@ h1 {
 
 .profile-settings-panel .profile-actions {
   grid-column: 1 / -1;
+}
+
+.profile-settings-panel .profile-details > * {
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .profile-settings-panel .profile-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profile-settings-panel .profile-actions {
+    grid-column: auto;
+  }
 }
 
 .profile-edit-form .primary-button {

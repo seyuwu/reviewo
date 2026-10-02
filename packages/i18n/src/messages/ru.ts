@@ -2202,8 +2202,10 @@ export const ruMessages: MessageDictionary = {
   "dota.team.expiryWarnBody": "Продли, если ещё играете",
   "dota.team.extendWhileVoiceHint": "Войс жив — продли пати, чтобы не сдохло mid-game",
   "dota.team.discordVoiceReadyToast": "Войс пати готов",
-  "dota.team.discordVoiceReadyBody": "Тиммейты заходят через кнопку «Войс»",
+  "dota.team.discordVoiceReadyBody": "Зайди через кнопку «Войс» или открой созданный канал по ссылке в уведомлении",
+  "dota.team.discordVoiceReadyOpen": "Открыть канал",
   "dota.team.system.discord_voice_ready": "Discord voice готов — зайди через кнопку «Войс»",
+  "dota.team.system.discord_voice_ready_link": " или перейди прямо в канал:",
   "dota.team.system.party_safety":
     "⚠ Безопасность: не переходите по чужим ссылкам из чата. Друзей в Dota добавляйте только по Dota ID через поиск в игре — не по сторонним ссылкам.",
   "dota.team.system.party_merged": "Пати объединились. Капитан выбран случайно из прежних лидеров.",
@@ -2287,7 +2289,9 @@ export const ruMessages: MessageDictionary = {
   "dota.team.discordLinkLead":
     "Один раз — чтобы в войс пати пускали только тебя, не всех с сервера. Спросим только кто ты.",
   "dota.team.discordLinkError":
-    "Не удалось привязать Discord. Нажми Join ещё раз или проверь Client Secret в Discord Developer Portal.",
+    "Не удалось завершить привязку Discord. Попробуй ещё раз позже.",
+  "dota.team.discordLinkAlreadyUsed":
+    "Этот Discord уже привязан к другому аккаунту Opinia. Войди в тот аккаунт и отвяжи Discord в профиле, затем попробуй снова.",
   "dota.team.discordLinkNotConfigured":
     "OAuth Discord не настроен: в .env.development нужен DISCORD_OAUTH_CLIENT_SECRET и redirect в портале.",
   "dota.team.discordVoiceError": "Не удалось открыть Discord voice. Попробуй ещё раз.",

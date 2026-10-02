@@ -272,10 +272,19 @@ function formatRemainingVoiceExpiry(
 
 function resolveChatDisplayText(
   message: string,
-  t: ReturnType<typeof useTranslation>
-): { isSystem: boolean; text: string } {
+  t: ReturnType<typeof useTranslation>,
+  discordInviteUrl: string | null | undefined
+): { discordInviteUrl?: string; isSystem: boolean; text: string } {
   if (message === "__system__:discord_voice_ready") {
-    return { isSystem: true, text: t("dota.team.system.discord_voice_ready") };
+    const directLinkCopy = discordInviteUrl
+      ? t("dota.team.system.discord_voice_ready_link")
+      : "";
+
+    return {
+      discordInviteUrl: discordInviteUrl ?? undefined,
+      isSystem: true,
+      text: `${t("dota.team.system.discord_voice_ready")}${directLinkCopy}`
+    };
   }
 
   if (message === "__system__:party_safety") {
@@ -497,7 +506,11 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
     if (discordStatus === "error") {
       window.sessionStorage.removeItem(PENDING_DISCORD_VOICE_JOIN_KEY);
       window.sessionStorage.removeItem(`${PENDING_DISCORD_VOICE_JOIN_LOCK_PREFIX}${party.slug}`);
-      setError(t("dota.team.discordLinkError"));
+      setError(
+        searchParams.get("discordReason") === "already_linked"
+          ? t("dota.team.discordLinkAlreadyUsed")
+          : t("dota.team.discordLinkError")
+      );
       const next = new URLSearchParams(searchParams.toString());
       next.delete("discord");
       next.delete("discordReason");
@@ -932,7 +945,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
               knownDiscordInviteRef.current = nextInvite;
               pushToast({
                 body: t("dota.team.discordVoiceReadyBody"),
-                ctaLabel: t("dota.team.discordVoiceJoin"),
+                ctaLabel: t("dota.team.discordVoiceReadyOpen"),
                 href: nextInvite,
                 id: `discord-voice-ready-${nextParty.id}`,
                 title: t("dota.team.discordVoiceReadyToast")
@@ -1848,7 +1861,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
         }));
         pushToast({
           body: t("dota.team.discordVoiceReadyBody"),
-          ctaLabel: t("dota.team.discordVoiceJoin"),
+          ctaLabel: t("dota.team.discordVoiceReadyOpen"),
           href: share.inviteUrl,
           id: `discord-voice-ready-${party.id}`,
           title: t("dota.team.discordVoiceReadyToast")
@@ -3484,7 +3497,11 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                 <p className={styles.chatEmpty}>{t("dota.team.chatEmpty")}</p>
               ) : (
                 chatMessages.map((message) => {
-                  const display = resolveChatDisplayText(message.message, t);
+                  const display = resolveChatDisplayText(
+                    message.message,
+                    t,
+                    party.discordInviteUrl
+                  );
 
                   return (
                     <article
@@ -3498,7 +3515,22 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                       )}
                       <div className={styles.chatMessageBody}>
                         {display.isSystem ? null : <strong>{message.displayName}</strong>}
-                        <span>{display.text}</span>
+                        <span>
+                          {display.text}
+                          {display.discordInviteUrl ? (
+                            <>
+                              {" "}
+                              <a
+                                className={styles.chatMessageLink}
+                                href={display.discordInviteUrl}
+                                rel="noopener noreferrer"
+                                target="_blank"
+                              >
+                                {display.discordInviteUrl}
+                              </a>
+                            </>
+                          ) : null}
+                        </span>
                       </div>
                     </article>
                   );

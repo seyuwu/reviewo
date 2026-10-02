@@ -11,6 +11,7 @@ from ..api.client import OpiniaApi
 from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import edit_panel_content
+from ..services.temporary_notifications import send_temporary_notification
 from ..storage.database import BotStorage
 from ..ui.keyboards import (
     admin_compose_keyboard,
@@ -196,8 +197,14 @@ async def open_admin(
     if message.chat.type != "private" or message.from_user is None:
         return
     if not is_admin(settings, message.from_user.id):
-        denied = await message.answer("Нет доступа к панели администратора.")
-        storage.add_temporary_message(message.from_user.id, denied.chat.id, denied.message_id, 5)
+        await send_temporary_notification(
+            message.bot,
+            storage,
+            message.from_user.id,
+            message.chat.id,
+            "Нет доступа к панели администратора.",
+            5,
+        )
         return
     await state.clear()
     storage.record_bot_user(message.from_user.id)
