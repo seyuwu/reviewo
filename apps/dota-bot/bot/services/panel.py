@@ -542,7 +542,7 @@ async def render_screen(
             return (
                 "<b>Аккаунт</b>\n\n"
                 "Создайте Dota-профиль или войдите в существующий аккаунт Opinia.\n\n"
-                "Если окно перестало работать, отправьте /start — бот откроет его заново.",
+                "Удалили окно бота? Отправьте /start — бот пришлёт новое. Удалённое сообщение восстановить нельзя.",
                 account_keyboard(False, False, False),
             )
         return (
@@ -640,7 +640,7 @@ async def render_screen(
             text = (
                 "<b>Аккаунт</b>\n\n"
                 "Создайте Dota-профиль или привяжите аккаунт Opinia.\n\n"
-                "Если окно перестало работать, отправьте /start — бот откроет его заново."
+                "Удалили окно бота? Отправьте /start — бот пришлёт новое. Удалённое сообщение восстановить нельзя."
             )
         else:
             text = (
@@ -648,7 +648,7 @@ async def render_screen(
                 f"Игрок: <b>{escape_text(profile.get('title') or 'Игрок')}</b> · "
                 f"{escape_text(profile.get('mmr') or '—')} MMR\n"
                 f"Opinia: {'привязан к Telegram' if session else 'не привязан'}\n\n"
-                "Если окно перестало работать, отправьте /start — бот откроет его заново."
+                "Удалили окно бота? Отправьте /start — бот пришлёт новое. Удалённое сообщение восстановить нельзя."
             )
         invites = [item for item in my_parties.get("invites", []) if item.get("status") == "PENDING"]
         return (
