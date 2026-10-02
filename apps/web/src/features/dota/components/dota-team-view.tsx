@@ -281,7 +281,7 @@ function resolveChatDisplayText(
       : "";
 
     return {
-      discordInviteUrl: discordInviteUrl ?? undefined,
+      ...(discordInviteUrl ? { discordInviteUrl } : {}),
       isSystem: true,
       text: `${t("dota.team.system.discord_voice_ready")}${directLinkCopy}`
     };
