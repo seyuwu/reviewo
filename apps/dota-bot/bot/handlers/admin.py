@@ -59,49 +59,99 @@ def _acquisition_text(stats: dict) -> str:
         "streamer": "Стример",
         "site": "Сайт",
         "other": "Другой канал",
-        "party_invite": "Приглашения",
-        "direct": "Прямой вход",
-        "existing": "До меток",
+        "party_invite": "Приглашение в пати",
+        "direct": "Без метки (прямой запуск)",
+        "existing": "Без метки (старые пользователи)",
     }
     campaigns = stats.get("campaigns", [])
+
+    def total(name: str) -> int:
+        return sum(int(campaign.get(name, 0) or 0) for campaign in campaigns)
+
+    searched_players = total("search_users_30d")
+    search_starts = total("search_events_30d")
+    found_players = total("search_party_users_30d")
+    found_joins = total("search_party_events_30d")
+    joined_players = total("party_users_30d")
+    join_events = total("party_events_30d")
+    party_creators = total("party_created_users_30d")
+    party_creations = total("party_created_30d")
+    duration_total = total("search_party_duration_total_30d")
+    duration_samples = total("search_party_duration_samples_30d")
+
+    lines = [
+        "Поиск и результат за последние 30 дней",
+        f"🔎 Искали: {searched_players} игроков · запусков поиска: {search_starts}",
+        f"🎯 Нашли пати через поиск: {found_players} игроков · вступлений: {found_joins}",
+        f"👥 Вступили в пати любым способом: {joined_players} игроков · вступлений: {join_events}",
+        f"➕ Создали пати: {party_creators} игроков · созданий: {party_creations}",
+    ]
+    if duration_samples:
+        average = duration_total // duration_samples
+        minutes, seconds = divmod(average, 60)
+        lines.append(
+            f"⏱ От поиска до вступления: в среднем {minutes}:{seconds:02d} "
+            f"({duration_samples} замеров)"
+        )
+    else:
+        lines.append("⏱ Время до пати появится после первых завершённых поисков.")
+
     if not campaigns:
-        return "Пока нет данных по источникам.\nСобытия начнут учитываться после запуска бота."
-    lines = []
-    shown_count = min(len(campaigns), 12)
-    for campaign in campaigns[:shown_count]:
+        lines.append("\nИсточники первого перехода пока не накопили данных.")
+        return "\n".join(lines)
+
+    lines.extend(("", "Источники первого перехода"))
+    footer = (
+        "\n\nИгроки — уникальные люди за период; запуски и вступления — повторные действия. "
+        "«Нашли через поиск» — вступили в пати по результату ботового или сайтового подбора; "
+        "приглашения входят только в общее число вступлений. "
+        "Новая классификация начинает собирать результаты после обновления; "
+        "старые вступления задним числом не размечаются. "
+        "Старую воронку вступлений не показываем: раньше она смешивала вступления и создание пати."
+    )
+    campaign_lines = []
+    for campaign in campaigns:
         source = campaign["source"]
         label = source_names.get(source, source)
         code = campaign.get("campaign")
         if code:
             label += f" / {code}"
         recent_funnel = campaign.get("funnel_30d", {})
-        search_events = campaign.get("search_events_30d", 0)
-        party_events = campaign.get("party_events_30d", 0)
-        party_created = campaign.get("party_created_30d", 0)
-        activity = (
-            f"поиск ×{search_events} · вступления ×{party_events} · "
-            f"создано ×{party_created} за 30 дн."
-        )
         average = campaign.get("avg_seconds_to_party")
-        if average is not None:
+        average_text = ""
+        samples = campaign.get("search_party_duration_samples_30d", 0)
+        if average is not None and samples:
             minutes, seconds = divmod(average, 60)
-            activity += f" · до найденной пати ~{minutes}:{seconds:02d}"
-        lines.append(
-            f"{label}: за 30 дн. {campaign.get('starts_30d', 0)} стартов → "
-            f"{recent_funnel.get('account_ready', 0)} аккаунт → "
-            f"{recent_funnel.get('search_started', 0)} поиск → "
-            f"{recent_funnel.get('party_joined', 0)} вступили, "
-            f"{recent_funnel.get('party_created', 0)} создали "
-            f"({campaign['starts']} старта всего)\n"
-            f"  {activity}"
+            average_text = f" · среднее до пати {minutes}:{seconds:02d}"
+        campaign_lines.append(
+            f"{label}: новые пользователи (первый запуск за 30 дн.) — "
+            f"{campaign.get('starts_30d', 0)} · всего — {campaign['starts']}\n"
+            f"  Этапы впервые достигнуты за 30 дн. (включая старых пользователей): "
+            f"аккаунт {recent_funnel.get('account_ready', 0)} · "
+            f"начали поиск {recent_funnel.get('search_started', 0)}\n"
+            f"  Поиск: {campaign.get('search_users_30d', 0)} игроков / "
+            f"{campaign.get('search_events_30d', 0)} запусков · нашли пати через поиск: "
+            f"{campaign.get('search_party_users_30d', 0)} игроков / "
+            f"{campaign.get('search_party_events_30d', 0)} вступлений\n"
+            f"  Вступили всего: {campaign.get('party_users_30d', 0)} игроков / "
+            f"{campaign.get('party_events_30d', 0)} раз · создали пати: "
+            f"{campaign.get('party_created_users_30d', 0)} игроков / "
+            f"{campaign.get('party_created_30d', 0)} раз{average_text}"
         )
-    if len(campaigns) > shown_count:
-        lines.append(f"Ещё кампаний: {len(campaigns) - shown_count}")
-    return (
-        "Источники (первый переход) → аккаунт → поиск → пати:\n"
-        + "\n".join(lines)
-        + "\n\nДо обновления аналитики создание пати также попадало в старый счётчик вступлений."
-    )
+    shown_count = 0
+    text_limit = 3000  # Leave room for the admin header, user totals, and broadcast status.
+    for index, campaign_line in enumerate(campaign_lines, start=1):
+        candidate_lines = [*lines, campaign_line]
+        if index < len(campaign_lines):
+            candidate_lines.append(f"Показаны {index} из {len(campaign_lines)} источников/кампаний.")
+        candidate = "\n".join(candidate_lines) + footer
+        if len(candidate.encode("utf-16-le")) // 2 > text_limit:
+            break
+        lines.append(campaign_line)
+        shown_count = index
+    if shown_count < len(campaign_lines):
+        lines.append(f"Показаны {shown_count} из {len(campaign_lines)} источников/кампаний.")
+    return "\n".join(lines) + footer
 
 
 async def show_admin_panel(
@@ -120,7 +170,7 @@ async def show_admin_panel(
         f"Запустили бота: <b>{stats['total']}</b>\n"
         f"Пользователей с сессией: <b>{stats['registered']}</b>\n"
         f"Получают объявления: <b>{stats['subscribers']}</b>\n\n"
-        f"<b>Переходы в FDP</b>\n{escape(_acquisition_text(acquisition))}\n\n"
+        f"<b>Поиск и переходы в FDP</b>\n{escape(_acquisition_text(acquisition))}\n\n"
         f"{escape(_last_broadcast_text(storage.broadcast_summary()))}"
     )
     if notice:

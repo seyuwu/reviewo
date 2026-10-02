@@ -262,7 +262,9 @@ async def finish_party_join(bot, api, settings, storage, telegram_user_id: int, 
             )
             return
         storage.set_choices(telegram_user_id, "pending_party_invite", [])
-        storage.record_party_joined(telegram_user_id, completes_search=True)
+        # Joining from an invitation is not a search result, even if the user
+        # happened to have a search timer running before opening the invite.
+        storage.record_party_joined(telegram_user_id, clear_search_timer=True)
         if result.get("slug"):
             from ..services.party_notifications import deliver_join_hint
 

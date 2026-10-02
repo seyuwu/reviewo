@@ -315,8 +315,14 @@ class BotStorage:
             )
             connection.commit()
 
-    def record_party_joined(self, telegram_user_id: int, *, completes_search: bool = False) -> None:
-        """Record a party entry and, when it came from matchmaking, its elapsed search time."""
+    def record_party_joined(
+        self,
+        telegram_user_id: int,
+        *,
+        completes_search: bool = False,
+        clear_search_timer: bool = False,
+    ) -> None:
+        """Record a party entry and optionally finish or clear the search timer."""
         self.record_funnel_event(telegram_user_id, "party_joined")
         now = timestamp()
         duration_seconds = None
@@ -339,6 +345,7 @@ class BotStorage:
                             duration_seconds = elapsed
                     except (TypeError, ValueError):
                         duration_seconds = None
+            if completes_search or clear_search_timer:
                 connection.execute(
                     "DELETE FROM active_search_timers WHERE telegram_user_id = ?",
                     (telegram_user_id,),
@@ -349,6 +356,13 @@ class BotStorage:
                    VALUES (?, 'party_joined', ?, ?)""",
                 (telegram_user_id, now, duration_seconds),
             )
+            if duration_seconds is not None:
+                connection.execute(
+                    """INSERT INTO bot_activity_events
+                         (telegram_user_id, event_type, occurred_at, duration_seconds)
+                       VALUES (?, 'search_result', ?, ?)""",
+                    (telegram_user_id, now, duration_seconds),
+                )
             connection.commit()
 
     def clear_search_timer(self, telegram_user_id: int) -> None:
@@ -403,8 +417,15 @@ class BotStorage:
                 "funnel": {},
                 "funnel_30d": {},
                 "search_events_30d": 0,
+                "search_users_30d": 0,
                 "party_events_30d": 0,
+                "party_users_30d": 0,
+                "search_party_events_30d": 0,
+                "search_party_users_30d": 0,
                 "party_created_30d": 0,
+                "party_created_users_30d": 0,
+                "search_party_duration_total_30d": 0,
+                "search_party_duration_samples_30d": 0,
                 "avg_seconds_to_party": None,
             }
             for row in campaign_rows
@@ -416,26 +437,49 @@ class BotStorage:
                 {
                     "source": key[0], "campaign": key[1], "starts": 0,
                     "starts_30d": 0, "funnel": {}, "funnel_30d": {},
+                    "search_events_30d": 0, "search_users_30d": 0,
+                    "party_events_30d": 0, "party_users_30d": 0,
+                    "search_party_events_30d": 0, "search_party_users_30d": 0,
+                    "party_created_30d": 0, "party_created_users_30d": 0,
+                    "search_party_duration_total_30d": 0,
+                    "search_party_duration_samples_30d": 0,
+                    "avg_seconds_to_party": None,
                 },
             )
             campaigns[key]["funnel"][str(row["event_type"])] = int(row["total"])
             campaigns[key]["funnel_30d"][str(row["event_type"])] = int(row["total_30d"] or 0)
         activity_rows = connection.execute(
             """SELECT users.acquisition_source, users.acquisition_campaign,
-                      SUM(CASE WHEN events.event_type = 'search_started'
-                                    AND events.occurred_at >= ? THEN 1 ELSE 0 END) AS searches_30d,
-                      SUM(CASE WHEN events.event_type = 'party_joined'
-                                    AND events.occurred_at >= ? THEN 1 ELSE 0 END) AS parties_30d,
-                      SUM(CASE WHEN events.event_type = 'party_created'
-                                    AND events.occurred_at >= ? THEN 1 ELSE 0 END) AS party_creations_30d,
-                      AVG(CASE WHEN events.event_type = 'party_joined'
-                                    AND events.duration_seconds IS NOT NULL
-                                    AND events.occurred_at >= ?
+                      SUM(CASE WHEN events.event_type = 'search_started' THEN 1 ELSE 0 END)
+                          AS searches_30d,
+                      COUNT(DISTINCT CASE WHEN events.event_type = 'search_started'
+                                          THEN events.telegram_user_id END) AS search_users_30d,
+                      SUM(CASE WHEN events.event_type = 'party_joined' THEN 1 ELSE 0 END)
+                          AS parties_30d,
+                      COUNT(DISTINCT CASE WHEN events.event_type = 'party_joined'
+                                          THEN events.telegram_user_id END) AS party_users_30d,
+                      SUM(CASE WHEN events.event_type = 'search_result' THEN 1 ELSE 0 END)
+                          AS search_party_events_30d,
+                      COUNT(DISTINCT CASE WHEN events.event_type = 'search_result'
+                                          THEN events.telegram_user_id END)
+                          AS search_party_users_30d,
+                      SUM(CASE WHEN events.event_type = 'party_created' THEN 1 ELSE 0 END)
+                          AS party_creations_30d,
+                      COUNT(DISTINCT CASE WHEN events.event_type = 'party_created'
+                                          THEN events.telegram_user_id END)
+                          AS party_created_users_30d,
+                      SUM(CASE WHEN events.event_type = 'search_result'
+                               THEN events.duration_seconds ELSE 0 END)
+                          AS search_party_duration_total_30d,
+                      COUNT(CASE WHEN events.event_type = 'search_result'
+                                 THEN 1 END) AS search_party_duration_samples_30d,
+                      AVG(CASE WHEN events.event_type = 'search_result'
                                THEN events.duration_seconds END) AS avg_seconds
                FROM bot_activity_events AS events
                JOIN bot_users AS users ON users.telegram_user_id = events.telegram_user_id
+               WHERE events.occurred_at >= ?
                GROUP BY users.acquisition_source, users.acquisition_campaign""",
-            (recent_since, recent_since, recent_since, recent_since),
+            (recent_since,),
         ).fetchall()
         for row in activity_rows:
             key = (str(row["acquisition_source"]), row["acquisition_campaign"])
@@ -444,11 +488,29 @@ class BotStorage:
                 {
                     "source": key[0], "campaign": key[1], "starts": 0,
                     "starts_30d": 0, "funnel": {}, "funnel_30d": {},
+                    "search_events_30d": 0, "search_users_30d": 0,
+                    "party_events_30d": 0, "party_users_30d": 0,
+                    "search_party_events_30d": 0, "search_party_users_30d": 0,
+                    "party_created_30d": 0, "party_created_users_30d": 0,
+                    "search_party_duration_total_30d": 0,
+                    "search_party_duration_samples_30d": 0,
+                    "avg_seconds_to_party": None,
                 },
             )
             campaign["search_events_30d"] = int(row["searches_30d"] or 0)
+            campaign["search_users_30d"] = int(row["search_users_30d"] or 0)
             campaign["party_events_30d"] = int(row["parties_30d"] or 0)
+            campaign["party_users_30d"] = int(row["party_users_30d"] or 0)
+            campaign["search_party_events_30d"] = int(row["search_party_events_30d"] or 0)
+            campaign["search_party_users_30d"] = int(row["search_party_users_30d"] or 0)
             campaign["party_created_30d"] = int(row["party_creations_30d"] or 0)
+            campaign["party_created_users_30d"] = int(row["party_created_users_30d"] or 0)
+            campaign["search_party_duration_total_30d"] = int(
+                row["search_party_duration_total_30d"] or 0
+            )
+            campaign["search_party_duration_samples_30d"] = int(
+                row["search_party_duration_samples_30d"] or 0
+            )
             average = row["avg_seconds"]
             campaign["avg_seconds_to_party"] = int(average) if average is not None else None
         return {"sources": sources, "funnel": funnel, "campaigns": list(campaigns.values())}
