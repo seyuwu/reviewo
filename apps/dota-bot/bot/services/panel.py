@@ -105,6 +105,7 @@ async def edit_panel(
     *,
     content: tuple[str, InlineKeyboardMarkup] | None = None,
     media_photo: str | BufferedInputFile | None = None,
+    force_new_message: bool = False,
 ) -> None:
     if screen == "recruiting":
         screen = "party"
@@ -158,6 +159,12 @@ async def edit_panel(
                     is_default_panel_photo = True
 
     panel_to_replace = panel if panel and panel.chat_id == destination else None
+    if force_new_message:
+        # /start should bring the menu to the bottom of the chat and recover a
+        # panel whose saved Telegram message was deleted. Send first, then remove
+        # the stale panel below after the replacement has been stored.
+        panel = None
+        loading_panel = None
     if loading_panel and loading_panel.chat_id == destination and loading_panel.is_photo and photo is not None:
         try:
             message = await bot.edit_message_media(

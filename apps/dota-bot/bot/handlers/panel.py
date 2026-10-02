@@ -29,8 +29,16 @@ async def start_panel(
     await state.clear()
     storage.set_choices(message.from_user.id, "pending_onboarding_action", [])
     storage.set_choices(message.from_user.id, "pending_solo_search", [])
-    await begin_panel_transition(bot, storage, message.from_user.id, message.chat.id)
-    await edit_panel(bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
+    await edit_panel(
+        bot,
+        storage,
+        api,
+        settings,
+        message.from_user.id,
+        "home",
+        message.chat.id,
+        force_new_message=has_existing_panel,
+    )
     if has_existing_panel:
         try:
             await message.delete()
