@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveDotaMarketingProfileRedirect } from "./lib/config/dota-marketing-redirect";
 
 const GAMES_HOSTS = new Set(["games.opinia.ru", "games.localhost"]);
 const DOTA_HOSTS = new Set(["dota.opinia.ru", "dota.localhost"]);
@@ -65,14 +66,12 @@ export function middleware(request: NextRequest) {
   }
 
   // Short marketing links on dota.*: /games/altushka → /dota/altushka
-  // (skip real Games routes: search, community)
+  // Keep actual Games routes, including tournament navigation, intact.
   if (DOTA_HOSTS.has(host)) {
-    const gamesProfileMatch = pathname.match(/^\/games\/([^/]+)\/?$/);
-    const gamesSlug = gamesProfileMatch?.[1];
-
-    if (gamesSlug && gamesSlug !== "search" && gamesSlug !== "community") {
+    const profilePath = resolveDotaMarketingProfileRedirect(pathname);
+    if (profilePath) {
       const url = request.nextUrl.clone();
-      url.pathname = `/dota/${gamesSlug}`;
+      url.pathname = profilePath;
       return NextResponse.redirect(url);
     }
   }

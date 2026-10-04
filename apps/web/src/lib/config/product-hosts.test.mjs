@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resolveDotaMarketingProfileRedirect } from "./dota-marketing-redirect.ts";
 
 import { resolveSharedAuthCookieDomain } from "../../features/auth/lib/auth-session-cookie.ts";
 
@@ -44,4 +45,12 @@ test("games and dota hosts share cookie domain with apex", () => {
   const domain = resolveSharedAuthCookieDomain("opinia.ru");
   assert.equal(resolveSharedAuthCookieDomain("games.opinia.ru"), domain);
   assert.equal(resolveSharedAuthCookieDomain("dota.opinia.ru"), domain);
+});
+
+test("Dota marketing redirect preserves real Games routes and tournament links", () => {
+  for (const path of ["/games/search", "/games/community", "/games/tournaments", "/games/tournaments/", "/games/tournaments/cup", "/games/tournaments/manage"]) {
+    assert.equal(resolveDotaMarketingProfileRedirect(path), null);
+  }
+  assert.equal(resolveDotaMarketingProfileRedirect("/games/altushka"), "/dota/altushka");
+  assert.equal(resolveDotaMarketingProfileRedirect("/games/fivi/"), "/dota/fivi");
 });
