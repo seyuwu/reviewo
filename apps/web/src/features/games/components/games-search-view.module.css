@@ -91,7 +91,7 @@
 
 .layoutCinematic > .sidebar:first-child,
 .layoutCinematic > .main,
-.layoutCinematic > .sidebar:last-child {
+.layoutCinematic > .sidebar:last-of-type {
   filter: blur(8px);
   opacity: 0;
   transform: translateY(12px) scale(0.97);
@@ -102,6 +102,10 @@
     transform 560ms cubic-bezier(0.18, 0.8, 0.22, 1);
 }
 
+.layoutCinematic > .tournamentShowcase {
+  display: none;
+}
+
 .layoutCinematic > .sidebar:first-child {
   filter: none;
   transform: none;
@@ -110,7 +114,7 @@
 
 .layoutCinematic.layoutShowLeft > .sidebar:first-child,
 .layoutCinematic.layoutShowFeed > .main,
-.layoutCinematic.layoutShowRail > .sidebar:last-child {
+.layoutCinematic.layoutShowRail > .sidebar:last-of-type {
   filter: blur(0);
   opacity: 1;
   transform: translateY(0) scale(1);
@@ -146,7 +150,7 @@
   box-shadow: var(--shadow-card), 0 0 48px rgb(91 60 202 / 10%);
   display: grid;
   gap: 0.9rem;
-  grid-column: 2;
+  grid-column: 1 / -1;
   min-width: 0;
   overflow: hidden;
   padding: clamp(0.9rem, 1.8vw, 1.2rem);
@@ -1472,7 +1476,7 @@
   .header,
   .layoutCinematic > .sidebar:first-child,
   .layoutCinematic > .main,
-  .layoutCinematic > .sidebar:last-child {
+  .layoutCinematic > .sidebar:last-of-type {
     transition-duration: 1ms;
   }
 }
