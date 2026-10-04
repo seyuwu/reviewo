@@ -318,7 +318,7 @@ function mergeChatMessages(
 }
 
 /** Drop join/created query without App Router remount (SSR resets isMember=false). */
-function stripTeamPageQuery(): void {
+function stripTeamPageQuery(preserveKeys: readonly string[] = []): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -328,8 +328,21 @@ function stripTeamPageQuery(): void {
     return;
   }
 
-  url.search = "";
-  window.history.replaceState(window.history.state, "", `${url.pathname}${url.hash}`);
+  const preservedParams = new URLSearchParams();
+  for (const key of preserveKeys) {
+    const value = url.searchParams.get(key);
+    if (value !== null) {
+      preservedParams.set(key, value);
+    }
+  }
+
+  const preservedQuery = preservedParams.toString();
+  if (url.searchParams.toString() === preservedQuery) {
+    return;
+  }
+
+  url.search = preservedQuery;
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 function applyLivePartyUpdate(
@@ -486,6 +499,9 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   const joinTokenFromUrl = lookLikeJoinToken(searchParams.get("join"))
     ? searchParams.get("join")
     : null;
+  const createdLanding = searchParams.get("created") === "1";
+  const createdFromTournament = searchParams.get("createdFromTournament") === "1";
+  const tournamentRegistrationFailed = searchParams.get("tournamentRegistration") === "failed";
 
   canManagePartyRef.current = canManageParty;
 
@@ -1410,7 +1426,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       applicationMatchesSlotRole(invite, role, unscopedAppsFallbackRole)
     ),
     member: party.members.find((item) => item.positionRole === role) ?? null,
-    recruiting: isRecruitLooking && effectiveRecruitRoles.includes(role),
+    recruiting: party.kind === "PARTY" && isRecruitLooking && effectiveRecruitRoles.includes(role),
     role
   }));
   const unassignedMembers = party.members.filter((member) => !member.positionRole);
@@ -1621,15 +1637,30 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       return;
     }
 
-    if (searchParams.get("created") === "1" && party.isMember && authSession?.accessToken) {
+    if (createdLanding && party.isMember && authSession?.accessToken) {
       createdLandingHandledRef.current = true;
       trackDotaEvent("party_created", { kind: party.kind, slug: party.slug });
+
+      if (createdFromTournament) {
+        // Tournament teams must not enter ordinary public party search automatically.
+        stripTeamPageQuery(tournamentRegistrationFailed ? ["tournamentRegistration"] : []);
+        return;
+      }
+
       void handleShare().then(() => {
         stripTeamPageQuery();
       });
     }
     // Intentionally once on created landing.
-  }, [authSession?.accessToken, party.isMember, party.slug]);
+  }, [
+    authSession?.accessToken,
+    createdFromTournament,
+    createdLanding,
+    party.isMember,
+    party.kind,
+    party.slug,
+    tournamentRegistrationFailed
+  ]);
 
   function neededRolesForInvite(): DotaPositionRole[] {
     const claimed = new Set(
@@ -1686,7 +1717,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
       window.setTimeout(() => setInviteHint(false), 4500);
     }
 
-    if (!canManageParty || lookingBusy) {
+    if (party.kind !== "PARTY" || !canManageParty || lookingBusy) {
       return;
     }
 
@@ -2076,7 +2107,12 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   }
 
   async function syncRecruitLooking(nextRoles: DotaPositionRole[]) {
-    if (!authSession?.accessToken || !canManageParty || lookingBusy) {
+    if (
+      !authSession?.accessToken ||
+      !canManageParty ||
+      lookingBusy ||
+      (party.kind === "TEAM" && nextRoles.length > 0)
+    ) {
       return;
     }
 
@@ -2122,7 +2158,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
   }
 
   async function handleToggleRecruitRole(role: DotaPositionRole) {
-    if (!canManageParty || claimedRoles.has(role) || lookingBusy) {
+    if (party.kind !== "PARTY" || !canManageParty || claimedRoles.has(role) || lookingBusy) {
       return;
     }
 
@@ -3071,22 +3107,24 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
                           {t("dota.team.wantThisRole")}
                         </button>
                       ) : null}
-                      <button
-                        className={`${styles.slotSecondaryBtn} ${styles.slotFindBtn}${
-                          recruiting ? ` ${styles.slotFindBtnActive}` : ""
-                        }`}
-                        disabled={lookingBusy || (party.isOwner && hasDotaProfile === false)}
-                        onClick={() => void handleToggleRecruitRole(role)}
-                        type="button"
-                      >
-                        {lookingBusy
-                          ? t("common.loadingEllipsis")
-                          : recruiting
-                            ? t("dota.team.slotStopFind")
-                            : t("dota.team.slotFind")}
-                      </button>
+                      {party.kind === "PARTY" ? (
+                        <button
+                          className={`${styles.slotSecondaryBtn} ${styles.slotFindBtn}${
+                            recruiting ? ` ${styles.slotFindBtnActive}` : ""
+                          }`}
+                          disabled={lookingBusy || (party.isOwner && hasDotaProfile === false)}
+                          onClick={() => void handleToggleRecruitRole(role)}
+                          type="button"
+                        >
+                          {lookingBusy
+                            ? t("common.loadingEllipsis")
+                            : recruiting
+                              ? t("dota.team.slotStopFind")
+                              : t("dota.team.slotFind")}
+                        </button>
+                      ) : null}
                     </div>
-                    {party.isOwner && hasDotaProfile === false ? (
+                    {party.kind === "PARTY" && party.isOwner && hasDotaProfile === false ? (
                       <Link className={styles.slotProfileLink} href="/dota/create">
                         {t("dota.team.recruitNeedProfileCta")}
                       </Link>
@@ -3277,7 +3315,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
         </div>
       ) : null}
 
-      {canManageParty ? (
+      {canManageParty && party.kind === "PARTY" ? (
           <section
             className={`${styles.candidatesPanel}${
               !isRecruitLooking || visibleRecruitCandidates.length === 0
@@ -3768,6 +3806,9 @@ export function DotaCreateTeamForm({ onCreated, tournamentEntry, tournamentSlug 
         }
       }
       const query = new URLSearchParams({ created: "1" });
+      if (tournamentEntry || tournamentSlug) {
+        query.set("createdFromTournament", "1");
+      }
       if (tournamentRegistrationFailed) {
         query.set("tournamentRegistration", "failed");
       }

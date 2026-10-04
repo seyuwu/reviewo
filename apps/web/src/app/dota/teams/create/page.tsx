@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { DotaCreateTeamGate } from "../../../../features/dota/components/dota-create-team-gate";
 
@@ -13,11 +14,14 @@ interface DotaCreateTeamPageProps {
 
 export default async function DotaCreateTeamPage({ searchParams }: DotaCreateTeamPageProps) {
   const { from, tournament } = await searchParams;
+  if (tournament) {
+    redirect(`/games/tournaments/${encodeURIComponent(tournament)}?create=1#registered-teams`);
+  }
   return (
     <main className="shell entity-route">
       <DotaCreateTeamGate
         allowClosedCommunity={from === "tournaments"}
-        tournamentSlug={tournament}
+        tournamentSlug={undefined}
       />
     </main>
   );

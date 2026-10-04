@@ -3,14 +3,18 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { useTranslation } from "../../i18n/locale-provider";
+import { getCurrentUserProfile } from "../../profile/api/profile";
 import { fetchDotaTournaments } from "../api/dota-tournaments-api";
 import type { DotaTournamentSummary } from "../types/dota-tournament";
 import styles from "./dota-tournaments-view.module.css";
 
 export function DotaTournamentsView() {
   const t = useTranslation();
+  const { authSession, isAuthSessionLoaded } = useAuthSession();
   const [tournaments, setTournaments] = useState<DotaTournamentSummary[]>([]);
+  const [canManageTournaments, setCanManageTournaments] = useState(false);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
@@ -31,6 +35,30 @@ export function DotaTournamentsView() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isAuthSessionLoaded || !authSession?.accessToken) {
+      setCanManageTournaments(false);
+      return;
+    }
+
+    let active = true;
+    void getCurrentUserProfile(authSession.accessToken)
+      .then((profile) => {
+        if (active) {
+          setCanManageTournaments(
+            profile.role === "ADMIN" || profile.role === "TOURNAMENT_MODERATOR"
+          );
+        }
+      })
+      .catch(() => {
+        if (active) setCanManageTournaments(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authSession?.accessToken, isAuthSessionLoaded]);
+
   return (
     <section className={styles.page}>
       <header className={styles.hero}>
@@ -39,9 +67,16 @@ export function DotaTournamentsView() {
           <h1>{t("dota.tournaments.title")}</h1>
           <p>{t("dota.tournaments.lead")}</p>
         </div>
-        <Link className="button-primary" href="/dota/teams/create?from=tournaments">
-          {t("dota.tournaments.createTeam")}
-        </Link>
+        <div className={styles.heroActions}>
+          {canManageTournaments ? (
+            <Link className="button-secondary" href="/games/tournaments/manage">
+              {t("dota.tournaments.admin.create")}
+            </Link>
+          ) : null}
+          <Link className="button-primary" href="/dota/teams/create?from=tournaments">
+            {t("dota.tournaments.createTeam")}
+          </Link>
+        </div>
       </header>
 
       {loading ? <p className={styles.muted}>{t("common.loadingEllipsis")}</p> : null}

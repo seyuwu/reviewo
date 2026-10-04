@@ -1119,6 +1119,7 @@ enum DotaTournamentStatus {
 }
 
 enum DotaTournamentEntryStatus {
+  RECRUITING
   REGISTERED
   WITHDRAWN
   DISQUALIFIED
@@ -1230,7 +1231,7 @@ model DotaTournament {
   @@schema("social")
 }
 
-/// A team's registration in one event. The same base team may enter many tournaments.
+/// One event-scoped squad registration; it may link to a persistent team or stand alone.
 model DotaTournamentEntry {
   id                    String                     @id @default(uuid()) @db.Uuid
   tournamentId          String                     @map("tournament_id") @db.Uuid

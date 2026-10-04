@@ -35,7 +35,7 @@ export interface DotaTournamentEntry {
   id: string;
   joinMode: "OPEN" | "CONFIRM";
   members: DotaTournamentEntryMember[];
-  status: "REGISTERED" | "WITHDRAWN" | "DISQUALIFIED";
+  status: "RECRUITING" | "REGISTERED" | "WITHDRAWN" | "DISQUALIFIED";
   teamName: string;
   teamPartySlug: string | null;
 }
@@ -104,6 +104,20 @@ export interface DotaTournamentTeamEntry {
     mmr: number | null;
     positionRole: string;
   }>;
-  status: "REGISTERED" | "WITHDRAWN" | "DISQUALIFIED";
+  status: "RECRUITING" | "REGISTERED" | "WITHDRAWN" | "DISQUALIFIED";
   tournament: DotaTournamentSummary;
+}
+
+export interface DotaTournamentManagedEntry {
+  entryId: string;
+  joinMode: "OPEN" | "CONFIRM";
+  members: DotaTournamentEntryMember[];
+  requests: Array<{
+    displayName: string;
+    dotaProfileSlug: string | null;
+    id: string;
+    mmr: number | null;
+    positionRole: string;
+  }>;
+  status: "RECRUITING" | "REGISTERED";
 }

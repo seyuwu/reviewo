@@ -2,6 +2,7 @@ import { apiRequest } from "../../../lib/api/api-client";
 import type {
   AdminDotaTournamentMatch,
   DotaTournament,
+  DotaTournamentManagedEntry,
   DotaTournamentMatch,
   DotaTournamentSummary,
   DotaTournamentTeamEntry,
@@ -108,6 +109,31 @@ export function fetchDotaTeamTournamentEntries(
   );
 }
 
+export function fetchDotaTournamentManagedEntries(
+  tournamentSlug: string,
+  accessToken: string
+): Promise<DotaTournamentManagedEntry[]> {
+  return apiRequest<DotaTournamentManagedEntry[]>(
+    `/dota/tournaments/${encodeURIComponent(tournamentSlug)}/managed-entries`,
+    { headers: authHeaders(accessToken) }
+  );
+}
+
+export function createDotaTournamentSquad(
+  tournamentSlug: string,
+  input: {
+    joinMode: "OPEN" | "CONFIRM";
+    name: string;
+    positionRole: "1" | "2" | "3" | "4" | "5";
+  },
+  accessToken: string
+): Promise<DotaTournament> {
+  return apiRequest<DotaTournament>(
+    `/dota/tournaments/${encodeURIComponent(tournamentSlug)}/squads`,
+    { body: input, headers: authHeaders(accessToken), method: "POST" }
+  );
+}
+
 export function registerDotaTeamForTournament(
   tournamentSlug: string,
   teamSlug: string,
@@ -192,6 +218,18 @@ export function leaveDotaTournamentEntry(
   return apiRequest<{ ok: true; tournament: DotaTournament }>(
     `/dota/tournaments/${encodeURIComponent(tournamentSlug)}/entries/${encodeURIComponent(entryId)}/members/me`,
     { headers: authHeaders(accessToken), method: "DELETE" }
+  );
+}
+
+export function assignDotaTournamentEntryPosition(
+  tournamentSlug: string,
+  entryId: string,
+  positionRole: string,
+  accessToken: string
+): Promise<DotaTournament> {
+  return apiRequest<DotaTournament>(
+    `/dota/tournaments/${encodeURIComponent(tournamentSlug)}/entries/${encodeURIComponent(entryId)}/members/me/position`,
+    { body: { positionRole }, headers: authHeaders(accessToken), method: "PATCH" }
   );
 }
 

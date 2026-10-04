@@ -19,6 +19,7 @@ class PartyNotificationTests(unittest.IsolatedAsyncioTestCase):
             chat=SimpleNamespace(id=123), message_id=456
         )
         storage = SimpleNamespace(
+            has_short_lived_temporary_message=lambda *args: False,
             add_temporary_message=lambda *args: events.append(("ttl", args[-1])),
             record_party_notification=lambda *args: events.append("party_notification"),
         )
@@ -46,6 +47,7 @@ class PartyNotificationTests(unittest.IsolatedAsyncioTestCase):
             chat=SimpleNamespace(id=123), message_id=456
         )))
         storage = SimpleNamespace(
+            has_short_lived_temporary_message=lambda *args: False,
             add_temporary_message=lambda *args: None,
             record_party_notification=lambda *args: None,
         )
@@ -67,6 +69,7 @@ class PartyNotificationTests(unittest.IsolatedAsyncioTestCase):
     async def test_delivery_fails_if_roster_message_cannot_be_sent(self) -> None:
         bot = SimpleNamespace(send_message=AsyncMock(side_effect=RuntimeError("send failed")))
         storage = SimpleNamespace(
+            has_short_lived_temporary_message=lambda *args: False,
             add_temporary_message=lambda *args: None,
             record_party_notification=lambda *args: None,
         )

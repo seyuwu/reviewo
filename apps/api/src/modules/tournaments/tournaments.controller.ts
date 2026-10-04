@@ -9,6 +9,7 @@ import {
 import { createSocialWriteRateLimitRules } from "../../common/rate-limiting/write-rate-limit-rules.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { RegisterDotaTournamentTeamDto } from "./dto/register-dota-tournament-team.dto.js";
+import { CreateDotaTournamentSquadDto } from "./dto/create-dota-tournament-squad.dto.js";
 import {
   DecideDotaTournamentEntryRequestDto,
   JoinDotaTournamentEntryDto,
@@ -36,6 +37,15 @@ export class DotaTournamentsController {
   @Get(":slug")
   get(@Param("slug") slug: string) {
     return this.dotaTournamentsService.getPublic(slug);
+  }
+
+  @Get(":slug/managed-entries")
+  @UseGuards(JwtAuthGuard)
+  listManagedEntries(
+    @Param("slug") slug: string,
+    @CurrentUser() currentUser: AuthenticatedUser
+  ) {
+    return this.dotaTournamentsService.listManagedEntries(slug, currentUser);
   }
 
   @Get(":slug/matches/:matchId")
@@ -135,6 +145,18 @@ export class DotaTournamentsController {
     return this.dotaTournamentsService.registerTeam(slug, input, currentUser);
   }
 
+  @Post(":slug/squads")
+  @UseGuards(JwtAuthGuard)
+  async createSquad(
+    @Param("slug") slug: string,
+    @Body() input: CreateDotaTournamentSquadDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ) {
+    await this.rateLimit(currentUser, request);
+    return this.dotaTournamentsService.createSquad(slug, input, currentUser);
+  }
+
   @Post(":slug/entries/:entryId/join")
   @UseGuards(JwtAuthGuard)
   async joinEntry(
@@ -179,6 +201,19 @@ export class DotaTournamentsController {
       input.decision,
       currentUser
     );
+  }
+
+  @Patch(":slug/entries/:entryId/members/me/position")
+  @UseGuards(JwtAuthGuard)
+  async assignPosition(
+    @Param("slug") slug: string,
+    @Param("entryId") entryId: string,
+    @Body() input: JoinDotaTournamentEntryDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ) {
+    await this.rateLimit(currentUser, request);
+    return this.dotaTournamentsService.assignEntryPosition(slug, entryId, input.positionRole, currentUser);
   }
 
   @Delete(":slug/entries/:entryId/members/me")

@@ -1309,6 +1309,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
 
       if (
         !recruitParty ||
+        recruitParty.kind !== "PARTY" ||
         recruitParty.ownerUserId !== targetUserId ||
         this.isExpired(recruitParty)
       ) {

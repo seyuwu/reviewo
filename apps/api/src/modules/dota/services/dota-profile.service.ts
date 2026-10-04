@@ -282,12 +282,11 @@ export class DotaProfileService {
               candidate.partySlug
             );
             const partyExpired =
-              party != null &&
-              party.kind === "PARTY" &&
+              party?.kind === "PARTY" &&
               party.expiresAt !== null &&
               party.expiresAt.getTime() <= now;
 
-            if (!party || partyExpired) {
+            if (!party || party.kind !== "PARTY" || partyExpired) {
               await this.entityAttributesRepository.upsertMany(candidate.entityId, {
                 [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
                 [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: "",
@@ -537,6 +536,14 @@ export class DotaProfileService {
         code: AppErrorCode.Forbidden,
         message: "Only the captain or a sub-captain can search on behalf of this party",
         statusCode: HttpStatus.FORBIDDEN
+      });
+    }
+
+    if (looking && party.kind !== "PARTY") {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "Persistent teams can only recruit through tournament entries or invite links",
+        statusCode: HttpStatus.CONFLICT
       });
     }
 
