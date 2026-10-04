@@ -44,6 +44,11 @@ export function getGamesTournamentsUrl(): string {
   return `${site.origin}/games/tournaments`;
 }
 
+/** Canonical detail page for a Dota tournament. */
+export function getGamesTournamentUrl(slug: string): string {
+  return `${getGamesTournamentsUrl()}/${encodeURIComponent(slug)}`;
+}
+
 /** Absolute Dota host root (middleware → `/games/search` for now). */
 export function getDotaHomeUrl(): string {
   return subdomainHomeUrl("dota");

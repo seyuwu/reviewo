@@ -173,19 +173,27 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
         </div>
         {tournament.status === "REGISTRATION_OPEN" ? (
           <Link
-            className="button-primary"
+            className={`button-primary ${styles.teamSignupPrimary}`}
+            href="#registered-teams"
+          >
+            {t("dota.tournaments.joinOrCreateTeam")}
+          </Link>
+        ) : null}
+      </header>
+
+      <div className={styles.teamHeading} id="registered-teams">
+        <div>
+          <h2>{t("dota.tournaments.registeredTeams")}</h2>
+          <p>{t("dota.tournaments.teamsLead")}</p>
+        </div>
+        {tournament.status === "REGISTRATION_OPEN" ? (
+          <Link
+            className="button-secondary"
             href={`/dota/teams/create?tournament=${encodeURIComponent(tournament.slug)}`}
           >
             {t("dota.tournaments.createTeam")}
           </Link>
         ) : null}
-      </header>
-
-      <div className={styles.teamHeading}>
-        <div>
-          <h2>{t("dota.tournaments.registeredTeams")}</h2>
-          <p>{t("dota.tournaments.teamsLead")}</p>
-        </div>
       </div>
       {tournament.entries.length === 0 ? (
         <div className={styles.emptyState}>

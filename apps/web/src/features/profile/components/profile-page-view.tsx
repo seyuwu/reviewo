@@ -171,7 +171,10 @@ export function ProfilePageView() {
                 />
                 <ProfileAdminLink isAdmin={profileQuery.data.role === "ADMIN"} />
                 <ProfileTournamentModeratorLink
-                  canManageTournaments={profileQuery.data.role === "TOURNAMENT_MODERATOR"}
+                  canManageTournaments={
+                    profileQuery.data.role === "ADMIN" ||
+                    profileQuery.data.role === "TOURNAMENT_MODERATOR"
+                  }
                 />
                 <ProfileUserTopsSection userId={profileQuery.data.id} />
                 <div

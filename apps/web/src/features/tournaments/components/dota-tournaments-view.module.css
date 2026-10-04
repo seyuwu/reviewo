@@ -184,6 +184,16 @@
   margin: 0;
 }
 
+.teamHeading {
+  scroll-margin-top: 6rem;
+}
+
+.teamSignupPrimary {
+  min-height: 3.2rem;
+  padding: 0.85rem 1.2rem;
+  text-align: center;
+}
+
 .teamHeading p {
   color: var(--color-text-muted);
   font-size: 0.82rem;
@@ -322,6 +332,10 @@
 
 @media (max-width: 620px) {
   .hero > a {
+    width: 100%;
+  }
+
+  .teamHeading > a {
     width: 100%;
   }
 }

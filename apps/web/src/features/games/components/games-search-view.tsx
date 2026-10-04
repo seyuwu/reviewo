@@ -12,7 +12,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getOrCreateVisitorId } from "../../../lib/site-presence";
-import { getGamesTournamentsUrl } from "../../../lib/config/product-hosts";
 import { isApiError, readApiErrorMessage } from "../../../lib/api/read-api-error";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { fetchDiscoveryStats, pingSitePresence } from "../../discovery/api/discovery-api";
@@ -59,6 +58,7 @@ import { useGamesLaunchStatus } from "../hooks/use-games-launch-status";
 import styles from "./games-search-view.module.css";
 import { GamesSearchTipRotator } from "./games-search-tip-rotator";
 import { GamesSearchWaitlistView } from "./games-search-waitlist-view";
+import { DotaUpcomingTournamentsPanel } from "../../tournaments/components/dota-upcoming-tournaments-panel";
 
 const PENDING_STACK_KEY = "opinia.pendingStackSlug";
 const RECOMMENDATION_COUNT = 3;
@@ -2326,16 +2326,9 @@ export function GamesSearchView() {
               <GamesSearchTipRotator embedded />
             </section>
           </aside>
-        </div>
 
-        <Link className={styles.tournamentBanner} href={getGamesTournamentsUrl()}>
-          <span aria-hidden="true" className={styles.tournamentIcon}>🏆</span>
-          <span className={styles.tournamentCopy}>
-            <strong>{t("games.tournaments.searchBannerTitle")}</strong>
-            <span>{t("games.tournaments.searchBannerLead")}</span>
-          </span>
-          <span className={styles.tournamentArrow} aria-hidden="true">→</span>
-        </Link>
+          <DotaUpcomingTournamentsPanel />
+        </div>
 
         {cinematicMode === "active" ? (
           <GamesSearchCinematic
