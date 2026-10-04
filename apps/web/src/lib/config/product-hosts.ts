@@ -33,6 +33,17 @@ export function getGamesHomeUrl(): string {
   return subdomainHomeUrl("games");
 }
 
+/** Canonical page for Dota tournament registration and discovery. */
+export function getGamesTournamentsUrl(): string {
+  const site = siteUrl();
+
+  if (isProductionApexHost(site.hostname) || site.hostname.endsWith(".opinia.ru")) {
+    return `${site.protocol}//games.opinia.ru/games/tournaments`;
+  }
+
+  return `${site.origin}/games/tournaments`;
+}
+
 /** Absolute Dota host root (middleware → `/games/search` for now). */
 export function getDotaHomeUrl(): string {
   return subdomainHomeUrl("dota");

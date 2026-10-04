@@ -18,7 +18,10 @@ def home_keyboard(
     rows = [[button(first_label, first_action), button(second_label, second_action)]]
     if registered:
         rows.append([button("👤 Аккаунт", "panel:account")])
-    rows.append([button_url("🏆 Турниры", f"{site_url.rstrip('/')}/games/tournaments")])
+    tournaments_url = site_url.rstrip("/")
+    if tournaments_url == "https://dota.opinia.ru":
+        tournaments_url = "https://games.opinia.ru"
+    rows.append([button_url("🏆 Турниры", f"{tournaments_url}/games/tournaments")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

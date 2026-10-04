@@ -20,7 +20,7 @@ class HomeKeyboardTests(unittest.TestCase):
         self.assertEqual(keyboard.inline_keyboard[-1][0].text, "🏆 Турниры")
         self.assertEqual(
             keyboard.inline_keyboard[-1][0].url,
-            "https://dota.opinia.ru/games/tournaments",
+            "https://games.opinia.ru/games/tournaments",
         )
 
 

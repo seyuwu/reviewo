@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { useTranslation } from "../../i18n/locale-provider";
+import { getGamesTournamentsUrl } from "../../../lib/config/product-hosts";
 import {
   decideDotaTournamentJoinRequest,
   fetchDotaTeamTournamentEntries,
@@ -178,7 +179,7 @@ export function DotaTeamTournamentsPanel({
           <p className={styles.eyebrow}>{t("dota.tournaments.eyebrow")}</p>
           <h2>{t("dota.tournaments.teamPanelTitle")}</h2>
         </div>
-        <Link className="button-secondary" href="/games/tournaments">
+        <Link className="button-secondary" href={getGamesTournamentsUrl()}>
           {t("dota.tournaments.allTournaments")}
         </Link>
       </div>

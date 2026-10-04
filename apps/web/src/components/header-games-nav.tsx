@@ -13,6 +13,7 @@ import {
 } from "../features/dota/hooks/use-my-dota-profile-nav";
 import { useGamesLaunchStatus } from "../features/games/hooks/use-games-launch-status";
 import { useTranslation } from "../features/i18n/locale-provider";
+import { getGamesTournamentsUrl } from "../lib/config/product-hosts";
 import { OpiniaIcon } from "./opinia-icon";
 
 export function HeaderGamesNav() {
@@ -110,7 +111,7 @@ export function HeaderGamesNav() {
 
       <Link
         className={navLinkClass(isTournamentSection, "games")}
-        href="/games/tournaments"
+        href={getGamesTournamentsUrl()}
         aria-label={t("web.nav.tournaments")}
         title={t("web.nav.tournaments")}
       >

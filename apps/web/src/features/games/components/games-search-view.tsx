@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getOrCreateVisitorId } from "../../../lib/site-presence";
+import { getGamesTournamentsUrl } from "../../../lib/config/product-hosts";
 import { isApiError, readApiErrorMessage } from "../../../lib/api/read-api-error";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { fetchDiscoveryStats, pingSitePresence } from "../../discovery/api/discovery-api";
@@ -2327,7 +2328,7 @@ export function GamesSearchView() {
           </aside>
         </div>
 
-        <Link className={styles.tournamentBanner} href="/games/tournaments">
+        <Link className={styles.tournamentBanner} href={getGamesTournamentsUrl()}>
           <span aria-hidden="true" className={styles.tournamentIcon}>🏆</span>
           <span className={styles.tournamentCopy}>
             <strong>{t("games.tournaments.searchBannerTitle")}</strong>
