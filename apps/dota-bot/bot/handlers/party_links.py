@@ -75,6 +75,7 @@ async def open_party_link(
         return
     code = parse_party_start_payload(command.args)
     acquisition_tag = parse_acquisition_tag(command.args)
+    has_existing_panel = storage.get_panel(message.from_user.id) is not None
     storage.record_bot_user(
         message.from_user.id,
         acquisition_tag[0] if acquisition_tag else ("party_invite" if code else "direct"),
@@ -83,7 +84,16 @@ async def open_party_link(
     if code is None:
         await state.clear()
         storage.set_choices(message.from_user.id, "pending_onboarding_action", [])
-        await edit_panel(message.bot, storage, api, settings, message.from_user.id, "home", message.chat.id)
+        await edit_panel(
+            message.bot,
+            storage,
+            api,
+            settings,
+            message.from_user.id,
+            "home",
+            message.chat.id,
+            force_new_message=has_existing_panel,
+        )
         return
     await state.clear()
     storage.set_choices(message.from_user.id, "pending_onboarding_action", [])
