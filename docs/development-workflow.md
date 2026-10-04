@@ -155,6 +155,16 @@ git push origin main
 
 На сервере (путь `/opt/opinia`):
 
+Подключение с компьютера разработчика — ключом Opinia:
+
+```bash
+ssh -i ~/.ssh/opinia_deploy -o IdentitiesOnly=yes root@136.234.5.192
+```
+
+Не отключайте проверку host key. Подтверждённый fingerprint VPS: `SHA256:JKLpUhfc+SL6u0XTPVAplGYLtsDopvdcGgNCDwtImGo`.
+
+После подключения:
+
 ```bash
 cd /opt/opinia && git pull
 docker compose --env-file .env.production \

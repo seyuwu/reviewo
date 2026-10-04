@@ -1,0 +1,170 @@
+.card {
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(113 74 240 / 12%), transparent 46%),
+    linear-gradient(145deg, rgb(21 25 38 / 96%), rgb(13 17 27 / 96%));
+  border: 1px solid var(--color-card-border);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.heading h3 {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 1rem;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.heading h3 span {
+  color: var(--color-text-muted);
+}
+
+.round {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+}
+
+.status {
+  background: rgb(119 82 247 / 16%);
+  border: 1px solid rgb(151 124 255 / 25%);
+  border-radius: 999px;
+  color: #d6caff;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.3rem 0.55rem;
+}
+
+.meta {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  gap: 0.5rem 0.9rem;
+}
+
+.meta a,
+.workflow a {
+  color: #c4b5fd;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.deadline {
+  background: rgb(255 255 255 / 3%);
+  border-radius: 0.55rem;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+}
+
+.workflow {
+  border-top: 1px solid var(--color-card-border);
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.85rem;
+}
+
+.settings,
+.lobbySecret {
+  background: rgb(6 9 17 / 42%);
+  border: 1px solid rgb(139 125 190 / 16%);
+  border-radius: 0.7rem;
+  display: grid;
+  font-size: 0.82rem;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0.7rem;
+}
+
+.settings strong {
+  color: #f3efff;
+  margin-bottom: 0.15rem;
+}
+
+.lobbySecret strong {
+  color: #fff;
+  user-select: text;
+}
+
+.actionForm,
+.disputeForm {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.actionForm label,
+.disputeForm label {
+  color: var(--color-text-muted);
+  display: grid;
+  font-size: 0.8rem;
+  gap: 0.35rem;
+}
+
+.actionForm input,
+.actionForm select,
+.disputeForm textarea {
+  background: rgb(8 11 19 / 85%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.6rem;
+  color: var(--color-text);
+  font: inherit;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+}
+
+.disputeForm textarea {
+  resize: vertical;
+}
+
+.actionForm p,
+.workflow > p {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.dispute {
+  background: rgb(248 113 113 / 9%);
+  border: 1px solid rgb(248 113 113 / 24%);
+  border-radius: 0.6rem;
+  color: #fecaca;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+}
+
+.error {
+  color: #fca5a5;
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  .card {
+    padding: 0.8rem;
+  }
+
+  .heading {
+    flex-direction: column;
+  }
+}

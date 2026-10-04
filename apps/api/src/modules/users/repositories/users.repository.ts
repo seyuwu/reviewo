@@ -112,6 +112,35 @@ export class UsersRepository {
     });
   }
 
+  async searchRoleManagementUsers(query: string, limit: number) {
+    return this.prismaService.user.findMany({
+      orderBy: [{ displayName: "asc" }, { id: "asc" }],
+      select: { displayName: true, id: true, role: true, username: true },
+      take: limit,
+      where: {
+        status: "active",
+        OR: [
+          { username: { contains: query, mode: "insensitive" } },
+          { displayName: { contains: query, mode: "insensitive" } },
+          ...(isUuid(query) ? [{ id: query }] : [])
+        ]
+      }
+    });
+  }
+
+  async updateRoleUnlessAdmin(id: string, role: UserRole) {
+    const result = await this.prismaService.user.updateMany({
+      data: { role },
+      where: { id, role: { not: "ADMIN" }, status: "active" }
+    });
+    if (result.count !== 1) return null;
+
+    return this.prismaService.user.findUnique({
+      select: { displayName: true, id: true, role: true, username: true },
+      where: { id }
+    });
+  }
+
   async updateProfile(
     id: string,
     input: UpdateUserProfileInput,
@@ -170,4 +199,8 @@ export class UsersRepository {
       (error as { code?: unknown }).code === "P2002"
     );
   }
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

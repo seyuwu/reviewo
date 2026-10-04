@@ -94,6 +94,8 @@ import {
   reportPartyLinkOpen
 } from "../lib/party-invite";
 import { PartyAuthSheet } from "./party-auth-sheet";
+import { DotaTeamTournamentsPanel } from "../../tournaments/components/dota-team-tournaments-panel";
+import { registerDotaTeamForTournament } from "../../tournaments/api/dota-tournaments-api";
 import styles from "./dota-team-view.module.css";
 
 const PENDING_PARTY_JOIN_KEY = "opinia.pendingPartyJoin";
@@ -2890,6 +2892,13 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
             {viewerInviteError ? <FormFeedback errorMessage={viewerInviteError} /> : null}
           </header>
 
+          {party.kind === "TEAM" && party.isOwner ? (
+            <DotaTeamTournamentsPanel
+              registrationFailed={searchParams.get("tournamentRegistration") === "failed"}
+              teamSlug={party.slug}
+            />
+          ) : null}
+
           {(lookingError || applicationError || error) && (canManageParty || party.isMember) ? (
             <div className={styles.rosterFeedback}>
               <FormFeedback errorMessage={error ?? lookingError ?? applicationError} />
@@ -3705,15 +3714,31 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
 
 interface DotaCreateTeamFormProps {
   onCreated?: (party: GameParty) => void;
+  tournamentEntry?: boolean | undefined;
+  tournamentSlug?: string | undefined;
 }
 
-export function DotaCreateTeamForm({ onCreated }: DotaCreateTeamFormProps) {
+export function DotaCreateTeamForm({ onCreated, tournamentEntry, tournamentSlug }: DotaCreateTeamFormProps) {
   const t = useTranslation();
   const router = useRouter();
-  const { authSession } = useAuthSession();
+  const { authSession, isAuthSessionLoaded } = useAuthSession();
   const [kind, setKind] = useState<GamePartyKind>("TEAM");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const tournamentCreatePath = tournamentSlug
+    ? `/dota/teams/create?tournament=${encodeURIComponent(tournamentSlug)}`
+    : "/dota/teams/create?from=tournaments";
+  const signInHref = `/profile?next=${encodeURIComponent(tournamentCreatePath)}`;
+  const createLead = tournamentSlug
+    ? t("dota.tournaments.createTeamToJoinLead")
+    : tournamentEntry
+      ? t("dota.tournaments.createTeamThenRegister")
+      : kind === "PARTY"
+        ? t("dota.team.createPartyLead", {
+            hours: String(DOTA_TEMP_PARTY_TTL_HOURS),
+            max: String(DOTA_PARTY_SIZE)
+          })
+        : t("dota.team.createLead", { max: String(DOTA_PARTY_SIZE) });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -3729,7 +3754,24 @@ export function DotaCreateTeamForm({ onCreated }: DotaCreateTeamFormProps) {
     try {
       const party = await createGameParty(kind, authSession.accessToken);
       onCreated?.(party);
-      router.push(`/dota/teams/${party.slug}?created=1`);
+      let tournamentRegistrationFailed = false;
+      if (tournamentSlug && kind === "TEAM") {
+        try {
+          await registerDotaTeamForTournament(
+            tournamentSlug,
+            party.slug,
+            authSession.accessToken,
+            "CONFIRM"
+          );
+        } catch {
+          tournamentRegistrationFailed = true;
+        }
+      }
+      const query = new URLSearchParams({ created: "1" });
+      if (tournamentRegistrationFailed) {
+        query.set("tournamentRegistration", "failed");
+      }
+      router.push(`/dota/teams/${party.slug}?${query.toString()}`);
     } catch {
       setError(t("dota.team.createError"));
       setPending(false);
@@ -3738,17 +3780,15 @@ export function DotaCreateTeamForm({ onCreated }: DotaCreateTeamFormProps) {
 
   return (
     <form className={styles.createForm} onSubmit={handleSubmit}>
-      <h2>{t("dota.team.createTitle")}</h2>
-      <p>
-        {kind === "PARTY"
-          ? t("dota.team.createPartyLead", {
-              hours: String(DOTA_TEMP_PARTY_TTL_HOURS),
-              max: String(DOTA_PARTY_SIZE)
-            })
-          : t("dota.team.createLead", { max: String(DOTA_PARTY_SIZE) })}
-      </p>
+      <h2>
+        {tournamentEntry || tournamentSlug
+          ? t("dota.tournaments.createTeamTitle")
+          : t("dota.team.createTitle")}
+      </h2>
+      <p>{createLead}</p>
       <p className={styles.createNameHint}>{t("dota.team.createNameHint")}</p>
-      <fieldset className={styles.kindFieldset}>
+      {!tournamentSlug && !tournamentEntry ? (
+        <fieldset className={styles.kindFieldset}>
         <legend>{t("dota.team.kindLabel")}</legend>
         <label className={styles.kindOption}>
           <input
@@ -3776,14 +3816,21 @@ export function DotaCreateTeamForm({ onCreated }: DotaCreateTeamFormProps) {
             <em>{t("dota.team.kindPartyHint", { hours: String(DOTA_TEMP_PARTY_TTL_HOURS) })}</em>
           </span>
         </label>
-      </fieldset>
-      <button className="button-primary" disabled={pending} type="submit">
-        {pending
-          ? t("common.loadingEllipsis")
-          : kind === "PARTY"
-            ? t("dota.team.createPartyCta")
-            : t("dota.team.createCta")}
-      </button>
+        </fieldset>
+      ) : null}
+      {isAuthSessionLoaded && !authSession && (tournamentEntry || tournamentSlug) ? (
+        <Link className="button-primary" href={signInHref}>
+          {t("web.nav.signIn")}
+        </Link>
+      ) : (
+        <button className="button-primary" disabled={pending || !isAuthSessionLoaded} type="submit">
+          {pending || !isAuthSessionLoaded
+            ? t("common.loadingEllipsis")
+            : kind === "PARTY"
+              ? t("dota.team.createPartyCta")
+              : t("dota.team.createCta")}
+        </button>
+      )}
       {error ? <FormFeedback errorMessage={error} /> : null}
     </form>
   );

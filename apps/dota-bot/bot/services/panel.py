@@ -557,9 +557,10 @@ async def render_screen(
                 account_keyboard(False, False, False),
             )
         return (
-            "<b>Поиск пати Dota 2 · Opinia</b>\n\n"
+            "<b>Поиск пати Dota 2 · FDP</b>\n"
+            'Официальный канал: <a href="https://t.me/FDPcommunity">@FDPcommunity</a>\n\n'
             "Найдите команду для игры или соберите свою пати. Выберите, с чего начать:",
-            home_keyboard(False, False),
+            home_keyboard(False, False, site_url=settings.site_url),
         )
 
     async def fetch_profile() -> dict | None:
@@ -584,7 +585,7 @@ async def render_screen(
         if not profile:
             return (
                 "<b>Аккаунт привязан</b>\n\nОткройте «Аккаунт» и создайте Dota-профиль, чтобы начать поиск.",
-                home_keyboard(False, False),
+                home_keyboard(False, False, site_url=settings.site_url),
             )
         name = escape_text(profile.get("title", "Игрок"))
         mmr = escape_text(profile.get("mmr") or "—")
@@ -592,7 +593,8 @@ async def render_screen(
         looking = profile.get("looking", False)
         state = "поиск активен" if looking else "не ищет"
         text = (
-            f"<b>Поиск пати Dota 2 · Opinia</b>\n\n"
+            f"<b>Поиск пати Dota 2 · FDP</b>\n"
+            'Официальный канал: <a href="https://t.me/FDPcommunity">@FDPcommunity</a>\n\n'
             f"Игрок: <b>{name}</b> · {mmr} MMR\n"
             f"Статус: {state}"
         )
@@ -608,7 +610,13 @@ async def render_screen(
         auto_search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
         is_recruiting = bool(looking and auto_search.get("mode") == "recruit")
         is_looking = bool(looking and auto_search.get("mode") == "looking")
-        return text, home_keyboard(True, bool(party), is_recruiting, is_looking)
+        return text, home_keyboard(
+            True,
+            bool(party),
+            is_recruiting,
+            is_looking,
+            site_url=settings.site_url,
+        )
 
     if screen == "looking":
         if not profile:
@@ -677,7 +685,7 @@ async def render_screen(
         parties = my_parties.get("parties") or []
         party = my_parties.get("party") or (parties[-1] if parties else None)
         if not party:
-            return "Вы пока не состоите в пати.", home_keyboard(True, False)
+            return "Вы пока не состоите в пати.", home_keyboard(True, False, site_url=settings.site_url)
         text = party_text(party)
         occupants = party_slot_occupants(party)
         available_roles = {role for role in ("1", "2", "3", "4", "5") if role not in occupants}
@@ -828,7 +836,9 @@ async def render_screen(
             back_keyboard("home"),
         )
 
-    return "Поиск пати Dota 2 · Opinia", home_keyboard(True, False)
+    return "Поиск пати Dota 2 · FDP · @FDPcommunity", home_keyboard(
+        True, False, site_url=settings.site_url
+    )
 
 
 def escape_text(value: object) -> str:

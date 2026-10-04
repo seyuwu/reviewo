@@ -2327,6 +2327,15 @@ export function GamesSearchView() {
           </aside>
         </div>
 
+        <Link className={styles.tournamentBanner} href="/games/tournaments">
+          <span aria-hidden="true" className={styles.tournamentIcon}>🏆</span>
+          <span className={styles.tournamentCopy}>
+            <strong>{t("games.tournaments.searchBannerTitle")}</strong>
+            <span>{t("games.tournaments.searchBannerLead")}</span>
+          </span>
+          <span className={styles.tournamentArrow} aria-hidden="true">→</span>
+        </Link>
+
         {cinematicMode === "active" ? (
           <GamesSearchCinematic
             onComplete={handleCinematicComplete}

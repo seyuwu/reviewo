@@ -29,6 +29,7 @@ import { AnalyticsModule } from "./modules/analytics/analytics.module.js";
 import { TopsModule } from "./modules/tops/tops.module.js";
 import { TrustModule } from "./modules/trust/trust.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
+import { DotaTournamentsModule } from "./modules/tournaments/tournaments.module.js";
 
 import { RedisModule } from "./redis/redis.module.js";
 
@@ -60,6 +61,7 @@ import { RedisModule } from "./redis/redis.module.js";
     DotaModule,
     GamesLaunchModule,
     SocialModule,
+    DotaTournamentsModule,
     AnalyticsModule,
     GrowthModule
   ],

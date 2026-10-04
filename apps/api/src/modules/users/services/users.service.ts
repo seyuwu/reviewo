@@ -151,6 +151,40 @@ export class UsersService {
     return toAuthenticatedUser(user);
   }
 
+  async searchRoleManagementUsers(query: string) {
+    const normalized = query.trim();
+    if (normalized.length < 2) return [];
+
+    return this.usersRepository.searchRoleManagementUsers(normalized, 20);
+  }
+
+  async setTournamentModerator(userId: string, enabled: boolean) {
+    const role = enabled ? "TOURNAMENT_MODERATOR" : "USER";
+    const updated = await this.usersRepository.updateRoleUnlessAdmin(userId, role);
+    if (updated) return updated;
+
+    const current = await this.usersRepository.findById(userId);
+    if (!current) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "User was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+    if (current.role !== "ADMIN" && current.status !== "active") {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "Only active users can be tournament moderators",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
+    throw createAppException({
+      code: AppErrorCode.Forbidden,
+      message: "Administrator roles cannot be changed here",
+      statusCode: HttpStatus.FORBIDDEN
+    });
+  }
+
   async updateUserAvatar(id: string, avatarUrl: string | null): Promise<AuthenticatedUser> {
     const user = await this.usersRepository.updateAvatarUrl(id, avatarUrl);
     return toAuthenticatedUser(user);
@@ -224,5 +258,5 @@ function toAuthenticatedUser(user: User): AuthenticatedUser {
 }
 
 function toUserRole(role: UserRole): AuthenticatedUser["role"] {
-  return role === "ADMIN" ? "ADMIN" : "USER";
+  return role;
 }

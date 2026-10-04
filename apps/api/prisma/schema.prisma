@@ -37,6 +37,10 @@ model User {
   friendshipsReceived    UserFriendship[] @relation("FriendshipAddressee")
   ownedGameParties       GameParty[]      @relation("GamePartyOwner")
   gamePartyMemberships   GamePartyMember[]
+  createdDotaTournaments DotaTournament[] @relation("DotaTournamentCreator")
+  createdDotaTournamentEntries DotaTournamentEntry[] @relation("DotaTournamentEntryCreator")
+  dotaTournamentEntryMembers DotaTournamentEntryMember[]
+  dotaTournamentJoinRequests DotaTournamentEntryRequest[]
   gamePartyInvitesSent   GamePartyInvite[] @relation("GamePartyInviter")
   gamePartyInvitesReceived GamePartyInvite[] @relation("GamePartyInvitee")
   gamePartyChatMessages  GamePartyChatMessage[]
@@ -51,6 +55,7 @@ model User {
 enum UserRole {
   USER
   ADMIN
+  TOURNAMENT_MODERATOR
 
   @@map("user_role")
   @@schema("users")
@@ -1101,6 +1106,51 @@ enum GamePartyInviteKind {
   @@schema("social")
 }
 
+enum DotaTournamentStatus {
+  DRAFT
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("dota_tournament_status")
+  @@schema("social")
+}
+
+enum DotaTournamentEntryStatus {
+  REGISTERED
+  WITHDRAWN
+  DISQUALIFIED
+
+  @@map("dota_tournament_entry_status")
+  @@schema("social")
+}
+
+enum DotaTournamentEntryRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+
+  @@map("dota_tournament_entry_request_status")
+  @@schema("social")
+}
+
+enum DotaTournamentMatchStatus {
+  SCHEDULED
+  LOBBY_CONFIRMATION
+  READY
+  IN_PROGRESS
+  RESULT_CONFIRMATION
+  DISPUTED
+  COMPLETED
+  CANCELLED
+
+  @@map("dota_tournament_match_status")
+  @@schema("social")
+}
+
 model UserFriendship {
   id          String           @id @default(uuid()) @db.Uuid
   requesterId String           @map("requester_id") @db.Uuid
@@ -1141,12 +1191,169 @@ model GameParty {
   invites       GamePartyInvite[]
   joinBlocks    GamePartyJoinBlock[]
   chatMessages  GamePartyChatMessage[]
+  dotaTournamentEntries DotaTournamentEntry[]
 
   @@unique([vertical, slug])
   @@index([ownerUserId])
   @@index([vertical, createdAt(sort: Desc)])
   @@index([vertical, kind, expiresAt])
   @@map("game_parties")
+  @@schema("social")
+}
+
+model DotaTournament {
+  id                    String               @id @default(uuid()) @db.Uuid
+  slug                  String               @unique @db.VarChar(120)
+  title                 String               @db.VarChar(120)
+  description           String               @default("")
+  format                String?              @db.VarChar(80)
+  rulesUrl              String?              @map("rules_url") @db.VarChar(500)
+  startsAt              DateTime?            @map("starts_at") @db.Timestamptz(6)
+  registrationClosesAt  DateTime?            @map("registration_closes_at") @db.Timestamptz(6)
+  maxTeams              Int?                 @map("max_teams")
+  status                DotaTournamentStatus @default(DRAFT)
+  gameMode              String               @default("ALL_PICK") @map("game_mode") @db.VarChar(32)
+  serverRegion          String               @default("EUROPE") @map("server_region") @db.VarChar(32)
+  allowSpectators       Boolean              @default(false) @map("allow_spectators")
+  cheatsEnabled         Boolean              @default(false) @map("cheats_enabled")
+  createdByUserId       String               @map("created_by_user_id") @db.Uuid
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy             User                 @relation("DotaTournamentCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  entries               DotaTournamentEntry[]
+  entryRequests         DotaTournamentEntryRequest[]
+  entryMembers          DotaTournamentEntryMember[]
+  matches               DotaTournamentMatch[]
+
+  @@index([status, registrationClosesAt])
+  @@map("dota_tournaments")
+  @@schema("social")
+}
+
+/// A team's registration in one event. The same base team may enter many tournaments.
+model DotaTournamentEntry {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  tournamentId          String                     @map("tournament_id") @db.Uuid
+  teamPartyId           String?                    @map("team_party_id") @db.Uuid
+  teamNameSnapshot      String                     @map("team_name_snapshot") @db.VarChar(80)
+  teamSlugSnapshot      String                     @map("team_slug_snapshot") @db.VarChar(120)
+  joinMode              GamePartyJoinMode          @default(CONFIRM) @map("join_mode")
+  status                DotaTournamentEntryStatus @default(REGISTERED)
+  createdByUserId       String?                    @map("created_by_user_id") @db.Uuid
+  createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tournament            DotaTournament             @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  teamParty             GameParty?                 @relation(fields: [teamPartyId], references: [id], onDelete: SetNull)
+  createdBy             User?                      @relation("DotaTournamentEntryCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  members               DotaTournamentEntryMember[]
+  joinRequests          DotaTournamentEntryRequest[]
+  matchesAsA            DotaTournamentMatch[]        @relation("DotaTournamentMatchEntryA")
+  matchesAsB            DotaTournamentMatch[]        @relation("DotaTournamentMatchEntryB")
+
+  @@unique([tournamentId, teamPartyId])
+  @@index([tournamentId, status, createdAt])
+  @@index([teamPartyId, status])
+  @@map("dota_tournament_entries")
+  @@schema("social")
+}
+
+/// One manually scheduled match. Lobby settings and results require confirmation from the other team.
+model DotaTournamentMatch {
+  id                         String                    @id @default(uuid()) @db.Uuid
+  tournamentId               String                    @map("tournament_id") @db.Uuid
+  entryAId                   String                    @map("entry_a_id") @db.Uuid
+  entryBId                   String                    @map("entry_b_id") @db.Uuid
+  roundNumber                Int                       @map("round_number")
+  matchNumber                Int                       @map("match_number")
+  scheduledAt                DateTime                  @map("scheduled_at") @db.Timestamptz(6)
+  status                     DotaTournamentMatchStatus @default(SCHEDULED)
+  gameMode                   String                    @map("game_mode") @db.VarChar(32)
+  serverRegion               String                    @map("server_region") @db.VarChar(32)
+  allowSpectators            Boolean                   @default(false) @map("allow_spectators")
+  cheatsEnabled              Boolean                   @default(false) @map("cheats_enabled")
+  hostSide                   String                    @default("A") @map("host_side") @db.VarChar(1)
+  lobbyName                  String?                   @map("lobby_name") @db.VarChar(120)
+  lobbyPassword              String?                   @map("lobby_password") @db.VarChar(120)
+  lobbyProofUrl              String?                   @map("lobby_proof_url") @db.VarChar(500)
+  lobbySubmittedByUserId     String?                   @map("lobby_submitted_by_user_id") @db.Uuid
+  lobbySubmittedAt           DateTime?                 @map("lobby_submitted_at") @db.Timestamptz(6)
+  settingsConfirmedByUserId  String?                   @map("settings_confirmed_by_user_id") @db.Uuid
+  settingsConfirmedAt        DateTime?                 @map("settings_confirmed_at") @db.Timestamptz(6)
+  startedAt                  DateTime?                 @map("started_at") @db.Timestamptz(6)
+  reportedWinnerEntryId      String?                   @map("reported_winner_entry_id") @db.Uuid
+  resultReportedByUserId     String?                   @map("result_reported_by_user_id") @db.Uuid
+  resultReportedAt           DateTime?                 @map("result_reported_at") @db.Timestamptz(6)
+  resultConfirmedByUserId    String?                   @map("result_confirmed_by_user_id") @db.Uuid
+  resultConfirmedAt          DateTime?                 @map("result_confirmed_at") @db.Timestamptz(6)
+  resultEvidenceUrl          String?                   @map("result_evidence_url") @db.VarChar(500)
+  streamUrl                  String?                   @map("stream_url") @db.VarChar(500)
+  disputeReason              String?                   @map("dispute_reason") @db.VarChar(1000)
+  winnerEntryId              String?                   @map("winner_entry_id") @db.Uuid
+  resolutionNote             String?                   @map("resolution_note") @db.VarChar(1000)
+  resolvedByUserId           String?                   @map("resolved_by_user_id") @db.Uuid
+  resolvedAt                 DateTime?                 @map("resolved_at") @db.Timestamptz(6)
+  lobbyDeadlineAt            DateTime                  @map("lobby_deadline_at") @db.Timestamptz(6)
+  confirmationDeadlineAt     DateTime?                 @map("confirmation_deadline_at") @db.Timestamptz(6)
+  resultDeadlineAt           DateTime?                 @map("result_deadline_at") @db.Timestamptz(6)
+  createdByUserId            String                    @map("created_by_user_id") @db.Uuid
+  createdAt                  DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tournament                 DotaTournament            @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  entryA                     DotaTournamentEntry       @relation("DotaTournamentMatchEntryA", fields: [entryAId], references: [id], onDelete: Cascade)
+  entryB                     DotaTournamentEntry       @relation("DotaTournamentMatchEntryB", fields: [entryBId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, roundNumber, matchNumber])
+  @@index([tournamentId, scheduledAt])
+  @@index([status, lobbyDeadlineAt])
+  @@index([status, confirmationDeadlineAt])
+  @@index([status, resultDeadlineAt])
+  @@map("dota_tournament_matches")
+  @@schema("social")
+}
+
+model DotaTournamentEntryRequest {
+  id               String                            @id @default(uuid()) @db.Uuid
+  tournamentId     String                            @map("tournament_id") @db.Uuid
+  entryId          String                            @map("entry_id") @db.Uuid
+  userId           String                            @map("user_id") @db.Uuid
+  displayName      String                            @map("display_name") @db.VarChar(80)
+  dotaProfileSlug  String?                           @map("dota_profile_slug") @db.VarChar(120)
+  mmr              Int?
+  positionRole     String                            @map("position_role") @db.VarChar(8)
+  status           DotaTournamentEntryRequestStatus @default(PENDING)
+  createdAt        DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  entry            DotaTournamentEntry               @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  tournament       DotaTournament                    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user             User                              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, userId])
+  @@index([tournamentId, status, createdAt])
+  @@index([userId, status])
+  @@map("dota_tournament_entry_requests")
+  @@schema("social")
+}
+
+/// Event-scoped lineup snapshot; base-team changes never silently alter a submitted entry.
+model DotaTournamentEntryMember {
+  id             String             @id @default(uuid()) @db.Uuid
+  tournamentId   String             @map("tournament_id") @db.Uuid
+  entryId        String             @map("entry_id") @db.Uuid
+  userId         String?            @map("user_id") @db.Uuid
+  displayName    String             @map("display_name") @db.VarChar(80)
+  dotaProfileSlug String?           @map("dota_profile_slug") @db.VarChar(120)
+  mmr            Int?
+  positionRole   String?            @map("position_role") @db.VarChar(8)
+  isActive       Boolean            @default(true) @map("is_active")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  entry          DotaTournamentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  tournament     DotaTournament      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user           User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([entryId, userId])
+  @@index([tournamentId, isActive])
+  @@index([userId])
+  @@map("dota_tournament_entry_members")
   @@schema("social")
 }
 

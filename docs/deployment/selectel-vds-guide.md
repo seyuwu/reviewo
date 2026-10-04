@@ -1,5 +1,15 @@
 Обновление на VPS:
 
+С рабочего компьютера подключайтесь ключом `~/.ssh/opinia_deploy`:
+
+```bash
+ssh -i ~/.ssh/opinia_deploy -o IdentitiesOnly=yes root@136.234.5.192
+```
+
+Не отключайте проверку host key. Подтверждённый fingerprint сервера: `SHA256:JKLpUhfc+SL6u0XTPVAplGYLtsDopvdcGgNCDwtImGo`.
+
+После подключения выполните на VPS:
+
 ```bash
 cd /opt/opinia && git pull
 docker compose --env-file .env.production \
@@ -23,8 +33,8 @@ docker compose --env-file .env.production \
 | | logITika (проект 1) | Reviewo (проект 2) |
 | --- | --- | --- |
 | **Владелец** | nefony | nefony |
-| **VPS** | Selectel, Ubuntu 24.04, `139.100.235.205`, hostname `rachelle` | тот же сервер |
-| **SSH** | `ssh root@139.100.235.205` | |
+| **VPS** | Selectel, Ubuntu 24.04, `136.234.5.192`, hostname `first` | тот же сервер |
+| **SSH** | `ssh -i ~/.ssh/opinia_deploy -o IdentitiesOnly=yes root@136.234.5.192` | тот же сервер и ключ |
 | **Путь** | `/opt/logitika` | `/opt/reviewo` |
 | **Git** | `git@github.com:seyuwu/logITika.git` (ветка `main`) | `git@github.com:seyuwu/reviewo.git` |
 | **HTTP (loopback)** | `127.0.0.1:8888` | `127.0.0.1:8889` (web), `127.0.0.1:8890` (api) |
@@ -32,7 +42,9 @@ docker compose --env-file .env.production \
 | **Домен** | `logitika.ru`, `www.logitika.ru` | **ваш домен** — см. раздел 4 |
 | **nginx** | `/etc/nginx/sites-available/logitika` | `/etc/nginx/sites-available/reviewo` |
 
-> **История:** старый IP `161.104.34.79` резался ТСПУ. Новый IP `139.100.235.205` чистый — logITika открывается без VPN.
+> Текущий адрес VPS — `136.234.5.192`. Домен `opinia.ru`, `dota.opinia.ru`, `api.opinia.ru` и `logitika.ru` сейчас разрешается в этот адрес.
+
+Приватный ключ хранится на компьютере разработчика как `~/.ssh/opinia_deploy` (Windows: `%USERPROFILE%\.ssh\opinia_deploy`). Не копируйте его в репозиторий и не отправляйте. Публичная часть — `opinia_deploy.pub`.
 
 ---
 
@@ -97,7 +109,7 @@ Postgres, Redis и MinIO **не публикуются** на хост (`docker-
 ## 1. Проверка ресурсов VPS
 
 ```bash
-ssh root@139.100.235.205
+ssh -i ~/.ssh/opinia_deploy -o IdentitiesOnly=yes root@136.234.5.192
 
 free -h
 df -h
@@ -228,7 +240,7 @@ services:
 
 ## 4. DNS
 
-A-записи на **139.100.235.205**:
+A-записи на **136.234.5.192**:
 
 | Имя | Тип |
 | --- | --- |
@@ -529,7 +541,7 @@ cd /opt/logitika && docker compose ps
 
 ## 14. Чеклист «готов к выкату»
 
-- [ ] DNS `<домен>`, `www`, `api` → `139.100.235.205`  
+- [ ] DNS `<домен>`, `www`, `api` → `136.234.5.192`
 - [ ] `.env.production` с HTTPS-URL и секретами  
 - [ ] Порты 8889/8890 не конфликтуют с logITika (8888/5434)  
 - [ ] Docker-порты на `127.0.0.1`  

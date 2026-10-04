@@ -8,18 +8,18 @@ def home_keyboard(
     has_party: bool,
     is_recruiting: bool = False,
     is_looking: bool = False,
+    site_url: str = "https://dota.opinia.ru",
 ) -> InlineKeyboardMarkup:
     first_label = "🔎 Ищу пати" if is_looking else "🎯 Ищу пати"
     first_action = "panel:looking" if is_looking else "search:looking"
     open_party = has_party or is_recruiting
     second_label = "👥 Моя пати" if open_party else "🧭 Собрать пати"
     second_action = "panel:party" if open_party else "search:recruit"
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [button(first_label, first_action), button(second_label, second_action)],
-            *([[button("👤 Аккаунт", "panel:account")]] if registered else []),
-        ]
-    )
+    rows = [[button(first_label, first_action), button(second_label, second_action)]]
+    if registered:
+        rows.append([button("👤 Аккаунт", "panel:account")])
+    rows.append([button_url("🏆 Турниры", f"{site_url.rstrip('/')}/games/tournaments")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def onboarding_keyboard() -> InlineKeyboardMarkup:

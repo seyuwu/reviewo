@@ -1,0 +1,19 @@
+export const DOTA_TOURNAMENT_GAME_MODES = [
+  "ALL_PICK",
+  "RANDOM_DRAFT",
+  "CAPTAINS_MODE",
+  "CAPTAINS_DRAFT",
+  "SINGLE_DRAFT"
+] as const;
+
+export const DOTA_TOURNAMENT_REGIONS = [
+  "EUROPE",
+  "RUSSIA",
+  "US_EAST",
+  "US_WEST",
+  "SOUTH_AMERICA",
+  "SOUTHEAST_ASIA",
+  "CHINA",
+  "AUSTRALIA",
+  "SOUTH_AFRICA"
+] as const;

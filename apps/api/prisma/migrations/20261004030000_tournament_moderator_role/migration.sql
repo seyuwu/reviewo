@@ -1,0 +1,1 @@
+ALTER TYPE "users"."user_role" ADD VALUE 'TOURNAMENT_MODERATOR';

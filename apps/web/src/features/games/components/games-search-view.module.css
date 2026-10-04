@@ -136,6 +136,61 @@
   padding: 1.05rem;
 }
 
+.tournamentBanner {
+  align-items: center;
+  backdrop-filter: blur(16px);
+  background:
+    radial-gradient(ellipse at 0% 50%, rgb(119 76 255 / 18%), transparent 60%),
+    linear-gradient(110deg, rgb(24 26 43 / 90%), rgb(13 17 27 / 88%));
+  border: 1px solid rgb(167 139 250 / 26%);
+  border-radius: 1rem;
+  color: inherit;
+  display: flex;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem;
+  text-decoration: none;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.tournamentBanner:hover {
+  border-color: rgb(167 139 250 / 58%);
+  transform: translateY(-1px);
+}
+
+.tournamentIcon {
+  align-items: center;
+  background: rgb(124 88 255 / 16%);
+  border: 1px solid rgb(167 139 250 / 24%);
+  border-radius: 0.8rem;
+  display: inline-flex;
+  flex: 0 0 2.8rem;
+  font-size: 1.25rem;
+  height: 2.8rem;
+  justify-content: center;
+}
+
+.tournamentCopy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.tournamentCopy strong {
+  font-size: 0.95rem;
+}
+
+.tournamentCopy > span {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.tournamentArrow {
+  color: #c4b5fd;
+  font-size: 1.25rem;
+  margin-left: auto;
+}
+
 .panelHead {
   align-items: center;
   display: flex;

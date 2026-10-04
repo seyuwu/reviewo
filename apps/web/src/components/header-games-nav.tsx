@@ -23,6 +23,7 @@ export function HeaderGamesNav() {
   const { status: launchStatus, isLoading: isLaunchStatusLoading } = useGamesLaunchStatus();
   const searchLive = launchStatus.searchLive;
   const isTeammateSearch = pathname === "/games/search" || pathname.startsWith("/games/search/");
+  const isTournamentSection = pathname.startsWith("/games/tournaments");
   const [cinematicTargetPending, setCinematicTargetPending] = useState(false);
 
   useEffect(() => {
@@ -105,6 +106,18 @@ export function HeaderGamesNav() {
           <OpiniaIcon className="app-chrome-nav-icon-svg" name="search" />
         </span>
         <span>{t("web.nav.teammateSearch")}</span>
+      </Link>
+
+      <Link
+        className={navLinkClass(isTournamentSection, "games")}
+        href="/games/tournaments"
+        aria-label={t("web.nav.tournaments")}
+        title={t("web.nav.tournaments")}
+      >
+        <span className="app-chrome-nav-icon app-chrome-nav-icon--games">
+          <OpiniaIcon className="app-chrome-nav-icon-svg" name="trophy" />
+        </span>
+        <span>{t("web.nav.tournaments")}</span>
       </Link>
 
       {searchLive ? (

@@ -10,7 +10,13 @@ import {
 import { useTranslation } from "../../i18n/locale-provider";
 import { DotaCreateTeamForm } from "./dota-team-view";
 
-export function DotaCreateTeamGate() {
+export function DotaCreateTeamGate({
+  allowClosedCommunity = false,
+  tournamentSlug
+}: {
+  allowClosedCommunity?: boolean;
+  tournamentSlug: string | undefined;
+}) {
   const t = useTranslation();
   const router = useRouter();
   const { status, isLoading } = useGamesLaunchStatus();
@@ -21,18 +27,23 @@ export function DotaCreateTeamGate() {
       return;
     }
 
-    if (!communityLive) {
+    if (!communityLive && !allowClosedCommunity && !tournamentSlug) {
       router.replace("/games/community");
     }
-  }, [communityLive, isLoading, router]);
+  }, [allowClosedCommunity, communityLive, isLoading, router, tournamentSlug]);
 
   if (isLoading) {
     return <p className="muted-copy">{t("common.loadingEllipsis")}</p>;
   }
 
-  if (!communityLive) {
+  if (!communityLive && !allowClosedCommunity && !tournamentSlug) {
     return <p className="muted-copy">{t("common.loadingEllipsis")}</p>;
   }
 
-  return <DotaCreateTeamForm />;
+  return (
+    <DotaCreateTeamForm
+      tournamentEntry={allowClosedCommunity}
+      tournamentSlug={tournamentSlug}
+    />
+  );
 }

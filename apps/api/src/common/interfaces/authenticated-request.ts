@@ -3,7 +3,7 @@ export interface AuthenticatedUser {
   displayName: string;
   email: string | null;
   id: string;
-  role: "ADMIN" | "USER";
+  role: "ADMIN" | "TOURNAMENT_MODERATOR" | "USER";
   status: string;
   username: string | null;
 }

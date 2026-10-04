@@ -26,7 +26,7 @@ import { fileToAvatarDataUrl } from "../lib/resize-avatar";
 import type { CurrentUserProfile } from "../types/profile";
 import { ProfileDashboardSummary } from "./profile-dashboard-summary";
 import { ProfileUserTopsSection } from "./profile-user-tops-section";
-import { ProfileAdminLink } from "./profile-editor-stats-section";
+import { ProfileAdminLink, ProfileTournamentModeratorLink } from "./profile-editor-stats-section";
 
 type ProfileFlowState = "loading" | "guest" | "authenticated";
 
@@ -170,6 +170,9 @@ export function ProfilePageView() {
                   profile={profileQuery.data}
                 />
                 <ProfileAdminLink isAdmin={profileQuery.data.role === "ADMIN"} />
+                <ProfileTournamentModeratorLink
+                  canManageTournaments={profileQuery.data.role === "TOURNAMENT_MODERATOR"}
+                />
                 <ProfileUserTopsSection userId={profileQuery.data.id} />
                 <div
                   className="panel-card profile-panel profile-settings-panel"

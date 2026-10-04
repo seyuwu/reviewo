@@ -88,3 +88,17 @@ export function ProfileAdminLink({ isAdmin }: ProfileAdminLinkProps) {
     </div>
   );
 }
+
+export function ProfileTournamentModeratorLink({ canManageTournaments }: { canManageTournaments: boolean }) {
+  const t = useTranslation();
+
+  if (!canManageTournaments) return null;
+
+  return (
+    <div className="profile-actions">
+      <Link className="button-secondary" href="/games/tournaments/manage">
+        {t("dota.tournaments.manage")}
+      </Link>
+    </div>
+  );
+}

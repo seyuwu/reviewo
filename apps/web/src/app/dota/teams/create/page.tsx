@@ -7,10 +7,18 @@ export const metadata: Metadata = {
   title: "Создать команду или пати | Opinia"
 };
 
-export default function DotaCreateTeamPage() {
+interface DotaCreateTeamPageProps {
+  searchParams: Promise<{ from?: string; tournament?: string }>;
+}
+
+export default async function DotaCreateTeamPage({ searchParams }: DotaCreateTeamPageProps) {
+  const { from, tournament } = await searchParams;
   return (
     <main className="shell entity-route">
-      <DotaCreateTeamGate />
+      <DotaCreateTeamGate
+        allowClosedCommunity={from === "tournaments"}
+        tournamentSlug={tournament}
+      />
     </main>
   );
 }

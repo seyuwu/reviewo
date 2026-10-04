@@ -152,6 +152,12 @@ export function AdminPageView() {
         <Link className="button-secondary" href="/admin/games-launch">
           {t("web.admin.gamesLaunch.openPanel")}
         </Link>
+        <Link className="button-secondary" href="/admin/tournaments">
+          {t("dota.tournaments.admin.title")}
+        </Link>
+        <Link className="button-secondary" href="/admin/tournament-moderators">
+          {t("dota.tournaments.moderators.title")}
+        </Link>
       </header>
 
       <div className={styles.adminStatsGrid}>
