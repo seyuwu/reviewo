@@ -59,6 +59,11 @@ const request = {
 function createService(overrides?: {
   attributes?: Record<string, string>;
   distinctConfirmers?: number;
+  hasProfile?: boolean;
+  lookingAttributes?: Record<string, string>;
+  onPersist?: (attributes: Record<string, string>) => void;
+  onSearchStart?: (input: { expiresAt: Date; source: "telegram" | "web" }) => void;
+  onSearchStop?: () => void;
   qualities?: Record<string, number>;
 }) {
   const attributes = {
@@ -70,7 +75,8 @@ function createService(overrides?: {
   const entitiesRepository = {
     create: async () => entity,
     findById: async () => entity,
-    findByOwnerUserId: async (userId: string) => (userId === owner.id ? entity : null),
+    findByOwnerUserId: async (userId: string) =>
+      userId === owner.id && overrides?.hasProfile !== false ? entity : null,
     findBySlug: async (slug: string) => (slug === entity.slug ? entity : null),
     isUniqueConstraintError: () => false,
     updateTitle: async (_id: string, title: string) => ({ ...entity, title })
@@ -80,11 +86,32 @@ function createService(overrides?: {
     findByEntityId: async () => attributes,
     findEntityIdByDotaAccountId: async () => entity.id,
     isUniqueConstraintError: () => false,
-    upsertMany: async () => undefined
+    listLookingDotaProfiles: async () => [
+      {
+        ...entity,
+        attributes: Object.entries({ ...attributes, ...overrides?.lookingAttributes }).map(
+          ([key, value]) => ({ key, value })
+        )
+      }
+    ],
+    upsertMany: async (_entityId: string, next: Record<string, string>) => {
+      Object.assign(attributes, next);
+      overrides?.onPersist?.(next);
+    },
+    upsertManyWithDotaMatchLock: async (
+      _userId: string,
+      _entityId: string,
+      next: Record<string, string>
+    ) => {
+      Object.assign(attributes, next);
+      overrides?.onPersist?.(next);
+      return true;
+    }
   } as unknown as EntityAttributesRepository;
 
   const entityQualityConfirmationsRepository = {
     countByQualityKey: async () => overrides?.qualities ?? {},
+    countByQualityKeyForEntities: async () => ({}),
     countDistinctConfirmers: async () => overrides?.distinctConfirmers ?? 0,
     deleteConfirmation: async () => undefined,
     hasConfirmerForEntity: async () => false,
@@ -137,7 +164,12 @@ function createService(overrides?: {
   } as unknown as FriendshipsService;
 
   const authService = {} as unknown as AuthService;
-  const dotaSearchHistoryService = {} as unknown as DotaSearchHistoryService;
+  const dotaSearchHistoryService = {
+    startSoloSearch: overrides?.onSearchStart ?? (() => undefined),
+    startPartyRecruitSearch: overrides?.onSearchStart ?? (() => undefined),
+    finishSoloSearch: overrides?.onSearchStop ?? (() => undefined),
+    stopPartyRecruitSearch: overrides?.onSearchStop ?? (() => undefined)
+  } as unknown as DotaSearchHistoryService;
 
   return new DotaProfileService(
     authService,
@@ -146,13 +178,137 @@ function createService(overrides?: {
     entityAttributesRepository,
     entityQualityConfirmationsRepository,
     friendshipsService,
-    {} as never,
+    {
+      listBlockedPartySlugsForUser: async () => [],
+      findByVerticalAndSlug: async () => ({
+        id: "44444444-4444-4444-8444-444444444444",
+        ownerUserId: owner.id,
+        slug: "website-party",
+        name: "Website party",
+        kind: "PARTY",
+        joinMode: "OPEN",
+        maxMembers: 5,
+        expiresAt: new Date(Date.now() + 60_000),
+        members: [{ userId: owner.id, positionRole: "3" }]
+      })
+    } as never,
     { broadcastPartyRecruitUpdated: () => undefined } as never,
     usersRepository
   );
 }
 
 describe("DotaProfileService", () => {
+  it("keeps Telegram solo and party searches active for 30 minutes, with matching analytics deadlines", async () => {
+    for (const source of [undefined, "telegram", "web"] as const) {
+      for (const partySlug of [undefined, "website-party"]) {
+        let deadline = "";
+        let historyDeadline = "";
+        let stopped = false;
+        const service = createService({
+          onPersist: (attributes) => {
+            deadline = attributes.lfg_until ?? "";
+          },
+          onSearchStart: (input) => {
+            historyDeadline = input.expiresAt.toISOString();
+            assert.equal(input.source, source ?? "telegram");
+          },
+          onSearchStop: () => {
+            stopped = true;
+          }
+        });
+        const before = Date.now();
+        const options = { ...(source ? { source } : {}), ...(partySlug ? { partySlug } : {}) };
+        const profile = await service.setLooking(true, owner, options);
+        const after = Date.now();
+        const duration = (source === "web" ? 20 : 30) * 60 * 1000;
+        assert.ok(Date.parse(deadline) >= before + duration);
+        assert.ok(Date.parse(deadline) <= after + duration);
+        assert.equal(historyDeadline, deadline);
+        assert.equal(profile.looking, true);
+        const stoppedProfile = await service.setLooking(false, owner, options);
+        assert.equal(deadline, new Date(0).toISOString());
+        assert.equal(stoppedProfile.looking, false);
+        assert.equal(stopped, true);
+      }
+    }
+  });
+
+  it("stores EU for new profiles even when the client omits region or sends a legacy region", async () => {
+    for (const server of [undefined, "RU"]) {
+      let persisted: Record<string, string> = {};
+      const service = createService({
+        hasProfile: false,
+        onPersist: (attributes) => {
+          persisted = attributes;
+        }
+      });
+      const profile = await service.createProfile(
+        {
+          dotaAccountId: "123456789",
+          mmr: "3500",
+          roles: ["1"],
+          ...(server ? { server } : {})
+        },
+        owner
+      );
+
+      assert.equal(profile.server, "EU");
+      assert.equal(persisted.server, "EU");
+      assert.equal(persisted.mmr, "3500");
+      assert.deepEqual(profile.roles, ["1"]);
+    }
+  });
+
+  it("normalizes legacy profiles on read and profile updates without changing roles or MMR", async () => {
+    for (const legacyServer of [undefined, "SEA"]) {
+      let persisted: Record<string, string> = {};
+      const service = createService({
+        attributes: {
+          mmr: "4256",
+          roles: '["1","2"]',
+          ...(legacyServer ? { server: legacyServer } : {})
+        },
+        onPersist: (attributes) => {
+          persisted = attributes;
+        }
+      });
+
+      assert.equal((await service.getMyProfile(owner)).server, "EU");
+      const profile = await service.updateMyProfile({ server: "RU" }, owner);
+      assert.equal(profile.server, "EU");
+      assert.equal(persisted.server, "EU");
+      assert.equal(profile.mmr, "4256");
+      assert.deepEqual(profile.roles, ["1", "2"]);
+    }
+  });
+
+  it("includes website recruiting parties without a region in the bot's EU search", async () => {
+    const service = createService({
+      attributes: { mmr: "3500", roles: '["3"]' },
+      lookingAttributes: {
+        lfg_until: new Date(Date.now() + 60_000).toISOString(),
+        lfg_party_slug: "website-party",
+        lfg_recruited_roles: "1,2"
+      }
+    });
+
+    for (const server of ["EU", "RU"]) {
+      const feed = await service.listLookingPlayers({
+        roles: ["1"],
+        server,
+        viewerUserId: owner.id
+      });
+      assert.equal(feed.results.length, 1);
+      assert.equal(feed.results[0]?.partySlug, "website-party");
+      assert.equal(feed.results[0]?.server, "EU");
+      assert.deepEqual(feed.results[0]?.recruitedRoles, ["1", "2"]);
+      assert.equal(feed.results[0]?.joinMode, "OPEN");
+    }
+
+    const incompatibleRoles = await service.listLookingPlayers({ roles: ["4"], server: "EU" });
+    assert.equal(incompatibleRoles.results.length, 0);
+  });
+
   it("returns public profile with progress milestone", async () => {
     const service = createService({ distinctConfirmers: 1, qualities: { play_again: 1 } });
     const profile = await service.getPublicProfileBySlug("fivii");
@@ -197,4 +353,3 @@ describe("DotaProfileService", () => {
     assert.equal(profile.isOwner, true);
   });
 });
-

@@ -1,5 +1,8 @@
 export const DOTA_VERTICAL = "dota" as const;
 
+/** Region selection is disabled; every Dota profile uses EU. */
+export const DOTA_DEFAULT_SERVER = "EU" as const;
+
 export const DOTA_ATTRIBUTE_KEYS = {
   vertical: "vertical",
   dotaAccountId: "dota_account_id",
@@ -25,8 +28,13 @@ export const DOTA_ATTRIBUTE_KEYS = {
   lfgMaxMembers: "lfg_max_members"
 } as const;
 
-/** How long "Looking for party" stays active without refresh. */
+/** Website search duration; Telegram searches have a longer window. */
 export const DOTA_LFG_TTL_SECONDS = 20 * 60;
+export const DOTA_TELEGRAM_LFG_TTL_SECONDS = 30 * 60;
+
+export function getDotaLfgTtlSeconds(source: "telegram" | "web"): number {
+  return source === "telegram" ? DOTA_TELEGRAM_LFG_TTL_SECONDS : DOTA_LFG_TTL_SECONDS;
+}
 
 export const DOTA_GENDER_VALUES = ["female", "male", "unspecified"] as const;
 export type DotaGender = (typeof DOTA_GENDER_VALUES)[number];

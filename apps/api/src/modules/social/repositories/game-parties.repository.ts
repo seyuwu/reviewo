@@ -9,6 +9,7 @@ import type {
 } from "#prisma/client";
 import {
   DOTA_ATTRIBUTE_KEYS,
+  DOTA_DEFAULT_SERVER,
   DOTA_PARTY_VERTICAL,
   DOTA_PARTY_RECRUIT_MMR_SPREAD,
   DOTA_POSITION_ROLES,
@@ -150,10 +151,7 @@ export class GamePartiesRepository {
         const bounds = parseMmrBounds(attributes?.[DOTA_ATTRIBUTE_KEYS.mmr]);
         return bounds ? [bounds] : [];
       });
-      const servers = memberAttributes.flatMap((attributes) => {
-        const server = attributes?.[DOTA_ATTRIBUTE_KEYS.server]?.trim();
-        return server ? [server] : [];
-      });
+      const servers = [DOTA_DEFAULT_SERVER];
 
       return [
         {
@@ -331,10 +329,7 @@ export class GamePartiesRepository {
           const bounds = parseMmrBounds(attributes?.[DOTA_ATTRIBUTE_KEYS.mmr]);
           return bounds ? [bounds] : [];
         });
-        const servers = memberAttributes.flatMap((attributes) => {
-          const server = attributes?.[DOTA_ATTRIBUTE_KEYS.server]?.trim();
-          return server ? [server] : [];
-        });
+        const servers = [DOTA_DEFAULT_SERVER];
         return {
           createdAt: party.createdAt,
           discordChannelId: party.discordChannelId,
@@ -653,7 +648,6 @@ export class GamePartiesRepository {
           .map((member) => member.userId);
 
         const mmrBounds: Array<{ high: number; low: number }> = [];
-        const servers = new Set<string>();
 
         for (const member of input.members) {
           if (!isDotaPositionRole(member.positionRole)) {
@@ -687,11 +681,6 @@ export class GamePartiesRepository {
             return { ok: false as const, reason: "invalid_profile" as const };
           }
           mmrBounds.push(bounds);
-
-          const server = attributes[DOTA_ATTRIBUTE_KEYS.server]?.trim();
-          if (server) {
-            servers.add(server);
-          }
         }
 
         if (
@@ -700,9 +689,6 @@ export class GamePartiesRepository {
           DOTA_PARTY_RECRUIT_MMR_SPREAD
         ) {
           return { ok: false as const, reason: "mmr_spread" as const };
-        }
-        if (servers.size > 1) {
-          return { ok: false as const, reason: "invalid_profile" as const };
         }
 
         const party = await tx.gameParty.create({

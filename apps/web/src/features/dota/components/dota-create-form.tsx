@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { DOTA_DEFAULT_SERVER } from "@reviewo/shared";
 
 import { ApiError } from "../../../lib/api/api-error";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
@@ -33,7 +34,6 @@ import { DotaMmrField } from "./dota-mmr-field";
 import styles from "./dota-create-form.module.css";
 
 const ROLE_OPTIONS = ["1", "2", "3", "4", "5"] as const;
-const SERVER_OPTIONS = ["EU", "RU", "US", "SEA"] as const;
 
 type PlayIntent = "fun" | "ranked" | "tournament";
 type ProfileLoadState = "idle" | "loading" | "loaded";
@@ -50,7 +50,6 @@ export function DotaCreateForm() {
   const [mmrFrom, setMmrFrom] = useState("");
   const [mmrTo, setMmrTo] = useState("");
   const [roles, setRoles] = useState<string[]>([]);
-  const [server, setServer] = useState<(typeof SERVER_OPTIONS)[number]>("EU");
   const [gender, setGender] = useState<"female" | "male" | "unspecified">("unspecified");
   const [hasMic, setHasMic] = useState(true);
   const [playIntent, setPlayIntent] = useState<PlayIntent>("ranked");
@@ -161,7 +160,6 @@ export function DotaCreateForm() {
     setMmrFrom(from);
     setMmrTo(to);
     setRoles(profile.roles);
-    setServer(resolveServer(profile.server));
     setGender(resolveGender(profile.gender));
     setHasMic(profile.hasMic ?? true);
     setPlayIntent(resolvePlayIntent(profile.playIntent));
@@ -200,7 +198,7 @@ export function DotaCreateForm() {
       ...(mmr ? { mmr } : {}),
       playIntent,
       roles,
-      server,
+      server: DOTA_DEFAULT_SERVER,
       // Create: omit title so API picks default / account name. Edit: always send nick.
       ...(isEditMode ? { title: trimmedDisplayName } : {})
     };
@@ -471,17 +469,6 @@ export function DotaCreateForm() {
           {isEditMode ? (
             <section className={styles.section}>
               <label className="field-label">
-                {t("dota.create.server")}
-                <select onChange={(event) => setServer(event.target.value as typeof server)} value={server}>
-                  {SERVER_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="field-label">
                 {t("dota.create.gender")}
                 <select
                   onChange={(event) =>
@@ -533,14 +520,6 @@ export function DotaCreateForm() {
       </section>
     </div>
   );
-}
-
-function resolveServer(value: string | null): (typeof SERVER_OPTIONS)[number] {
-  if (value && SERVER_OPTIONS.includes(value as (typeof SERVER_OPTIONS)[number])) {
-    return value as (typeof SERVER_OPTIONS)[number];
-  }
-
-  return "EU";
 }
 
 function resolveGender(value: string | null): "female" | "male" | "unspecified" {

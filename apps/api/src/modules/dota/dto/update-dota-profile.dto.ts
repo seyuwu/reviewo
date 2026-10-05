@@ -73,6 +73,7 @@ export class UpdateDotaProfileDto {
   @IsIn(ROLE_VALUES, { each: true })
   roles?: string[];
 
+  /** Accepted for older clients; the profile service always stores EU. */
   @IsOptional()
   @Transform(({ value }) => (typeof value === "string" ? value.trim().toUpperCase() : value))
   @IsString()

@@ -41,7 +41,7 @@ class PanelUpdateGuard(Protocol):
     def panel_lock_for(self, telegram_user_id: int) -> asyncio.Lock: ...
 
     def is_processing(self, telegram_user_id: int) -> bool: ...
-LFG_WINDOW_SECONDS = 20 * 60
+LFG_WINDOW_SECONDS = 30 * 60
 LONG_SEARCH_REMINDER_SECONDS = 3 * 60
 DEFAULT_PANEL_IMAGE = Path(__file__).resolve().parents[1] / "assets" / "fdp-panel-background.png"
 
@@ -877,4 +877,4 @@ def search_elapsed_seconds(expires_at: object, started_at: object = None) -> int
     except (TypeError, ValueError, OverflowError):
         pass
     remaining = remaining_seconds(expires_at)
-    return LFG_WINDOW_SECONDS - remaining if remaining is not None else 0
+    return max(0, LFG_WINDOW_SECONDS - remaining) if remaining is not None else 0

@@ -3,8 +3,9 @@ import type { Entity } from "#prisma/client";
 import {
   DOTA_ATTRIBUTE_KEYS,
   DOTA_CONFIRMATION_MILESTONE,
+  DOTA_DEFAULT_SERVER,
   DOTA_FLAG_LIMIT_PER_SIDE,
-  DOTA_LFG_TTL_SECONDS,
+  getDotaLfgTtlSeconds,
   DOTA_PARTY_SIZE,
   DOTA_PARTY_RECRUIT_MMR_SPREAD,
   DOTA_PARTY_VERTICAL,
@@ -205,7 +206,8 @@ export class DotaProfileService {
           !attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim()
             ? [...DOTA_POSITION_ROLES]
             : parseRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
-        const server = attributes[DOTA_ATTRIBUTE_KEYS.server] ?? null;
+        // Old clients may still send a region filter; matching currently uses EU for everyone.
+        const server = DOTA_DEFAULT_SERVER;
         const partySlug = attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || null;
         const source = attributes[DOTA_ATTRIBUTE_KEYS.lfgSource];
         const matchSource: "telegram" | "web" | null =
@@ -215,10 +217,6 @@ export class DotaProfileService {
         );
 
         if (partySlug && blockedPartySlugs.has(partySlug)) {
-          return null;
-        }
-
-        if (input.server && server !== input.server) {
           return null;
         }
 
@@ -471,13 +469,12 @@ export class DotaProfileService {
       };
     }
 
+    const lfgExpiresAt = new Date(looking ? Date.now() + getDotaLfgTtlSeconds(source) * 1000 : 0);
     const savedLookingState = await this.entityAttributesRepository.upsertManyWithDotaMatchLock(
       currentUser.id,
       entity.id,
       {
-        [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
-          ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
-          : new Date(0).toISOString(),
+        [DOTA_ATTRIBUTE_KEYS.lfgUntil]: lfgExpiresAt.toISOString(),
         [DOTA_ATTRIBUTE_KEYS.lfgSource]: looking ? source : "",
         [DOTA_ATTRIBUTE_KEYS.lfgAllRoles]: "",
         [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
@@ -495,7 +492,7 @@ export class DotaProfileService {
 
     if (looking) {
       this.dotaSearchHistoryService.startSoloSearch({
-        expiresAt: new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000),
+        expiresAt: lfgExpiresAt,
         source,
         userId: currentUser.id
       });
@@ -645,14 +642,13 @@ export class DotaProfileService {
       };
     }
 
+    const lfgExpiresAt = new Date(looking ? Date.now() + getDotaLfgTtlSeconds(source) * 1000 : 0);
     const savedRecruitState = await this.entityAttributesRepository.upsertManyWithDotaMatchLock(
       party.ownerUserId,
       ownerEntity.id,
       {
         [DOTA_ATTRIBUTE_KEYS.lfgAllRoles]: "",
-        [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
-          ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
-          : new Date(0).toISOString(),
+        [DOTA_ATTRIBUTE_KEYS.lfgUntil]: lfgExpiresAt.toISOString(),
         [DOTA_ATTRIBUTE_KEYS.lfgSource]: looking ? source : "",
         [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
         ...recruitAttributes
@@ -680,7 +676,7 @@ export class DotaProfileService {
 
     if (looking) {
       this.dotaSearchHistoryService.startPartyRecruitSearch({
-        expiresAt: new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000),
+        expiresAt: lfgExpiresAt,
         initialMemberCount: party.members.length,
         partyId: party.id,
         partyName: party.name,
@@ -1075,7 +1071,8 @@ export class DotaProfileService {
 
   private buildAttributeMap(input: DotaAttributeInput): Record<string, string> {
     const attributes: Record<string, string> = {
-      [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL
+      [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
+      [DOTA_ATTRIBUTE_KEYS.server]: DOTA_DEFAULT_SERVER
     };
 
     if (input.dotaAccountId) {
@@ -1088,10 +1085,6 @@ export class DotaProfileService {
 
     if (input.roles?.length) {
       attributes[DOTA_ATTRIBUTE_KEYS.roles] = JSON.stringify([...new Set(input.roles)]);
-    }
-
-    if (input.server) {
-      attributes[DOTA_ATTRIBUTE_KEYS.server] = input.server.trim().toUpperCase();
     }
 
     if (input.language) {
@@ -1181,7 +1174,9 @@ export class DotaProfileService {
       hasMic: parseOptionalBoolean(attributes[DOTA_ATTRIBUTE_KEYS.hasMic]),
       isOwner: options.isOwner,
       looking: options.isOwner && isLooking,
-      searchAllRoles: options.isOwner && isLooking &&
+      searchAllRoles:
+        options.isOwner &&
+        isLooking &&
         !attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() &&
         attributes[DOTA_ATTRIBUTE_KEYS.lfgAllRoles] === "true",
       lfgExpiresAt: options.isOwner && isLooking ? new Date(lfgUntilMs).toISOString() : null,
@@ -1199,7 +1194,7 @@ export class DotaProfileService {
       },
       qualities,
       roles: parseRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]),
-      server: attributes[DOTA_ATTRIBUTE_KEYS.server] ?? null,
+      server: DOTA_DEFAULT_SERVER,
       slug: entity.slug,
       title: entity.title
     };

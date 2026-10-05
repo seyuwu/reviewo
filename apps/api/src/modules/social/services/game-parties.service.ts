@@ -20,7 +20,7 @@ import {
   DOTA_TEMP_PARTY_EXTEND_HOURS,
   DOTA_TEMP_PARTY_MAX_LIFETIME_HOURS,
   DOTA_TEMP_PARTY_TTL_HOURS,
-  DOTA_LFG_TTL_SECONDS,
+  getDotaLfgTtlSeconds,
   DOTA_VERTICAL,
   generateDotaPartyName,
   isDotaGreenFlagKey,
@@ -229,10 +229,11 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     const slug = await this.createAvailableSlug(createSlug(name), "PARTY");
     const now = new Date();
     const expiresAt = new Date(now.getTime() + DOTA_TEMP_PARTY_TTL_HOURS * 60 * 60 * 1000);
+    const lfgExpiresAt = new Date(now.getTime() + getDotaLfgTtlSeconds(searchSource) * 1000);
     const result = await this.gamePartiesRepository.createAutoMatchedPartyAtomically({
       expiresAt,
       leaderUserId: input.leaderUserId,
-      lfgExpiresAt: new Date(now.getTime() + DOTA_LFG_TTL_SECONDS * 1000),
+      lfgExpiresAt,
       maxMembers: DOTA_PARTY_SIZE,
       members: input.members,
       name,
@@ -272,7 +273,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
 
     if (party.recruitedRoles.length > 0) {
       this.dotaSearchHistoryService.startPartyRecruitSearch({
-        expiresAt: new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000),
+        expiresAt: lfgExpiresAt,
         initialMemberCount: result.party.members.length,
         partyId: result.party.id,
         partyName: result.party.name,
