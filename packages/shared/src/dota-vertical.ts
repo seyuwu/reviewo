@@ -14,6 +14,8 @@ export const DOTA_ATTRIBUTE_KEYS = {
   matchMode: "match_mode",
   lfgUntil: "lfg_until",
   lfgSource: "lfg_source",
+  /** Current solo search accepts any position without changing profile roles. */
+  lfgAllRoles: "lfg_all_roles",
   lfgPartySlug: "lfg_party_slug",
   lfgDesiredSize: "lfg_desired_size",
   lfgRecruitedRoles: "lfg_recruited_roles",

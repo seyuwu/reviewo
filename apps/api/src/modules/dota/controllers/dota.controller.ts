@@ -36,6 +36,7 @@ import { GuestDotaProfileCreateResponseDto } from "../dto/guest-dota-profile-cre
 import { ListDotaLfgQueryDto } from "../dto/list-dota-lfg-query.dto.js";
 import { SearchDotaProfilesQueryDto } from "../dto/search-dota-profiles-query.dto.js";
 import { SetDotaLfgLookingDto } from "../dto/set-dota-lfg-looking.dto.js";
+import { SetDotaLfgAllRolesDto } from "../dto/set-dota-lfg-all-roles.dto.js";
 import { UpdateDotaProfileDto } from "../dto/update-dota-profile.dto.js";
 import { DotaProfileService } from "../services/dota-profile.service.js";
 
@@ -127,6 +128,15 @@ export class DotaController {
       ...(input.recruitedRoles !== undefined ? { recruitedRoles: input.recruitedRoles } : {}),
       ...(input.partySlug ? { partySlug: input.partySlug } : {})
     });
+  }
+
+  @Patch("lfg/roles")
+  @UseGuards(JwtAuthGuard)
+  async searchAllRoles(
+    @Body() _input: SetDotaLfgAllRolesDto,
+    @CurrentUser() currentUser: AuthenticatedUser
+  ): Promise<DotaProfileResponseDto> {
+    return this.dotaProfileService.searchAllRoles(currentUser);
   }
 
   @Post()

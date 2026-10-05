@@ -624,6 +624,9 @@ async def render_screen(
         roles = profile.get("roles") or []
         role_names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
         roles_text = ", ".join(role_names[role] for role in roles if role in role_names) or "не выбраны"
+        all_roles = bool(profile.get("searchAllRoles"))
+        if all_roles:
+            roles_text = "Все роли · 1–5"
         if not profile.get("looking"):
             return (
                 "Автопоиск завершён. Нажмите ниже, чтобы искать пати снова.",
@@ -640,13 +643,16 @@ async def render_screen(
         timer = f"\n\n⏱ Поиск идёт: <b>{format_duration(elapsed)}</b>"
         if remaining is not None:
             timer += f" · осталось {format_duration(remaining)}"
+        search_description = (
+            "Займёте одну из свободных позиций найденной пати."
+            if all_roles else "Подбираю пати автоматически по позициям и MMR."
+        )
         return (
             f"<b>Ищу пати · {escape_text(profile.get('title') or 'Игрок')}</b>\n"
             f"MMR: {escape_text(profile.get('mmr') or '—')}\n"
             f"Позиции: {escape_text(roles_text)}\n\n"
-            "Подбираю пати автоматически по позициям и MMR."
-            f"{timer}",
-            looking_keyboard(),
+            f"{search_description}{timer}",
+            looking_keyboard(all_roles=all_roles),
         )
 
     if screen == "profile":

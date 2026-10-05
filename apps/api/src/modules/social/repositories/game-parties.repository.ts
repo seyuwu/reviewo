@@ -11,6 +11,7 @@ import {
   DOTA_ATTRIBUTE_KEYS,
   DOTA_PARTY_VERTICAL,
   DOTA_PARTY_RECRUIT_MMR_SPREAD,
+  DOTA_POSITION_ROLES,
   DOTA_VERTICAL,
   isDotaPositionRole
 } from "@reviewo/shared";
@@ -674,7 +675,9 @@ export class GamePartiesRepository {
             return { ok: false as const, reason: "search_expired" as const };
           }
 
-          const roles = parseDotaRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
+          const roles = attributes[DOTA_ATTRIBUTE_KEYS.lfgAllRoles] === "true"
+            ? [...DOTA_POSITION_ROLES]
+            : parseDotaRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
           if (!roles.includes(member.positionRole)) {
             return { ok: false as const, reason: "invalid_profile" as const };
           }
@@ -747,6 +750,7 @@ export class GamePartiesRepository {
           const attributes =
             member.userId === input.leaderUserId && recruitedRoles.length > 0
               ? {
+                  [DOTA_ATTRIBUTE_KEYS.lfgAllRoles]: "",
                   [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: String(input.maxMembers),
                   [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: String(input.maxMembers),
                   [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: String(input.members.length),
@@ -759,6 +763,7 @@ export class GamePartiesRepository {
                   [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL
                 }
               : {
+                  [DOTA_ATTRIBUTE_KEYS.lfgAllRoles]: "",
                   [DOTA_ATTRIBUTE_KEYS.lfgDesiredSize]: "",
                   [DOTA_ATTRIBUTE_KEYS.lfgMaxMembers]: "",
                   [DOTA_ATTRIBUTE_KEYS.lfgMemberCount]: "",

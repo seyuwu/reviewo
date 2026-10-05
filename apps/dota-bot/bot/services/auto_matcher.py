@@ -15,6 +15,12 @@ ROLE_VALUES = {"1", "2", "3", "4", "5"}
 SOLO_GROUP_MMR_SPREAD = 1500
 
 
+def solo_search_roles(profile: dict) -> list[str]:
+    if profile.get("searchAllRoles"):
+        return sorted(ROLE_VALUES)
+    return sorted({str(role) for role in (profile.get("roles") or [])} & ROLE_VALUES)
+
+
 def _is_current_solo_search(storage, telegram_user_id: int, search: dict) -> bool:
     current = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
     return (
@@ -81,7 +87,7 @@ async def _form_solo_searcher_groups(bot, api, settings, storage) -> None:
                     return None
 
                 mmr = mmr_interval(profile.get("mmr"))
-                roles = sorted({str(role) for role in (profile.get("roles") or [])} & ROLE_VALUES)
+                roles = solo_search_roles(profile)
                 owner_user_id = str(profile.get("ownerUserId") or "")
                 if not mmr or not roles or not owner_user_id or not profile.get("slug"):
                     return None
@@ -306,7 +312,7 @@ async def _match_user(
             return
 
         player_mmr = mmr_interval(profile.get("mmr"))
-        player_roles = sorted({str(role) for role in (profile.get("roles") or [])} & ROLE_VALUES)
+        player_roles = solo_search_roles(profile)
         if player_mmr is None or not player_roles:
             return
 

@@ -43,6 +43,7 @@ export class EntityAttributesRepository {
     options?: {
       activeRecruitingPartySlug?: string;
       expectedPartySlug?: string;
+      activeSoloSearch?: boolean;
     }
   ): Promise<boolean> {
     return this.prismaService.$transaction(async (tx) => {
@@ -51,6 +52,27 @@ export class EntityAttributesRepository {
           hashtext(${`${userId}:dota-party-join`})
         )
       `;
+
+      if (options?.activeSoloSearch) {
+        const searchAttributes = await tx.entityAttribute.findMany({
+          select: { key: true, value: true },
+          where: {
+            entityId,
+            key: { in: [DOTA_ATTRIBUTE_KEYS.lfgUntil, DOTA_ATTRIBUTE_KEYS.lfgPartySlug] }
+          }
+        });
+        const currentSearch = Object.fromEntries(
+          searchAttributes.map(({ key, value }) => [key, value])
+        );
+        const expiresAt = Date.parse(currentSearch[DOTA_ATTRIBUTE_KEYS.lfgUntil] ?? "");
+        if (
+          !Number.isFinite(expiresAt) ||
+          expiresAt <= Date.now() ||
+          currentSearch[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim()
+        ) {
+          return false;
+        }
+      }
 
       if (options?.expectedPartySlug) {
         const currentPartySlug = await tx.entityAttribute.findUnique({
@@ -92,7 +114,7 @@ export class EntityAttributesRepository {
         Number.isFinite(lfgUntil) &&
         lfgUntil > Date.now() &&
         !attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim();
-      if (startsSoloSearch) {
+      if (startsSoloSearch || options?.activeSoloSearch) {
         const activeParty = await tx.gamePartyMember.findFirst({
           select: { id: true },
           where: {

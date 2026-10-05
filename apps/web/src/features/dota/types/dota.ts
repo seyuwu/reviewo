@@ -12,6 +12,7 @@ export interface DotaProfile {
   hasMic: boolean | null;
   isOwner: boolean;
   looking?: boolean;
+  searchAllRoles?: boolean;
   lfgExpiresAt?: string | null;
   language: string | null;
   mmr: string | null;

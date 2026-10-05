@@ -543,8 +543,9 @@ export function GamesSearchView() {
         const profile = await fetchMyDotaProfile(authSession.accessToken);
         setMyMmr(profile.mmr);
         setMyServer(profile.server);
+        const searchRoles = profile.searchAllRoles ? ["1", "2", "3", "4", "5"] : profile.roles ?? [];
         setMyRoles(
-          (profile.roles ?? []).filter((role): role is DotaPositionRole =>
+          searchRoles.filter((role): role is DotaPositionRole =>
             ["1", "2", "3", "4", "5"].includes(role)
           )
         );

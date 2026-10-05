@@ -71,12 +71,16 @@ def announcements_keyboard(enabled: bool) -> InlineKeyboardMarkup:
     )
 
 
-def looking_keyboard() -> InlineKeyboardMarkup:
+def looking_keyboard(all_roles: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if not all_roles:
+        rows.append([button("🔎 Поиск по всем ролям", "search:all_roles")])
+    rows.extend([
+        [button("⏹ Остановить поиск", "search:stop")],
+        [button("← В меню", "panel:home")],
+    ])
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [button("⏹ Остановить поиск", "search:stop")],
-            [button("← В меню", "panel:home")],
-        ]
+        inline_keyboard=rows
     )
 
 

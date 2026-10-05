@@ -3227,6 +3227,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
         [DOTA_ATTRIBUTE_KEYS.lfgPartyName]: "",
         [DOTA_ATTRIBUTE_KEYS.lfgPartySlug]: "",
         [DOTA_ATTRIBUTE_KEYS.lfgRecruitedRoles]: "",
+        [DOTA_ATTRIBUTE_KEYS.lfgAllRoles]: "",
         [DOTA_ATTRIBUTE_KEYS.lfgUntil]: new Date(0).toISOString()
       },
       {

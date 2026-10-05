@@ -506,6 +506,58 @@ async def send_party_search_tip_if_pending(
         storage.set_choices(telegram_user_id, "party_slot_search_tip_message_pending", [])
 
 
+@router.callback_query(F.data == "search:all_roles")
+async def search_all_roles(
+    callback: CallbackQuery,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+    match_wakeup: asyncio.Event,
+) -> None:
+    acknowledge_callback(callback)
+    user_id = callback.from_user.id
+    panel = storage.get_panel(user_id)
+    search = storage.get_choice(user_id, "auto_search", 0) or {}
+    if (
+        not callback.message
+        or not panel
+        or panel.screen != "looking"
+        or panel.message_id != callback.message.message_id
+        or search.get("mode") != "looking"
+    ):
+        return
+    try:
+        await api.user(user_id, "PATCH", "/dota/profiles/lfg/roles", {"allRoles": True})
+        current = storage.get_choice(user_id, "auto_search", 0) or {}
+        panel = storage.get_panel(user_id)
+        if (
+            current != search
+            or not panel
+            or panel.screen != "looking"
+            or panel.message_id != callback.message.message_id
+        ):
+            return
+        storage.clear_auto_match_exclusions(user_id)
+        await edit_panel(callback.bot, storage, api, settings, user_id, "looking")
+        match_wakeup.set()
+    except ApiError as error:
+        panel = storage.get_panel(user_id)
+        if (
+            not panel
+            or panel.screen != "looking"
+            or panel.message_id != callback.message.message_id
+            or storage.get_choice(user_id, "auto_search", 0) != search
+        ):
+            return
+        if error.status == 409:
+            # Search expired or a concurrent matcher already filled a party.
+            # Let the regular panel refresh show that state, without restarting.
+            await edit_panel(callback.bot, storage, api, settings, user_id, "looking")
+            match_wakeup.set()
+            return
+        await show_error(callback, api, settings, storage, error)
+
+
 @router.callback_query(F.data == "search:stop")
 async def stop_search(
     callback: CallbackQuery,
@@ -606,7 +658,7 @@ async def send_roles_reminder(bot, storage, telegram_user_id: int, chat_id: int 
             telegram_user_id,
             chat_id or telegram_user_id,
             "🎯 Проверьте, все ли игровые позиции указаны в профиле: автоподбор ищет пати по ним. "
-            "Изменить позиции можно в «Аккаунт» → «Профиль» → «Изменить». "
+            "Если готовы играть на любой позиции, нажмите «Поиск по всем ролям» в окне поиска. "
             "Это уведомление исчезнет через 10 секунд.",
             10,
         )

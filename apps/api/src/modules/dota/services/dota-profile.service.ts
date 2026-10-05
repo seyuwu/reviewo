@@ -200,7 +200,11 @@ export class DotaProfileService {
           return null;
         }
 
-        const roles = parseRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
+        const roles =
+          attributes[DOTA_ATTRIBUTE_KEYS.lfgAllRoles] === "true" &&
+          !attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim()
+            ? [...DOTA_POSITION_ROLES]
+            : parseRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
         const server = attributes[DOTA_ATTRIBUTE_KEYS.server] ?? null;
         const partySlug = attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() || null;
         const source = attributes[DOTA_ATTRIBUTE_KEYS.lfgSource];
@@ -397,6 +401,30 @@ export class DotaProfileService {
     };
   }
 
+  async searchAllRoles(currentUser: AuthenticatedUser): Promise<DotaProfileResponseDto> {
+    const entity = await this.requireOwnedProfile(currentUser.id);
+    // The lock also guards joining a party. A stale button must never restart
+    // an expired search or turn the captain's recruiting card into a solo one.
+    const saved = await this.entityAttributesRepository.upsertManyWithDotaMatchLock(
+      currentUser.id,
+      entity.id,
+      { [DOTA_ATTRIBUTE_KEYS.lfgAllRoles]: "true" },
+      { activeSoloSearch: true }
+    );
+    if (!saved) {
+      throw createAppException({
+        code: AppErrorCode.Conflict,
+        message: "Solo search is no longer active",
+        statusCode: HttpStatus.CONFLICT
+      });
+    }
+    const attributes = await this.entityAttributesRepository.findByEntityId(entity.id);
+    return this.buildProfileResponse(entity, attributes, {
+      isOwner: true,
+      viewerUserId: currentUser.id
+    });
+  }
+
   async setLooking(
     looking: boolean,
     currentUser: AuthenticatedUser,
@@ -451,6 +479,7 @@ export class DotaProfileService {
           ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
           : new Date(0).toISOString(),
         [DOTA_ATTRIBUTE_KEYS.lfgSource]: looking ? source : "",
+        [DOTA_ATTRIBUTE_KEYS.lfgAllRoles]: "",
         [DOTA_ATTRIBUTE_KEYS.vertical]: DOTA_VERTICAL,
         ...recruitAttributes
       }
@@ -620,6 +649,7 @@ export class DotaProfileService {
       party.ownerUserId,
       ownerEntity.id,
       {
+        [DOTA_ATTRIBUTE_KEYS.lfgAllRoles]: "",
         [DOTA_ATTRIBUTE_KEYS.lfgUntil]: looking
           ? new Date(Date.now() + DOTA_LFG_TTL_SECONDS * 1000).toISOString()
           : new Date(0).toISOString(),
@@ -1151,6 +1181,9 @@ export class DotaProfileService {
       hasMic: parseOptionalBoolean(attributes[DOTA_ATTRIBUTE_KEYS.hasMic]),
       isOwner: options.isOwner,
       looking: options.isOwner && isLooking,
+      searchAllRoles: options.isOwner && isLooking &&
+        !attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() &&
+        attributes[DOTA_ATTRIBUTE_KEYS.lfgAllRoles] === "true",
       lfgExpiresAt: options.isOwner && isLooking ? new Date(lfgUntilMs).toISOString() : null,
       language: attributes[DOTA_ATTRIBUTE_KEYS.language] ?? null,
       mmr: attributes[DOTA_ATTRIBUTE_KEYS.mmr] ?? null,
