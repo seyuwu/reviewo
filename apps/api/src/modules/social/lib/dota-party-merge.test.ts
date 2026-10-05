@@ -30,6 +30,31 @@ function party(
 }
 
 describe("planDotaPartyMerge", () => {
+  it("does not return a former member through a merge, in either direction", () => {
+    const older = party("older", [["a", "1"]], { blockedUserIds: ["b"] });
+    const newer = party("newer", [["b", "2"]]);
+    assert.equal(planDotaPartyMerge(older, newer, now), null);
+    assert.equal(planDotaPartyMerge(newer, older, now), null);
+    assert.equal(
+      planDotaPartyMerge(
+        party("older", [["a", "1"]]),
+        party("newer", [["b", "2"]], { blockedUserIds: ["a"] }),
+        now
+      ),
+      null
+    );
+  });
+
+  it("still merges when the excluded player is outside both rosters", () => {
+    assert.ok(
+      planDotaPartyMerge(
+        party("older", [["a", "1"]], { blockedUserIds: ["outsider"] }),
+        party("newer", [["b", "2"]]),
+        now
+      )
+    );
+  });
+
   it("merges two and three player parties with distinct occupied roles and searches remaining slots", () => {
     const plan = planDotaPartyMerge(
       party("older", [
@@ -132,7 +157,12 @@ describe("planDotaPartyMerge", () => {
             ["a", "1"],
             ["b", "4"]
           ],
-          { mmrBounds: [{ high: 1000, low: 1000 }, { high: 1000, low: 1000 }] }
+          {
+            mmrBounds: [
+              { high: 1000, low: 1000 },
+              { high: 1000, low: 1000 }
+            ]
+          }
         ),
         party(
           "newer",
@@ -140,7 +170,12 @@ describe("planDotaPartyMerge", () => {
             ["c", "2"],
             ["d", "3"]
           ],
-          { mmrBounds: [{ high: 5000, low: 5000 }, { high: 5000, low: 5000 }] }
+          {
+            mmrBounds: [
+              { high: 5000, low: 5000 },
+              { high: 5000, low: 5000 }
+            ]
+          }
         ),
         now
       ),

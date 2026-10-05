@@ -543,7 +543,9 @@ export function GamesSearchView() {
         const profile = await fetchMyDotaProfile(authSession.accessToken);
         setMyMmr(profile.mmr);
         setMyServer(profile.server);
-        const searchRoles = profile.searchAllRoles ? ["1", "2", "3", "4", "5"] : profile.roles ?? [];
+        const searchRoles = profile.searchAllRoles
+          ? ["1", "2", "3", "4", "5"]
+          : (profile.roles ?? []);
         setMyRoles(
           searchRoles.filter((role): role is DotaPositionRole =>
             ["1", "2", "3", "4", "5"].includes(role)
@@ -1263,7 +1265,8 @@ export function GamesSearchView() {
               pick.targetSlug,
               authSession.accessToken,
               undefined,
-              pick.role
+              pick.role,
+              false
             );
 
             if (stacked.invite.status === "ACCEPTED" || stacked.party.isMember) {
@@ -1291,6 +1294,16 @@ export function GamesSearchView() {
 
             if (isApiError(error)) {
               const apiMessage = readApiErrorMessage(error.body);
+
+              if (
+                apiMessage ===
+                  "Automatic rejoining this party is disabled. Join manually or accept an invite." ||
+                apiMessage ===
+                  "You left or were removed from this party. Rejoin only through a new invite."
+              ) {
+                setRejectedApplicationPartySlugs((current) => new Set(current).add(pick.partySlug));
+                return;
+              }
 
               if (
                 apiMessage === "Your application to this party was declined" ||
@@ -1476,7 +1489,8 @@ export function GamesSearchView() {
             pick.targetSlug,
             authSession.accessToken,
             partySlug,
-            pick.role
+            pick.role,
+            false
           );
           const nextInvite: GamePartyInvite = {
             ...stacked.invite,
@@ -1490,6 +1504,10 @@ export function GamesSearchView() {
         } catch (error) {
           const apiMessage = isApiError(error) ? readApiErrorMessage(error.body) : null;
           const expectedRace =
+            apiMessage ===
+              "Automatic rejoining this party is disabled. Join manually or accept an invite." ||
+            apiMessage ===
+              "You left or were removed from this party. Rejoin only through a new invite." ||
             apiMessage === "Invite already pending" ||
             apiMessage === "Player already applied to this party" ||
             apiMessage === "This team is already full" ||

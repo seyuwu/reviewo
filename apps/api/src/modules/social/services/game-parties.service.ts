@@ -987,7 +987,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     await this.assertNoActiveMembershipOfKind(joiningUserId, party.kind);
 
     if (isApplication) {
-      await this.assertNotJoinBlocked(party.id, joiningUserId);
+      await this.assertNotJoinBlocked(party.id, joiningUserId, true);
     }
 
     if (party.members.length >= party.maxMembers) {
@@ -1020,7 +1020,12 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
 
     let closedInvites: GamePartyInvite[];
     let joined: GamePartyMember | null;
-    let acceptFailReason: "full" | "role_taken" | "already_on_other_team" | undefined;
+    let acceptFailReason:
+      | "full"
+      | "role_taken"
+      | "already_on_other_team"
+      | "join_blocked"
+      | undefined;
 
     try {
       const accepted = await this.gamePartiesRepository.acceptInviteAtomically({
@@ -1061,6 +1066,14 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       // Role/full race: closedInvites already collected inside the transaction.
       await this.emitAutoClosedNotifications(closedInvites, party);
 
+      if (acceptFailReason === "join_blocked") {
+        throw createAppException({
+          code: AppErrorCode.Forbidden,
+          message: "You left or were removed from this party. Rejoin only through a new invite.",
+          statusCode: HttpStatus.FORBIDDEN
+        });
+      }
+
       if (acceptFailReason === "already_on_other_team") {
         throw createAppException({
           code: AppErrorCode.Conflict,
@@ -1081,7 +1094,6 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
 
     await this.clearLookingForUser(joiningUserId, undefined, "JOINED");
     await this.refreshRecruitLookingAttributes(party.ownerUserId, party.id);
-    await this.gamePartiesRepository.deleteJoinBlock(party.id, joiningUserId);
 
     const updated = await this.gamePartiesRepository.findById(party.id);
 
@@ -1244,7 +1256,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     currentUser: AuthenticatedUser,
     fromPartySlug?: string,
     positionRole?: string,
-    options?: { notifyMembersJoined?: boolean }
+    options?: { manualJoin?: boolean; notifyMembersJoined?: boolean }
   ): Promise<{ invite: GamePartyInviteDto; party: GamePartyResponseDto }> {
     const targetEntity = await this.entitiesRepository.findBySlug(targetSlug);
 
@@ -1340,9 +1352,10 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
 
       if (recruitParty.joinMode === "OPEN") {
         await this.assertNoActiveMembershipOfKind(currentUser.id, recruitParty.kind);
-        await this.assertNotJoinBlocked(recruitParty.id, currentUser.id);
+        await this.assertNotJoinBlocked(recruitParty.id, currentUser.id, options?.manualJoin);
 
         const joined = await this.gamePartiesRepository.addMemberAtomically({
+          manualJoin: options?.manualJoin === true,
           maxMembers: recruitParty.maxMembers,
           partyId: recruitParty.id,
           positionRole: resolvedPosition,
@@ -1452,13 +1465,15 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
           this.notifyPartyMembersJoined(partyResponse, invite, currentUser.id);
         }
       } else {
-        await this.assertNotJoinBlocked(recruitParty.id, currentUser.id);
+        await this.assertNotJoinBlocked(recruitParty.id, currentUser.id, options?.manualJoin);
         invite = await this.inviteWithoutFriendshipCheck(
           recruitSlug,
           currentUser.id,
           { id: targetUserId } as AuthenticatedUser,
           {
             inviteKind: "APPLICATION",
+            automaticMatch: options?.manualJoin !== true,
+            manualJoin: options?.manualJoin === true,
             positionRole: resolvedPosition
           }
         );
@@ -1489,6 +1504,11 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
 
       partyResponse = loaded;
 
+      // An automatic recruit invitation must not bring a former member back either.
+      if (!options?.manualJoin) {
+        await this.assertNotJoinBlocked(owned.id, targetUserId);
+      }
+
       if (resolvedPosition) {
         const claimed = partyResponse.members.some(
           (member) => member.positionRole === resolvedPosition
@@ -1509,6 +1529,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
         currentUser,
         {
           inviteKind: "INVITE",
+          automaticMatch: options?.manualJoin !== true,
           positionRole: resolvedPosition
         }
       );
@@ -1725,7 +1746,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    await this.assertNotJoinBlocked(party.id, currentUser.id);
+    await this.assertNotJoinBlocked(party.id, currentUser.id, true);
 
     // CONFIRM: creates an application; managers accept before membership.
     if (party.joinMode === "CONFIRM" && !acceptJoinLink) {
@@ -1747,6 +1768,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
         { id: party.ownerUserId } as AuthenticatedUser,
         {
           inviteKind: "APPLICATION",
+          manualJoin: true,
           positionRole: positionRole ?? null
         }
       );
@@ -1758,6 +1780,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     }
 
     const joined = await this.gamePartiesRepository.addMemberAtomically({
+      manualJoin: true,
       maxMembers: party.maxMembers,
       partyId: party.id,
       positionRole: positionRole ?? null,
@@ -1886,7 +1909,9 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     targetUserId: string,
     currentUser: AuthenticatedUser,
     options?: {
+      automaticMatch?: boolean;
       inviteKind?: "INVITE" | "APPLICATION";
+      manualJoin?: boolean;
       positionRole?: DotaPositionRole | null;
     }
   ): Promise<GamePartyInviteDto> {
@@ -1966,7 +1991,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     }
 
     if ((options?.inviteKind ?? "INVITE") === "APPLICATION") {
-      await this.assertNotJoinBlocked(party.id, targetUserId);
+      await this.assertNotJoinBlocked(party.id, targetUserId, options?.manualJoin);
       await this.assertCanSubmitPartyApplication(party.id, targetUserId);
     }
 
@@ -1998,6 +2023,8 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
 
     try {
       invite = await this.gamePartiesRepository.createInvite({
+        automaticMatch: options?.automaticMatch === true,
+        manualJoin: options?.manualJoin === true,
         inviteeUserId: targetUserId,
         inviteKind: options?.inviteKind ?? "INVITE",
         inviterUserId: currentUser.id,
@@ -2005,6 +2032,19 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
         positionRole
       });
     } catch (error) {
+      if (
+        error instanceof Error &&
+        ["AUTO_JOIN_BLOCKED", "PARTY_JOIN_BLOCKED"].includes(error.message)
+      ) {
+        throw createAppException({
+          code: AppErrorCode.Forbidden,
+          message:
+            error.message === "AUTO_JOIN_BLOCKED"
+              ? "Automatic rejoining this party is disabled. Join manually or accept an invite."
+              : "You left or were removed from this party. Rejoin only through a new invite.",
+          statusCode: HttpStatus.FORBIDDEN
+        });
+      }
       if (error instanceof Error && error.message === "PARTY_MERGED") {
         throw createAppException({
           code: AppErrorCode.Conflict,
@@ -2140,7 +2180,11 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     }
 
     await this.revokeDiscordVoiceAccessForUser(party.discordChannelId, currentUser.id);
-    await this.gamePartiesRepository.removeMemberAndBlockJoinAtomically(party.id, currentUser.id);
+    await this.gamePartiesRepository.removeMemberAndBlockJoinAtomically(
+      party.id,
+      currentUser.id,
+      true
+    );
 
     if (!this.isExpired(party)) {
       await this.refreshRecruitLookingAttributes(party.ownerUserId, party.id);
@@ -3144,16 +3188,22 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async assertNotJoinBlocked(partyId: string, userId: string): Promise<void> {
+  private async assertNotJoinBlocked(
+    partyId: string,
+    userId: string,
+    manualJoin = false
+  ): Promise<void> {
     const block = await this.gamePartiesRepository.findJoinBlock(partyId, userId);
 
-    if (!block) {
+    if (!block || (manualJoin && block.allowManualRejoin)) {
       return;
     }
 
     throw createAppException({
       code: AppErrorCode.Forbidden,
-      message: "You left or were removed from this party. Rejoin only through a new invite.",
+      message: block.allowManualRejoin
+        ? "Automatic rejoining this party is disabled. Join manually or accept an invite."
+        : "You left or were removed from this party. Rejoin only through a new invite.",
       statusCode: HttpStatus.FORBIDDEN
     });
   }

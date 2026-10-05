@@ -8,6 +8,7 @@ This directory is the long-term home for project documentation. Content is being
 | ---- | ----------- |
 | [product/web-discovery-and-battles.md](./product/web-discovery-and-battles.md) | Главная лента, битвы, discovery API, лимиты на странице, поведение активных/случайных битв |
 | [product/dota-vertical.md](./product/dota-vertical.md) | Dota vertical: репутация игроков, confirmations, хост `dota.opinia.ru`, маршруты `/dota/*` |
+| [product/dota-party-admin-view.md](./product/dota-party-admin-view.md) | Страница всех пати и просмотр чатов администратором, ограничения доступа и пагинация |
 | [development-workflow.md](./development-workflow.md) | Локальная разработка → GitHub → production; хосты Games/Dota, shared login, CORS |
 | [deployment/mvp-deploy.md](./deployment/mvp-deploy.md) | MVP production deployment notes (Stage 32) |
 | [deployment/selectel-vds-guide.md](./deployment/selectel-vds-guide.md) | Пошаговый деплой на VDS Selectel (рядом с другим Docker-проектом) |

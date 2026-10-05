@@ -1,3 +1,4 @@
+import asyncio
 from html import escape
 
 from aiogram import F, Router
@@ -10,6 +11,12 @@ from aiogram.types import CallbackQuery, Message
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.callbacks import acknowledge_callback
+from ..services.broadcast_duration import (
+    BROADCAST_TTL_PRESETS,
+    format_broadcast_duration,
+    parse_broadcast_duration,
+    validate_broadcast_duration,
+)
 from ..services.panel import edit_panel_content
 from ..services.temporary_notifications import send_temporary_notification
 from ..storage.database import BotStorage
@@ -17,14 +24,17 @@ from ..ui.keyboards import (
     admin_compose_keyboard,
     admin_keyboard,
     admin_preview_keyboard,
-    announcements_keyboard,
+    admin_broadcast_duration_keyboard,
 )
 
 router = Router(name="admin")
+_broadcast_send_locks: dict[int, asyncio.Lock] = {}
 
 
 class BroadcastDraft(StatesGroup):
     composing = State()
+    choosing_duration = State()
+    custom_duration = State()
     preview = State()
 
 
@@ -40,7 +50,7 @@ def _last_broadcast_text(summary: dict | None) -> str:
         f"Последняя рассылка #{summary['id']}: "
         f"{status_names.get(summary['status'], summary['status'])} · "
         f"доставлено {summary['sent']}/{summary['total']} · очередь {summary['pending']} · "
-        f"отписки {summary['skipped']} · блокировки {summary['blocked']} · ошибки {summary['failed']}"
+        f"пропущено {summary['skipped']} · блокировки {summary['blocked']} · ошибки {summary['failed']}"
     )
 
 
@@ -130,34 +140,7 @@ async def show_admin_panel(
     )
 
 
-async def show_news_panel(
-    bot,
-    api: OpiniaApi,
-    settings: Settings,
-    storage: BotStorage,
-    telegram_user_id: int,
-    chat_id: int | None = None,
-    notice: str | None = None,
-) -> None:
-    enabled = storage.announcements_enabled(telegram_user_id)
-    status = "включены" if enabled else "отключены"
-    text = f"<b>Новости FDP</b>\n\nОбъявления об обновлениях сейчас <b>{status}</b>."
-    if notice:
-        text = f"{escape(notice)}\n\n{text}"
-    await edit_panel_content(
-        bot,
-        storage,
-        api,
-        settings,
-        telegram_user_id,
-        "news",
-        text,
-        announcements_keyboard(enabled),
-        chat_id,
-    )
-
-
-def _preview_text(text: str, storage: BotStorage) -> str:
+def _preview_text(text: str, storage: BotStorage, ttl_seconds: int) -> str:
     excerpt = escape(text[:120])
     if len(text) > 120:
         excerpt += "…"
@@ -165,6 +148,7 @@ def _preview_text(text: str, storage: BotStorage) -> str:
     return (
         f"<b>Предпросмотр рассылки</b>\n\n"
         f"Получателей: <b>{recipients}</b> · символов: <b>{len(text)}</b>\n\n"
+        f"Удаление: через <b>{format_broadcast_duration(ttl_seconds)}</b> после доставки каждому получателю.\n\n"
         f"{excerpt}\n\n"
         "Можно отправить полный тест себе, затем подтвердить рассылку."
     )
@@ -176,6 +160,35 @@ async def _get_draft_text(settings: Settings, state: FSMContext, telegram_user_i
     data = await state.get_data()
     value = data.get("broadcast_text")
     return str(value) if isinstance(value, str) and value.strip() else None
+
+
+async def _get_draft_duration(state: FSMContext) -> int | None:
+    try:
+        return validate_broadcast_duration((await state.get_data()).get("broadcast_ttl_seconds"))
+    except ValueError:
+        return None
+
+
+async def show_duration_picker(bot, api, settings, storage, state, user_id, chat_id) -> None:
+    await state.set_state(BroadcastDraft.choosing_duration)
+    await edit_panel_content(
+        bot, storage, api, settings, user_id, "admin:broadcast:duration",
+        "<b>Когда удалить сообщение?</b>\n\nВыбери срок после доставки каждому получателю. "
+        "Можно указать своё время, максимум 47 часов.",
+        admin_broadcast_duration_keyboard(), chat_id,
+    )
+
+
+async def show_broadcast_preview(bot, api, settings, storage, state, user_id, chat_id) -> None:
+    text = await _get_draft_text(settings, state, user_id)
+    ttl_seconds = await _get_draft_duration(state)
+    if text is None or ttl_seconds is None:
+        return
+    await state.set_state(BroadcastDraft.preview)
+    await edit_panel_content(
+        bot, storage, api, settings, user_id, "admin:broadcast:preview",
+        _preview_text(text, storage, ttl_seconds), admin_preview_keyboard(), chat_id,
+    )
 
 
 @router.message(Command("admin"))
@@ -201,21 +214,6 @@ async def open_admin(
     await state.clear()
     storage.record_bot_user(message.from_user.id)
     await show_admin_panel(message.bot, api, settings, storage, message.from_user.id, message.chat.id)
-
-
-@router.message(Command("news"))
-async def open_news_settings(
-    message: Message,
-    state: FSMContext,
-    api: OpiniaApi,
-    settings: Settings,
-    storage: BotStorage,
-) -> None:
-    if message.chat.type != "private" or message.from_user is None:
-        return
-    await state.clear()
-    storage.record_bot_user(message.from_user.id)
-    await show_news_panel(message.bot, api, settings, storage, message.from_user.id, message.chat.id)
 
 
 @router.callback_query(F.data.startswith("admin:"))
@@ -253,7 +251,8 @@ async def admin_action(
             settings,
             callback.from_user.id,
             "admin:broadcast:compose",
-            "<b>Новая рассылка</b>\n\nНапиши текст объявления. Он будет отправлен пользователям, которые запускали бота и не отключили новости.",
+            "<b>Новая рассылка</b>\n\nНапиши текст объявления. Затем выбери срок удаления. "
+            "Сообщение получат пользователи, которые запускали бота и не заблокировали его.",
             admin_compose_keyboard(),
             chat_id,
         )
@@ -272,22 +271,49 @@ async def admin_action(
             admin_compose_keyboard(),
             chat_id,
         )
-        await state.update_data(broadcast_text=data.get("broadcast_text"))
+        await state.update_data(
+            broadcast_text=data.get("broadcast_text"),
+            broadcast_ttl_seconds=data.get("broadcast_ttl_seconds"),
+        )
+        return
+    if action == "broadcast:duration":
+        if await _get_draft_text(settings, state, callback.from_user.id) is not None:
+            await show_duration_picker(callback.bot, api, settings, storage, state, callback.from_user.id, chat_id)
+        return
+    if action.startswith("broadcast:ttl:"):
+        if await _get_draft_text(settings, state, callback.from_user.id) is None:
+            return
+        value = action.removeprefix("broadcast:ttl:")
+        if value == "custom":
+            await state.set_state(BroadcastDraft.custom_duration)
+            await edit_panel_content(
+                callback.bot, storage, api, settings, callback.from_user.id,
+                "admin:broadcast:duration",
+                "<b>Свой срок удаления</b>\n\nНапиши время: например, 30 сек, 10 мин, 2 ч или 1 день. "
+                "Число без единицы — минуты. От 1 секунды до 47 часов.",
+                admin_compose_keyboard(), chat_id,
+            )
+        elif value.isdecimal() and int(value) in BROADCAST_TTL_PRESETS:
+            await state.update_data(broadcast_ttl_seconds=int(value))
+            await show_broadcast_preview(callback.bot, api, settings, storage, state, callback.from_user.id, chat_id)
         return
     if action == "broadcast:test":
         text = await _get_draft_text(settings, state, callback.from_user.id)
-        if text is None:
+        ttl_seconds = await _get_draft_duration(state)
+        if text is None or ttl_seconds is None:
             return
         test_message = await callback.bot.send_message(callback.from_user.id, text, disable_web_page_preview=True)
-        storage.add_temporary_message(callback.from_user.id, test_message.chat.id, test_message.message_id, 600)
+        storage.add_temporary_message(callback.from_user.id, test_message.chat.id, test_message.message_id, ttl_seconds)
         return
     if action == "broadcast:send":
-        text = await _get_draft_text(settings, state, callback.from_user.id)
-        if text is None:
-            await show_admin_panel(callback.bot, api, settings, storage, callback.from_user.id, chat_id)
-            return
-        campaign_id, recipient_count = storage.create_broadcast(callback.from_user.id, text)
-        await state.clear()
+        lock = _broadcast_send_locks.setdefault(callback.from_user.id, asyncio.Lock())
+        async with lock:
+            text = await _get_draft_text(settings, state, callback.from_user.id)
+            ttl_seconds = await _get_draft_duration(state)
+            if text is None or ttl_seconds is None or await state.get_state() != BroadcastDraft.preview.state:
+                return
+            campaign_id, recipient_count = storage.create_broadcast(callback.from_user.id, text, ttl_seconds)
+            await state.clear()
         await show_admin_panel(
             callback.bot,
             api,
@@ -295,44 +321,20 @@ async def admin_action(
             storage,
             callback.from_user.id,
             chat_id,
-            f"Рассылка #{campaign_id} поставлена в очередь для {recipient_count} пользователей.",
+            f"Рассылка #{campaign_id} поставлена в очередь для {recipient_count} пользователей. "
+            f"Удаление через {format_broadcast_duration(ttl_seconds)} после доставки.",
         )
 
 
 @router.callback_query(F.data.in_({"news:enable", "news:disable"}))
-async def set_news_preference(
+async def dismiss_legacy_news_button(
     callback: CallbackQuery,
-    api: OpiniaApi,
-    settings: Settings,
-    storage: BotStorage,
 ) -> None:
-    enabled = callback.data == "news:enable"
-    storage.set_announcements_enabled(callback.from_user.id, enabled)
-    acknowledge_callback(callback, "Объявления включены" if enabled else "Объявления отключены")
-    if callback.message is None:
-        return
-    if callback.message.chat.type != "private":
-        return
-    panel = storage.get_panel(callback.from_user.id)
-    is_panel_message = bool(
-        panel
-        and panel.chat_id == callback.message.chat.id
-        and panel.message_id == callback.message.message_id
-    )
-    if is_panel_message:
-        await show_news_panel(
-            callback.bot,
-            api,
-            settings,
-            storage,
-            callback.from_user.id,
-            callback.message.chat.id,
-            "Настройка сохранена.",
-        )
-    else:
-        # The broadcast itself is the notification; dismiss it after its only action is used.
+    # Old messages can still contain the retired preference buttons.
+    acknowledge_callback(callback, "Эта кнопка больше не используется")
+    if callback.message is not None and callback.message.chat.type == "private":
         try:
-            await callback.message.delete()
+            await callback.message.edit_reply_markup(reply_markup=None)
         except TelegramAPIError:
             pass
 
@@ -365,15 +367,30 @@ async def receive_broadcast_text(
         )
         return
     await state.update_data(broadcast_text=text)
-    await state.set_state(BroadcastDraft.preview)
-    await edit_panel_content(
-        message.bot,
-        storage,
-        api,
-        settings,
-        message.from_user.id,
-        "admin:broadcast:preview",
-        _preview_text(text, storage),
-        admin_preview_keyboard(),
-        message.chat.id,
-    )
+    if await _get_draft_duration(state) is None:
+        await show_duration_picker(message.bot, api, settings, storage, state, message.from_user.id, message.chat.id)
+    else:
+        await show_broadcast_preview(message.bot, api, settings, storage, state, message.from_user.id, message.chat.id)
+
+
+@router.message(BroadcastDraft.custom_duration, F.text & ~F.text.startswith("/"))
+async def receive_broadcast_duration(
+    message: Message,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    if message.chat.type != "private" or message.from_user is None or not is_admin(settings, message.from_user.id):
+        await state.clear()
+        return
+    try:
+        ttl_seconds = parse_broadcast_duration(message.text or "")
+    except ValueError as error:
+        await edit_panel_content(
+            message.bot, storage, api, settings, message.from_user.id,
+            "admin:broadcast:duration", escape(str(error)), admin_compose_keyboard(), message.chat.id,
+        )
+        return
+    await state.update_data(broadcast_ttl_seconds=ttl_seconds)
+    await show_broadcast_preview(message.bot, api, settings, storage, state, message.from_user.id, message.chat.id)

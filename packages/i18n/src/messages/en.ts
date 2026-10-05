@@ -2577,7 +2577,30 @@ export const enMessages = {
   "dota.gender.unspecified": "Prefer not to say",
   "dota.create.gender": "Gender",
   "dota.create.genderHint": "Optional.",
-  "dota.profile.gender": "Gender"
+  "dota.profile.gender": "Gender",
+  "dota.allParties.title": "All parties",
+  "dota.allParties.description": "All current parties and teams, including private rosters. Open a roster to view its members and chat.",
+  "dota.allParties.adminOnly": "Only administrators can access this page.",
+  "dota.allParties.refresh": "Refresh",
+  "dota.allParties.filters": "Roster type",
+  "dota.allParties.all": "All rosters",
+  "dota.allParties.parties": "Parties",
+  "dota.allParties.teams": "Teams",
+  "dota.allParties.total": "Total: {count}",
+  "dota.allParties.loadError": "Could not load rosters. Select Refresh to try again.",
+  "dota.allParties.empty": "There are no current rosters of this type.",
+  "dota.allParties.more": "Show more",
+  "dota.allParties.private": "Private roster",
+  "dota.allParties.public": "Public roster",
+  "dota.allParties.open": "Instant join",
+  "dota.allParties.application": "Join by application",
+  "dota.allParties.created": "Created: {date}",
+  "dota.allParties.expires": "Active until: {date}",
+  "dota.allParties.viewParty": "Open roster and chat",
+  "dota.allParties.readOnly": "Administrator view. You can read messages without joining the roster.",
+  "dota.allParties.olderMessages": "Earlier messages",
+  "dota.allParties.chatError": "Could not load chat. The party may have expired or been deleted. Try refreshing the messages.",
+  "dota.allParties.system": "System"
 } as const;
 
 export type MessageKey = keyof typeof enMessages;

@@ -4,6 +4,10 @@ The bot is a private-chat client for the existing Dota profile, LFG, party, and 
 
 ## Run with Docker Compose
 
+Voluntary party departure is recorded by the API and excludes that party from future automatic joins, even after restarting search or switching between Telegram and the website. The bot still uses automatic matchmaking only: no new manual-search buttons are added. Players may return through the existing invitation/link flow; website users may explicitly claim a role or apply. Kicked players still require a personal invitation. Automatic party merging also respects departure exclusions.
+
+The API migration `20261005020000_party_manual_rejoin` must be applied before running the updated API. Historical exclusion rows retain the stricter invitation-only policy because they do not record whether the player left or was kicked.
+
 1. Create a Telegram bot with `@BotFather` and set `DOTA_BOT_TOKEN`.
 2. Generate two independent secrets:
 
@@ -14,7 +18,7 @@ The bot is a private-chat client for the existing Dota profile, LFG, party, and 
 
    Put the first value in `TELEGRAM_BOT_API_SECRET` and the second in `DOTA_BOT_ENCRYPTION_KEY`. Use the same API secret for the API and the bot.
 3. Set `DOTA_BOT_SITE_URL` to the public Dota.Opinia site URL. The internal API URL defaults to `http://api:3000` inside Compose.
-4. Optional: set `DOTA_BOT_ADMIN_IDS` to a comma-separated allowlist of numeric Telegram user IDs. Administrators can use `/admin` to preview and send announcements; `/news` lets users control announcement delivery. Username-based admin checks are not used.
+4. Optional: set `DOTA_BOT_ADMIN_IDS` to a comma-separated allowlist of numeric Telegram user IDs. Administrators use `/admin` to compose an announcement, choose its deletion delay, preview/test it, and confirm delivery to all known users who have not blocked the bot. There is no news subscription toggle. The deletion delay starts at delivery to each recipient and survives restarts; presets and custom values from 1 second to 47 hours are supported. Test messages use the same delay. Username-based admin checks are not used.
 5. Start the bot:
 
    ```powershell

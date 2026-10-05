@@ -54,3 +54,8 @@ test("Dota marketing redirect preserves real Games routes and tournament links",
   assert.equal(resolveDotaMarketingProfileRedirect("/games/altushka"), "/dota/altushka");
   assert.equal(resolveDotaMarketingProfileRedirect("/games/fivi/"), "/dota/fivi");
 });
+
+test("Dota host preserves the administrator party list route", () => {
+  assert.equal(resolveDotaMarketingProfileRedirect("/games/parties"), null);
+  assert.equal(resolveDotaMarketingProfileRedirect("/games/parties/"), null);
+});

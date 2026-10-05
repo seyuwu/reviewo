@@ -9,22 +9,12 @@ from aiogram.exceptions import (
     TelegramNetworkError,
     TelegramRetryAfter,
 )
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
 from ..storage.database import BotStorage
 from .temporary_notifications import send_temporary_notification
 
 logger = logging.getLogger(__name__)
 SEND_INTERVAL_SECONDS = 0.05
 MAX_DELIVERY_ATTEMPTS = 5
-
-
-def announcement_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🔕 Отключить новости", callback_data="news:disable")]
-        ]
-    )
 
 
 async def broadcast_worker(bot: Bot, storage: BotStorage) -> None:
@@ -38,18 +28,17 @@ async def broadcast_worker(bot: Bot, storage: BotStorage) -> None:
 
             campaign_id = recipient["campaign_id"]
             user_id = recipient["telegram_user_id"]
-            if not storage.announcements_enabled(user_id):
+            if not storage.can_receive_broadcast(user_id):
                 completed = storage.mark_broadcast_recipient(
-                    campaign_id, user_id, "skipped", "User opted out before delivery", increment_attempt=False
+                    campaign_id, user_id, "skipped", "Bot is blocked or user is unavailable", increment_attempt=False
                 )
                 if completed:
                     await _send_completion_report(bot, storage, recipient)
                 continue
             try:
-                await bot.send_message(
+                message = await bot.send_message(
                     user_id,
                     recipient["text"],
-                    reply_markup=announcement_keyboard(),
                     disable_web_page_preview=True,
                 )
             except TelegramRetryAfter as error:
@@ -77,7 +66,10 @@ async def broadcast_worker(bot: Bot, storage: BotStorage) -> None:
                     await asyncio.sleep(min(2**attempts, 30))
                     continue
             else:
-                completed = storage.mark_broadcast_recipient(campaign_id, user_id, "sent")
+                completed = storage.mark_broadcast_recipient(
+                    campaign_id, user_id, "sent",
+                    sent_message=(message.chat.id, message.message_id),
+                )
 
             if completed:
                 await _send_completion_report(bot, storage, recipient)
@@ -97,7 +89,7 @@ async def _send_completion_report(bot: Bot, storage: BotStorage, campaign: dict)
     report = (
         f"Рассылка #{summary['id']} завершена.\n"
         f"Доставлено: {summary['sent']} из {summary['total']}.\n"
-        f"Отписались до отправки: {summary['skipped']}. Заблокировали бота: {summary['blocked']}.\n"
+        f"Пропущено: {summary['skipped']}. Заблокировали бота: {summary['blocked']}.\n"
         f"Ошибок: {summary['failed']}."
     )
     try:

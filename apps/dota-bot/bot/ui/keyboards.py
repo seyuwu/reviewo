@@ -55,18 +55,19 @@ def admin_preview_keyboard() -> InlineKeyboardMarkup:
             [button("📨 Отправить всем", "admin:broadcast:send")],
             [button("🧪 Отправить тест себе", "admin:broadcast:test")],
             [button("✏️ Изменить текст", "admin:broadcast:edit")],
+            [button("⏱ Изменить срок удаления", "admin:broadcast:duration")],
             [button("← Отмена", "admin:cancel")],
         ]
     )
 
 
-def announcements_keyboard(enabled: bool) -> InlineKeyboardMarkup:
-    action = "news:disable" if enabled else "news:enable"
-    label = "🔕 Отключить новости" if enabled else "🔔 Включить новости"
+def admin_broadcast_duration_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [button(label, action)],
-            [button("← В меню", "panel:home")],
+            [button("1 мин", "admin:broadcast:ttl:60"), button("10 мин", "admin:broadcast:ttl:600")],
+            [button("1 час", "admin:broadcast:ttl:3600"), button("6 часов", "admin:broadcast:ttl:21600")],
+            [button("24 часа", "admin:broadcast:ttl:86400"), button("Своё время", "admin:broadcast:ttl:custom")],
+            [button("← Отмена", "admin:cancel")],
         ]
     )
 

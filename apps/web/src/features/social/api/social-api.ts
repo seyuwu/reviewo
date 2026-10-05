@@ -258,11 +258,13 @@ export function stackWithPlayer(
   targetSlug: string,
   accessToken: string,
   partySlug?: string,
-  positionRole?: "1" | "2" | "3" | "4" | "5"
+  positionRole?: "1" | "2" | "3" | "4" | "5",
+  manualJoin = true
 ): Promise<{ invite: GamePartyInvite; party: GameParty }> {
   return apiRequest<{ invite: GamePartyInvite; party: GameParty }>("/social/parties/stack", {
     body: {
       targetSlug,
+      manualJoin,
       source: "web",
       ...(partySlug ? { partySlug } : {}),
       ...(positionRole ? { positionRole } : {})

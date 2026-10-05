@@ -94,6 +94,7 @@ import {
   reportPartyLinkOpen
 } from "../lib/party-invite";
 import { PartyAuthSheet } from "./party-auth-sheet";
+import { AdminPartyChat } from "./admin-party-chat";
 import { DotaTeamTournamentsPanel } from "../../tournaments/components/dota-team-tournaments-panel";
 import { registerDotaTeamForTournament } from "../../tournaments/api/dota-tournaments-api";
 import styles from "./dota-team-view.module.css";
@@ -3681,12 +3682,18 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
           </aside>
           </div>
         ) : (
-          <aside className={styles.chatPanel} aria-label={t("dota.team.chatTitle")}>
-            <div className={styles.chatHead}>
-              <h2>{t("dota.team.chatTitle")}</h2>
-              <p className={styles.chatHint}>{t("dota.team.chatMembersOnly")}</p>
-            </div>
-          </aside>
+          <AdminPartyChat
+            key={party.id}
+            partyId={party.id}
+            fallback={
+              <aside className={styles.chatPanel} aria-label={t("dota.team.chatTitle")}>
+                <div className={styles.chatHead}>
+                  <h2>{t("dota.team.chatTitle")}</h2>
+                  <p className={styles.chatHint}>{t("dota.team.chatMembersOnly")}</p>
+                </div>
+              </aside>
+            }
+          />
         )}
       </div>
 

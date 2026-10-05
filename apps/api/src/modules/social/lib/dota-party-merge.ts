@@ -5,6 +5,7 @@ import {
 } from "@reviewo/shared";
 
 export interface DotaPartyMergeCandidate {
+  blockedUserIds?: string[];
   createdAt: Date;
   discordChannelId: string | null;
   expiresAt: Date | null;
@@ -43,6 +44,14 @@ export function planDotaPartyMerge(
   now: Date
 ): DotaPartyMergePlan | null {
   if (left.id === right.id || left.joinMode !== "OPEN" || right.joinMode !== "OPEN") {
+    return null;
+  }
+
+  // Check both directions, regardless of which party keeps its URL after the merge.
+  if (
+    right.members.some((member) => left.blockedUserIds?.includes(member.userId)) ||
+    left.members.some((member) => right.blockedUserIds?.includes(member.userId))
+  ) {
     return null;
   }
 

@@ -14,6 +14,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { useAuthSession } from "../features/auth/hooks/use-auth-session";
+import { usePartyAdminAccess } from "../features/dota/hooks/use-party-admin-access";
 import { useTranslation } from "../features/i18n/locale-provider";
 import { fetchMyParties } from "../features/social/api/social-api";
 import {
@@ -34,6 +35,7 @@ export function HeaderRostersMenu() {
   const closeTimerRef = useRef<number | null>(null);
   const { authSession, isAuthSessionLoaded } = useAuthSession();
   const [open, setOpen] = useState(false);
+  const { isAdmin } = usePartyAdminAccess(open);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [team, setTeam] = useState<GameParty | null>(null);
@@ -44,7 +46,8 @@ export function HeaderRostersMenu() {
   const isActive =
     pathname === "/games/community" ||
     pathname.startsWith("/games/community/") ||
-    pathname.startsWith("/dota/teams/");
+    pathname.startsWith("/dota/teams/") ||
+    pathname === "/games/parties";
 
   const loadRosters = useCallback(async () => {
     if (!authSession?.accessToken) {
@@ -321,6 +324,16 @@ export function HeaderRostersMenu() {
                   ) : null}
 
                   <div className="games-rosters-menu-footer">
+                    {isAdmin ? (
+                      <Link
+                        className="games-rosters-menu-footer-link"
+                        href="/games/parties"
+                        onClick={handleSelect}
+                        role="menuitem"
+                      >
+                        {t("dota.allParties.title")}
+                      </Link>
+                    ) : null}
                     <Link
                       className="games-rosters-menu-footer-link"
                       href="/games/community"

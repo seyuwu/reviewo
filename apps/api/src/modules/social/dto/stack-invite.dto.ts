@@ -1,8 +1,13 @@
-import { IsIn, IsOptional, IsString, MinLength, ValidateIf } from "class-validator";
+import { IsBoolean, IsIn, IsOptional, IsString, MinLength, ValidateIf } from "class-validator";
 
 import { DOTA_POSITION_ROLES } from "@reviewo/shared";
 
 export class StackInviteDto {
+  /** Explicit button click; omitted/false means automatic matchmaking. */
+  @IsOptional()
+  @IsBoolean()
+  manualJoin?: boolean;
+
   @IsOptional()
   @IsIn(["web", "telegram"])
   source?: "web" | "telegram";

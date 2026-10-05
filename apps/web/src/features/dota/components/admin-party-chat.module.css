@@ -1,0 +1,67 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-self: start;
+  min-width: 0;
+  border: 1px solid var(--color-card-border);
+  border-radius: 20px;
+  background: var(--games-glass-strong, var(--color-card));
+  overflow: hidden;
+}
+.header {
+  padding: 20px;
+  border-bottom: 1px solid var(--color-card-border);
+}
+.header h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+.header p {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.messages {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  max-height: 620px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.message {
+  min-width: 0;
+  border-bottom: 1px solid var(--color-card-border);
+  padding-bottom: 14px;
+}
+.message:last-child {
+  border-bottom: 0;
+}
+.meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.meta strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.meta time {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+.message p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  margin: 8px 0 0;
+}

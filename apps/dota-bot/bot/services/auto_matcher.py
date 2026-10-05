@@ -356,6 +356,7 @@ async def _match_user(
                         "POST",
                         "/social/parties/stack",
                         {
+                            "manualJoin": False,
                             "positionRole": role,
                             "targetSlug": candidate["slug"],
                         },

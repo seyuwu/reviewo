@@ -32,6 +32,74 @@ const MAX_CHAT_PAGE_SIZE = 100;
 export class GamePartiesRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
+  async listAdminActiveParties(
+    input: { before?: string; kind?: GamePartyKind; limit?: number },
+    now: Date
+  ) {
+    const limit = Math.min(Math.max(input.limit ?? 25, 1), 50);
+    const activeWhere: Prisma.GamePartyWhereInput = {
+      ...(input.kind ? { kind: input.kind } : {}),
+      mergedIntoSlug: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      vertical: DOTA_PARTY_VERTICAL
+    };
+    let cursorWhere: Prisma.GamePartyWhereInput = {};
+    if (input.before) {
+      const cursor = await this.prismaService.gameParty.findUnique({
+        select: { createdAt: true, id: true, vertical: true },
+        where: { id: input.before }
+      });
+      // A missing/deleted cursor must never restart at the first page.
+      if (!cursor || cursor.vertical !== DOTA_PARTY_VERTICAL) {
+        return {
+          items: [],
+          nextCursor: null,
+          total: await this.prismaService.gameParty.count({ where: activeWhere })
+        };
+      }
+      cursorWhere = {
+        OR: [
+          { createdAt: { lt: cursor.createdAt } },
+          { createdAt: cursor.createdAt, id: { lt: cursor.id } }
+        ]
+      };
+    }
+    const [rows, total] = await Promise.all([
+      this.prismaService.gameParty.findMany({
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: {
+          createdAt: true,
+          expiresAt: true,
+          id: true,
+          joinMode: true,
+          kind: true,
+          maxMembers: true,
+          members: {
+            orderBy: [{ positionRole: "asc" }, { joinedAt: "asc" }],
+            select: {
+              positionRole: true,
+              role: true,
+              user: { select: { displayName: true } },
+              userId: true
+            }
+          },
+          name: true,
+          slug: true,
+          visibility: true
+        },
+        take: limit + 1,
+        where: { AND: [activeWhere, cursorWhere] }
+      }),
+      this.prismaService.gameParty.count({ where: activeWhere })
+    ]);
+    const items = rows.slice(0, limit);
+    return {
+      items,
+      nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null,
+      total
+    };
+  }
+
   async listActiveRecruitingParties(now: Date): Promise<DotaPartyMergeCandidate[]> {
     const activeLfgAttributes = await this.prismaService.entityAttribute.findMany({
       select: { entityId: true },
@@ -94,6 +162,7 @@ export class GamePartiesRepository {
 
     const parties = await this.prismaService.gameParty.findMany({
       include: {
+        joinBlocks: { select: { userId: true } },
         invites: { select: { id: true }, where: { status: "PENDING" } },
         members: { select: { positionRole: true, userId: true } }
       },
@@ -155,6 +224,7 @@ export class GamePartiesRepository {
 
       return [
         {
+          blockedUserIds: party.joinBlocks.map((block) => block.userId),
           createdAt: party.createdAt,
           discordChannelId: party.discordChannelId,
           expiresAt: party.expiresAt,
@@ -229,6 +299,7 @@ export class GamePartiesRepository {
 
       const parties = await tx.gameParty.findMany({
         include: {
+          joinBlocks: { select: { userId: true } },
           invites: { select: { id: true }, where: { status: "PENDING" } },
           members: { select: { positionRole: true, userId: true } }
         },
@@ -331,6 +402,7 @@ export class GamePartiesRepository {
         });
         const servers = [DOTA_DEFAULT_SERVER];
         return {
+          blockedUserIds: party.joinBlocks.map((block) => block.userId),
           createdAt: party.createdAt,
           discordChannelId: party.discordChannelId,
           expiresAt: party.expiresAt,
@@ -409,16 +481,28 @@ export class GamePartiesRepository {
         where: { partyId: retired.id }
       });
       const retiredBlocks = await tx.gamePartyJoinBlock.findMany({
-        select: { userId: true },
+        select: { userId: true, allowManualRejoin: true },
         where: { partyId: retired.id }
       });
-      const outsideBlocks = retiredBlocks
-        .map((block) => block.userId)
-        .filter((userId) => !mergedMemberIds.includes(userId));
+      const outsideBlocks = retiredBlocks.filter(
+        (block) => !mergedMemberIds.includes(block.userId)
+      );
       if (outsideBlocks.length > 0) {
         await tx.gamePartyJoinBlock.createMany({
-          data: [...new Set(outsideBlocks)].map((userId) => ({ partyId: survivor.id, userId })),
+          data: outsideBlocks.map((block) => ({ partyId: survivor.id, ...block })),
           skipDuplicates: true
+        });
+        // A kick in either source party must retain its stricter manual-entry restriction.
+        await tx.gamePartyJoinBlock.updateMany({
+          data: { allowManualRejoin: false },
+          where: {
+            partyId: survivor.id,
+            userId: {
+              in: outsideBlocks
+                .filter((block) => !block.allowManualRejoin)
+                .map((block) => block.userId)
+            }
+          }
         });
       }
       await tx.gamePartyJoinBlock.deleteMany({ where: { partyId: retired.id } });
@@ -669,9 +753,10 @@ export class GamePartiesRepository {
             return { ok: false as const, reason: "search_expired" as const };
           }
 
-          const roles = attributes[DOTA_ATTRIBUTE_KEYS.lfgAllRoles] === "true"
-            ? [...DOTA_POSITION_ROLES]
-            : parseDotaRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
+          const roles =
+            attributes[DOTA_ATTRIBUTE_KEYS.lfgAllRoles] === "true"
+              ? [...DOTA_POSITION_ROLES]
+              : parseDotaRoles(attributes[DOTA_ATTRIBUTE_KEYS.roles]);
           if (!roles.includes(member.positionRole)) {
             return { ok: false as const, reason: "invalid_profile" as const };
           }
@@ -959,6 +1044,8 @@ export class GamePartiesRepository {
   }
 
   createInvite(input: {
+    automaticMatch?: boolean;
+    manualJoin?: boolean;
     inviteeUserId: string;
     inviteKind?: "INVITE" | "APPLICATION";
     inviterUserId: string;
@@ -974,6 +1061,15 @@ export class GamePartiesRepository {
       `;
       if (!partyRows[0] || partyRows[0].mergedIntoSlug) {
         throw new Error("PARTY_MERGED");
+      }
+
+      if (input.automaticMatch || input.inviteKind === "APPLICATION") {
+        const block = await tx.gamePartyJoinBlock.findUnique({
+          where: { partyId_userId: { partyId: input.partyId, userId: input.inviteeUserId } }
+        });
+        if (block && (input.automaticMatch || !(input.manualJoin && block.allowManualRejoin))) {
+          throw new Error(block.allowManualRejoin ? "AUTO_JOIN_BLOCKED" : "PARTY_JOIN_BLOCKED");
+        }
       }
 
       return tx.gamePartyInvite.create({
@@ -1140,6 +1236,7 @@ export class GamePartiesRepository {
    * Returns existing membership when already present; otherwise ok/reason for callers.
    */
   addMemberAtomically(input: {
+    manualJoin?: boolean;
     maxMembers: number;
     partyId: string;
     positionRole?: string | null;
@@ -1174,7 +1271,7 @@ export class GamePartiesRepository {
       }
 
       const joinBlock = await tx.gamePartyJoinBlock.findUnique({
-        select: { id: true },
+        select: { id: true, allowManualRejoin: true },
         where: {
           partyId_userId: {
             partyId: input.partyId,
@@ -1183,7 +1280,7 @@ export class GamePartiesRepository {
         }
       });
 
-      if (joinBlock) {
+      if (joinBlock && !(input.manualJoin && joinBlock.allowManualRejoin)) {
         return { ok: false as const, reason: "join_blocked" as const };
       }
 
@@ -1281,7 +1378,7 @@ export class GamePartiesRepository {
   }): Promise<{
     closedInvites: GamePartyInvite[];
     member: GamePartyMember | null;
-    reason?: "full" | "role_taken" | "already_on_other_team";
+    reason?: "full" | "role_taken" | "already_on_other_team" | "join_blocked";
     staleInvite: boolean;
   }> {
     return this.prismaService.$transaction(async (tx) => {
@@ -1321,6 +1418,20 @@ export class GamePartiesRepository {
         inviteRow.status !== "PENDING"
       ) {
         return { closedInvites: [], member: null, staleInvite: true };
+      }
+
+      if (inviteRow.kind === "APPLICATION") {
+        const block = await tx.gamePartyJoinBlock.findUnique({
+          where: { partyId_userId: { partyId: input.partyId, userId: input.userId } }
+        });
+        if (block && !block.allowManualRejoin) {
+          return {
+            closedInvites: [],
+            member: null,
+            reason: "join_blocked" as const,
+            staleInvite: false
+          };
+        }
       }
 
       if (partyMeta.kind === "TEAM") {
@@ -1520,28 +1631,45 @@ export class GamePartiesRepository {
       );
       closedInvites.push(...cancelledApplications);
 
+      // Keep this under the party lock: a subsequent leave must create a new block.
+      await tx.gamePartyJoinBlock.deleteMany({
+        where: { partyId: input.partyId, userId: input.userId }
+      });
+
       return { closedInvites, member, staleInvite: false };
     });
   }
 
-  /** Remove a member, block public rejoining, and cancel party invites atomically. */
-  async removeMemberAndBlockJoinAtomically(partyId: string, userId: string): Promise<void> {
+  /** Remove membership and persist the rejoin policy in the same party transaction. */
+  async removeMemberAndBlockJoinAtomically(
+    partyId: string,
+    userId: string,
+    allowManualRejoin = false
+  ): Promise<void> {
     await this.prismaService.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtext(${`${userId}:dota-party-join`}))
+      `;
       await tx.$executeRaw`
         SELECT id FROM social.game_parties WHERE id = ${partyId}::uuid FOR UPDATE
       `;
 
-      await tx.gamePartyMember.deleteMany({
+      const removed = await tx.gamePartyMember.deleteMany({
         where: {
           partyId,
           userId
         }
       });
 
+      if (removed.count === 0) {
+        return;
+      }
+
       await tx.$executeRaw`
-        INSERT INTO social.game_party_join_blocks (id, party_id, user_id, created_at)
-        VALUES (gen_random_uuid(), ${partyId}::uuid, ${userId}::uuid, NOW())
-        ON CONFLICT (party_id, user_id) DO NOTHING
+        INSERT INTO social.game_party_join_blocks (id, party_id, user_id, created_at, allow_manual_rejoin)
+        VALUES (gen_random_uuid(), ${partyId}::uuid, ${userId}::uuid, NOW(), ${allowManualRejoin})
+        ON CONFLICT (party_id, user_id) DO UPDATE
+        SET allow_manual_rejoin = EXCLUDED.allow_manual_rejoin
       `;
 
       await tx.gamePartyInvite.updateMany({
@@ -1572,9 +1700,14 @@ export class GamePartiesRepository {
     `;
   }
 
-  async findJoinBlock(partyId: string, userId: string): Promise<{ id: string } | null> {
-    const rows = await this.prismaService.$queryRaw<Array<{ id: string }>>`
-      SELECT id::text AS id
+  async findJoinBlock(
+    partyId: string,
+    userId: string
+  ): Promise<{ id: string; allowManualRejoin: boolean } | null> {
+    const rows = await this.prismaService.$queryRaw<
+      Array<{ id: string; allowManualRejoin: boolean }>
+    >`
+      SELECT id::text AS id, allow_manual_rejoin AS "allowManualRejoin"
       FROM social.game_party_join_blocks
       WHERE party_id = ${partyId}::uuid AND user_id = ${userId}::uuid
       LIMIT 1

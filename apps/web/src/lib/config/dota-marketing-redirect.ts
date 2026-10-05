@@ -1,4 +1,4 @@
-const RESERVED_GAMES_ROUTES = new Set(["search", "community", "tournaments"]);
+const RESERVED_GAMES_ROUTES = new Set(["search", "community", "tournaments", "parties"]);
 
 /** Keep actual Games routes separate from shortened Dota profile links. */
 export function resolveDotaMarketingProfileRedirect(pathname: string): string | null {

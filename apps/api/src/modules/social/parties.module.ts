@@ -8,6 +8,8 @@ import { EntitiesModule } from "../entities/entities.module.js";
 import { GamesLaunchModule } from "../games-launch/games-launch.module.js";
 import { UsersModule } from "../users/users.module.js";
 import { PartiesController } from "./controllers/parties.controller.js";
+import { AdminPartiesController } from "./controllers/admin-parties.controller.js";
+import { AdminPartiesService } from "./services/admin-parties.service.js";
 import { FriendshipsModule } from "./friendships.module.js";
 import { TelegramBotModule } from "../telegram/telegram-bot.module.js";
 import { GamePartyGateway } from "./gateways/game-party.gateway.js";
@@ -18,7 +20,7 @@ import { PartyRealtimeService } from "./services/party-realtime.service.js";
 import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
 
 @Module({
-  controllers: [PartiesController],
+  controllers: [PartiesController, AdminPartiesController],
   exports: [
     GamePartiesService,
     GamePartyGateway,
@@ -39,6 +41,7 @@ import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
     UsersModule
   ],
   providers: [
+    AdminPartiesService,
     DiscordVoiceService,
     GamePartiesRepository,
     GamePartiesService,

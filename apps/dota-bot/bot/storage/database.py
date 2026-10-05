@@ -8,6 +8,8 @@ from threading import RLock
 
 from cryptography.fernet import Fernet
 
+from ..services.broadcast_duration import DEFAULT_BROADCAST_TTL_SECONDS, validate_broadcast_duration
+
 
 @dataclass(frozen=True)
 class Session:
@@ -128,6 +130,8 @@ class BotStorage:
               ON broadcast_recipients (campaign_id, status, telegram_user_id);
             CREATE INDEX IF NOT EXISTS idx_bot_users_announcements
               ON bot_users (announcements_enabled, blocked_at);
+            CREATE INDEX IF NOT EXISTS idx_temporary_messages_delete_at
+              ON temporary_messages (delete_at);
             """
         )
         columns = {
@@ -140,6 +144,13 @@ class BotStorage:
         user_columns = {
             row["name"] for row in self.connection.execute("PRAGMA table_info(bot_users)")
         }
+        campaign_columns = {
+            row["name"] for row in self.connection.execute("PRAGMA table_info(broadcast_campaigns)")
+        }
+        if "delete_after_seconds" not in campaign_columns:
+            self.connection.execute(
+                f"ALTER TABLE broadcast_campaigns ADD COLUMN delete_after_seconds INTEGER NOT NULL DEFAULT {DEFAULT_BROADCAST_TTL_SECONDS}"
+            )
         if "acquisition_source" not in user_columns:
             self.connection.execute(
                 "ALTER TABLE bot_users ADD COLUMN acquisition_source TEXT NOT NULL DEFAULT 'existing'"
@@ -585,21 +596,12 @@ class BotStorage:
             ),
         }
 
-    def set_announcements_enabled(self, telegram_user_id: int, enabled: bool) -> None:
-        self.record_bot_user(telegram_user_id)
-        with self.lock:
-            self._connection().execute(
-                "UPDATE bot_users SET announcements_enabled = ?, blocked_at = NULL WHERE telegram_user_id = ?",
-                (int(enabled), telegram_user_id),
-            )
-            self._connection().commit()
-
-    def announcements_enabled(self, telegram_user_id: int) -> bool:
+    def can_receive_broadcast(self, telegram_user_id: int) -> bool:
         row = self._connection().execute(
-            "SELECT announcements_enabled FROM bot_users WHERE telegram_user_id = ?",
+            "SELECT blocked_at FROM bot_users WHERE telegram_user_id = ?",
             (telegram_user_id,),
         ).fetchone()
-        return bool(row["announcements_enabled"]) if row else True
+        return row is not None and row["blocked_at"] is None
 
     def mark_bot_user_blocked(self, telegram_user_id: int) -> None:
         with self.lock:
@@ -612,7 +614,7 @@ class BotStorage:
     def bot_user_stats(self) -> dict[str, int]:
         row = self._connection().execute(
             """SELECT COUNT(*) AS total,
-                      SUM(CASE WHEN announcements_enabled = 1 AND blocked_at IS NULL THEN 1 ELSE 0 END) AS subscribers
+                      SUM(CASE WHEN blocked_at IS NULL THEN 1 ELSE 0 END) AS subscribers
                FROM bot_users"""
         ).fetchone()
         registered = self._connection().execute("SELECT COUNT(*) FROM telegram_sessions").fetchone()[0]
@@ -622,16 +624,20 @@ class BotStorage:
             "registered": int(registered or 0),
         }
 
-    def create_broadcast(self, admin_user_id: int, text: str) -> tuple[int, int]:
+    def create_broadcast(
+        self, admin_user_id: int, text: str,
+        delete_after_seconds: int = DEFAULT_BROADCAST_TTL_SECONDS,
+    ) -> tuple[int, int]:
+        validate_broadcast_duration(delete_after_seconds)
         with self.lock:
             connection = self._connection()
             cursor = connection.execute(
-                "INSERT INTO broadcast_campaigns (admin_user_id, text, status, created_at) VALUES (?, ?, 'queued', ?)",
-                (admin_user_id, text, timestamp()),
+                "INSERT INTO broadcast_campaigns (admin_user_id, text, status, created_at, delete_after_seconds) VALUES (?, ?, 'queued', ?, ?)",
+                (admin_user_id, text, timestamp(), delete_after_seconds),
             )
             campaign_id = int(cursor.lastrowid)
             recipients = connection.execute(
-                "SELECT telegram_user_id FROM bot_users WHERE announcements_enabled = 1 AND blocked_at IS NULL"
+                "SELECT telegram_user_id FROM bot_users WHERE blocked_at IS NULL"
             ).fetchall()
             connection.executemany(
                 "INSERT INTO broadcast_recipients (campaign_id, telegram_user_id) VALUES (?, ?)",
@@ -649,7 +655,7 @@ class BotStorage:
         with self.lock:
             connection = self._connection()
             campaign = connection.execute(
-                "SELECT id, admin_user_id, text FROM broadcast_campaigns WHERE status IN ('queued', 'sending') ORDER BY id LIMIT 1"
+                "SELECT id, admin_user_id, text, delete_after_seconds FROM broadcast_campaigns WHERE status IN ('queued', 'sending') ORDER BY id LIMIT 1"
             ).fetchone()
             if campaign is None:
                 return None
@@ -674,6 +680,7 @@ class BotStorage:
                 "campaign_id": int(campaign["id"]),
                 "admin_user_id": int(campaign["admin_user_id"]),
                 "text": str(campaign["text"]),
+                "delete_after_seconds": int(campaign["delete_after_seconds"]),
                 "telegram_user_id": int(recipient["telegram_user_id"]),
             }
 
@@ -685,6 +692,7 @@ class BotStorage:
         error: str | None = None,
         *,
         increment_attempt: bool = True,
+        sent_message: tuple[int, int] | None = None,
     ) -> bool:
         if status not in {"sent", "blocked", "failed", "skipped"}:
             raise ValueError("Unsupported broadcast recipient status")
@@ -692,6 +700,20 @@ class BotStorage:
         attempt_update = "attempts = attempts + 1," if increment_attempt else ""
         with self.lock:
             connection = self._connection()
+            if sent_message is not None:
+                if status != "sent":
+                    raise ValueError("Only delivered broadcasts can have a message")
+                campaign = connection.execute(
+                    "SELECT delete_after_seconds FROM broadcast_campaigns WHERE id = ?",
+                    (campaign_id,),
+                ).fetchone()
+                if campaign is None:
+                    raise ValueError("Broadcast was not found")
+                delete_at = datetime.now(UTC) + timedelta(seconds=int(campaign["delete_after_seconds"]))
+                connection.execute(
+                    "INSERT OR REPLACE INTO temporary_messages VALUES (?, ?, ?, ?)",
+                    (telegram_user_id, *sent_message, delete_at.isoformat()),
+                )
             connection.execute(
                 f"""UPDATE broadcast_recipients SET status = ?, {attempt_update}
                    last_error = ?, sent_at = CASE WHEN ? = 'sent' THEN ? ELSE sent_at END
@@ -848,7 +870,7 @@ class BotStorage:
 
     def due_temporary_messages(self) -> list[tuple[int, int, int]]:
         rows = self._connection().execute(
-            "SELECT telegram_user_id, chat_id, message_id FROM temporary_messages WHERE delete_at <= ?",
+            "SELECT telegram_user_id, chat_id, message_id FROM temporary_messages WHERE delete_at <= ? ORDER BY delete_at LIMIT 100",
             (timestamp(),),
         ).fetchall()
         return [(row["telegram_user_id"], row["chat_id"], row["message_id"]) for row in rows]

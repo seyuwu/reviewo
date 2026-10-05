@@ -299,7 +299,7 @@ export class PartiesController {
       currentUser,
       input.partySlug,
       input.positionRole,
-      input.source === "web" ? { notifyMembersJoined: false } : undefined
+      { manualJoin: input.manualJoin === true, notifyMembersJoined: input.source !== "web" }
     );
 
     if (result.invite.status === "ACCEPTED") {

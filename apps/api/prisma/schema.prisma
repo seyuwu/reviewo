@@ -1424,11 +1424,12 @@ model GamePartyInvite {
   @@schema("social")
 }
 
-/// After leaving or being kicked: user cannot OPEN/claim/auto-rejoin until a fresh INVITE is accepted.
+/// Prevents automatic rejoining. Voluntary leavers may explicitly return; kicked users need an invite.
 model GamePartyJoinBlock {
   id        String    @id @default(uuid()) @db.Uuid
   partyId   String    @map("party_id") @db.Uuid
   userId    String    @map("user_id") @db.Uuid
+  allowManualRejoin Boolean @default(false) @map("allow_manual_rejoin")
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   party     GameParty @relation(fields: [partyId], references: [id], onDelete: Cascade)
 
