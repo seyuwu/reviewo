@@ -109,6 +109,19 @@ class BotStorage:
               telegram_user_id INTEGER PRIMARY KEY,
               started_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS search_timeout_notices (
+              telegram_user_id INTEGER NOT NULL,
+              ordinal INTEGER NOT NULL CHECK (ordinal IN (1, 2)),
+              event_key TEXT NOT NULL,
+              search_mode TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'pending',
+              created_at TEXT NOT NULL,
+              sent_at TEXT,
+              PRIMARY KEY (telegram_user_id, ordinal),
+              UNIQUE (telegram_user_id, event_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_search_timeout_notices_pending
+              ON search_timeout_notices (status, created_at);
             CREATE TABLE IF NOT EXISTS broadcast_campaigns (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               admin_user_id INTEGER NOT NULL,
@@ -856,6 +869,46 @@ class BotStorage:
             return items[index] if 0 <= index < len(items) else None
         except (IndexError, TypeError, json.JSONDecodeError):
             return None
+
+    def queue_search_timeout_notice(self, telegram_user_id: int, event_key: str, mode: str) -> bool:
+        """Reserve at most two notices across both modes; restart-safe event deduplication."""
+        if mode not in {"looking", "recruit"}:
+            raise ValueError("Invalid search mode")
+        with self.lock:
+            connection = self._connection()
+            count = connection.execute(
+                "SELECT COUNT(*) FROM search_timeout_notices WHERE telegram_user_id = ?",
+                (telegram_user_id,),
+            ).fetchone()[0]
+            if count >= 2:
+                return False
+            cursor = connection.execute(
+                """INSERT OR IGNORE INTO search_timeout_notices
+                   (telegram_user_id, ordinal, event_key, search_mode, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (telegram_user_id, count + 1, event_key, mode, timestamp()),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+    def pending_search_timeout_notices(self) -> list[dict]:
+        rows = self._connection().execute(
+            """SELECT n.* FROM search_timeout_notices n WHERE n.status = 'pending'
+               AND NOT EXISTS (
+                 SELECT 1 FROM search_timeout_notices earlier
+                 WHERE earlier.telegram_user_id = n.telegram_user_id
+                   AND earlier.ordinal < n.ordinal AND earlier.status = 'pending'
+               ) ORDER BY n.created_at LIMIT 20"""
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def finish_search_timeout_notice(self, telegram_user_id: int, ordinal: int, *, blocked: bool = False) -> None:
+        with self.lock:
+            self._connection().execute(
+                "UPDATE search_timeout_notices SET status = ?, sent_at = ? WHERE telegram_user_id = ? AND ordinal = ?",
+                ("blocked" if blocked else "sent", timestamp(), telegram_user_id, ordinal),
+            )
+            self._connection().commit()
 
     def add_temporary_message(
         self, telegram_user_id: int, chat_id: int, message_id: int, ttl_seconds: int

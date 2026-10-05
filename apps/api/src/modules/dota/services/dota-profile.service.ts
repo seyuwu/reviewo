@@ -1180,6 +1180,12 @@ export class DotaProfileService {
         !attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() &&
         attributes[DOTA_ATTRIBUTE_KEYS.lfgAllRoles] === "true",
       lfgExpiresAt: options.isOwner && isLooking ? new Date(lfgUntilMs).toISOString() : null,
+      lfgTimedOut:
+        options.isOwner &&
+        Number.isFinite(lfgUntilMs) &&
+        lfgUntilMs > 0 &&
+        lfgUntilMs <= Date.now() &&
+        !attributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim(),
       language: attributes[DOTA_ATTRIBUTE_KEYS.language] ?? null,
       mmr: attributes[DOTA_ATTRIBUTE_KEYS.mmr] ?? null,
       ownerUserId: entity.ownerUserId,

@@ -797,6 +797,7 @@ try {
   for (const socket of sockets) socket.disconnect();
   const ids = users.map((user) => user.id);
   await prisma.gameParty.deleteMany({ where: { ownerUserId: { in: ids } } });
+  await prisma.gamePartyChatArchive.deleteMany({ where: { name: { startsWith: prefix } } });
   await prisma.entity.deleteMany({ where: { ownerUserId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.$disconnect();

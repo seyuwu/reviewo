@@ -20,6 +20,8 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..storage.database import BotStorage
 from .temporary_notifications import send_temporary_notification
+from .search_timeout_notices import queue_solo_timeout, queue_recruit_timeout, search_reached_timeout
+from .start_links import bot_friend_invite_url
 from ..ui.formatters import party_text, profile_text
 from ..ui.keyboards import (
     account_keyboard,
@@ -380,6 +382,11 @@ async def refresh_active_search_panels(
                     if search.get("mode") == "looking":
                         profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
                         if not profile.get("looking"):
+                            if profile.get("lfgTimedOut") and search_reached_timeout(storage, telegram_user_id, search):
+                                memberships = await api.user(telegram_user_id, "GET", "/social/parties/me")
+                                queue_solo_timeout(storage, telegram_user_id, search, profile, memberships)
+                            if storage.get_choice(telegram_user_id, "auto_search", 0) != search:
+                                continue
                             storage.set_choices(telegram_user_id, "auto_search", [])
                         else:
                             await maybe_send_long_search_reminder(
@@ -397,21 +404,29 @@ async def refresh_active_search_panels(
                             telegram_user_id,
                             "looking",
                         )
-                    elif panel and panel.screen == "party" and (
+                    elif (
                         search.get("mode") == "recruit"
-                        or storage.get_choice(telegram_user_id, "party_search_watch", 0)
+                        or (panel and panel.screen == "party" and storage.get_choice(telegram_user_id, "party_search_watch", 0))
                     ):
+                        if (not panel or panel.screen != "party") and not search_reached_timeout(storage, telegram_user_id, search):
+                            continue
                         parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
+                        if (storage.get_choice(telegram_user_id, "auto_search", 0) or {}) != search:
+                            continue
                         party = parties.get("party") or ((parties.get("parties") or [None])[-1])
                         if not party:
                             storage.set_choices(telegram_user_id, "auto_search", [])
                             storage.set_choices(telegram_user_id, "party_search_watch", [])
-                            await edit_panel(bot, storage, api, settings, telegram_user_id, "home")
+                            if panel and panel.screen == "party":
+                                await edit_panel(bot, storage, api, settings, telegram_user_id, "home")
                             continue
                         if search.get("mode") == "recruit" and party.get("slug") != search.get("partySlug"):
                             storage.set_choices(telegram_user_id, "auto_search", [])
+                        queue_recruit_timeout(storage, telegram_user_id, search, party)
                         if not party.get("recruitedRoles"):
                             storage.set_choices(telegram_user_id, "auto_search", [])
+                        if not panel or panel.screen != "party":
+                            continue
                         text, keyboard = await render_screen(
                             api,
                             storage,
@@ -490,7 +505,7 @@ async def maybe_send_long_search_reminder(
             logger.warning("Cannot build bot invitation without a Telegram username")
             return
 
-        invite_url = f"https://t.me/{me.username}"
+        invite_url = bot_friend_invite_url(me.username)
         invitation_text = (
             "🎮 Ищем пати в Dota 2? Заходи в FDP — подберём команду по ролям и MMR: "
             f"{invite_url}\n@{me.username}"

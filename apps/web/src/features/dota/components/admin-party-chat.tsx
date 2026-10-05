@@ -6,11 +6,19 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 import { useTranslation } from "../../i18n/locale-provider";
 import type { GamePartyChatMessagesPage } from "../../social/types/social";
-import { fetchAdminPartyChat } from "../api/admin-parties-api";
+import { fetchAdminPartyChat, fetchArchivedPartyChat } from "../api/admin-parties-api";
 import { usePartyAdminAccess } from "../hooks/use-party-admin-access";
 import styles from "./admin-party-chat.module.css";
 
-export function AdminPartyChat({ partyId, fallback }: { partyId: string; fallback: ReactNode }) {
+export function AdminPartyChat({
+  partyId,
+  fallback,
+  archived = false
+}: {
+  partyId: string;
+  fallback: ReactNode;
+  archived?: boolean;
+}) {
   const t = useTranslation();
   const { accessToken, isAdmin } = usePartyAdminAccess();
   const listRef = useRef<HTMLDivElement>(null);
@@ -25,8 +33,13 @@ export function AdminPartyChat({ partyId, fallback }: { partyId: string; fallbac
     enabled: isAdmin,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => fetchAdminPartyChat(partyId, accessToken ?? "", pageParam),
-    queryKey: ["admin-party-chat", accessToken, partyId],
+    queryFn: ({ pageParam }) =>
+      (archived ? fetchArchivedPartyChat : fetchAdminPartyChat)(
+        partyId,
+        accessToken ?? "",
+        pageParam
+      ),
+    queryKey: ["admin-party-chat", accessToken, partyId, archived],
     refetchOnWindowFocus: false,
     gcTime: 0,
     retry: false
@@ -84,7 +97,11 @@ export function AdminPartyChat({ partyId, fallback }: { partyId: string; fallbac
           </button>
         ) : null}
         {chat.isPending ? <p>{t("common.loadingEllipsis")}</p> : null}
-        {chat.isError ? <p role="alert">{t("dota.allParties.chatError")}</p> : null}
+        {chat.isError ? (
+          <p role="alert">
+            {t(archived ? "dota.allParties.archiveError" : "dota.allParties.chatError")}
+          </p>
+        ) : null}
         {chat.isSuccess && messages.length === 0 ? <p>{t("dota.team.chatEmpty")}</p> : null}
         {messages.map((message) => (
           <article className={styles.message} key={message.id}>

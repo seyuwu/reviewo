@@ -79,6 +79,8 @@ const PARTY_JOIN_CODE_TTL_SECONDS = 60 * 60 * 24 * 7;
 export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(GamePartiesService.name);
   private cleanupTimer?: NodeJS.Timeout;
+  private chatArchiveCleanupTimer?: NodeJS.Timeout;
+  private chatArchiveCleanupRunning = false;
   private partyMergeTimer?: NodeJS.Timeout;
   private partyMergeRunning = false;
 
@@ -99,6 +101,7 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    void this.runChatArchiveCleanupSafely();
     void this.runCleanupSafely();
     void this.runRecruitPartyMergeSafely();
 
@@ -109,9 +112,13 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     this.partyMergeTimer = setInterval(() => {
       void this.runRecruitPartyMergeSafely();
     }, 5_000).unref();
+    this.chatArchiveCleanupTimer = setInterval(() => {
+      void this.runChatArchiveCleanupSafely();
+    }, 60_000).unref();
   }
 
   onModuleDestroy(): void {
+    if (this.chatArchiveCleanupTimer) clearInterval(this.chatArchiveCleanupTimer);
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
     }
@@ -2943,6 +2950,25 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
+  private async runChatArchiveCleanupSafely(): Promise<void> {
+    if (this.chatArchiveCleanupRunning) return;
+    this.chatArchiveCleanupRunning = true;
+    try {
+      const now = new Date();
+      // Bound work per minute; several API instances can safely sweep using SKIP LOCKED.
+      for (let batch = 0; batch < 10; batch += 1) {
+        if ((await this.gamePartiesRepository.deleteExpiredPartyChatArchives(now)) < 100) break;
+      }
+    } catch (error) {
+      this.logger.error(
+        "Party chat archive cleanup failed",
+        error instanceof Error ? error.stack : undefined
+      );
+    } finally {
+      this.chatArchiveCleanupRunning = false;
+    }
+  }
+
   private async runCleanupSafely(): Promise<void> {
     try {
       // Discord first, then DB — avoids orphan channels when process dies mid-cleanup.
@@ -3581,6 +3607,15 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       recruitedRoles,
       recruitingUntil:
         recruitedRoles.length > 0 ? (recruitingUntilDate?.toISOString() ?? null) : null,
+      recruitmentTimedOut:
+        isOwner &&
+        party.kind === "PARTY" &&
+        members.length < party.maxMembers &&
+        ownerAttributes[DOTA_ATTRIBUTE_KEYS.lfgPartySlug]?.trim() === party.slug &&
+        recruitingUntilDate !== null &&
+        Number.isFinite(recruitingUntilDate.getTime()) &&
+        recruitingUntilDate.getTime() > 0 &&
+        recruitingUntilDate.getTime() <= Date.now(),
       slug: party.slug,
       vertical: party.vertical,
       visibility: party.visibility

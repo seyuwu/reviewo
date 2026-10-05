@@ -1,6 +1,7 @@
 import unittest
 
 from bot.services.start_links import (
+    bot_friend_invite_url,
     parse_acquisition_source,
     parse_acquisition_tag,
     parse_party_start_payload,
@@ -8,6 +9,15 @@ from bot.services.start_links import (
 
 
 class StartLinkTests(unittest.TestCase):
+    def test_friend_link_starts_bot_and_has_separate_attribution(self) -> None:
+        from urllib.parse import parse_qs, urlparse
+        link = bot_friend_invite_url("FDPdotabot")
+        payload = parse_qs(urlparse(link).query)["start"][0]
+        self.assertEqual(parse_acquisition_tag(payload), ("referral", "friends"))
+        self.assertIsNone(parse_party_start_payload(payload))
+        with self.assertRaises(ValueError):
+            bot_friend_invite_url("invalid/name?start=party_other")
+
     def test_acquisition_sources_are_separate_from_party_invites(self) -> None:
         self.assertEqual(parse_acquisition_source("src_seo"), "seo")
         self.assertEqual(parse_acquisition_source("src_community"), "community")

@@ -25,6 +25,44 @@ export interface AdminPartiesPage {
   total: number;
 }
 
+export interface PartyChatArchive {
+  id: string;
+  name: string;
+  archivedAt: string;
+  expiresAt: string;
+}
+
+export interface PartyChatArchivesPage {
+  items: PartyChatArchive[];
+  nextCursor: string | null;
+}
+
+export function fetchPartyChatArchives(
+  accessToken: string,
+  before?: string
+): Promise<PartyChatArchivesPage> {
+  const params = new URLSearchParams({ limit: "25" });
+  if (before) params.set("before", before);
+  return apiRequest<PartyChatArchivesPage>(`/admin/parties/archives?${params}`, {
+    headers: { authorization: `Bearer ${accessToken}` }
+  });
+}
+
+export function fetchArchivedPartyChat(
+  partyId: string,
+  accessToken: string,
+  before?: string
+): Promise<GamePartyChatMessagesPage> {
+  const params = new URLSearchParams({ limit: "50" });
+  if (before) params.set("before", before);
+  return apiRequest<GamePartyChatMessagesPage>(
+    `/admin/parties/archives/${encodeURIComponent(partyId)}/messages?${params}`,
+    {
+      headers: { authorization: `Bearer ${accessToken}` }
+    }
+  );
+}
+
 export function fetchAllActiveParties(
   accessToken: string,
   input: { before?: string | undefined; kind?: "PARTY" | "TEAM" | undefined } = {}

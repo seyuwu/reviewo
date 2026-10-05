@@ -19,6 +19,13 @@ ACQUISITION_SOURCES = {
 }
 
 
+def bot_friend_invite_url(username: str) -> str:
+    """Public, anonymous acquisition link; deliberately separate from party join codes."""
+    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
+        raise ValueError("Invalid Telegram bot username")
+    return f"https://t.me/{username}?start=src_referral_friends"
+
+
 def parse_party_start_payload(payload: str | None) -> str | None:
     if not payload:
         return None

@@ -198,6 +198,19 @@ function createService(overrides?: {
 }
 
 describe("DotaProfileService", () => {
+  it("marks only an expired solo deadline as a timeout, not manual stop or recruitment", async () => {
+    for (const [attributes, expected] of [
+      [{ lfg_until: new Date(Date.now() - 1000).toISOString() }, true],
+      [{ lfg_until: new Date(0).toISOString() }, false],
+      [{ lfg_until: new Date(Date.now() + 1000).toISOString() }, false],
+      [{ lfg_until: "invalid" }, false],
+      [{ lfg_until: new Date(Date.now() - 1000).toISOString(), lfg_party_slug: "party" }, false]
+    ] as const) {
+      const service = createService({ attributes });
+      const profile = await service.getMyProfile(owner);
+      assert.equal(profile.lfgTimedOut, expected);
+    }
+  });
   it("keeps Telegram solo and party searches active for 30 minutes, with matching analytics deadlines", async () => {
     for (const source of [undefined, "telegram", "web"] as const) {
       for (const partySlug of [undefined, "website-party"]) {

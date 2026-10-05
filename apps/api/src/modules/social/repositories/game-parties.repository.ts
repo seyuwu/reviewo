@@ -32,6 +32,70 @@ const MAX_CHAT_PAGE_SIZE = 100;
 export class GamePartiesRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
+  async listPartyChatArchives(input: { before?: string; limit?: number }, now: Date) {
+    const limit = Math.min(Math.max(input.limit ?? 25, 1), 50);
+    const active = { expiresAt: { gt: now } };
+    const cursor = input.before
+      ? await this.prismaService.gamePartyChatArchive.findUnique({ where: { id: input.before } })
+      : null;
+    if (input.before && !cursor) return { items: [], nextCursor: null };
+    const rows = await this.prismaService.gamePartyChatArchive.findMany({
+      where: cursor
+        ? {
+            ...active,
+            OR: [
+              { archivedAt: { lt: cursor.archivedAt } },
+              { archivedAt: cursor.archivedAt, id: { lt: cursor.id } }
+            ]
+          }
+        : active,
+      orderBy: [{ archivedAt: "desc" }, { id: "desc" }],
+      take: limit + 1
+    });
+    const items = rows.slice(0, limit);
+    return { items, nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null };
+  }
+
+  async listArchivedPartyChatMessages(archiveId: string, before?: string, limit = 50) {
+    const now = new Date();
+    const archive = await this.prismaService.gamePartyChatArchive.findFirst({
+      where: { id: archiveId, expiresAt: { gt: now } }
+    });
+    if (!archive) return null;
+    const cursor = before
+      ? await this.prismaService.gamePartyArchivedChatMessage.findUnique({ where: { id: before } })
+      : null;
+    if (before && (!cursor || cursor.archiveId !== archiveId)) return [];
+    return this.prismaService.gamePartyArchivedChatMessage.findMany({
+      where: {
+        archiveId,
+        archive: { expiresAt: { gt: new Date() } },
+        ...(cursor
+          ? {
+              OR: [
+                { createdAt: { lt: cursor.createdAt } },
+                { createdAt: cursor.createdAt, id: { lt: cursor.id } }
+              ]
+            }
+          : {})
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: Math.min(Math.max(limit, 1), 100)
+    });
+  }
+
+  deleteExpiredPartyChatArchives(now: Date): Promise<number> {
+    // Bound each sweep; cascades delete only the expired archives' message snapshots.
+    return this.prismaService.$executeRaw`
+      WITH expired AS (
+        SELECT id FROM social.game_party_chat_archives
+        WHERE expires_at <= ${now}
+        ORDER BY expires_at, id LIMIT 100 FOR UPDATE SKIP LOCKED
+      )
+      DELETE FROM social.game_party_chat_archives WHERE id IN (SELECT id FROM expired)
+    `;
+  }
+
   async listAdminActiveParties(
     input: { before?: string; kind?: GamePartyKind; limit?: number },
     now: Date

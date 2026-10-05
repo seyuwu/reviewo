@@ -12,6 +12,50 @@ import { GamePartiesRepository } from "../repositories/game-parties.repository.j
 export class AdminPartiesService {
   constructor(private readonly gamePartiesRepository: GamePartiesRepository) {}
 
+  async listChatArchives(actor: AuthenticatedUser, input: { before?: string; limit?: number }) {
+    this.assertAdmin(actor);
+    const page = await this.gamePartiesRepository.listPartyChatArchives(input, new Date());
+    return {
+      ...page,
+      items: page.items.map((archive) => ({
+        ...archive,
+        archivedAt: archive.archivedAt.toISOString(),
+        expiresAt: archive.expiresAt.toISOString()
+      }))
+    };
+  }
+
+  async listArchivedChatMessages(
+    actor: AuthenticatedUser,
+    archiveId: string,
+    before?: string,
+    limit = 50
+  ): Promise<GamePartyChatMessagesPageDto> {
+    this.assertAdmin(actor);
+    const rows = await this.gamePartiesRepository.listArchivedPartyChatMessages(
+      archiveId,
+      before,
+      limit
+    );
+    if (!rows) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Chat archive was not found or has expired",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+    return {
+      messages: [...rows].reverse().map((row) => ({
+        id: row.id,
+        userId: row.userId,
+        displayName: row.displayName,
+        message: row.message,
+        createdAt: row.createdAt.toISOString()
+      })),
+      nextCursor: rows.length >= Math.min(limit, 100) ? (rows.at(-1)?.id ?? null) : null
+    };
+  }
+
   async listParties(
     actor: AuthenticatedUser,
     input: ListAdminPartiesQueryDto

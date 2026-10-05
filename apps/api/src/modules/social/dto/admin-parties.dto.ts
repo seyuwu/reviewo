@@ -1,11 +1,7 @@
 import { Type } from "class-transformer";
 import { IsIn, IsInt, IsOptional, IsUUID, Max, Min } from "class-validator";
 
-export class ListAdminPartiesQueryDto {
-  @IsOptional()
-  @IsIn(["PARTY", "TEAM"])
-  kind?: "PARTY" | "TEAM";
-
+export class ListAdminPartyChatArchivesQueryDto {
   @IsOptional()
   @IsUUID()
   before?: string;
@@ -16,6 +12,12 @@ export class ListAdminPartiesQueryDto {
   @Min(1)
   @Max(50)
   limit?: number;
+}
+
+export class ListAdminPartiesQueryDto extends ListAdminPartyChatArchivesQueryDto {
+  @IsOptional()
+  @IsIn(["PARTY", "TEAM"])
+  kind?: "PARTY" | "TEAM";
 }
 
 export class ListAdminPartyChatQueryDto {

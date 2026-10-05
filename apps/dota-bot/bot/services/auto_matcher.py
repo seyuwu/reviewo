@@ -9,6 +9,7 @@ from ..config import Settings
 from ..storage.database import BotStorage
 from .panel import edit_panel
 from .party_notifications import deliver_join_hint
+from .search_timeout_notices import queue_solo_timeout
 
 logger = logging.getLogger(__name__)
 ROLE_VALUES = {"1", "2", "3", "4", "5"}
@@ -283,9 +284,12 @@ async def _match_user(
         if not _is_current_solo_search(storage, telegram_user_id, search):
             return
         if not profile.get("looking"):
+            my_parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
+            if not _is_current_solo_search(storage, telegram_user_id, search):
+                return
+            queue_solo_timeout(storage, telegram_user_id, search, profile, my_parties)
             storage.set_choices(telegram_user_id, "auto_search", [])
             storage.clear_auto_match_exclusions(telegram_user_id)
-            my_parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
             panel = storage.get_panel(telegram_user_id)
             if panel and panel.screen != "looking":
                 return

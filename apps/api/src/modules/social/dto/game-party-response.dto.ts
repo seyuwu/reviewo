@@ -67,6 +67,8 @@ export class GamePartyResponseDto {
   recruitedRoles!: Array<"1" | "2" | "3" | "4" | "5">;
   /** Expiration of the active party LFG window, if any. */
   recruitingUntil!: string | null;
+  /** Owner-only expired recruitment signal; not a stopped or completed recruitment. */
+  recruitmentTimedOut?: boolean;
   /** Soft-unique invite link opens; only populated for captains/officers. */
   linkOpenCount!: number | null;
   slug!: string;

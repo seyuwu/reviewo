@@ -2,15 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode
-} from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useAuthSession } from "../features/auth/hooks/use-auth-session";
@@ -35,7 +27,7 @@ export function HeaderRostersMenu() {
   const closeTimerRef = useRef<number | null>(null);
   const { authSession, isAuthSessionLoaded } = useAuthSession();
   const [open, setOpen] = useState(false);
-  const { isAdmin } = usePartyAdminAccess(open);
+  const { isAdmin } = usePartyAdminAccess();
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [team, setTeam] = useState<GameParty | null>(null);
@@ -136,10 +128,7 @@ export function HeaderRostersMenu() {
 
     function handlePointerDown(event: MouseEvent) {
       const target = event.target as Node;
-      if (
-        !rootRef.current?.contains(target) &&
-        !panelRef.current?.contains(target)
-      ) {
+      if (!rootRef.current?.contains(target) && !panelRef.current?.contains(target)) {
         setOpen(false);
       }
     }
@@ -294,6 +283,21 @@ export function HeaderRostersMenu() {
           <span>{t("web.nav.rosters")}</span>
         </Link>
       </div>
+
+      {isAdmin ? (
+        <Link
+          aria-label={t("dota.allParties.title")}
+          className={`app-chrome-nav-link${pathname === "/games/parties" ? " is-active" : ""}`}
+          href="/games/parties"
+          onClick={handleSelect}
+          title={t("dota.allParties.title")}
+        >
+          <span className="app-chrome-nav-icon app-chrome-nav-icon--objects">
+            <OpiniaIcon className="app-chrome-nav-icon-svg" name="objects" />
+          </span>
+          <span>{t("dota.allParties.title")}</span>
+        </Link>
+      ) : null}
 
       {portalReady
         ? createPortal(

@@ -1453,6 +1453,34 @@ model GamePartyChatMessage {
   @@schema("social")
 }
 
+/// A deleted party's chat only; no membership, invite or search state is retained.
+model GamePartyChatArchive {
+  id         String @id @db.Uuid
+  name       String @db.VarChar(160)
+  archivedAt DateTime @default(now()) @map("archived_at") @db.Timestamptz(6)
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(6)
+  messages   GamePartyArchivedChatMessage[]
+
+  @@index([archivedAt(sort: Desc), id(sort: Desc)])
+  @@index([expiresAt])
+  @@map("game_party_chat_archives")
+  @@schema("social")
+}
+
+model GamePartyArchivedChatMessage {
+  id          String @id @db.Uuid
+  archiveId   String @map("archive_id") @db.Uuid
+  userId      String @map("user_id") @db.Uuid
+  displayName String @map("display_name")
+  message     String
+  createdAt   DateTime @map("created_at") @db.Timestamptz(6)
+  archive     GamePartyChatArchive @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+
+  @@index([archiveId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("game_party_archived_chat_messages")
+  @@schema("social")
+}
+
 model TelegramBotNotification {
   id               String    @id @default(uuid()) @db.Uuid
   telegramUserId   String    @map("telegram_user_id") @db.VarChar(32)

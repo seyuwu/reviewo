@@ -12,11 +12,13 @@ import {
 } from "../api/admin-parties-api";
 import { usePartyAdminAccess } from "../hooks/use-party-admin-access";
 import styles from "./all-parties-view.module.css";
+import { ArchivedPartyChats } from "./archived-party-chats";
 
 export function AllPartiesView() {
   const t = useTranslation();
   const { accessToken, isAdmin, isLoading } = usePartyAdminAccess();
   const [kind, setKind] = useState<"ALL" | "PARTY" | "TEAM">("ALL");
+  const [view, setView] = useState<"ACTIVE" | "ARCHIVE">("ACTIVE");
   const parties = useInfiniteQuery<
     AdminPartiesPage,
     Error,
@@ -24,7 +26,7 @@ export function AllPartiesView() {
     readonly unknown[],
     string | undefined
   >({
-    enabled: isAdmin,
+    enabled: isAdmin && view === "ACTIVE",
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
@@ -63,59 +65,80 @@ export function AllPartiesView() {
           <h1>{t("dota.allParties.title")}</h1>
           <p className="muted-copy">{t("dota.allParties.description")}</p>
         </div>
-        <button
-          className="button-secondary"
-          disabled={parties.isFetching}
-          onClick={() => void parties.refetch()}
-          type="button"
-        >
-          {t("dota.allParties.refresh")}
-        </button>
-      </header>
-      <div className={styles.filters} aria-label={t("dota.allParties.filters")}>
-        {(["ALL", "PARTY", "TEAM"] as const).map((value) => (
+        {view === "ACTIVE" ? (
           <button
-            aria-pressed={kind === value}
-            className={kind === value ? "button-primary" : "button-secondary"}
-            key={value}
-            onClick={() => setKind(value)}
+            className="button-secondary"
+            disabled={parties.isFetching}
+            onClick={() => void parties.refetch()}
             type="button"
           >
-            {t(
-              value === "ALL"
-                ? "dota.allParties.all"
-                : value === "PARTY"
-                  ? "dota.allParties.parties"
-                  : "dota.allParties.teams"
-            )}
+            {t("dota.allParties.refresh")}
+          </button>
+        ) : null}
+      </header>
+      <div className={styles.filters}>
+        {(["ACTIVE", "ARCHIVE"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={view === value}
+            className={view === value ? "button-primary" : "button-secondary"}
+            onClick={() => setView(value)}
+          >
+            {t(value === "ACTIVE" ? "dota.allParties.active" : "dota.allParties.archives")}
           </button>
         ))}
-        {parties.data ? (
-          <span className="muted-copy">
-            {t("dota.allParties.total", { count: String(parties.data.pages[0]?.total ?? 0) })}
-          </span>
-        ) : null}
       </div>
-      {parties.isPending ? <p className="muted-copy">{t("common.loadingEllipsis")}</p> : null}
-      {parties.isError ? <p role="alert">{t("dota.allParties.loadError")}</p> : null}
-      {parties.isSuccess && items.length === 0 ? (
-        <div className={`panel-card ${styles.empty}`}>{t("dota.allParties.empty")}</div>
-      ) : null}
-      <div className={styles.grid}>
-        {items.map((party) => (
-          <PartyCard key={party.id} party={party} />
-        ))}
-      </div>
-      {parties.hasNextPage ? (
-        <button
-          className={`button-secondary ${styles.more}`}
-          disabled={parties.isFetching}
-          onClick={() => void parties.fetchNextPage()}
-          type="button"
-        >
-          {t("dota.allParties.more")}
-        </button>
-      ) : null}
+      {view === "ARCHIVE" ? (
+        <ArchivedPartyChats accessToken={accessToken ?? ""} />
+      ) : (
+        <>
+          <div className={styles.filters} aria-label={t("dota.allParties.filters")}>
+            {(["ALL", "PARTY", "TEAM"] as const).map((value) => (
+              <button
+                aria-pressed={kind === value}
+                className={kind === value ? "button-primary" : "button-secondary"}
+                key={value}
+                onClick={() => setKind(value)}
+                type="button"
+              >
+                {t(
+                  value === "ALL"
+                    ? "dota.allParties.all"
+                    : value === "PARTY"
+                      ? "dota.allParties.parties"
+                      : "dota.allParties.teams"
+                )}
+              </button>
+            ))}
+            {parties.data ? (
+              <span className="muted-copy">
+                {t("dota.allParties.total", { count: String(parties.data.pages[0]?.total ?? 0) })}
+              </span>
+            ) : null}
+          </div>
+          {parties.isPending ? <p className="muted-copy">{t("common.loadingEllipsis")}</p> : null}
+          {parties.isError ? <p role="alert">{t("dota.allParties.loadError")}</p> : null}
+          {parties.isSuccess && items.length === 0 ? (
+            <div className={`panel-card ${styles.empty}`}>{t("dota.allParties.empty")}</div>
+          ) : null}
+          <div className={styles.grid}>
+            {items.map((party) => (
+              <PartyCard key={party.id} party={party} />
+            ))}
+          </div>
+          {parties.hasNextPage ? (
+            <button
+              className={`button-secondary ${styles.more}`}
+              disabled={parties.isFetching}
+              onClick={() => void parties.fetchNextPage()}
+              type="button"
+            >
+              {t("dota.allParties.more")}
+            </button>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }

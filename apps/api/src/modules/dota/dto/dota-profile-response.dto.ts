@@ -14,6 +14,8 @@ export class DotaProfileResponseDto {
   looking!: boolean;
   searchAllRoles?: boolean;
   lfgExpiresAt!: string | null;
+  /** Owner-only signal; manual stop and a match clear the original deadline. */
+  lfgTimedOut?: boolean;
   language!: string | null;
   mmr!: string | null;
   ownerUserId!: string | null;
