@@ -8,12 +8,13 @@ import { UsersModule } from "../users/users.module.js";
 import { AdminDotaTournamentsController } from "./tournaments-admin.controller.js";
 import { DotaTournamentsController } from "./tournaments.controller.js";
 import { DotaTournamentsService } from "./tournaments.service.js";
+import { DotaTournamentBracketService } from "./tournament-bracket.service.js";
 import { TournamentManagerGuard } from "./tournament-manager.guard.js";
 
 @Module({
   controllers: [AdminDotaTournamentsController, DotaTournamentsController],
   exports: [DotaTournamentsService],
   imports: [AuthModule, DotaModule, PartiesModule, RateLimitingModule, UsersModule],
-  providers: [DotaTournamentsService, TournamentManagerGuard]
+  providers: [DotaTournamentBracketService, DotaTournamentsService, TournamentManagerGuard]
 })
 export class DotaTournamentsModule {}

@@ -48,6 +48,7 @@ export function AdminDotaTournamentsView({
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [form, setForm] = useState({
+    automaticBracket: true,
     allowSpectators: false,
     cheatsEnabled: false,
     description: "",
@@ -80,7 +81,8 @@ export function AdminDotaTournamentsView({
     void getCurrentUserProfile(authSession.accessToken)
       .then(async (profile) => {
         if (!active) return;
-        const allowed = profile.role === "ADMIN" ||
+        const allowed =
+          profile.role === "ADMIN" ||
           (allowTournamentModerator && profile.role === "TOURNAMENT_MODERATOR");
         setCanManageTournaments(allowed);
         if (allowed) {
@@ -111,6 +113,7 @@ export function AdminDotaTournamentsView({
     setFeedback(null);
     try {
       const input: AdminDotaTournamentInput = {
+        automaticBracket: form.automaticBracket,
         allowSpectators: form.allowSpectators,
         cheatsEnabled: form.cheatsEnabled,
         gameMode: form.gameMode,
@@ -129,6 +132,7 @@ export function AdminDotaTournamentsView({
       };
       await createAdminDotaTournament(input, authSession.accessToken);
       setForm({
+        automaticBracket: true,
         allowSpectators: false,
         cheatsEnabled: false,
         description: "",
@@ -176,7 +180,9 @@ export function AdminDotaTournamentsView({
       <section className={styles.page}>
         <h1>{t("admin.accessDeniedTitle")}</h1>
         <p>{t("admin.accessDeniedBody")}</p>
-        <Link className="button-secondary" href={backHref}>{t("admin.backToProfile")}</Link>
+        <Link className="button-secondary" href={backHref}>
+          {t("admin.backToProfile")}
+        </Link>
       </section>
     );
   }
@@ -192,67 +198,143 @@ export function AdminDotaTournamentsView({
         <h2>{t("dota.tournaments.admin.create")}</h2>
         <label>
           {t("dota.tournaments.admin.titleLabel")}
-          <input maxLength={120} onChange={(event) => setForm({ ...form, title: event.target.value })} required value={form.title} />
+          <input
+            maxLength={120}
+            onChange={(event) => setForm({ ...form, title: event.target.value })}
+            required
+            value={form.title}
+          />
         </label>
         <label>
           {t("dota.tournaments.admin.slugLabel")}
-          <input maxLength={120} onChange={(event) => setForm({ ...form, slug: event.target.value })} value={form.slug} />
+          <input
+            maxLength={120}
+            onChange={(event) => setForm({ ...form, slug: event.target.value })}
+            value={form.slug}
+          />
         </label>
         <div className={styles.twoColumns}>
           <label>
             {t("dota.tournaments.admin.formatLabel")}
-            <input maxLength={80} onChange={(event) => setForm({ ...form, format: event.target.value })} placeholder="5×5 · single elimination" value={form.format} />
+            <input
+              maxLength={80}
+              onChange={(event) => setForm({ ...form, format: event.target.value })}
+              placeholder="5×5 · single elimination"
+              value={form.format}
+            />
           </label>
           <label>
             {t("dota.tournaments.admin.gameModeLabel")}
-            <select onChange={(event) => setForm({ ...form, gameMode: event.target.value })} value={form.gameMode}>
+            <select
+              onChange={(event) => setForm({ ...form, gameMode: event.target.value })}
+              value={form.gameMode}
+            >
               {DOTA_TOURNAMENT_GAME_MODES.map((mode) => (
-                <option key={mode} value={mode}>{t(`dota.tournaments.mode.${mode}` as never)}</option>
+                <option key={mode} value={mode}>
+                  {t(`dota.tournaments.mode.${mode}` as never)}
+                </option>
               ))}
             </select>
           </label>
           <label>
             {t("dota.tournaments.admin.serverRegionLabel")}
-            <select onChange={(event) => setForm({ ...form, serverRegion: event.target.value })} value={form.serverRegion}>
+            <select
+              onChange={(event) => setForm({ ...form, serverRegion: event.target.value })}
+              value={form.serverRegion}
+            >
               {DOTA_TOURNAMENT_REGIONS.map((region) => (
-                <option key={region} value={region}>{t(`dota.tournaments.region.${region}` as never)}</option>
+                <option key={region} value={region}>
+                  {t(`dota.tournaments.region.${region}` as never)}
+                </option>
               ))}
             </select>
           </label>
           <label className={styles.checkboxLabel}>
-            <input checked={form.allowSpectators} onChange={(event) => setForm({ ...form, allowSpectators: event.target.checked })} type="checkbox" />
+            <input
+              checked={form.automaticBracket}
+              onChange={(event) => setForm({ ...form, automaticBracket: event.target.checked })}
+              type="checkbox"
+            />
+            {t("dota.tournaments.bracket.auto")}
+          </label>
+          <p>{t("dota.tournaments.bracket.autoLead")}</p>
+          <label className={styles.checkboxLabel}>
+            <input
+              checked={form.allowSpectators}
+              onChange={(event) => setForm({ ...form, allowSpectators: event.target.checked })}
+              type="checkbox"
+            />
             {t("dota.tournaments.admin.spectatorsLabel")}
           </label>
           <label className={styles.checkboxLabel}>
-            <input checked={form.cheatsEnabled} onChange={(event) => setForm({ ...form, cheatsEnabled: event.target.checked })} type="checkbox" />
+            <input
+              checked={form.cheatsEnabled}
+              onChange={(event) => setForm({ ...form, cheatsEnabled: event.target.checked })}
+              type="checkbox"
+            />
             {t("dota.tournaments.admin.cheatsLabel")}
           </label>
           <label>
             {t("dota.tournaments.admin.statusLabel")}
-            <select onChange={(event) => setForm({ ...form, status: event.target.value as DotaTournamentStatus })} value={form.status}>
-              {STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status, t)}</option>)}
+            <select
+              onChange={(event) =>
+                setForm({ ...form, status: event.target.value as DotaTournamentStatus })
+              }
+              value={form.status}
+            >
+              {STATUSES.filter(
+                (status) => !form.automaticBracket || !["IN_PROGRESS", "COMPLETED"].includes(status)
+              ).map((status) => (
+                <option key={status} value={status}>
+                  {statusLabel(status, t)}
+                </option>
+              ))}
             </select>
           </label>
           <label>
             {t("dota.tournaments.admin.startsAtLabel")}
-            <input onChange={(event) => setForm({ ...form, startsAt: event.target.value })} type="datetime-local" value={form.startsAt} />
+            <input
+              onChange={(event) => setForm({ ...form, startsAt: event.target.value })}
+              type="datetime-local"
+              value={form.startsAt}
+            />
           </label>
           <label>
             {t("dota.tournaments.admin.registrationClosesAtLabel")}
-            <input onChange={(event) => setForm({ ...form, registrationClosesAt: event.target.value })} type="datetime-local" value={form.registrationClosesAt} />
+            <input
+              onChange={(event) => setForm({ ...form, registrationClosesAt: event.target.value })}
+              type="datetime-local"
+              value={form.registrationClosesAt}
+            />
           </label>
           <label>
             {t("dota.tournaments.admin.maxTeamsLabel")}
-            <input max={256} min={2} onChange={(event) => setForm({ ...form, maxTeams: event.target.value })} type="number" value={form.maxTeams} />
+            <input
+              max={256}
+              min={2}
+              onChange={(event) => setForm({ ...form, maxTeams: event.target.value })}
+              type="number"
+              value={form.maxTeams}
+            />
           </label>
           <label>
             {t("dota.tournaments.admin.rulesUrlLabel")}
-            <input maxLength={500} onChange={(event) => setForm({ ...form, rulesUrl: event.target.value })} type="url" value={form.rulesUrl} />
+            <input
+              maxLength={500}
+              onChange={(event) => setForm({ ...form, rulesUrl: event.target.value })}
+              type="url"
+              value={form.rulesUrl}
+            />
           </label>
         </div>
         <label>
           {t("dota.tournaments.admin.descriptionLabel")}
-          <textarea maxLength={10000} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={5} value={form.description} />
+          <textarea
+            maxLength={10000}
+            onChange={(event) => setForm({ ...form, description: event.target.value })}
+            rows={5}
+            value={form.description}
+          />
         </label>
         <button className="button-primary" disabled={busy || !form.title.trim()} type="submit">
           {busy ? t("common.loadingEllipsis") : t("dota.tournaments.admin.create")}
@@ -266,19 +348,51 @@ export function AdminDotaTournamentsView({
         {items.map((item) => (
           <article className={styles.item} key={item.id}>
             <div>
-              <Link href={`/games/tournaments/${encodeURIComponent(item.slug)}`}><strong>{item.title}</strong></Link>
-              <span>{item.registeredTeams} · {item.slug}</span>
+              <Link href={`/games/tournaments/${encodeURIComponent(item.slug)}`}>
+                <strong>{item.title}</strong>
+              </Link>
+              <span>
+                {item.registeredTeams} · {item.slug}
+              </span>
             </div>
             <select
               disabled={busy}
-              onChange={(event) => void handleStatus(item.slug, event.target.value as DotaTournamentStatus)}
+              onChange={(event) =>
+                void handleStatus(item.slug, event.target.value as DotaTournamentStatus)
+              }
               value={item.status}
             >
-              {STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status, t)}</option>)}
+              {STATUSES.filter(
+                (status) => !item.bracketGeneratedAt || [item.status, "CANCELLED"].includes(status)
+              )
+                .filter(
+                  (status) =>
+                    !item.automaticBracket || item.bracketGeneratedAt || status !== "COMPLETED"
+                )
+                .map((status) => (
+                  <option key={status} value={status}>
+                    {statusLabel(status, t)}
+                  </option>
+                ))}
             </select>
-              <Link className="button-secondary" href={`${basePath}/${encodeURIComponent(item.slug)}`}>
-                {t("dota.tournaments.admin.manageMatches")}
-              </Link>
+            {item.automaticBracket &&
+            !item.bracketGeneratedAt &&
+            ["REGISTRATION_OPEN", "REGISTRATION_CLOSED"].includes(item.status) ? (
+              <button
+                className="button-primary"
+                type="button"
+                disabled={busy || item.registeredTeams < 2}
+                onClick={() => void handleStatus(item.slug, "IN_PROGRESS")}
+              >
+                {t("dota.tournaments.bracket.start")}
+              </button>
+            ) : null}
+            <Link
+              className="button-secondary"
+              href={`${basePath}/${encodeURIComponent(item.slug)}`}
+            >
+              {t("dota.tournaments.admin.manageMatches")}
+            </Link>
           </article>
         ))}
       </section>

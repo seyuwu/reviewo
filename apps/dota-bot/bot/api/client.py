@@ -8,6 +8,8 @@ import aiohttp
 from ..config import Settings
 from ..storage.database import BotStorage
 
+_UNSET_TELEGRAM_USERNAME = object()
+
 
 class ApiError(Exception):
     def __init__(self, message: str, status: int = 0) -> None:
@@ -106,12 +108,17 @@ class OpiniaApi:
             bot_secret=True,
         )
 
-    async def ensure_telegram_link(self, telegram_user_id: int) -> dict:
+    async def ensure_telegram_link(
+        self, telegram_user_id: int, *, telegram_username: Any = _UNSET_TELEGRAM_USERNAME
+    ) -> dict:
+        body = {"telegramUserId": str(telegram_user_id)}
+        if telegram_username is not _UNSET_TELEGRAM_USERNAME:
+            body["telegramUsername"] = telegram_username
         return await self.user(
             telegram_user_id,
             "POST",
             "/telegram/ensure-link",
-            {"telegramUserId": str(telegram_user_id)},
+            body,
             bot_secret=True,
         )
 

@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Req,
+  UseGuards
+} from "@nestjs/common";
 
 import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../common/interfaces/authenticated-request.js";
@@ -8,6 +20,7 @@ import {
 } from "../../common/rate-limiting/api-rate-limiter.service.js";
 import { createSocialWriteRateLimitRules } from "../../common/rate-limiting/write-rate-limit-rules.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { OptionalJwtAuthGuard } from "../auth/guards/optional-jwt-auth.guard.js";
 import { RegisterDotaTournamentTeamDto } from "./dto/register-dota-tournament-team.dto.js";
 import { CreateDotaTournamentSquadDto } from "./dto/create-dota-tournament-squad.dto.js";
 import {
@@ -41,10 +54,7 @@ export class DotaTournamentsController {
 
   @Get(":slug/managed-entries")
   @UseGuards(JwtAuthGuard)
-  listManagedEntries(
-    @Param("slug") slug: string,
-    @CurrentUser() currentUser: AuthenticatedUser
-  ) {
+  listManagedEntries(@Param("slug") slug: string, @CurrentUser() currentUser: AuthenticatedUser) {
     return this.dotaTournamentsService.listManagedEntries(slug, currentUser);
   }
 
@@ -56,6 +66,17 @@ export class DotaTournamentsController {
     @CurrentUser() currentUser: AuthenticatedUser
   ) {
     return this.dotaTournamentsService.getParticipantMatch(slug, matchId, currentUser);
+  }
+
+  @Get(":slug/matches/:matchId/public")
+  @UseGuards(OptionalJwtAuthGuard)
+  @Header("Cache-Control", "private, no-store")
+  getPublicMatch(
+    @Param("slug") slug: string,
+    @Param("matchId", new ParseUUIDPipe()) matchId: string,
+    @CurrentUser() currentUser?: AuthenticatedUser
+  ) {
+    return this.dotaTournamentsService.getPublicMatch(slug, matchId, currentUser);
   }
 
   @Post(":slug/matches/:matchId/lobby")
@@ -213,7 +234,12 @@ export class DotaTournamentsController {
     @Req() request: RequestLike
   ) {
     await this.rateLimit(currentUser, request);
-    return this.dotaTournamentsService.assignEntryPosition(slug, entryId, input.positionRole, currentUser);
+    return this.dotaTournamentsService.assignEntryPosition(
+      slug,
+      entryId,
+      input.positionRole,
+      currentUser
+    );
   }
 
   @Delete(":slug/entries/:entryId/members/me")

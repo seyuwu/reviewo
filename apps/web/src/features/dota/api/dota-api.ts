@@ -2,6 +2,33 @@ import { apiRequest } from "../../../lib/api/api-client";
 import type { CreateDotaProfileInput, DotaProfile } from "../types/dota";
 import type { DotaProfileSearchResponse } from "../types/dota-search";
 
+export interface DotaTelegramContact {
+  username: string | null;
+  visible: boolean;
+  isOwner: boolean;
+  isAdminView: boolean;
+}
+
+export function fetchDotaTelegramContact(
+  slug: string,
+  accessToken?: string
+): Promise<DotaTelegramContact> {
+  return apiRequest<DotaTelegramContact>(`/dota/profiles/${encodeURIComponent(slug)}/telegram`, {
+    ...(accessToken ? { headers: { authorization: `Bearer ${accessToken}` } } : {})
+  });
+}
+
+export function setDotaTelegramVisibility(
+  visible: boolean,
+  accessToken: string
+): Promise<DotaTelegramContact> {
+  return apiRequest<DotaTelegramContact>("/dota/profiles/me/telegram-visibility", {
+    method: "PATCH",
+    body: { visible },
+    headers: { authorization: `Bearer ${accessToken}` }
+  });
+}
+
 export function createDotaProfile(
   input: CreateDotaProfileInput,
   accessToken: string

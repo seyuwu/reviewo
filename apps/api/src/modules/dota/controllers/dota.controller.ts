@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Headers,
   HttpStatus,
   Param,
@@ -38,6 +39,10 @@ import { SearchDotaProfilesQueryDto } from "../dto/search-dota-profiles-query.dt
 import { SetDotaLfgLookingDto } from "../dto/set-dota-lfg-looking.dto.js";
 import { SetDotaLfgAllRolesDto } from "../dto/set-dota-lfg-all-roles.dto.js";
 import { UpdateDotaProfileDto } from "../dto/update-dota-profile.dto.js";
+import {
+  UpdateTelegramContactVisibilityDto,
+  type TelegramContactResponse
+} from "../dto/telegram-contact.dto.js";
 import { DotaProfileService } from "../services/dota-profile.service.js";
 
 @Controller("dota/profiles")
@@ -96,9 +101,7 @@ export class DotaController {
   }
 
   @Get("admin/search-metrics")
-  async getAdminSearchMetrics(
-    @Headers("x-telegram-bot-secret") botSecret?: string
-  ): Promise<{
+  async getAdminSearchMetrics(@Headers("x-telegram-bot-secret") botSecret?: string): Promise<{
     completedSearches30d: number;
     searchesJoinedParty30d: number;
     searchingPlayers: number;
@@ -170,6 +173,35 @@ export class DotaController {
     @Query() query: SearchDotaProfilesQueryDto
   ): Promise<DotaProfileSearchResponseDto> {
     return this.dotaProfileService.searchProfiles(query.query);
+  }
+
+  @Patch("me/telegram-visibility")
+  @UseGuards(JwtAuthGuard)
+  @Header("Cache-Control", "private, no-store")
+  async updateTelegramVisibility(
+    @Body() input: UpdateTelegramContactVisibilityDto,
+    @CurrentUser() currentUser: AuthenticatedUser
+  ): Promise<TelegramContactResponse> {
+    await this.apiRateLimiterService.assertWithinLimits([
+      {
+        key: currentUser.id,
+        limit: 60,
+        namespace: "dota:telegram-visibility:user",
+        windowSeconds: 60 * 60,
+        message: "Too many contact visibility changes"
+      }
+    ]);
+    return this.dotaProfileService.setTelegramContactVisibility(input.visible, currentUser);
+  }
+
+  @Get(":slug/telegram")
+  @UseGuards(OptionalJwtAuthGuard)
+  @Header("Cache-Control", "private, no-store")
+  async getTelegramContact(
+    @Param("slug") slug: string,
+    @CurrentUser() currentUser?: AuthenticatedUser
+  ): Promise<TelegramContactResponse> {
+    return this.dotaProfileService.getTelegramContact(slug, currentUser);
   }
 
   @Get("by-id/:accountId")

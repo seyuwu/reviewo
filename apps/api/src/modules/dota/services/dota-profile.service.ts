@@ -41,6 +41,7 @@ import type { DotaProfileSearchResponseDto } from "../dto/dota-profile-search-re
 import type { GuestDotaProfileCreateResponseDto } from "../dto/guest-dota-profile-create-response.dto.js";
 import type { DotaLfgListResponseDto } from "../dto/dota-lfg-response.dto.js";
 import type { UpdateDotaProfileDto } from "../dto/update-dota-profile.dto.js";
+import type { TelegramContactResponse } from "../dto/telegram-contact.dto.js";
 import { buildConfirmerKey } from "../lib/confirmer-key.js";
 import { EntityAttributesRepository } from "../repositories/entity-attributes.repository.js";
 import { EntityQualityConfirmationsRepository } from "../repositories/entity-quality-confirmations.repository.js";
@@ -72,6 +73,34 @@ export class DotaProfileService {
     private readonly partyRealtimeService: PartyRealtimePublisher,
     private readonly usersRepository: UsersRepository
   ) {}
+
+  async getTelegramContact(
+    slug: string,
+    viewer?: AuthenticatedUser
+  ): Promise<TelegramContactResponse> {
+    const entity = await this.requireDotaProfileBySlug(slug);
+    const isOwner = !!viewer && entity.ownerUserId === viewer.id;
+    const contact = entity.ownerUserId
+      ? await this.usersRepository.findTelegramContact(entity.ownerUserId)
+      : null;
+    const visible = contact?.telegramContactVisible ?? false;
+    const canRead = visible || isOwner || viewer?.role === "ADMIN";
+    return {
+      username: canRead ? (contact?.authIdentities[0]?.telegramUsername ?? null) : null,
+      visible,
+      isOwner,
+      isAdminView: viewer?.role === "ADMIN" && !isOwner && !visible
+    };
+  }
+
+  async setTelegramContactVisibility(
+    visible: boolean,
+    currentUser: AuthenticatedUser
+  ): Promise<TelegramContactResponse> {
+    const entity = await this.requireOwnedProfile(currentUser.id);
+    await this.usersRepository.setTelegramContactVisibility(currentUser.id, visible);
+    return this.getTelegramContact(entity.slug, currentUser);
+  }
 
   async createGuestProfile(
     input: CreateDotaProfileDto

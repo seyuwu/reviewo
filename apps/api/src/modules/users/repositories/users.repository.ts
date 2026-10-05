@@ -20,6 +20,27 @@ export interface UpdateUserProfileInput {
 export class UsersRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
+  async findTelegramContact(userId: string) {
+    return this.prismaService.user.findUnique({
+      where: { id: userId },
+      select: {
+        telegramContactVisible: true,
+        authIdentities: {
+          where: { provider: "telegram" },
+          take: 1,
+          select: { telegramUsername: true }
+        }
+      }
+    });
+  }
+
+  async setTelegramContactVisibility(userId: string, visible: boolean): Promise<void> {
+    await this.prismaService.user.update({
+      where: { id: userId },
+      data: { telegramContactVisible: visible }
+    });
+  }
+
   async create(
     input: CreateUserInput,
     client: PrismaClientOrTransaction = this.prismaService

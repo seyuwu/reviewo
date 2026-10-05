@@ -68,6 +68,11 @@ class EnsureTelegramLinkDto {
   @IsString()
   @Matches(/^\d{1,32}$/)
   telegramUserId!: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[a-zA-Z0-9_]{1,32}$/)
+  telegramUsername?: string | null;
 }
 
 class NotificationDeliveryDto {
@@ -198,7 +203,11 @@ export class TelegramBotController {
         windowSeconds: 60 * 60
       }
     ]);
-    return this.telegramBotService.ensureTelegramIdentity(currentUser.id, input.telegramUserId);
+    return this.telegramBotService.ensureTelegramIdentity(
+      currentUser.id,
+      input.telegramUserId,
+      input.telegramUsername
+    );
   }
 
   @Get("notifications")

@@ -29,7 +29,11 @@ export class TelegramBotService {
     return this.authService.completeTelegramLink({ code, telegramUserId });
   }
 
-  async ensureTelegramIdentity(userId: string, telegramUserId: string): Promise<{ linked: true }> {
+  async ensureTelegramIdentity(
+    userId: string,
+    telegramUserId: string,
+    telegramUsername?: string | null
+  ): Promise<{ linked: true }> {
     await this.prismaService.$transaction(async (transaction) => {
       const identityForTelegram = await transaction.userAuthIdentity.findUnique({
         where: {
@@ -56,8 +60,17 @@ export class TelegramBotService {
             passwordHash: null,
             provider: "telegram",
             providerUserId: telegramUserId,
+            ...(telegramUsername !== undefined ? { telegramUsername } : {}),
             userId
           }
+        });
+      } else if (
+        telegramUsername !== undefined &&
+        identityForTelegram.telegramUsername !== telegramUsername
+      ) {
+        await transaction.userAuthIdentity.update({
+          where: { id: identityForTelegram.id },
+          data: { telegramUsername }
         });
       }
     });
@@ -84,6 +97,15 @@ export class TelegramBotService {
     });
     if (!identity || identity.user.status !== "active") {
       throw new UnauthorizedException("Link your Telegram account to Opinia before continuing");
+    }
+
+    const telegramUsername =
+      payload.username && /^[a-zA-Z0-9_]{1,32}$/.test(payload.username) ? payload.username : null;
+    if (identity.telegramUsername !== telegramUsername) {
+      await this.prismaService.userAuthIdentity.update({
+        where: { id: identity.id },
+        data: { telegramUsername }
+      });
     }
 
     return this.authService.createAuthResponse({

@@ -3,14 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import {
-  getGamesTournamentUrl,
-  getGamesTournamentsUrl
-} from "../../../lib/config/product-hosts";
+import { getGamesTournamentUrl, getGamesTournamentsUrl } from "../../../lib/config/product-hosts";
 import { useTranslation } from "../../i18n/locale-provider";
 import { fetchDotaTournaments } from "../api/dota-tournaments-api";
 import type { DotaTournamentSummary } from "../types/dota-tournament";
 import { formatDate, statusLabel } from "./dota-tournaments-view";
+import { DotaTournamentPodium } from "./dota-tournament-podium";
 import styles from "../../games/components/games-search-view.module.css";
 
 const MAX_VISIBLE_TOURNAMENTS = 2;
@@ -42,12 +40,20 @@ export function DotaUpcomingTournamentsPanel() {
   const upcoming = tournaments
     .filter(isUpcomingTournament)
     .sort((left, right) => {
+      if (left.status === "COMPLETED" || right.status === "COMPLETED") {
+        if (left.status !== right.status) return left.status === "COMPLETED" ? 1 : -1;
+        return (
+          Date.parse(right.startsAt ?? "1970-01-01") - Date.parse(left.startsAt ?? "1970-01-01")
+        );
+      }
       const leftClosed = Number(left.status !== "REGISTRATION_OPEN");
       const rightClosed = Number(right.status !== "REGISTRATION_OPEN");
       const statusOrder = leftClosed - rightClosed;
       if (statusOrder !== 0) return statusOrder;
-      return (left.startsAt ? Date.parse(left.startsAt) : Number.MAX_SAFE_INTEGER) -
-        (right.startsAt ? Date.parse(right.startsAt) : Number.MAX_SAFE_INTEGER);
+      return (
+        (left.startsAt ? Date.parse(left.startsAt) : Number.MAX_SAFE_INTEGER) -
+        (right.startsAt ? Date.parse(right.startsAt) : Number.MAX_SAFE_INTEGER)
+      );
     })
     .slice(0, MAX_VISIBLE_TOURNAMENTS);
 
@@ -55,10 +61,16 @@ export function DotaUpcomingTournamentsPanel() {
     <section aria-labelledby="upcoming-tournaments-title" className={styles.tournamentShowcase}>
       <header className={styles.tournamentShowcaseHeader}>
         <div className={styles.tournamentShowcaseHeading}>
-          <span aria-hidden="true" className={styles.tournamentShowcaseIcon}>🏆</span>
+          <span aria-hidden="true" className={styles.tournamentShowcaseIcon}>
+            🏆
+          </span>
           <div>
             <p className={styles.tournamentShowcaseEyebrow}>{t("dota.tournaments.eyebrow")}</p>
-            <h2 id="upcoming-tournaments-title">{t("games.tournaments.upcomingTitle")}</h2>
+            <h2 id="upcoming-tournaments-title">
+              {upcoming.some((item) => item.status === "COMPLETED" || item.status === "IN_PROGRESS")
+                ? t("dota.tournaments.title")
+                : t("games.tournaments.upcomingTitle")}
+            </h2>
             <p>{t("games.tournaments.upcomingLead")}</p>
           </div>
         </div>
@@ -107,19 +119,27 @@ export function DotaUpcomingTournamentsPanel() {
                   </span>
                 </div>
                 <h3>{tournament.title}</h3>
-                <div className={styles.tournamentCardMeta}>
-                  {tournament.startsAt ? (
-                    <span>{t("dota.tournaments.startsAt", { date: formatDate(tournament.startsAt) })}</span>
-                  ) : null}
-                  {tournament.format ? <span>{tournament.format}</span> : null}
-                </div>
+                {tournament.status === "COMPLETED" ? (
+                  <DotaTournamentPodium tournament={tournament} compact />
+                ) : (
+                  <div className={styles.tournamentCardMeta}>
+                    {tournament.startsAt ? (
+                      <span>
+                        {t("dota.tournaments.startsAt", { date: formatDate(tournament.startsAt) })}
+                      </span>
+                    ) : null}
+                    {tournament.format ? <span>{tournament.format}</span> : null}
+                  </div>
+                )}
                 <Link
                   className={`button-primary ${styles.tournamentAction}`}
-                  href={getGamesTournamentUrl(tournament.slug)}
+                  href={`${getGamesTournamentUrl(tournament.slug)}${tournament.status === "COMPLETED" ? "#tournament-bracket" : ""}`}
                 >
-                  {registrationOpen
-                    ? t("games.tournaments.joinOrCreate")
-                    : t("games.tournaments.viewTeams")}
+                  {tournament.status === "COMPLETED"
+                    ? t("dota.tournaments.bracket.show")
+                    : registrationOpen
+                      ? t("games.tournaments.joinOrCreate")
+                      : t("games.tournaments.viewTeams")}
                 </Link>
               </article>
             );
@@ -131,7 +151,7 @@ export function DotaUpcomingTournamentsPanel() {
 }
 
 function isUpcomingTournament(tournament: DotaTournamentSummary): boolean {
-  if (tournament.status === "REGISTRATION_OPEN") return true;
+  if (["REGISTRATION_OPEN", "IN_PROGRESS", "COMPLETED"].includes(tournament.status)) return true;
   if (tournament.status !== "REGISTRATION_CLOSED") return false;
   return !tournament.startsAt || Date.parse(tournament.startsAt) >= Date.now();
 }

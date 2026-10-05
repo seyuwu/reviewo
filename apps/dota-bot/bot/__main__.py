@@ -10,6 +10,7 @@ from .handlers import router
 from .middlewares import (
     DeletePrivateMessagesMiddleware,
     RecordPrivateCallbackActivityMiddleware,
+    TelegramUsernameSyncMiddleware,
 )
 from .services.notifications import (
     cleanup_temporary_messages,
@@ -53,6 +54,9 @@ async def main() -> None:
     dispatcher.include_router(router)
     dispatcher.message.outer_middleware(DeletePrivateMessagesMiddleware())
     dispatcher.callback_query.outer_middleware(RecordPrivateCallbackActivityMiddleware())
+    username_sync = TelegramUsernameSyncMiddleware()
+    dispatcher.message.outer_middleware(username_sync)
+    dispatcher.callback_query.outer_middleware(username_sync)
     tasks = [
         asyncio.create_task(reconcile_saved_telegram_links(api, storage)),
         asyncio.create_task(poll_notifications(bot, api, settings, storage)),
@@ -79,6 +83,7 @@ async def main() -> None:
             party_search_queue=party_search_queue,
         )
     finally:
+        await username_sync.close()
         await party_search_queue.close()
         for task in tasks:
             task.cancel()

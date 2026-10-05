@@ -7,6 +7,14 @@ export type DotaTournamentStatus =
   | "CANCELLED";
 
 export interface DotaTournamentSummary {
+  automaticBracket?: boolean;
+  bracketGeneratedAt?: string | null;
+  podium?: Array<{
+    place: number;
+    entryId: string | null;
+    teamName: string | null;
+    members: DotaTournamentEntryMember[];
+  }>;
   allowSpectators: boolean;
   cheatsEnabled: boolean;
   description: string;
@@ -41,11 +49,29 @@ export interface DotaTournamentEntry {
 }
 
 export interface DotaTournament extends DotaTournamentSummary {
+  bracket?: {
+    size: number;
+    seeds: Array<{ entryId: string; seed: number; averageMmr: number | null }>;
+    nodes: Array<{
+      key: string;
+      kind: "MAIN" | "BRONZE";
+      roundNumber: number;
+      matchNumber: number;
+      entryAId: string | null;
+      entryBId: string | null;
+      sourceA: string | null;
+      sourceB: string | null;
+      matchId: string | null;
+      status: string;
+      winnerEntryId: string | null;
+    }>;
+  } | null;
   entries: DotaTournamentEntry[];
   matches?: DotaTournamentMatchSummary[];
 }
 
 export interface DotaTournamentMatchSummary {
+  bracketKind?: string;
   allowSpectators: boolean;
   cheatsEnabled: boolean;
   confirmationDeadlineAt: string | null;
@@ -83,6 +109,12 @@ export interface DotaTournamentMatch extends DotaTournamentMatchSummary {
   resultEvidenceUrl: string | null;
   resultReporterSide: "A" | "B" | null;
   viewerSide: "A" | "B";
+}
+
+export interface PublicDotaTournamentMatch extends DotaTournamentMatchSummary {
+  isParticipant: boolean;
+  tournament: { slug: string; title: string };
+  rosters: { A: DotaTournamentEntryMember[]; B: DotaTournamentEntryMember[] };
 }
 
 export interface AdminDotaTournamentMatch extends DotaTournamentMatchSummary {

@@ -49,7 +49,7 @@ async function player(index, role = "USER") {
 
 async function tournament(admin, suffix, maxTeams = 16) {
   return request("/dota/tournament-management", admin, "POST", {
-    title: `${prefix}-${suffix}`, slug: `${prefix}-${suffix}`, maxTeams, status: "REGISTRATION_OPEN",
+    automaticBracket: false, title: `${prefix}-${suffix}`, slug: `${prefix}-${suffix}`, maxTeams, status: "REGISTRATION_OPEN",
     startsAt: new Date(Date.now() + 3600000).toISOString(),
     registrationClosesAt: new Date(Date.now() + 1800000).toISOString()
   }, 201);

@@ -16,6 +16,9 @@ import {
 } from "./create-dota-tournament-match.dto.js";
 
 export class CreateDotaTournamentDto {
+  @IsOptional()
+  @IsBoolean()
+  automaticBracket?: boolean;
   @IsString()
   @MaxLength(120)
   title!: string;
@@ -76,6 +79,9 @@ export class CreateDotaTournamentDto {
 }
 
 export class UpdateDotaTournamentDto {
+  @IsOptional()
+  @IsBoolean()
+  automaticBracket?: boolean;
   @IsOptional()
   @IsString()
   @MaxLength(120)

@@ -16,6 +16,7 @@ model User {
   username       String?            @unique
   displayName    String             @map("display_name")
   avatarUrl      String?            @map("avatar_url")
+  telegramContactVisible Boolean   @default(false) @map("telegram_contact_visible")
   role           UserRole           @default(USER)
   status         String             @default("active")
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -66,6 +67,7 @@ model UserAuthIdentity {
   userId         String   @map("user_id") @db.Uuid
   provider       String
   providerUserId String   @map("provider_user_id")
+  telegramUsername String? @map("telegram_username")
   passwordHash   String?  @map("password_hash")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1212,6 +1214,9 @@ model DotaTournament {
   startsAt              DateTime?            @map("starts_at") @db.Timestamptz(6)
   registrationClosesAt  DateTime?            @map("registration_closes_at") @db.Timestamptz(6)
   maxTeams              Int?                 @map("max_teams")
+  automaticBracket      Boolean              @default(true) @map("automatic_bracket")
+  bracketGeneratedAt    DateTime?            @map("bracket_generated_at") @db.Timestamptz(6)
+  bracketSize           Int?                 @map("bracket_size")
   status                DotaTournamentStatus @default(DRAFT)
   gameMode              String               @default("ALL_PICK") @map("game_mode") @db.VarChar(32)
   serverRegion          String               @default("EUROPE") @map("server_region") @db.VarChar(32)
@@ -1225,8 +1230,10 @@ model DotaTournament {
   entryRequests         DotaTournamentEntryRequest[]
   entryMembers          DotaTournamentEntryMember[]
   matches               DotaTournamentMatch[]
+  bracketSeeds          DotaTournamentBracketSeed[]
 
   @@index([status, registrationClosesAt])
+  @@index([automaticBracket, status, startsAt])
   @@map("dota_tournaments")
   @@schema("social")
 }
@@ -1250,6 +1257,7 @@ model DotaTournamentEntry {
   joinRequests          DotaTournamentEntryRequest[]
   matchesAsA            DotaTournamentMatch[]        @relation("DotaTournamentMatchEntryA")
   matchesAsB            DotaTournamentMatch[]        @relation("DotaTournamentMatchEntryB")
+  bracketSeed           DotaTournamentBracketSeed?
 
   @@unique([tournamentId, teamPartyId])
   @@index([tournamentId, status, createdAt])
@@ -1258,7 +1266,21 @@ model DotaTournamentEntry {
   @@schema("social")
 }
 
-/// One manually scheduled match. Lobby settings and results require confirmation from the other team.
+model DotaTournamentBracketSeed {
+  id           String @id @default(uuid()) @db.Uuid
+  tournamentId String @map("tournament_id") @db.Uuid
+  entryId      String @unique @map("entry_id") @db.Uuid
+  seed         Int
+  averageMmr   Float? @map("average_mmr")
+  tournament   DotaTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  entry        DotaTournamentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, seed])
+  @@map("dota_tournament_bracket_seeds")
+  @@schema("social")
+}
+
+/// Scheduled manually or advanced from a seeded bracket; results need opposing confirmation.
 model DotaTournamentMatch {
   id                         String                    @id @default(uuid()) @db.Uuid
   tournamentId               String                    @map("tournament_id") @db.Uuid
@@ -1266,6 +1288,7 @@ model DotaTournamentMatch {
   entryBId                   String                    @map("entry_b_id") @db.Uuid
   roundNumber                Int                       @map("round_number")
   matchNumber                Int                       @map("match_number")
+  bracketKind                String                    @default("MANUAL") @map("bracket_kind") @db.VarChar(16)
   scheduledAt                DateTime                  @map("scheduled_at") @db.Timestamptz(6)
   status                     DotaTournamentMatchStatus @default(SCHEDULED)
   gameMode                   String                    @map("game_mode") @db.VarChar(32)

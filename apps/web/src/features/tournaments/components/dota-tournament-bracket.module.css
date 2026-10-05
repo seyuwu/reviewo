@@ -1,0 +1,348 @@
+.section {
+  margin: 26px 0;
+  padding: 24px;
+  border: 1px solid #393153;
+  border-radius: 20px;
+  background: linear-gradient(130deg, #17142b, #0e121d 55%);
+  min-width: 0;
+}
+.title {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.title p {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  color: #b8a1ff;
+}
+.title h2 {
+  margin: 0;
+}
+.title > span {
+  font-size: 12px;
+  color: #d2c7ff;
+  border: 1px solid #49406a;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+.lead {
+  color: #a7afc2;
+  font-size: 13px;
+  max-width: 700px;
+  line-height: 1.6;
+}
+.scroll {
+  overflow: auto;
+  max-height: 680px;
+  scrollbar-color: #69509c #141522;
+  padding: 0 0 16px;
+}
+.scroll:focus-visible {
+  outline: 2px solid #a58aff;
+  outline-offset: 4px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--rounds), 280px);
+  gap: 40px;
+  min-width: max-content;
+  width: max-content;
+  margin: 0 auto;
+}
+.column {
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  max-width: 300px;
+}
+.column h3 {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #141422;
+  padding: 10px 0;
+  margin: 0;
+  color: #cbc0ed;
+  font-size: 13px;
+}
+.roundNodes {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  flex: 1;
+}
+.node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1;
+  padding: 12px 0;
+}
+.connected::after {
+  content: "";
+  position: absolute;
+  height: 1px;
+  background: #665087;
+  width: 20px;
+  left: 100%;
+  top: 50%;
+}
+.connected:nth-child(odd)::before {
+  content: "";
+  position: absolute;
+  border-right: 1px solid #665087;
+  left: calc(100% + 20px);
+  width: 0;
+  height: 100%;
+  top: 50%;
+}
+.incoming {
+  position: absolute;
+  width: 20px;
+  height: 1px;
+  background: #665087;
+  right: 100%;
+  top: 50%;
+}
+.match {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  background: #0d101a;
+  border: 1px solid #323146;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+.completed {
+  border-color: #4d715c;
+}
+a.match:hover {
+  border-color: #a58aff;
+  background: #161327;
+}
+a.match:focus-visible {
+  outline: 2px solid #a58aff;
+  outline-offset: 3px;
+}
+.matchHeading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 10px;
+  color: #9d9bb5;
+  border-bottom: 1px solid #252637;
+}
+.team {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  min-height: 55px;
+  border-bottom: 1px solid #202230;
+}
+.team > div {
+  min-width: 0;
+  flex: 1;
+}
+.team strong {
+  font-size: 13px;
+  display: block;
+  overflow-wrap: anywhere;
+}
+.team small {
+  font-size: 10px;
+  display: block;
+  color: #929bb1;
+  margin-top: 3px;
+}
+.seed {
+  font-size: 10px;
+  color: #aa91d4;
+  width: 25px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.winner {
+  background: linear-gradient(90deg, #17302488, transparent);
+  color: #a8efc4;
+}
+.matchLink {
+  padding: 7px 12px;
+  display: block;
+  text-align: right;
+  font-size: 11px;
+  color: #baa6ff;
+}
+.bronze {
+  max-width: 300px;
+  margin-top: 20px;
+}
+.bronze h3 {
+  font-size: 13px;
+  color: #dfb18f;
+}
+.podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 16px;
+  margin: 26px 0;
+}
+.place {
+  min-width: 0;
+  border: 1px solid #373342;
+  border-radius: 18px;
+  padding: 24px 18px;
+  background: #13141e;
+  text-align: center;
+}
+.place1 {
+  order: 2;
+  border-color: #7c6341;
+  background: radial-gradient(ellipse at top, #45301c88, transparent 70%), #15141b;
+  padding-top: 36px;
+}
+.place2 {
+  order: 1;
+  border-color: #4d566b;
+  background: radial-gradient(ellipse at top, #28324299, transparent 70%), #12141d;
+}
+.place3 {
+  order: 3;
+  border-color: #664938;
+  background: radial-gradient(ellipse at top, #45261988, transparent 70%), #15131a;
+}
+.medal {
+  font-size: 36px;
+}
+.place1 .medal {
+  font-size: 48px;
+}
+.place p {
+  font-size: 12px;
+  color: #b9abc6;
+  margin: 8px 0;
+}
+.place h3 {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+  margin: 0 0 18px;
+}
+.place1 h3 {
+  color: #f6d797;
+  font-size: 24px;
+}
+.place ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 9px;
+}
+.place li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  font-size: 12px;
+  min-width: 0;
+}
+.place li > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.place small {
+  color: #9396a6;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.role {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  background: #29213b;
+  border-radius: 5px;
+  color: #c4aeff;
+  flex-shrink: 0;
+}
+.compact {
+  gap: 8px;
+  margin: 16px 0;
+  align-items: stretch;
+}
+.compact .place {
+  padding: 14px 9px;
+  border-radius: 12px;
+}
+.compact .medal,
+.compact .place1 .medal {
+  font-size: 25px;
+}
+.compact .place h3 {
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+.compact .place li {
+  font-size: 10px;
+  gap: 5px;
+}
+.compact .role {
+  width: 17px;
+  height: 17px;
+  font-size: 10px;
+}
+@media (max-width: 640px) {
+  .section {
+    padding: 16px;
+    border-radius: 16px;
+  }
+  .podium {
+    grid-template-columns: 1fr;
+  }
+  .place1,
+  .place2,
+  .place3 {
+    order: initial;
+  }
+  .place {
+    padding: 20px;
+  }
+  .place1 {
+    padding-top: 24px;
+  }
+  .compact {
+    grid-template-columns: 1fr;
+  }
+  .compact .place {
+    text-align: left;
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 0 8px;
+  }
+  .compact .medal {
+    grid-row: span 2;
+  }
+  .compact .place h3 {
+    margin: 0;
+  }
+  .compact .place p {
+    margin: 0 0 4px;
+  }
+  .compact .place ul {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    gap: 6px 10px;
+  }
+}

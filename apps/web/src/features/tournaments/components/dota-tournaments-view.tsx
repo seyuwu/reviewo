@@ -8,6 +8,7 @@ import { useTranslation } from "../../i18n/locale-provider";
 import { getCurrentUserProfile } from "../../profile/api/profile";
 import { fetchDotaTournaments } from "../api/dota-tournaments-api";
 import type { DotaTournamentSummary } from "../types/dota-tournament";
+import { DotaTournamentPodium } from "./dota-tournament-podium";
 import styles from "./dota-tournaments-view.module.css";
 
 export function DotaTournamentsView() {
@@ -92,7 +93,7 @@ export function DotaTournamentsView() {
         {tournaments.map((tournament) => (
           <Link
             className={styles.card}
-            href={`/games/tournaments/${encodeURIComponent(tournament.slug)}`}
+            href={`/games/tournaments/${encodeURIComponent(tournament.slug)}${tournament.status === "COMPLETED" ? "#tournament-bracket" : ""}`}
             key={tournament.id}
           >
             <div className={styles.cardTop}>
@@ -105,23 +106,37 @@ export function DotaTournamentsView() {
               </span>
             </div>
             <h2>{tournament.title}</h2>
-            <p className={styles.description}>
-              {tournament.description || t("dota.tournaments.noDescription")}
-            </p>
-            <div className={styles.meta}>
-              {tournament.format ? <span>{tournament.format}</span> : null}
-              {tournament.startsAt ? (
-                <span>{t("dota.tournaments.startsAt", { date: formatDate(tournament.startsAt) })}</span>
-              ) : null}
-              {tournament.registrationClosesAt ? (
-                <span>
-                  {t("dota.tournaments.registrationUntil", {
-                    date: formatDate(tournament.registrationClosesAt)
-                  })}
-                </span>
-              ) : null}
-            </div>
-            <strong className={styles.cardCta}>{t("dota.tournaments.openTournament")}</strong>
+            {tournament.status === "COMPLETED" ? (
+              <DotaTournamentPodium tournament={tournament} compact />
+            ) : (
+              <>
+                <p className={styles.description}>
+                  {tournament.description || t("dota.tournaments.noDescription")}
+                </p>
+                <div className={styles.meta}>
+                  {tournament.format ? <span>{tournament.format}</span> : null}
+                  {tournament.startsAt ? (
+                    <span>
+                      {t("dota.tournaments.startsAt", { date: formatDate(tournament.startsAt) })}
+                    </span>
+                  ) : null}
+                  {tournament.registrationClosesAt ? (
+                    <span>
+                      {t("dota.tournaments.registrationUntil", {
+                        date: formatDate(tournament.registrationClosesAt)
+                      })}
+                    </span>
+                  ) : null}
+                </div>
+              </>
+            )}
+            <strong className={styles.cardCta}>
+              {t(
+                tournament.status === "COMPLETED"
+                  ? "dota.tournaments.bracket.show"
+                  : "dota.tournaments.openTournament"
+              )}
+            </strong>
           </Link>
         ))}
       </div>

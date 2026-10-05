@@ -1,0 +1,91 @@
+.card {
+  padding: 16px 18px;
+  border: 1px solid #34334a;
+  border-radius: 14px;
+  background: linear-gradient(120deg, #18162b, #10131c);
+  margin: 18px 0;
+  min-width: 0;
+}
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.heading > div {
+  flex: 1;
+  min-width: 0;
+}
+.icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #25233d;
+  color: #bdb0ff;
+  font-size: 22px;
+}
+.label {
+  display: block;
+  color: #abb2c5;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+.card a {
+  color: #c4b5fd;
+  overflow-wrap: anywhere;
+  text-underline-offset: 3px;
+}
+.heading a {
+  font-size: 16px;
+  font-weight: 600;
+}
+.heading p {
+  margin: 0;
+  font-size: 13px;
+  color: #adb4c5;
+  line-height: 1.6;
+}
+.badge {
+  color: #dccca6;
+  background: #423521;
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 5px 8px;
+}
+.settings {
+  display: grid;
+  gap: 9px;
+  border-top: 1px solid #2d2b3d;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+.settings label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.settings input {
+  accent-color: #9775ff;
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.settings small {
+  color: #a4acc0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.settings > a {
+  font-size: 13px;
+  justify-self: start;
+}
+.error {
+  color: #ffaaaa;
+  font-size: 13px;
+  margin: 0;
+}

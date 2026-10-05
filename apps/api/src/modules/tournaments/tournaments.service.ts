@@ -1,10 +1,4 @@
-import {
-  HttpStatus,
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit
-} from "@nestjs/common";
+import { HttpStatus, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { DotaTournamentMatchStatus, DotaTournamentStatus, Prisma } from "#prisma/client";
 import { DOTA_PARTY_VERTICAL } from "@reviewo/shared";
@@ -29,6 +23,9 @@ import type {
   SubmitDotaTournamentLobbyDto,
   SubmitDotaTournamentResultDto
 } from "./dto/create-dota-tournament-match.dto.js";
+
+import { DotaTournamentBracketService } from "./tournament-bracket.service.js";
+import { buildBracket } from "./tournament-bracket.js";
 
 const PUBLIC_TOURNAMENT_STATUSES: DotaTournamentStatus[] = [
   "REGISTRATION_OPEN",
@@ -55,7 +52,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly gamePartiesService: GamePartiesService,
-    private readonly dotaProfileService: DotaProfileService
+    private readonly dotaProfileService: DotaProfileService,
+    private readonly bracketService: DotaTournamentBracketService
   ) {}
 
   onModuleInit(): void {
@@ -73,18 +71,24 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     if (this.matchTimeoutTimer) clearInterval(this.matchTimeoutTimer);
   }
 
-  listPublic() {
-    return this.prismaService.dotaTournament.findMany({
+  async listPublic() {
+    const items = await this.prismaService.dotaTournament.findMany({
       include: { _count: { select: { entries: { where: { status: "REGISTERED" } } } } },
       orderBy: [{ startsAt: "asc" }, { createdAt: "desc" }],
       where: { status: { in: PUBLIC_TOURNAMENT_STATUSES } }
-    }).then((items) => items.map((item) => this.toTournamentSummary(item)));
+    });
+    const completed = await this.completedPodiums(items);
+    return items.map((item) => ({
+      ...this.toTournamentSummary(item),
+      podium: completed.get(item.id) ?? []
+    }));
   }
 
   async getPublic(slug: string) {
     const tournament = await this.prismaService.dotaTournament.findFirst({
       include: {
         _count: { select: { entries: { where: { status: "REGISTERED" } } } },
+        bracketSeeds: true,
         matches: {
           include: {
             entryA: { select: { id: true, teamNameSnapshot: true } },
@@ -117,6 +121,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
 
     return {
       ...this.toTournamentSummary(tournament),
+      ...this.bracketPresentation(tournament),
       matches: tournament.matches.map((match) => this.toMatchSummary(match)),
       entries: tournament.entries.map((entry) => ({
         id: entry.id,
@@ -168,10 +173,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     });
 
     return entries
-      .filter(
-        (entry) =>
-          (entry.teamParty?.ownerUserId ?? entry.createdByUserId) === currentUser.id
-      )
+      .filter((entry) => (entry.teamParty?.ownerUserId ?? entry.createdByUserId) === currentUser.id)
       .map((entry) => ({
         entryId: entry.id,
         joinMode: entry.joinMode,
@@ -315,7 +317,10 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     const entries = await this.prismaService.dotaTournamentEntry.findMany({
       include: {
         joinRequests: { orderBy: { createdAt: "asc" }, where: { status: "PENDING" } },
-        members: { where: { isActive: true }, orderBy: [{ positionRole: "asc" }, { createdAt: "asc" }] },
+        members: {
+          where: { isActive: true },
+          orderBy: [{ positionRole: "asc" }, { createdAt: "asc" }]
+        },
         tournament: true
       },
       orderBy: { createdAt: "desc" },
@@ -680,7 +685,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         where: { entryId_userId: { entryId, userId: currentUser.id } }
       });
       if (!member?.isActive || member.positionRole) {
-        throw this.matchConflict("Only an active member without an assigned position can claim a role");
+        throw this.matchConflict(
+          "Only an active member without an assigned position can claim a role"
+        );
       }
       const occupied = await tx.dotaTournamentEntryMember.findFirst({
         where: { entryId, isActive: true, positionRole }
@@ -694,7 +701,10 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           throw this.matchConflict("Tournament team limit has been reached");
         }
       }
-      await tx.dotaTournamentEntryMember.update({ data: { positionRole }, where: { id: member.id } });
+      await tx.dotaTournamentEntryMember.update({
+        data: { positionRole },
+        where: { id: member.id }
+      });
       await this.syncEntryRegistrationStatus(tx, entryId);
     });
     return this.getPublic(tournamentSlug);
@@ -759,7 +769,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
 
   async listAdminMatches(tournamentSlug: string) {
     await this.expireOverdueMatches();
-    const tournament = await this.prismaService.dotaTournament.findUnique({ where: { slug: tournamentSlug } });
+    const tournament = await this.prismaService.dotaTournament.findUnique({
+      where: { slug: tournamentSlug }
+    });
     if (!tournament) {
       throw createAppException({
         code: AppErrorCode.NotFound,
@@ -790,7 +802,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     input: CreateDotaTournamentMatchDto,
     currentUser: AuthenticatedUser
   ) {
-    const tournament = await this.prismaService.dotaTournament.findUnique({ where: { slug: tournamentSlug } });
+    const tournament = await this.prismaService.dotaTournament.findUnique({
+      where: { slug: tournamentSlug }
+    });
     if (!tournament) {
       throw createAppException({
         code: AppErrorCode.NotFound,
@@ -834,8 +848,18 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     const match = await this.prismaService.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${tournament.id}`}))`;
       const latestTournament = await tx.dotaTournament.findUnique({ where: { id: tournament.id } });
-      if (!latestTournament || !["REGISTRATION_CLOSED", "IN_PROGRESS"].includes(latestTournament.status)) {
-        throw this.matchConflict("Tournament matches can only be scheduled after registration closes");
+      if (
+        !latestTournament ||
+        !["REGISTRATION_CLOSED", "IN_PROGRESS"].includes(latestTournament.status)
+      ) {
+        throw this.matchConflict(
+          "Tournament matches can only be scheduled after registration closes"
+        );
+      }
+      if (latestTournament.automaticBracket) {
+        throw this.matchConflict(
+          "В автоматическом турнире матчи назначает сетка: запустите турнир"
+        );
       }
       const entries = await tx.dotaTournamentEntry.findMany({
         select: { id: true },
@@ -860,19 +884,18 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           tournamentId: tournament.id
         }
       });
-      if (duplicateNumber) throw this.matchConflict("A match already uses this round and match number");
+      if (duplicateNumber)
+        throw this.matchConflict("A match already uses this round and match number");
       const activeMatch = await tx.dotaTournamentMatch.findFirst({
         select: { id: true },
         where: {
-          OR: [
-            { entryAId: { in: entryIds } },
-            { entryBId: { in: entryIds } }
-          ],
+          OR: [{ entryAId: { in: entryIds } }, { entryBId: { in: entryIds } }],
           status: { notIn: ["COMPLETED", "CANCELLED"] },
           tournamentId: tournament.id
         }
       });
-      if (activeMatch) throw this.matchConflict("A team already has an unresolved match in this tournament");
+      if (activeMatch)
+        throw this.matchConflict("A team already has an unresolved match in this tournament");
 
       return tx.dotaTournamentMatch.create({
         data: {
@@ -898,6 +921,79 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       });
     });
     return this.toMatchSummary(match);
+  }
+
+  async getPublicMatch(tournamentSlug: string, matchId: string, currentUser?: AuthenticatedUser) {
+    const rosterSelect = {
+      id: true,
+      teamNameSnapshot: true,
+      teamParty: { select: { ownerUserId: true } },
+      members: {
+        where: { isActive: true },
+        orderBy: { positionRole: "asc" },
+        select: {
+          displayName: true,
+          dotaProfileSlug: true,
+          mmr: true,
+          positionRole: true,
+          userId: true
+        }
+      }
+    } as const;
+    const match = await this.prismaService.dotaTournamentMatch.findFirst({
+      where: {
+        id: matchId,
+        tournament: { slug: tournamentSlug, status: { in: PUBLIC_TOURNAMENT_STATUSES } }
+      },
+      select: {
+        id: true,
+        bracketKind: true,
+        roundNumber: true,
+        matchNumber: true,
+        scheduledAt: true,
+        status: true,
+        gameMode: true,
+        serverRegion: true,
+        allowSpectators: true,
+        cheatsEnabled: true,
+        hostSide: true,
+        streamUrl: true,
+        lobbyDeadlineAt: true,
+        confirmationDeadlineAt: true,
+        resultDeadlineAt: true,
+        reportedWinnerEntryId: true,
+        winnerEntryId: true,
+        tournament: { select: { slug: true, title: true } },
+        entryA: { select: rosterSelect },
+        entryB: { select: rosterSelect }
+      }
+    });
+    if (!match) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Tournament match was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+    return {
+      ...this.toMatchSummary(match),
+      tournament: match.tournament,
+      isParticipant: !!currentUser && !!this.matchSideForUser(match, currentUser.id),
+      rosters: {
+        A: match.entryA.members.map(({ displayName, dotaProfileSlug, mmr, positionRole }) => ({
+          displayName,
+          dotaProfileSlug,
+          mmr,
+          positionRole
+        })),
+        B: match.entryB.members.map(({ displayName, dotaProfileSlug, mmr, positionRole }) => ({
+          displayName,
+          dotaProfileSlug,
+          mmr,
+          positionRole
+        }))
+      }
+    };
   }
 
   async getParticipantMatch(
@@ -970,7 +1066,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     const now = new Date();
     if (match.lobbyDeadlineAt <= now) {
       await this.expireOverdueMatches();
-      throw this.matchConflict("The lobby setup deadline passed; an administrator must review this match");
+      throw this.matchConflict(
+        "The lobby setup deadline passed; an administrator must review this match"
+      );
     }
     const updated = await this.prismaService.dotaTournamentMatch.updateMany({
       data: {
@@ -1075,7 +1173,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         statusCode: HttpStatus.BAD_REQUEST
       });
     }
-    if (match.status !== "IN_PROGRESS") throw this.matchConflict("This match is not accepting a result");
+    if (match.status !== "IN_PROGRESS")
+      throw this.matchConflict("This match is not accepting a result");
     const now = new Date();
     const updated = await this.prismaService.dotaTournamentMatch.updateMany({
       data: {
@@ -1095,7 +1194,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     });
     if (updated.count !== 1) {
       await this.expireOverdueMatches();
-      throw this.matchConflict("The result deadline passed or another result was already submitted");
+      throw this.matchConflict(
+        "The result deadline passed or another result was already submitted"
+      );
     }
     return this.getParticipantMatch(tournamentSlug, matchId, currentUser);
   }
@@ -1134,6 +1235,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       await this.expireOverdueMatches();
       throw this.matchConflict("The result confirmation deadline passed");
     }
+    await this.bracketService.reconcile(match.tournamentId);
     return this.getParticipantMatch(tournamentSlug, matchId, currentUser);
   }
 
@@ -1149,8 +1251,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       ? this.matchSideForUser(match, match.resultReportedByUserId)
       : null;
     const mayDisputeLobby = match.status === "LOBBY_CONFIRMATION" && actorSide !== match.hostSide;
-    const mayDisputeResult =
-      match.status === "RESULT_CONFIRMATION" && actorSide !== reporterSide;
+    const mayDisputeResult = match.status === "RESULT_CONFIRMATION" && actorSide !== reporterSide;
     if (!actorSide || (!mayDisputeLobby && !mayDisputeResult)) {
       throw createAppException({
         code: AppErrorCode.Forbidden,
@@ -1170,7 +1271,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       data: { disputeReason: reason, status: "DISPUTED" },
       where: { id: match.id, status: match.status }
     });
-    if (updated.count !== 1) throw this.matchConflict("The match changed while you were reporting the issue");
+    if (updated.count !== 1)
+      throw this.matchConflict("The match changed while you were reporting the issue");
     return this.getParticipantMatch(tournamentSlug, matchId, currentUser);
   }
 
@@ -1193,7 +1295,13 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         statusCode: HttpStatus.NOT_FOUND
       });
     }
-    if (match.status !== "DISPUTED") throw this.matchConflict("Only disputed matches can be resolved here");
+    if (match.status !== "DISPUTED")
+      throw this.matchConflict("Only disputed matches can be resolved here");
+    if (match.bracketKind !== "MANUAL" && input.resolution === "CANCEL") {
+      throw this.matchConflict(
+        "Для матча сетки назначьте победителя или переигровку; отменить можно весь турнир"
+      );
+    }
     if (!input.note.trim()) {
       throw createAppException({
         code: AppErrorCode.ValidationError,
@@ -1233,7 +1341,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         },
         where: { id: match.id, status: "DISPUTED" }
       });
-      if (updated.count !== 1) throw this.matchConflict("Another administrator already resolved this match");
+      if (updated.count !== 1)
+        throw this.matchConflict("Another administrator already resolved this match");
       nextStatus = "SCHEDULED";
     } else {
       const winnerEntryId =
@@ -1253,7 +1362,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         },
         where: { id: match.id, status: "DISPUTED" }
       });
-      if (updated.count !== 1) throw this.matchConflict("Another administrator already resolved this match");
+      if (updated.count !== 1)
+        throw this.matchConflict("Another administrator already resolved this match");
       nextStatus = winnerEntryId ? "COMPLETED" : "CANCELLED";
     }
     const resolved = await this.prismaService.dotaTournamentMatch.findUniqueOrThrow({
@@ -1263,6 +1373,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       },
       where: { id: match.id }
     });
+    await this.bracketService.reconcile(match.tournamentId);
     return this.toMatchSummary({ ...resolved, status: nextStatus });
   }
 
@@ -1338,7 +1449,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         if (
           !currentTournament ||
           currentTournament.status !== "REGISTRATION_OPEN" ||
-          (currentTournament.registrationClosesAt && currentTournament.registrationClosesAt <= new Date())
+          (currentTournament.registrationClosesAt &&
+            currentTournament.registrationClosesAt <= new Date())
         ) {
           throw createAppException({
             code: AppErrorCode.Conflict,
@@ -1367,10 +1479,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           where: { status: "REGISTERED", tournamentId: tournament.id }
         });
         const completeLineup = this.hasCompleteRoleLineup(team.members);
-        if (
-          currentTournament.maxTeams &&
-          registeredTeams >= currentTournament.maxTeams
-        ) {
+        if (currentTournament.maxTeams && registeredTeams >= currentTournament.maxTeams) {
           throw createAppException({
             code: AppErrorCode.Conflict,
             message: "Tournament team limit has been reached",
@@ -1535,13 +1644,23 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
   }
 
   listForAdmin() {
-    return this.prismaService.dotaTournament.findMany({
-      include: { _count: { select: { entries: { where: { status: "REGISTERED" } } } } },
-      orderBy: [{ createdAt: "desc" }]
-    }).then((items) => items.map((item) => this.toTournamentSummary(item)));
+    return this.prismaService.dotaTournament
+      .findMany({
+        include: { _count: { select: { entries: { where: { status: "REGISTERED" } } } } },
+        orderBy: [{ createdAt: "desc" }]
+      })
+      .then((items) => items.map((item) => this.toTournamentSummary(item)));
   }
 
   async create(input: CreateDotaTournamentDto, currentUser: AuthenticatedUser) {
+    if (
+      input.automaticBracket !== false &&
+      ["IN_PROGRESS", "COMPLETED"].includes(input.status ?? "DRAFT")
+    ) {
+      throw this.matchConflict(
+        "Сначала откройте регистрацию и наберите команды, затем запустите турнир"
+      );
+    }
     const title = input.title.trim();
     if (!title) {
       throw createAppException({
@@ -1565,13 +1684,16 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       await this.prismaService.dotaTournament.create({
         data: {
           createdByUserId: currentUser.id,
+          automaticBracket: input.automaticBracket ?? true,
           allowSpectators: input.allowSpectators ?? false,
           cheatsEnabled: input.cheatsEnabled ?? false,
           description: input.description?.trim() ?? "",
           format: input.format?.trim() || null,
           gameMode: input.gameMode ?? "ALL_PICK",
           maxTeams: input.maxTeams ?? null,
-          registrationClosesAt: input.registrationClosesAt ? new Date(input.registrationClosesAt) : null,
+          registrationClosesAt: input.registrationClosesAt
+            ? new Date(input.registrationClosesAt)
+            : null,
           rulesUrl: input.rulesUrl ?? null,
           serverRegion: input.serverRegion ?? "EUROPE",
           slug,
@@ -1592,9 +1714,12 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         statusCode: HttpStatus.NOT_FOUND
       });
     }
-    const nextSlug = input.slug === undefined ? current.slug : this.slugify(input.slug) || current.slug;
+    const nextSlug =
+      input.slug === undefined ? current.slug : this.slugify(input.slug) || current.slug;
     if (nextSlug !== current.slug) {
-      const collision = await this.prismaService.dotaTournament.findUnique({ where: { slug: nextSlug } });
+      const collision = await this.prismaService.dotaTournament.findUnique({
+        where: { slug: nextSlug }
+      });
       if (collision) {
         throw createAppException({
           code: AppErrorCode.Conflict,
@@ -1613,8 +1738,37 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           statusCode: HttpStatus.NOT_FOUND
         });
       }
-      return tx.dotaTournament.update({
+      if (
+        latest.bracketGeneratedAt &&
+        (input.automaticBracket === false ||
+          (input.status &&
+            ["DRAFT", "REGISTRATION_OPEN", "REGISTRATION_CLOSED"].includes(input.status)) ||
+          (input.status === "COMPLETED" && latest.status !== "COMPLETED") ||
+          (input.status === "IN_PROGRESS" && latest.status !== "IN_PROGRESS") ||
+          (input.gameMode !== undefined && input.gameMode !== latest.gameMode) ||
+          (input.serverRegion !== undefined && input.serverRegion !== latest.serverRegion) ||
+          (input.allowSpectators !== undefined &&
+            input.allowSpectators !== latest.allowSpectators) ||
+          (input.cheatsEnabled !== undefined && input.cheatsEnabled !== latest.cheatsEnabled))
+      )
+        throw this.matchConflict(
+          "Сетка уже зафиксирована: результат определяется матчами, настройки менять нельзя"
+        );
+      const automaticBracket = input.automaticBracket ?? latest.automaticBracket;
+      if (
+        automaticBracket &&
+        !latest.bracketGeneratedAt &&
+        !latest.automaticBracket &&
+        (await tx.dotaTournamentMatch.count({ where: { tournamentId: latest.id } }))
+      ) {
+        throw this.matchConflict("В турнире уже есть ручные матчи: режим сетки менять нельзя");
+      }
+      if (automaticBracket && input.status === "COMPLETED" && !latest.bracketGeneratedAt) {
+        throw this.matchConflict("Завершите матчи сетки перед завершением турнира");
+      }
+      const result = await tx.dotaTournament.update({
         data: {
+          automaticBracket,
           description: input.description?.trim() ?? latest.description,
           allowSpectators: input.allowSpectators ?? latest.allowSpectators,
           cheatsEnabled: input.cheatsEnabled ?? latest.cheatsEnabled,
@@ -1631,12 +1785,27 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           serverRegion: input.serverRegion ?? latest.serverRegion,
           slug: nextSlug,
           startsAt:
-            input.startsAt === undefined ? latest.startsAt : input.startsAt ? new Date(input.startsAt) : null,
+            input.startsAt === undefined
+              ? latest.startsAt
+              : input.startsAt
+                ? new Date(input.startsAt)
+                : null,
           status: input.status ?? latest.status,
           title: input.title?.trim() || latest.title
         },
         where: { id: current.id }
       });
+      if (automaticBracket && result.status === "IN_PROGRESS") {
+        await this.bracketService.startLocked(tx, current.id);
+        return tx.dotaTournament.findUniqueOrThrow({ where: { id: current.id } });
+      }
+      if (latest.bracketGeneratedAt && result.status === "CANCELLED") {
+        await tx.dotaTournamentMatch.updateMany({
+          where: { tournamentId: latest.id, status: { notIn: ["COMPLETED", "CANCELLED"] } },
+          data: { status: "CANCELLED" }
+        });
+      }
+      return result;
     });
     return this.toTournamentSummary(updated);
   }
@@ -1672,13 +1841,20 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
 
   private matchSideForUser(
     match: {
-      entryA: { members: Array<{ userId: string | null }>; teamParty: { ownerUserId: string } | null };
-      entryB: { members: Array<{ userId: string | null }>; teamParty: { ownerUserId: string } | null };
+      entryA: {
+        members: Array<{ userId: string | null }>;
+        teamParty: { ownerUserId: string } | null;
+      };
+      entryB: {
+        members: Array<{ userId: string | null }>;
+        teamParty: { ownerUserId: string } | null;
+      };
     },
     userId: string
   ): MatchSide | null {
     const belongsTo = (entry: (typeof match)["entryA"]) =>
-      entry.teamParty?.ownerUserId === userId || entry.members.some((member) => member.userId === userId);
+      entry.teamParty?.ownerUserId === userId ||
+      entry.members.some((member) => member.userId === userId);
     if (belongsTo(match.entryA)) return "A";
     if (belongsTo(match.entryB)) return "B";
     return null;
@@ -1718,7 +1894,10 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         disputeReason: "Не удалось подтвердить результат матча в отведённое время.",
         status: "DISPUTED"
       },
-      where: { resultDeadlineAt: { lt: now }, status: { in: ["IN_PROGRESS", "RESULT_CONFIRMATION"] } }
+      where: {
+        resultDeadlineAt: { lt: now },
+        status: { in: ["IN_PROGRESS", "RESULT_CONFIRMATION"] }
+      }
     });
   }
 
@@ -1731,6 +1910,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private toMatchSummary(match: {
+    bracketKind?: string;
     id: string;
     roundNumber: number;
     matchNumber: number;
@@ -1751,6 +1931,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     entryB: { id: string; teamNameSnapshot: string };
   }) {
     return {
+      bracketKind: match.bracketKind ?? "MANUAL",
       allowSpectators: match.allowSpectators,
       cheatsEnabled: match.cheatsEnabled,
       confirmationDeadlineAt: match.confirmationDeadlineAt?.toISOString() ?? null,
@@ -1842,8 +2023,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       .map((member) => member.positionRole)
       .filter((role): role is string => role !== null);
     return (
-      assigned.every((role) => TOURNAMENT_ROLES.includes(role as (typeof TOURNAMENT_ROLES)[number])) &&
-      new Set(assigned).size === assigned.length
+      assigned.every((role) =>
+        TOURNAMENT_ROLES.includes(role as (typeof TOURNAMENT_ROLES)[number])
+      ) && new Set(assigned).size === assigned.length
     );
   }
 
@@ -1937,15 +2119,120 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private isPrismaUniqueError(error: unknown): boolean {
-    return (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "P2002"
-    );
+    return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+  }
+
+  private bracketPresentation(tournament: {
+    status: string;
+    bracketSize: number | null;
+    bracketSeeds: Array<{ entryId: string; seed: number; averageMmr: number | null }>;
+    entries: Array<{
+      id: string;
+      teamNameSnapshot: string;
+      members: Array<{
+        displayName: string;
+        dotaProfileSlug: string | null;
+        mmr: number | null;
+        positionRole: string | null;
+      }>;
+    }>;
+    matches: Array<{
+      id: string;
+      bracketKind: string;
+      roundNumber: number;
+      matchNumber: number;
+      entryAId: string;
+      entryBId: string;
+      status: string;
+      winnerEntryId: string | null;
+    }>;
+  }) {
+    const bracket = tournament.bracketSize
+      ? buildBracket(tournament.bracketSize, tournament.bracketSeeds, tournament.matches)
+      : null;
+    const manualResults =
+      !bracket && tournament.status === "COMPLETED"
+        ? tournament.matches.filter((match) => match.status === "COMPLETED" && match.winnerEntryId)
+        : [];
+    const finalRound = Math.max(0, ...tournament.matches.map((match) => match.roundNumber));
+    const finalCandidates = manualResults.filter((match) => match.roundNumber === finalRound);
+    const manualFinal =
+      finalCandidates.length === 1 &&
+      !tournament.matches.some(
+        (match) => match.roundNumber === finalRound && match.status !== "COMPLETED"
+      )
+        ? finalCandidates[0]
+        : null;
+    const places =
+      bracket?.podium ??
+      (manualFinal
+        ? [
+            manualFinal.winnerEntryId,
+            manualFinal.winnerEntryId === manualFinal.entryAId
+              ? manualFinal.entryBId
+              : manualFinal.entryAId,
+            null
+          ]
+        : []);
+    const podium = places.map((entryId, index) => {
+      const entry = tournament.entries.find((item) => item.id === entryId);
+      return {
+        place: index + 1,
+        entryId: entry?.id ?? null,
+        teamName: entry?.teamNameSnapshot ?? null,
+        members:
+          entry?.members.map(({ displayName, dotaProfileSlug, mmr, positionRole }) => ({
+            displayName,
+            dotaProfileSlug,
+            mmr,
+            positionRole
+          })) ?? []
+      };
+    });
+    return {
+      bracket: bracket
+        ? {
+            size: tournament.bracketSize,
+            seeds: tournament.bracketSeeds.map(({ entryId, seed, averageMmr }) => ({
+              entryId,
+              seed,
+              averageMmr
+            })),
+            nodes: bracket.nodes
+          }
+        : null,
+      podium: tournament.status === "COMPLETED" ? podium : []
+    };
+  }
+
+  private async completedPodiums(items: Array<{ id: string; status: string }>) {
+    const ids = items.filter((item) => item.status === "COMPLETED").map((item) => item.id);
+    if (!ids.length) return new Map();
+    const tournaments = await this.prismaService.dotaTournament.findMany({
+      where: { id: { in: ids } },
+      include: {
+        bracketSeeds: true,
+        matches: {
+          select: {
+            id: true,
+            bracketKind: true,
+            roundNumber: true,
+            matchNumber: true,
+            entryAId: true,
+            entryBId: true,
+            status: true,
+            winnerEntryId: true
+          }
+        },
+        entries: { include: { members: { where: { isActive: true } } } }
+      }
+    });
+    return new Map(tournaments.map((item) => [item.id, this.bracketPresentation(item).podium]));
   }
 
   private toTournamentSummary(tournament: {
+    automaticBracket?: boolean;
+    bracketGeneratedAt?: Date | null;
     _count?: { entries: number };
     allowSpectators: boolean;
     cheatsEnabled: boolean;
@@ -1963,6 +2250,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     title: string;
   }) {
     return {
+      automaticBracket: tournament.automaticBracket ?? false,
+      bracketGeneratedAt: tournament.bracketGeneratedAt?.toISOString() ?? null,
       allowSpectators: tournament.allowSpectators,
       cheatsEnabled: tournament.cheatsEnabled,
       description: tournament.description,

@@ -10,7 +10,7 @@ from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..storage.database import BotStorage
-from ..services.party_notifications import deliver_join_hint
+from ..services.party_notifications import deliver_join_hint, deliver_member_joined_notice
 from ..services.temporary_notifications import send_temporary_notification
 from ..ui.keyboards import back_keyboard, invite_keyboard
 from ..ui.formatters import notification_text
@@ -138,10 +138,16 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
                     "Откройте сайт, чтобы посмотреть состав пати и перейти в чат или Discord."
                 )
             else:
-                message_text = (
-                    f"🎮 В пати «<b>{party_name}</b>» вступил игрок из поиска на сайте.\n"
-                    "Откройте сайт, чтобы посмотреть состав и перейти в чат или Discord."
+                await deliver_member_joined_notice(
+                    bot,
+                    api,
+                    storage,
+                    telegram_user_id,
+                    settings.site_url,
+                    str(payload.get("partySlug") or ""),
+                    f"🎮 В пати «<b>{party_name}</b>» вступил игрок из поиска на сайте.",
                 )
+                return True
             await deliver_join_hint(
                 bot,
                 api,
@@ -162,16 +168,15 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
                     "Could not refresh party panel before roster notification",
                     exc_info=True,
                 )
-            await send_temporary_notification(
+            await deliver_member_joined_notice(
                 bot,
+                api,
                 storage,
                 telegram_user_id,
-                telegram_user_id,
+                settings.site_url,
+                str(invite.get("partySlug") or payload.get("partySlug") or ""),
                 notification_text(payload),
-                10,
-                parse_mode="HTML",
             )
-            storage.record_party_notification(telegram_user_id)
             return True
         if event_type in {"member_left", "member_kicked"}:
             try:

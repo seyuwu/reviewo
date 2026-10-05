@@ -28,6 +28,7 @@ import { DotaProfileFlags } from "./dota-profile-flags";
 import { DotaRecoveryNotice } from "./dota-recovery-notice";
 import { DotaSharePanel } from "./dota-share-panel";
 import { DotaProfileWaitlistCta } from "./dota-profile-waitlist-cta";
+import { DotaTelegramContactField } from "./dota-telegram-contact";
 import styles from "./dota-profile-view.module.css";
 
 interface DotaProfileViewProps {
@@ -225,6 +226,7 @@ export function DotaProfileView({ profile: initialProfile }: DotaProfileViewProp
       {profile.isOwner ? <DotaRecoveryNotice slug={profile.slug} /> : null}
       {profile.isOwner ? <DotaClaimEmailBanner isOwner={profile.isOwner} /> : null}
       <DotaProfileWaitlistCta />
+      <DotaTelegramContactField slug={profile.slug} />
 
       <div className={`profile-fields ${styles.metaGrid}`}>
         <DotaIdCopyField accountId={profile.dotaAccountId} showFillCta={profile.isOwner} />
@@ -266,9 +268,7 @@ export function DotaProfileView({ profile: initialProfile }: DotaProfileViewProp
                 onClick={() => void handleCopyProfileLink()}
                 type="button"
               >
-                {copiedProfileLink
-                  ? t("dota.share.copied")
-                  : t("dota.profile.copyProfileLink")}
+                {copiedProfileLink ? t("dota.share.copied") : t("dota.profile.copyProfileLink")}
               </button>
               {copyProfileError ? <FormFeedback errorMessage={copyProfileError} /> : null}
             </div>

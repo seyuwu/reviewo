@@ -1,0 +1,120 @@
+.page {
+  margin: 0 auto;
+  max-width: 62rem;
+  padding: 2rem 0 3rem;
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.header {
+  display: grid;
+  gap: 16px;
+}
+.header > a {
+  color: #c3b2ff;
+  font-size: 14px;
+  text-decoration: none;
+}
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.heading h1 {
+  margin: 0;
+  font-size: clamp(24px, 4vw, 36px);
+}
+.scoreboard {
+  min-width: 0;
+}
+.scoreboard h3 {
+  font-size: clamp(20px, 3vw, 28px);
+  overflow-wrap: anywhere;
+}
+.rosters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.roster {
+  padding: 22px;
+  background: #10131e;
+  border: 1px solid #343047;
+  border-radius: 16px;
+  min-width: 0;
+}
+.winningRoster {
+  border-color: #52735f;
+  background: linear-gradient(120deg, #19322566, transparent), #10131e;
+}
+.roster p {
+  color: #a798cd;
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+.roster h2 {
+  margin: 0 0 20px;
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+.roster ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.roster li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 0;
+  border-bottom: 1px solid #282938;
+}
+.roster li:last-child {
+  border: 0;
+}
+.roster li > a,
+.roster li > strong {
+  color: inherit;
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.roster small {
+  color: #8fb9d9;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.role {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  background: #282140;
+  border-radius: 7px;
+  color: #c7b6ff;
+  flex-shrink: 0;
+}
+.error {
+  color: #fca5a5;
+  padding: 16px;
+  border: 1px solid #754447;
+  border-radius: 12px;
+}
+@media (max-width: 640px) {
+  .rosters {
+    grid-template-columns: 1fr;
+  }
+  .roster {
+    padding: 16px;
+  }
+  .page {
+    padding-top: 1rem;
+  }
+}

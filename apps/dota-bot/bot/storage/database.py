@@ -870,6 +870,24 @@ class BotStorage:
         except (IndexError, TypeError, json.JSONDecodeError):
             return None
 
+    def party_chat_hint_count(self, telegram_user_id: int, party_slug: str) -> int:
+        state = self.get_choice(telegram_user_id, "party_chat_hints", 0) or {}
+        return next(
+            (item["count"] for item in state.get("parties", []) if item["slug"] == party_slug),
+            0,
+        )
+
+    def record_party_chat_hint(self, telegram_user_id: int, party_slug: str) -> None:
+        # Persist across restarts without creating a row for every expired party.
+        # Only the user's 32 most recent parties are retained in this single row.
+        with self.lock:
+            state = self.get_choice(telegram_user_id, "party_chat_hints", 0) or {}
+            history = state.get("parties", [])
+            count = next((item["count"] for item in history if item["slug"] == party_slug), 0)
+            history = [item for item in history if item["slug"] != party_slug]
+            history.append({"slug": party_slug, "count": min(2, count + 1)})
+            self.set_choices(telegram_user_id, "party_chat_hints", [{"parties": history[-32:]}])
+
     def queue_search_timeout_notice(self, telegram_user_id: int, event_key: str, mode: str) -> bool:
         """Reserve at most two notices across both modes; restart-safe event deduplication."""
         if mode not in {"looking", "recruit"}:
