@@ -54,6 +54,30 @@ def queue_recruit_timeout(storage, telegram_user_id: int, search: dict, party: d
     storage.queue_search_timeout_notice(telegram_user_id, f"recruit:{search.get('partySlug')}:{search['startedAt']}", "recruit")
 
 
+def queue_solo_stop(storage, telegram_user_id: int, search: dict, profile: dict, memberships: dict) -> None:
+    if (
+        search.get("mode") != "looking" or profile.get("looking")
+        or memberships.get("party") or memberships.get("parties")
+        or not is_current_search(storage, telegram_user_id, search)
+    ):
+        return
+    # Use the timeout's event key and lifetime quota so one search cannot
+    # consume two notices when a stop races with deadline detection.
+    storage.queue_search_timeout_notice(telegram_user_id, f"looking:{search['startedAt']}", "looking")
+
+
+def queue_recruit_stop(storage, telegram_user_id: int, search: dict, party: dict) -> None:
+    if (
+        search.get("mode") != "recruit" or not party.get("isOwner")
+        or search.get("partySlug") != party.get("slug") or party.get("kind") == "TEAM"
+        or party.get("recruitedRoles")
+        or int(party.get("memberCount") or len(party.get("members") or [])) >= int(party.get("maxMembers") or 5)
+        or not is_current_search(storage, telegram_user_id, search)
+    ):
+        return
+    storage.queue_search_timeout_notice(telegram_user_id, f"recruit:{search.get('partySlug')}:{search['startedAt']}", "recruit")
+
+
 def timeout_notice_text(ordinal: int, mode: str) -> str:
     result = "В этот раз не удалось собрать полный состав." if mode == "recruit" else "В этот раз пати не нашлась."
     if ordinal == 1:
@@ -73,8 +97,8 @@ def timeout_notice_text(ordinal: int, mode: str) -> str:
     )
 
 
-def timeout_notice_keyboard(username: str) -> InlineKeyboardMarkup:
-    invite = bot_friend_invite_url(username)
+def timeout_notice_keyboard(username: str, referral_code: str | None = None) -> InlineKeyboardMarkup:
+    invite = bot_friend_invite_url(username, referral_code)
     invitation = f"🎮 Ищем пати в Dota 2? Заходи в FDP — поиск по ролям и MMR, прямо в Telegram:\n{invite}"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📣 Канал FDP", url="https://t.me/FDPcommunity")],
@@ -88,7 +112,7 @@ async def deliver_timeout_notice(bot, storage, row: dict, username: str) -> None
         await send_temporary_notification(
             bot, storage, user_id, user_id,
             timeout_notice_text(row["ordinal"], row["search_mode"]), NOTICE_TTL_SECONDS,
-            reply_markup=timeout_notice_keyboard(username), disable_web_page_preview=True,
+            reply_markup=timeout_notice_keyboard(username, storage.referral_code(user_id)), disable_web_page_preview=True,
         )
         storage.finish_search_timeout_notice(user_id, row["ordinal"])
     except TelegramForbiddenError:

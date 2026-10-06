@@ -3,12 +3,14 @@ from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
 import re
+import secrets
 import sqlite3
 from threading import RLock
 
 from cryptography.fernet import Fernet
 
 from ..services.broadcast_duration import DEFAULT_BROADCAST_TTL_SECONDS, validate_broadcast_duration
+from ..services.broadcast_content import normalize_broadcast_entities, validate_broadcast_content
 
 
 @dataclass(frozen=True)
@@ -96,6 +98,31 @@ class BotStorage:
               occurred_at TEXT NOT NULL,
               PRIMARY KEY (telegram_user_id, event_type)
             );
+            CREATE TABLE IF NOT EXISTS bot_referral_codes (
+              telegram_user_id INTEGER PRIMARY KEY,
+              code TEXT NOT NULL UNIQUE,
+              display_name TEXT NOT NULL,
+              username TEXT
+            );
+            CREATE TABLE IF NOT EXISTS bot_referrals (
+              invitee_telegram_id INTEGER PRIMARY KEY,
+              inviter_telegram_id INTEGER NOT NULL,
+              code TEXT NOT NULL,
+              inviter_name TEXT NOT NULL,
+              inviter_username TEXT,
+              invitee_name TEXT NOT NULL,
+              invitee_username TEXT,
+              started_at TEXT NOT NULL,
+              account_created_at TEXT,
+              account_ready_at TEXT,
+              search_started_at TEXT,
+              party_joined_at TEXT,
+              revision INTEGER NOT NULL DEFAULT 1,
+              needs_sync INTEGER NOT NULL DEFAULT 1,
+              CHECK (invitee_telegram_id <> inviter_telegram_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_bot_referrals_pending
+              ON bot_referrals (needs_sync, started_at);
             CREATE TABLE IF NOT EXISTS bot_activity_events (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               telegram_user_id INTEGER NOT NULL,
@@ -137,6 +164,9 @@ class BotStorage:
               attempts INTEGER NOT NULL DEFAULT 0,
               last_error TEXT,
               sent_at TEXT,
+              sent_chat_id INTEGER,
+              sent_message_id INTEGER,
+              delete_clicked_at TEXT,
               PRIMARY KEY (campaign_id, telegram_user_id)
             );
             CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_pending
@@ -160,10 +190,23 @@ class BotStorage:
         campaign_columns = {
             row["name"] for row in self.connection.execute("PRAGMA table_info(broadcast_campaigns)")
         }
+        recipient_columns = {
+            row["name"] for row in self.connection.execute("PRAGMA table_info(broadcast_recipients)")
+        }
+        if "sent_chat_id" not in recipient_columns:
+            self.connection.execute("ALTER TABLE broadcast_recipients ADD COLUMN sent_chat_id INTEGER")
+        if "sent_message_id" not in recipient_columns:
+            self.connection.execute("ALTER TABLE broadcast_recipients ADD COLUMN sent_message_id INTEGER")
+        if "delete_clicked_at" not in recipient_columns:
+            self.connection.execute("ALTER TABLE broadcast_recipients ADD COLUMN delete_clicked_at TEXT")
         if "delete_after_seconds" not in campaign_columns:
             self.connection.execute(
                 f"ALTER TABLE broadcast_campaigns ADD COLUMN delete_after_seconds INTEGER NOT NULL DEFAULT {DEFAULT_BROADCAST_TTL_SECONDS}"
             )
+        if "photo_file_id" not in campaign_columns:
+            self.connection.execute("ALTER TABLE broadcast_campaigns ADD COLUMN photo_file_id TEXT")
+        if "entities_json" not in campaign_columns:
+            self.connection.execute("ALTER TABLE broadcast_campaigns ADD COLUMN entities_json TEXT NOT NULL DEFAULT '[]'")
         if "acquisition_source" not in user_columns:
             self.connection.execute(
                 "ALTER TABLE bot_users ADD COLUMN acquisition_source TEXT NOT NULL DEFAULT 'existing'"
@@ -258,6 +301,10 @@ class BotStorage:
         telegram_user_id: int,
         acquisition_source: str = "direct",
         acquisition_campaign: str | None = None,
+        *,
+        referral_code: str | None = None,
+        display_name: str | None = None,
+        username: str | None = None,
     ) -> None:
         now = timestamp()
         allowed_sources = {
@@ -269,6 +316,13 @@ class BotStorage:
         campaign = self._campaign_code(acquisition_campaign)
         with self.lock:
             connection = self._connection()
+            inviter = connection.execute(
+                "SELECT * FROM bot_referral_codes WHERE code=? AND telegram_user_id<>?",
+                (referral_code, telegram_user_id),
+            ).fetchone() if referral_code else None
+            if inviter:
+                source = "party_invite" if source == "party_invite" else "referral"
+                campaign = "personal"
             inserted = connection.execute(
                 """INSERT OR IGNORE INTO bot_users
                      (telegram_user_id, first_seen_at, last_seen_at, acquisition_source,
@@ -288,7 +342,57 @@ class BotStorage:
                        VALUES (?, 'bot_started', ?)""",
                     (telegram_user_id, now),
                 )
+                if inviter:
+                    connection.execute(
+                        """INSERT OR IGNORE INTO bot_referrals
+                          (invitee_telegram_id, inviter_telegram_id, code, inviter_name,
+                           inviter_username, invitee_name, invitee_username, started_at)
+                          VALUES (?,?,?,?,?,?,?,?)""",
+                        (telegram_user_id, inviter["telegram_user_id"], inviter["code"],
+                         inviter["display_name"], inviter["username"],
+                         (display_name or "Игрок Telegram")[:128], self._telegram_username(username), now),
+                    )
             connection.commit()
+
+    @staticmethod
+    def _telegram_username(value: str | None) -> str | None:
+        return value if value and re.fullmatch(r"[A-Za-z0-9_]{1,32}", value) else None
+
+    def referral_code(self, telegram_user_id: int, display_name: str | None = None,
+                      username: str | None = None) -> str:
+        with self.lock:
+            connection = self._connection()
+            connection.execute(
+                """INSERT OR IGNORE INTO bot_referral_codes (telegram_user_id,code,display_name,username)
+                   VALUES (?,?,?,?)""",
+                (telegram_user_id, secrets.token_hex(12), (display_name or "Игрок Telegram")[:128],
+                 self._telegram_username(username)),
+            )
+            if display_name is not None:
+                connection.execute(
+                    "UPDATE bot_referral_codes SET display_name=?,username=? WHERE telegram_user_id=?",
+                    (display_name[:128], self._telegram_username(username), telegram_user_id),
+                )
+            row = connection.execute(
+                "SELECT code FROM bot_referral_codes WHERE telegram_user_id=?", (telegram_user_id,)
+            ).fetchone()
+            connection.commit()
+            return str(row["code"])
+
+    def pending_referrals(self, limit: int = 100) -> list[dict]:
+        rows = self._connection().execute(
+            "SELECT * FROM bot_referrals WHERE needs_sync=1 ORDER BY started_at LIMIT ?",
+            (min(max(limit, 1), 100),),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def finish_referral_sync(self, rows: list[dict]) -> None:
+        with self.lock:
+            self._connection().executemany(
+                "UPDATE bot_referrals SET needs_sync=0 WHERE invitee_telegram_id=? AND revision=?",
+                [(row["invitee_telegram_id"], row["revision"]) for row in rows],
+            )
+            self._connection().commit()
 
     def record_funnel_event(self, telegram_user_id: int, event_type: str) -> None:
         if event_type not in {
@@ -307,6 +411,18 @@ class BotStorage:
                    VALUES (?, ?, ?)""",
                 (telegram_user_id, event_type, timestamp()),
             )
+            columns = {
+                "account_created": "account_created_at", "account_ready": "account_ready_at",
+                "search_started": "search_started_at", "party_joined": "party_joined_at",
+            }
+            column = columns.get(event_type)
+            if column:
+                # Column names come only from the fixed allowlist above; values are bound.
+                self._connection().execute(
+                    f"""UPDATE bot_referrals SET {column}=?,revision=revision+1,needs_sync=1
+                        WHERE invitee_telegram_id=? AND {column} IS NULL""",
+                    (timestamp(), telegram_user_id),
+                )
             self._connection().commit()
 
     def record_party_created(self, telegram_user_id: int) -> None:
@@ -640,13 +756,16 @@ class BotStorage:
     def create_broadcast(
         self, admin_user_id: int, text: str,
         delete_after_seconds: int = DEFAULT_BROADCAST_TTL_SECONDS,
+        *, photo_file_id: str | None = None, entities: list[dict] | None = None,
     ) -> tuple[int, int]:
         validate_broadcast_duration(delete_after_seconds)
+        validate_broadcast_content(text, photo_file_id)
+        entities_json = json.dumps(normalize_broadcast_entities(text, entities), ensure_ascii=False)
         with self.lock:
             connection = self._connection()
             cursor = connection.execute(
-                "INSERT INTO broadcast_campaigns (admin_user_id, text, status, created_at, delete_after_seconds) VALUES (?, ?, 'queued', ?, ?)",
-                (admin_user_id, text, timestamp(), delete_after_seconds),
+                "INSERT INTO broadcast_campaigns (admin_user_id, text, status, created_at, delete_after_seconds, photo_file_id, entities_json) VALUES (?, ?, 'queued', ?, ?, ?, ?)",
+                (admin_user_id, text, timestamp(), delete_after_seconds, photo_file_id, entities_json),
             )
             campaign_id = int(cursor.lastrowid)
             recipients = connection.execute(
@@ -668,7 +787,7 @@ class BotStorage:
         with self.lock:
             connection = self._connection()
             campaign = connection.execute(
-                "SELECT id, admin_user_id, text, delete_after_seconds FROM broadcast_campaigns WHERE status IN ('queued', 'sending') ORDER BY id LIMIT 1"
+                "SELECT id, admin_user_id, text, delete_after_seconds, photo_file_id, entities_json FROM broadcast_campaigns WHERE status IN ('queued', 'sending') ORDER BY id LIMIT 1"
             ).fetchone()
             if campaign is None:
                 return None
@@ -693,6 +812,8 @@ class BotStorage:
                 "campaign_id": int(campaign["id"]),
                 "admin_user_id": int(campaign["admin_user_id"]),
                 "text": str(campaign["text"]),
+                "photo_file_id": campaign["photo_file_id"],
+                "entities": json.loads(campaign["entities_json"]),
                 "delete_after_seconds": int(campaign["delete_after_seconds"]),
                 "telegram_user_id": int(recipient["telegram_user_id"]),
             }
@@ -733,6 +854,12 @@ class BotStorage:
                    WHERE campaign_id = ? AND telegram_user_id = ?""",
                 (status, error, status, now, campaign_id, telegram_user_id),
             )
+            if sent_message is not None:
+                connection.execute(
+                    """UPDATE broadcast_recipients SET sent_chat_id = ?, sent_message_id = ?
+                       WHERE campaign_id = ? AND telegram_user_id = ?""",
+                    (*sent_message, campaign_id, telegram_user_id),
+                )
             if status == "blocked":
                 connection.execute(
                     "UPDATE bot_users SET announcements_enabled = 0, blocked_at = ? WHERE telegram_user_id = ?",
@@ -750,6 +877,35 @@ class BotStorage:
                 )
             connection.commit()
             return completed
+
+    def record_broadcast_delete_click(
+        self,
+        campaign_id: int,
+        telegram_user_id: int,
+        chat_id: int,
+        message_id: int,
+    ) -> bool | None:
+        """Record at most one delete click per delivered message; None means untrusted/unknown."""
+        with self.lock:
+            connection = self._connection()
+            row = connection.execute(
+                """SELECT delete_clicked_at FROM broadcast_recipients
+                   WHERE campaign_id = ? AND telegram_user_id = ? AND status = 'sent'
+                     AND sent_chat_id = ? AND sent_message_id = ?""",
+                (campaign_id, telegram_user_id, chat_id, message_id),
+            ).fetchone()
+            if row is None:
+                return None
+            if row["delete_clicked_at"] is not None:
+                return False
+            connection.execute(
+                """UPDATE broadcast_recipients SET delete_clicked_at = ?
+                   WHERE campaign_id = ? AND telegram_user_id = ? AND status = 'sent'
+                     AND sent_chat_id = ? AND sent_message_id = ? AND delete_clicked_at IS NULL""",
+                (timestamp(), campaign_id, telegram_user_id, chat_id, message_id),
+            )
+            connection.commit()
+            return True
 
     def retry_broadcast_recipient(self, campaign_id: int, telegram_user_id: int, error: str) -> int:
         with self.lock:
@@ -784,7 +940,8 @@ class BotStorage:
                       SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) AS blocked,
                       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
                       SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
-                      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending
+                      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                      SUM(CASE WHEN delete_clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS delete_clicks
                FROM broadcast_recipients WHERE campaign_id = ?""",
             (campaign["id"],),
         ).fetchone()
@@ -798,6 +955,7 @@ class BotStorage:
             "failed": int(counts["failed"] or 0),
             "skipped": int(counts["skipped"] or 0),
             "pending": int(counts["pending"] or 0),
+            "delete_clicks": int(counts["delete_clicks"] or 0),
         }
 
     def unlink(self, telegram_user_id: int) -> None:
@@ -889,7 +1047,7 @@ class BotStorage:
             self.set_choices(telegram_user_id, "party_chat_hints", [{"parties": history[-32:]}])
 
     def queue_search_timeout_notice(self, telegram_user_id: int, event_key: str, mode: str) -> bool:
-        """Reserve at most two notices across both modes; restart-safe event deduplication."""
+        """Reserve two notices total across modes and stop/timeout reasons, with durable deduplication."""
         if mode not in {"looking", "recruit"}:
             raise ValueError("Invalid search mode")
         with self.lock:

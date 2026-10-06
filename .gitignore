@@ -30,6 +30,7 @@ pnpm-debug.log*
 
 # Local waitlist bot data
 apps/waitlist-bot/data/
+apps/dota-bot/.local-test/
 apps/api/src/generated/
 
 # Python

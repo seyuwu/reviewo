@@ -14,8 +14,11 @@ from aiogram.methods import SendMessage
 from bot.storage.database import BotStorage
 from bot.services.search_timeout_notices import (
     queue_solo_timeout, queue_recruit_timeout, deliver_timeout_notice,
-    timeout_notice_keyboard, timeout_notice_text,
+    queue_solo_stop, queue_recruit_stop, timeout_notice_keyboard, timeout_notice_text,
 )
+from bot.api.client import ApiError
+from bot.handlers.search import stop_search
+from bot.services.party_search_queue import PartySearchAction, PartySearchQueue
 from bot.services.panel import refresh_active_search_panels
 
 
@@ -103,6 +106,157 @@ class TimeoutNoticeTests(unittest.IsolatedAsyncioTestCase):
         search, party = self.recruit(1795)
         queue_recruit_timeout(self.storage, 7, search, party)
         self.assertEqual(self.storage.pending_search_timeout_notices()[0]["ordinal"], 2)
+
+    def test_manual_stop_and_timeout_share_lifetime_limit_after_restart(self):
+        search = self.solo(2)
+        queue_solo_stop(self.storage, 7, search, {"looking": False}, {})
+        self.assertEqual(self.storage.pending_search_timeout_notices()[0]["ordinal"], 1)
+        self.storage.finish_search_timeout_notice(7, 1)
+        self.storage.close()
+        self.storage = BotStorage(self.path, self.key)
+        self.storage.initialize()
+        search, party = self.recruit()
+        queue_recruit_timeout(self.storage, 7, search, party)
+        self.assertEqual(self.storage.pending_search_timeout_notices()[0]["ordinal"], 2)
+        self.storage.finish_search_timeout_notice(7, 2)
+        queue_solo_stop(self.storage, 7, self.solo(2), {"looking": False}, {})
+        self.assertEqual(self.storage.pending_search_timeout_notices(), [])
+
+    def test_timeout_then_stop_and_same_search_are_deduplicated(self):
+        search = self.solo()
+        queue_solo_timeout(self.storage, 7, search, {"lfgTimedOut": True}, {})
+        queue_solo_stop(self.storage, 7, search, {"looking": False}, {})
+        self.storage.finish_search_timeout_notice(7, 1)
+        search, party = self.recruit(2)
+        queue_recruit_stop(self.storage, 7, search, party)
+        self.assertEqual(self.storage.pending_search_timeout_notices()[0]["ordinal"], 2)
+
+    def test_solo_stop_ignores_found_party_active_or_stale_search(self):
+        search = self.solo(2)
+        queue_solo_stop(self.storage, 7, search, {"looking": True}, {})
+        queue_solo_stop(self.storage, 7, search, {}, {"party": {"slug": "found"}})
+        queue_solo_stop(self.storage, 7, search, {}, {"parties": [{"slug": "found"}]})
+        self.solo(1)
+        queue_solo_stop(self.storage, 7, search, {}, {})
+        self.assertEqual(self.storage.pending_search_timeout_notices(), [])
+
+    def test_recruit_stop_ignores_full_other_team_and_partial_role_stop(self):
+        search, party = self.recruit(2)
+        for override in [
+            {"isOwner": False}, {"slug": "other"}, {"kind": "TEAM"},
+            {"memberCount": 5}, {"recruitedRoles": ["5"]},
+        ]:
+            queue_recruit_stop(self.storage, 7, search, {**party, **override})
+        self.assertEqual(self.storage.pending_search_timeout_notices(), [])
+
+    async def test_solo_stop_handler_queues_only_after_success_and_only_once(self):
+        self.solo(2)
+        api = SimpleNamespace(user=AsyncMock(side_effect=[{}, {"looking": False}, {}, {"looking": False}]))
+        callback = SimpleNamespace(from_user=SimpleNamespace(id=7), message=None, bot=object())
+        with patch("bot.handlers.search.acknowledge_callback"), \
+             patch("bot.handlers.search.begin_panel_transition", new_callable=AsyncMock), \
+             patch("bot.handlers.search.edit_panel", new_callable=AsyncMock):
+            await stop_search(callback, api, object(), self.storage, object())
+            await stop_search(callback, api, object(), self.storage, object())
+        self.assertIsNone(self.storage.get_choice(7, "auto_search", 0))
+        rows = self.storage._connection().execute("SELECT * FROM search_timeout_notices").fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(api.user.await_count, 4)
+
+    async def test_failed_solo_stop_keeps_search_and_notice_quota(self):
+        search = self.solo(2)
+        api = SimpleNamespace(user=AsyncMock(side_effect=[{}, ApiError("Failed", 503)]))
+        callback = SimpleNamespace(from_user=SimpleNamespace(id=7), message=None, bot=object())
+        with patch("bot.handlers.search.acknowledge_callback"), \
+             patch("bot.handlers.search.begin_panel_transition", new_callable=AsyncMock), \
+             patch("bot.handlers.search.show_error", new_callable=AsyncMock):
+            await stop_search(callback, api, object(), self.storage, object())
+        self.assertEqual(self.storage.get_choice(7, "auto_search", 0), search)
+        self.assertEqual(self.storage.pending_search_timeout_notices(), [])
+
+    async def test_new_solo_search_during_stop_is_not_cleared_or_notified(self):
+        self.solo(2)
+        async def reply(user_id, method, path, *args):
+            if method == "POST":
+                self.solo(1)
+            return {}
+        api = SimpleNamespace(user=AsyncMock(side_effect=reply))
+        callback = SimpleNamespace(from_user=SimpleNamespace(id=7), message=None, bot=object())
+        with patch("bot.handlers.search.acknowledge_callback"), \
+             patch("bot.handlers.search.begin_panel_transition", new_callable=AsyncMock), \
+             patch("bot.handlers.search.edit_panel", new_callable=AsyncMock) as edit:
+            await stop_search(callback, api, object(), self.storage, object())
+            edit.assert_not_awaited()
+        self.assertIsNotNone(self.storage.get_choice(7, "auto_search", 0))
+        self.assertEqual(self.storage.pending_search_timeout_notices(), [])
+
+    async def test_recruit_stop_rechecks_last_slot_before_notifying(self):
+        for filled in [False, True]:
+            with self.subTest(filled=filled):
+                before = self.storage._connection().execute("SELECT COUNT(*) FROM search_timeout_notices").fetchone()[0]
+                self.recruit(2)
+                party = {"slug": "test-party", "isOwner": True, "canManageParty": True,
+                         "memberCount": 4, "maxMembers": 5, "members": [], "recruitedRoles": ["5"]}
+                after = {**party, "recruitedRoles": [], "memberCount": 5 if filled else 4}
+                api = SimpleNamespace(user=AsyncMock(side_effect=[{"party": party}, {}, {"party": after}]))
+                queue = PartySearchQueue(object(), api, object(), self.storage, asyncio.Event())
+                await queue._apply_actions(7, [PartySearchAction("stop", 7)])
+                self.assertIsNone(self.storage.get_choice(7, "auto_search", 0))
+                count = self.storage._connection().execute("SELECT COUNT(*) FROM search_timeout_notices").fetchone()[0]
+                self.assertEqual(count, before + int(not filled))
+
+    async def test_failed_recruit_stop_preserves_search_and_notice_quota(self):
+        search, _ = self.recruit(2)
+        party = {"slug": "test-party", "canManageParty": True, "recruitedRoles": ["5"], "members": []}
+        api = SimpleNamespace(user=AsyncMock(side_effect=[{"party": party}, ApiError("Failed", 503)]))
+        queue = PartySearchQueue(object(), api, object(), self.storage, asyncio.Event())
+        with self.assertRaises(ApiError):
+            await queue._apply_actions(7, [PartySearchAction("stop", 7)])
+        self.assertEqual(self.storage.get_choice(7, "auto_search", 0), search)
+        self.assertEqual(self.storage.pending_search_timeout_notices(), [])
+
+    async def test_new_recruit_search_during_stop_check_is_not_cleared_or_notified(self):
+        self.recruit(2)
+        party = {"slug": "test-party", "isOwner": True, "canManageParty": True,
+                 "memberCount": 4, "maxMembers": 5, "members": [], "recruitedRoles": ["5"]}
+        reads = 0
+        async def reply(user_id, method, path, *args):
+            nonlocal reads
+            if method == "GET":
+                reads += 1
+                if reads == 2:
+                    self.recruit(1)
+                    return {"party": {**party, "recruitedRoles": []}}
+                return {"party": party}
+            return {}
+        api = SimpleNamespace(user=AsyncMock(side_effect=reply))
+        queue = PartySearchQueue(object(), api, object(), self.storage, asyncio.Event())
+        await queue._apply_actions(7, [PartySearchAction("stop", 7)])
+        self.assertIsNotNone(self.storage.get_choice(7, "auto_search", 0))
+        self.assertEqual(self.storage.pending_search_timeout_notices(), [])
+
+    async def test_partial_role_stop_does_not_notify_last_role_stop_does(self):
+        self.recruit(2)
+        party = {"slug": "test-party", "isOwner": True, "canManageParty": True,
+                 "memberCount": 3, "maxMembers": 5, "members": [], "recruitedRoles": ["4", "5"], "joinMode": "OPEN"}
+        api = SimpleNamespace(user=AsyncMock(side_effect=[{"party": party}, {}]))
+        queue = PartySearchQueue(object(), api, object(), self.storage, asyncio.Event())
+        await queue._apply_actions(7, [PartySearchAction("toggle", 7, "4")])
+        self.assertEqual(self.storage.pending_search_timeout_notices(), [])
+        self.assertEqual(api.user.await_count, 2)
+        api.user.side_effect = [{"party": {**party, "recruitedRoles": ["5"]}}, {}, {"party": {**party, "recruitedRoles": []}}]
+        await queue._apply_actions(7, [PartySearchAction("toggle", 7, "5")])
+        self.assertEqual(self.storage.pending_search_timeout_notices()[0]["search_mode"], "recruit")
+
+    async def test_recruit_membership_check_failure_does_not_undo_successful_stop(self):
+        self.recruit(2)
+        party = {"slug": "test-party", "canManageParty": True, "recruitedRoles": ["5"], "members": []}
+        api = SimpleNamespace(user=AsyncMock(side_effect=[{"party": party}, {}, ApiError("Failed", 503)]))
+        queue = PartySearchQueue(object(), api, object(), self.storage, asyncio.Event())
+        result = await queue._apply_actions(7, [PartySearchAction("stop", 7)])
+        self.assertEqual(result, ("party", False))
+        self.assertIsNone(self.storage.get_choice(7, "auto_search", 0))
+        self.assertEqual(self.storage.pending_search_timeout_notices(), [])
 
     def test_keyboard_and_second_text(self):
         keyboard = timeout_notice_keyboard("FDPdotabot")

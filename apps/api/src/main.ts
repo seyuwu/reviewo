@@ -64,7 +64,12 @@ async function bootstrap(): Promise<void> {
     });
   }
 
-  await app.listen(port);
+  const bindHost = process.env["API_BIND_HOST"]?.trim();
+  if (bindHost) {
+    await app.listen(port, bindHost);
+  } else {
+    await app.listen(port);
+  }
   logger.log(`API application is running on port ${port}`, "Bootstrap");
 }
 

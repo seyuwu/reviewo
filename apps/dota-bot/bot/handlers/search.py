@@ -15,6 +15,7 @@ from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..services.party_search_queue import PartySearchQueue
+from ..services.search_timeout_notices import queue_solo_stop
 from ..services.solo_search import (
     PartyChangedDuringConfirmation,
     PartyOwnerMustResolveMembers,
@@ -578,6 +579,7 @@ async def stop_search(
             markup=getattr(message, "reply_markup", None) if message else None,
         )
         return
+    search = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}
     await begin_panel_transition(
         callback.bot,
         storage,
@@ -586,11 +588,18 @@ async def stop_search(
     )
     try:
         my_parties = await api.user(callback.from_user.id, "GET", "/social/parties/me")
+        current = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}
+        if current and current != search:
+            return
         party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
         payload = {"looking": False}
         if party:
             payload["partySlug"] = party["slug"]
-        await api.user(callback.from_user.id, "POST", "/dota/profiles/lfg/looking", payload)
+        profile = await api.user(callback.from_user.id, "POST", "/dota/profiles/lfg/looking", payload)
+        queue_solo_stop(storage, callback.from_user.id, search, profile, my_parties)
+        current = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}
+        if current and current != search:
+            return
         storage.set_choices(callback.from_user.id, "auto_search", [])
         storage.clear_search_timer(callback.from_user.id)
         storage.clear_auto_match_exclusions(callback.from_user.id)

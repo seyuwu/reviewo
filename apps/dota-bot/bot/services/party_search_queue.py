@@ -12,6 +12,7 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..storage.database import BotStorage
 from .panel import edit_panel
+from .search_timeout_notices import is_current_search, queue_recruit_stop
 from .temporary_notifications import send_temporary_notification
 
 logger = logging.getLogger(__name__)
@@ -276,6 +277,7 @@ class PartySearchQueue:
         telegram_user_id: int,
         actions: list[PartySearchAction],
     ) -> tuple[str, bool]:
+        search = self.storage.get_choice(telegram_user_id, "auto_search", 0) or {}
         response = await self.api.user(
             telegram_user_id, "GET", "/social/parties/me"
         )
@@ -354,8 +356,21 @@ class PartySearchQueue:
                     self.storage.record_search_started(telegram_user_id)
                     self.storage.clear_auto_match_exclusions(telegram_user_id)
             else:
-                self.storage.set_choices(telegram_user_id, "auto_search", [])
-                self.storage.clear_search_timer(telegram_user_id)
+                if is_current_search(self.storage, telegram_user_id, search):
+                    # Refresh only after a successful stop: the shared matcher
+                    # may have filled the last slot while the request was pending.
+                    try:
+                        memberships = await self.api.user(
+                            telegram_user_id, "GET", "/social/parties/me"
+                        )
+                        stopped_party = memberships.get("party") or (memberships.get("parties") or [None])[-1]
+                        if stopped_party:
+                            queue_recruit_stop(self.storage, telegram_user_id, search, stopped_party)
+                    except ApiError:
+                        logger.info("Could not check stopped recruitment for user %s", telegram_user_id)
+                if (self.storage.get_choice(telegram_user_id, "auto_search", 0) or {}) == search:
+                    self.storage.set_choices(telegram_user_id, "auto_search", [])
+                    self.storage.clear_search_timer(telegram_user_id)
             self.match_wakeup.set()
             return "party", bool(roles) and not was_searching
 

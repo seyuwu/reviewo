@@ -505,7 +505,7 @@ async def maybe_send_long_search_reminder(
             logger.warning("Cannot build bot invitation without a Telegram username")
             return
 
-        invite_url = bot_friend_invite_url(me.username)
+        invite_url = bot_friend_invite_url(me.username, storage.referral_code(telegram_user_id))
         invitation_text = (
             "🎮 Ищем пати в Dota 2? Заходи в FDP — подберём команду по ролям и MMR: "
             f"{invite_url}\n@{me.username}"
@@ -575,7 +575,7 @@ async def render_screen(
             "<b>Поиск пати Dota 2 · FDP</b>\n"
             'Официальный канал: <a href="https://t.me/FDPcommunity">@FDPcommunity</a>\n\n'
             "Найдите команду для игры или соберите свою пати. Выберите, с чего начать:",
-            home_keyboard(False, False, site_url=settings.site_url),
+            home_keyboard(False, False, site_url=settings.site_url, can_share=True),
         )
 
     async def fetch_profile() -> dict | None:
@@ -600,7 +600,7 @@ async def render_screen(
         if not profile:
             return (
                 "<b>Аккаунт привязан</b>\n\nОткройте «Аккаунт» и создайте Dota-профиль, чтобы начать поиск.",
-                home_keyboard(False, False, site_url=settings.site_url),
+                home_keyboard(False, False, site_url=settings.site_url, can_share=True),
             )
         name = escape_text(profile.get("title", "Игрок"))
         mmr = escape_text(profile.get("mmr") or "—")
@@ -631,6 +631,7 @@ async def render_screen(
             is_recruiting,
             is_looking,
             site_url=settings.site_url,
+            can_share=True,
         )
 
     if screen == "looking":
@@ -706,7 +707,7 @@ async def render_screen(
         parties = my_parties.get("parties") or []
         party = my_parties.get("party") or (parties[-1] if parties else None)
         if not party:
-            return "Вы пока не состоите в пати.", home_keyboard(True, False, site_url=settings.site_url)
+            return "Вы пока не состоите в пати.", home_keyboard(True, False, site_url=settings.site_url, can_share=True)
         text = party_text(party)
         occupants = party_slot_occupants(party)
         available_roles = {role for role in ("1", "2", "3", "4", "5") if role not in occupants}
@@ -858,7 +859,7 @@ async def render_screen(
         )
 
     return "Поиск пати Dota 2 · FDP · @FDPcommunity", home_keyboard(
-        True, False, site_url=settings.site_url
+        True, False, site_url=settings.site_url, can_share=True
     )
 
 

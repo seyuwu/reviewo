@@ -20,12 +20,14 @@ export function DotaTournamentMatchCard({
   match,
   tournamentSlug,
   onChanged,
+  onBusyChange,
   initialDetails = null,
   participantLoading = false
 }: {
   match: DotaTournamentMatchSummary;
   tournamentSlug: string;
   onChanged?: () => Promise<void>;
+  onBusyChange?: (busy: boolean) => void;
   initialDetails?: DotaTournamentMatch | null;
   participantLoading?: boolean;
 }) {
@@ -43,17 +45,21 @@ export function DotaTournamentMatchCard({
   const [winnerEntryId, setWinnerEntryId] = useState(match.entryA.id);
   const [resultEvidenceUrl, setResultEvidenceUrl] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
+  const [playersReady, setPlayersReady] = useState(false);
+  const [serverNowMs, setServerNowMs] = useState(() => Date.parse(match.serverNow));
 
   async function updateDetails(action: () => Promise<DotaTournamentMatch>) {
+    onBusyChange?.(true);
     setBusy(true);
     setError(null);
     try {
       setDetails(await action());
       await onChanged?.();
     } catch {
-      setError(t("dota.tournaments.matchAccessDenied"));
+      setError(t("dota.tournaments.matchActionError"));
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
     }
   }
 
@@ -105,6 +111,24 @@ export function DotaTournamentMatchCard({
   }
 
   const current = details ?? match;
+  useEffect(() => {
+    const receivedAt = performance.now();
+    const serverTime = Date.parse(current.serverNow);
+    const tick = () => setServerNowMs(serverTime + performance.now() - receivedAt);
+    tick();
+    if (current.status !== "SPECTATOR_ADMISSION") return;
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [current.serverNow, current.status]);
+  useEffect(() => {
+    setPlayersReady(false);
+  }, [current.id, current.status]);
+  const spectatorSeconds = current.spectatorAdmissionEndsAt
+    ? Math.max(0, Math.ceil((Date.parse(current.spectatorAdmissionEndsAt) - serverNowMs) / 1000))
+    : 0;
+  const spectatorCountdown = `${Math.floor(spectatorSeconds / 60)
+    .toString()
+    .padStart(2, "0")}:${(spectatorSeconds % 60).toString().padStart(2, "0")}`;
   const statusLabel = t(`dota.tournaments.matchStatus.${current.status}` as never);
   const winnerName =
     current.winnerEntryId === current.entryA.id
@@ -113,7 +137,9 @@ export function DotaTournamentMatchCard({
         ? current.entryB.teamName
         : null;
   const canConfirmLobby =
-    details?.status === "LOBBY_CONFIRMATION" && details.viewerSide !== details.hostSide;
+    details?.status === "LOBBY_CONFIRMATION" &&
+    details.canConfirmLobby &&
+    !(details.viewerSide === "A" ? details.captainAReadyAt : details.captainBReadyAt);
   const canConfirmResult =
     details?.status === "RESULT_CONFIRMATION" && details.viewerSide !== details.resultReporterSide;
 
@@ -164,7 +190,40 @@ export function DotaTournamentMatchCard({
       {winnerName ? (
         <strong>{t("dota.tournaments.matchWinnerLabel", { team: winnerName })}</strong>
       ) : null}
-      {current.status !== "COMPLETED" && current.status !== "CANCELLED" ? (
+      {current.status === "LOBBY_CONFIRMATION" ? (
+        <div className={styles.readiness}>
+          <p>{t("dota.tournaments.matchReadinessTitle")}</p>
+          {(["A", "B"] as const).map((side) => (
+            <span key={side}>
+              {side === "A" ? current.entryA.teamName : current.entryB.teamName}:{" "}
+              {t(
+                (side === "A" ? current.captainAReadyAt : current.captainBReadyAt)
+                  ? "dota.tournaments.matchCaptainReady"
+                  : "dota.tournaments.matchCaptainPending"
+              )}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {current.status === "SPECTATOR_ADMISSION" ? (
+        <div className={styles.spectatorAdmission}>
+          <div>
+            <strong>{t("dota.tournaments.matchStatus.SPECTATOR_ADMISSION")}</strong>
+            <p>{t("dota.tournaments.matchSpectatorHint")}</p>
+          </div>
+          <strong
+            className={styles.countdown}
+            role="timer"
+            aria-label={t("dota.tournaments.matchSpectatorCountdown")}
+          >
+            {spectatorCountdown}
+          </strong>
+          {details?.canManageLobby ? <p>{t("dota.tournaments.matchSpectatorHostHint")}</p> : null}
+        </div>
+      ) : null}
+      {current.status !== "COMPLETED" &&
+      current.status !== "CANCELLED" &&
+      current.status !== "SPECTATOR_ADMISSION" ? (
         <p className={styles.deadline}>
           {t("dota.tournaments.matchDeadline", {
             date: formatDate(
@@ -262,9 +321,18 @@ export function DotaTournamentMatchCard({
           ) : null}
           {details.status === "LOBBY_CONFIRMATION" && canConfirmLobby ? (
             <>
+              <label className={styles.readyCheckbox}>
+                <input
+                  type="checkbox"
+                  checked={playersReady}
+                  disabled={busy}
+                  onChange={(event) => setPlayersReady(event.target.checked)}
+                />
+                {t("dota.tournaments.matchPlayersReadyCheck")}
+              </label>
               <button
                 className="button-primary"
-                disabled={busy}
+                disabled={busy || !playersReady}
                 onClick={() =>
                   void updateDetails(() =>
                     confirmDotaTournamentLobby(tournamentSlug, match.id, authSession!.accessToken)
@@ -274,22 +342,22 @@ export function DotaTournamentMatchCard({
               >
                 {t("dota.tournaments.matchConfirmLobby")}
               </button>
-              <DisputeForm
-                value={disputeReason}
-                onChange={setDisputeReason}
-                onSubmit={() => void dispute()}
-                disabled={busy}
-                t={t}
-              />
             </>
           ) : null}
           {details.status === "LOBBY_CONFIRMATION" && !canConfirmLobby ? (
-            <p>{t("dota.tournaments.matchWaitOpponent")}</p>
+            <p>
+              {t(
+                details.canConfirmLobby
+                  ? "dota.tournaments.matchWaitOpponent"
+                  : "dota.tournaments.matchWaitCaptains"
+              )}
+            </p>
           ) : null}
-          {details.status === "READY" && details.canManageLobby ? (
+          {(details.status === "READY" || details.status === "SPECTATOR_ADMISSION") &&
+          details.canManageLobby ? (
             <button
               className="button-primary"
-              disabled={busy}
+              disabled={busy || (details.status === "SPECTATOR_ADMISSION" && spectatorSeconds > 0)}
               onClick={() =>
                 void updateDetails(() =>
                   startDotaTournamentMatch(tournamentSlug, match.id, authSession!.accessToken)
@@ -297,11 +365,22 @@ export function DotaTournamentMatchCard({
               }
               type="button"
             >
-              {t("dota.tournaments.matchStart")}
+              {details.status === "SPECTATOR_ADMISSION" && spectatorSeconds > 0
+                ? t("dota.tournaments.matchStartAfterSpectators", { time: spectatorCountdown })
+                : t("dota.tournaments.matchStart")}
             </button>
           ) : null}
           {details.status === "READY" && !details.canManageLobby ? (
             <p>{t("dota.tournaments.matchWaitHost")}</p>
+          ) : null}
+          {["LOBBY_CONFIRMATION", "SPECTATOR_ADMISSION", "READY"].includes(details.status) ? (
+            <DisputeForm
+              value={disputeReason}
+              onChange={setDisputeReason}
+              onSubmit={() => void dispute()}
+              disabled={busy}
+              t={t}
+            />
           ) : null}
           {details.status === "IN_PROGRESS" ? (
             <form className={styles.actionForm} onSubmit={(event) => void submitResult(event)}>

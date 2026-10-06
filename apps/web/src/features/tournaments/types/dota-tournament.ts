@@ -75,6 +75,10 @@ export interface DotaTournamentMatchSummary {
   allowSpectators: boolean;
   cheatsEnabled: boolean;
   confirmationDeadlineAt: string | null;
+  captainAReadyAt: string | null;
+  captainBReadyAt: string | null;
+  spectatorAdmissionEndsAt: string | null;
+  serverNow: string;
   entryA: { id: string; teamName: string };
   entryB: { id: string; teamName: string };
   gameMode: string;
@@ -90,6 +94,7 @@ export interface DotaTournamentMatchSummary {
   status:
     | "SCHEDULED"
     | "LOBBY_CONFIRMATION"
+    | "SPECTATOR_ADMISSION"
     | "READY"
     | "IN_PROGRESS"
     | "RESULT_CONFIRMATION"
@@ -101,6 +106,7 @@ export interface DotaTournamentMatchSummary {
 }
 
 export interface DotaTournamentMatch extends DotaTournamentMatchSummary {
+  canConfirmLobby: boolean;
   canManageLobby: boolean;
   disputeReason: string | null;
   lobbyName: string | null;

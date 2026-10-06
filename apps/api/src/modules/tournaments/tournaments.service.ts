@@ -17,6 +17,7 @@ import type { RegisterDotaTournamentTeamDto } from "./dto/register-dota-tourname
 import type { CreateDotaTournamentSquadDto } from "./dto/create-dota-tournament-squad.dto.js";
 import type { JoinDotaTournamentEntryDto } from "./dto/join-dota-tournament-entry.dto.js";
 import type {
+  ConfirmDotaTournamentLobbyDto,
   CreateDotaTournamentMatchDto,
   DisputeDotaTournamentMatchDto,
   ResolveDotaTournamentMatchDto,
@@ -37,6 +38,7 @@ const PUBLIC_TOURNAMENT_STATUSES: DotaTournamentStatus[] = [
 
 const LOBBY_SETUP_GRACE_MS = 15 * 60 * 1000;
 const LOBBY_CONFIRMATION_MS = 5 * 60 * 1000;
+const SPECTATOR_ADMISSION_MS = 2 * 60 * 1000;
 const MATCH_RESULT_CONFIRMATION_MS = 10 * 60 * 1000;
 const MATCH_DURATION_LIMIT_MS = 4 * 60 * 60 * 1000;
 const MATCH_TIMEOUT_SCAN_MS = 30 * 1000;
@@ -960,6 +962,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         streamUrl: true,
         lobbyDeadlineAt: true,
         confirmationDeadlineAt: true,
+        captainAReadyAt: true,
+        captainBReadyAt: true,
+        spectatorAdmissionEndsAt: true,
         resultDeadlineAt: true,
         reportedWinnerEntryId: true,
         winnerEntryId: true,
@@ -1001,8 +1006,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     matchId: string,
     currentUser: AuthenticatedUser
   ) {
-    await this.expireOverdueMatches();
-    const match = await this.findMatchForWorkflow(tournamentSlug, matchId);
+    let match = await this.findMatchForWorkflow(tournamentSlug, matchId);
     const viewerSide = this.matchSideForUser(match, currentUser.id);
     if (!viewerSide) {
       throw createAppException({
@@ -1010,6 +1014,21 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         message: "Only players on either tournament roster can open this match",
         statusCode: HttpStatus.FORBIDDEN
       });
+    }
+    const transition = this.matchDeadlineTransition(match, new Date());
+    if (transition) {
+      await this.prismaService.dotaTournamentMatch.updateMany({
+        where: {
+          id: match.id,
+          status: match.status,
+          lobbyDeadlineAt: match.lobbyDeadlineAt,
+          confirmationDeadlineAt: match.confirmationDeadlineAt,
+          spectatorAdmissionEndsAt: match.spectatorAdmissionEndsAt,
+          resultDeadlineAt: match.resultDeadlineAt
+        },
+        data: transition
+      });
+      match = await this.findMatchForWorkflow(tournamentSlug, matchId);
     }
     return {
       ...this.toMatchSummary(match),
@@ -1022,7 +1041,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         ? this.matchSideForUser(match, match.resultReportedByUserId)
         : null,
       viewerSide,
-      canManageLobby: viewerSide === match.hostSide
+      canConfirmLobby: this.matchCaptainSideForUser(match, currentUser.id) === viewerSide,
+      canManageLobby: this.matchCaptainSideForUser(match, currentUser.id) === match.hostSide
     };
   }
 
@@ -1033,11 +1053,11 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     currentUser: AuthenticatedUser
   ) {
     const match = await this.findMatchForWorkflow(tournamentSlug, matchId);
-    const actorSide = this.matchSideForUser(match, currentUser.id);
+    const actorSide = this.matchCaptainSideForUser(match, currentUser.id);
     if (!actorSide || actorSide !== match.hostSide) {
       throw createAppException({
         code: AppErrorCode.Forbidden,
-        message: "Only a player from the assigned host team can submit lobby details",
+        message: "Only the assigned host captain can submit lobby details",
         statusCode: HttpStatus.FORBIDDEN
       });
     }
@@ -1089,40 +1109,82 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     return this.getParticipantMatch(tournamentSlug, matchId, currentUser);
   }
 
-  async confirmLobby(tournamentSlug: string, matchId: string, currentUser: AuthenticatedUser) {
-    const match = await this.findMatchForWorkflow(tournamentSlug, matchId);
-    const actorSide = this.matchSideForUser(match, currentUser.id);
-    if (!actorSide || actorSide === match.hostSide) {
-      throw createAppException({
-        code: AppErrorCode.Forbidden,
-        message: "A player from the other team must confirm the lobby",
-        statusCode: HttpStatus.FORBIDDEN
-      });
-    }
-    const now = new Date();
-    const updated = await this.prismaService.dotaTournamentMatch.updateMany({
-      data: {
-        confirmationDeadlineAt: new Date(now.getTime() + LOBBY_SETUP_GRACE_MS),
-        settingsConfirmedAt: now,
-        settingsConfirmedByUserId: currentUser.id,
-        status: "READY"
-      },
-      where: {
-        confirmationDeadlineAt: { gt: now },
-        id: match.id,
-        status: "LOBBY_CONFIRMATION"
+  async confirmLobby(
+    tournamentSlug: string,
+    matchId: string,
+    input: ConfirmDotaTournamentLobbyDto,
+    currentUser: AuthenticatedUser
+  ) {
+    if (input.playersReady !== true)
+      throw this.matchConflict("Confirm that all five players are in the lobby");
+    await this.prismaService.$transaction(async (tx) => {
+      // Serialize the two captains and duplicate clicks on this match only.
+      await tx.$queryRaw`SELECT id FROM social.dota_tournament_matches WHERE id = ${matchId}::uuid FOR UPDATE`;
+      const match = await this.findMatchForWorkflow(tournamentSlug, matchId, tx);
+      const actorSide = this.matchCaptainSideForUser(match, currentUser.id);
+      if (!actorSide) {
+        throw createAppException({
+          code: AppErrorCode.Forbidden,
+          message: "Only the team captains can confirm lobby settings and player readiness",
+          statusCode: HttpStatus.FORBIDDEN
+        });
       }
+      const ownReadyAt = actorSide === "A" ? match.captainAReadyAt : match.captainBReadyAt;
+      if (
+        ownReadyAt &&
+        ["LOBBY_CONFIRMATION", "SPECTATOR_ADMISSION", "READY"].includes(match.status)
+      )
+        return;
+      const now = new Date();
+      if (
+        match.status !== "LOBBY_CONFIRMATION" ||
+        !match.confirmationDeadlineAt ||
+        match.confirmationDeadlineAt <= now
+      ) {
+        throw this.matchConflict("Lobby confirmation is no longer available");
+      }
+      if (
+        [match.entryA, match.entryB].some(
+          (entry) =>
+            entry.members.length !== 5 ||
+            new Set(entry.members.map((member) => member.positionRole)).size !== 5 ||
+            entry.members.some(
+              (member) => !TOURNAMENT_ROLES.some((role) => role === member.positionRole)
+            )
+        )
+      )
+        throw this.matchConflict("Both teams must have five players on distinct roles");
+      const bothReady = !!(actorSide === "A" ? match.captainBReadyAt : match.captainAReadyAt);
+      const admissionEndsAt =
+        bothReady && match.allowSpectators
+          ? new Date(now.getTime() + SPECTATOR_ADMISSION_MS)
+          : null;
+      const updated = await tx.dotaTournamentMatch.updateMany({
+        where: { id: match.id, status: "LOBBY_CONFIRMATION", confirmationDeadlineAt: { gt: now } },
+        data: {
+          ...(actorSide === "A" ? { captainAReadyAt: now } : { captainBReadyAt: now }),
+          ...(bothReady
+            ? {
+                confirmationDeadlineAt: new Date(
+                  (admissionEndsAt ?? now).getTime() + LOBBY_SETUP_GRACE_MS
+                ),
+                settingsConfirmedAt: now,
+                settingsConfirmedByUserId: currentUser.id,
+                spectatorAdmissionEndsAt: admissionEndsAt,
+                status: admissionEndsAt ? "SPECTATOR_ADMISSION" : "READY"
+              }
+            : {})
+        }
+      });
+      if (updated.count !== 1)
+        throw this.matchConflict("Lobby confirmation is no longer available");
     });
-    if (updated.count !== 1) {
-      await this.expireOverdueMatches();
-      throw this.matchConflict("Lobby confirmation is no longer available");
-    }
     return this.getParticipantMatch(tournamentSlug, matchId, currentUser);
   }
 
   async startMatch(tournamentSlug: string, matchId: string, currentUser: AuthenticatedUser) {
     const match = await this.findMatchForWorkflow(tournamentSlug, matchId);
-    const actorSide = this.matchSideForUser(match, currentUser.id);
+    const actorSide = this.matchCaptainSideForUser(match, currentUser.id);
     if (!actorSide || actorSide !== match.hostSide) {
       throw createAppException({
         code: AppErrorCode.Forbidden,
@@ -1140,7 +1202,10 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       where: {
         confirmationDeadlineAt: { gt: now },
         id: match.id,
-        status: "READY"
+        status: { in: ["READY", "SPECTATOR_ADMISSION"] },
+        captainAReadyAt: { not: null },
+        captainBReadyAt: { not: null },
+        OR: [{ spectatorAdmissionEndsAt: null }, { spectatorAdmissionEndsAt: { lte: now } }]
       }
     });
     if (updated.count !== 1) throw this.matchConflict("The match is not ready to start");
@@ -1250,7 +1315,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     const reporterSide = match.resultReportedByUserId
       ? this.matchSideForUser(match, match.resultReportedByUserId)
       : null;
-    const mayDisputeLobby = match.status === "LOBBY_CONFIRMATION" && actorSide !== match.hostSide;
+    const mayDisputeLobby = ["LOBBY_CONFIRMATION", "SPECTATOR_ADMISSION", "READY"].includes(
+      match.status
+    );
     const mayDisputeResult = match.status === "RESULT_CONFIRMATION" && actorSide !== reporterSide;
     if (!actorSide || (!mayDisputeLobby && !mayDisputeResult)) {
       throw createAppException({
@@ -1335,6 +1402,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           scheduledAt: now,
           settingsConfirmedAt: null,
           settingsConfirmedByUserId: null,
+          captainAReadyAt: null,
+          captainBReadyAt: null,
+          spectatorAdmissionEndsAt: null,
           startedAt: null,
           status: "SCHEDULED",
           winnerEntryId: null
@@ -1714,8 +1784,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         statusCode: HttpStatus.NOT_FOUND
       });
     }
-    const nextSlug =
-      input.slug === undefined ? current.slug : this.slugify(input.slug) || current.slug;
+    const nextSlug = input.slug == null ? current.slug : this.slugify(input.slug) || current.slug;
     if (nextSlug !== current.slug) {
       const collision = await this.prismaService.dotaTournament.findUnique({
         where: { slug: nextSlug }
@@ -1737,6 +1806,36 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           message: "Tournament was not found",
           statusCode: HttpStatus.NOT_FOUND
         });
+      }
+      const configurationFields = [
+        "automaticBracket",
+        "title",
+        "slug",
+        "description",
+        "format",
+        "rulesUrl",
+        "startsAt",
+        "registrationClosesAt",
+        "maxTeams",
+        "gameMode",
+        "serverRegion",
+        "allowSpectators",
+        "cheatsEnabled"
+      ] as const;
+      const changesConfiguration = configurationFields.some((field) => input[field] !== undefined);
+      const hasStartedMatch = await tx.dotaTournamentMatch.count({
+        where: {
+          tournamentId: latest.id,
+          status: { notIn: ["SCHEDULED", "CANCELLED"] }
+        }
+      });
+      if (
+        changesConfiguration &&
+        (Boolean(latest.bracketGeneratedAt) ||
+          ["IN_PROGRESS", "COMPLETED", "CANCELLED"].includes(latest.status) ||
+          hasStartedMatch > 0)
+      ) {
+        throw this.matchConflict("Параметры турнира можно менять только до его старта");
       }
       if (
         latest.bracketGeneratedAt &&
@@ -1763,6 +1862,16 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       ) {
         throw this.matchConflict("В турнире уже есть ручные матчи: режим сетки менять нельзя");
       }
+      if (input.maxTeams !== undefined && input.maxTeams !== null) {
+        const registeredTeams = await tx.dotaTournamentEntry.count({
+          where: { status: "REGISTERED", tournamentId: latest.id }
+        });
+        if (input.maxTeams < registeredTeams) {
+          throw this.matchConflict(
+            `Лимит команд не может быть меньше уже зарегистрированного состава (${registeredTeams})`
+          );
+        }
+      }
       if (automaticBracket && input.status === "COMPLETED" && !latest.bracketGeneratedAt) {
         throw this.matchConflict("Завершите матчи сетки перед завершением турнира");
       }
@@ -1772,7 +1881,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           description: input.description?.trim() ?? latest.description,
           allowSpectators: input.allowSpectators ?? latest.allowSpectators,
           cheatsEnabled: input.cheatsEnabled ?? latest.cheatsEnabled,
-          format: input.format === undefined ? latest.format : input.format.trim() || null,
+          format: input.format === undefined ? latest.format : input.format?.trim() || null,
           gameMode: input.gameMode ?? latest.gameMode,
           maxTeams: input.maxTeams === undefined ? latest.maxTeams : input.maxTeams,
           registrationClosesAt:
@@ -1795,6 +1904,22 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         },
         where: { id: current.id }
       });
+      if (
+        input.gameMode !== undefined ||
+        input.serverRegion !== undefined ||
+        input.allowSpectators !== undefined ||
+        input.cheatsEnabled !== undefined
+      ) {
+        await tx.dotaTournamentMatch.updateMany({
+          where: { tournamentId: latest.id, status: "SCHEDULED" },
+          data: {
+            allowSpectators: result.allowSpectators,
+            cheatsEnabled: result.cheatsEnabled,
+            gameMode: result.gameMode,
+            serverRegion: result.serverRegion
+          }
+        });
+      }
       if (automaticBracket && result.status === "IN_PROGRESS") {
         await this.bracketService.startLocked(tx, current.id);
         return tx.dotaTournament.findUniqueOrThrow({ where: { id: current.id } });
@@ -1810,18 +1935,22 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     return this.toTournamentSummary(updated);
   }
 
-  private async findMatchForWorkflow(tournamentSlug: string, matchId: string) {
-    const match = await this.prismaService.dotaTournamentMatch.findFirst({
+  private async findMatchForWorkflow(
+    tournamentSlug: string,
+    matchId: string,
+    client: PrismaService | Prisma.TransactionClient = this.prismaService
+  ) {
+    const match = await client.dotaTournamentMatch.findFirst({
       include: {
         entryA: {
           include: {
-            members: { select: { userId: true }, where: { isActive: true } },
+            members: { select: { userId: true, positionRole: true }, where: { isActive: true } },
             teamParty: { select: { ownerUserId: true } }
           }
         },
         entryB: {
           include: {
-            members: { select: { userId: true }, where: { isActive: true } },
+            members: { select: { userId: true, positionRole: true }, where: { isActive: true } },
             teamParty: { select: { ownerUserId: true } }
           }
         },
@@ -1837,6 +1966,20 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       });
     }
     return match;
+  }
+
+  private matchCaptainSideForUser(
+    match: {
+      entryA: { createdByUserId: string | null; teamParty: { ownerUserId: string } | null };
+      entryB: { createdByUserId: string | null; teamParty: { ownerUserId: string } | null };
+    },
+    userId: string
+  ): MatchSide | null {
+    if ((match.entryA.teamParty?.ownerUserId ?? match.entryA.createdByUserId) === userId)
+      return "A";
+    if ((match.entryB.teamParty?.ownerUserId ?? match.entryB.createdByUserId) === userId)
+      return "B";
+    return null;
   }
 
   private matchSideForUser(
@@ -1860,8 +2003,68 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     return null;
   }
 
+  private matchDeadlineTransition(
+    match: {
+      status: DotaTournamentMatchStatus;
+      lobbyDeadlineAt: Date;
+      confirmationDeadlineAt: Date | null;
+      spectatorAdmissionEndsAt: Date | null;
+      resultDeadlineAt: Date | null;
+    },
+    now: Date
+  ): { status: DotaTournamentMatchStatus; disputeReason?: string } | null {
+    if (match.status === "SCHEDULED" && match.lobbyDeadlineAt <= now) {
+      return {
+        status: "DISPUTED",
+        disputeReason: "Лобби не было подготовлено к установленному сроку."
+      };
+    }
+    if (
+      match.status === "LOBBY_CONFIRMATION" &&
+      match.confirmationDeadlineAt &&
+      match.confirmationDeadlineAt <= now
+    ) {
+      return {
+        status: "DISPUTED",
+        disputeReason: "Капитаны не подтвердили готовность команд в отведённое время."
+      };
+    }
+    if (
+      ["READY", "SPECTATOR_ADMISSION"].includes(match.status) &&
+      match.confirmationDeadlineAt &&
+      match.confirmationDeadlineAt <= now
+    ) {
+      return {
+        status: "DISPUTED",
+        disputeReason: "Матч не был начат после подтверждения настроек лобби."
+      };
+    }
+    if (
+      match.status === "SPECTATOR_ADMISSION" &&
+      match.spectatorAdmissionEndsAt &&
+      match.spectatorAdmissionEndsAt <= now
+    ) {
+      return { status: "READY" };
+    }
+    if (
+      ["IN_PROGRESS", "RESULT_CONFIRMATION"].includes(match.status) &&
+      match.resultDeadlineAt &&
+      match.resultDeadlineAt <= now
+    ) {
+      return {
+        status: "DISPUTED",
+        disputeReason: "Не удалось подтвердить результат матча в отведённое время."
+      };
+    }
+    return null;
+  }
+
   private async expireOverdueMatches(): Promise<void> {
     const now = new Date();
+    await this.prismaService.dotaTournamentMatch.updateMany({
+      data: { status: "READY" },
+      where: { status: "SPECTATOR_ADMISSION", spectatorAdmissionEndsAt: { lte: now } }
+    });
     await this.prismaService.dotaTournamentMatch.updateMany({
       data: {
         disputeReason: "Лобби не было подготовлено к установленному сроку.",
@@ -1871,7 +2074,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     });
     await this.prismaService.dotaTournamentMatch.updateMany({
       data: {
-        disputeReason: "Соперник не подтвердил настройки лобби в отведённое время.",
+        disputeReason: "Капитаны не подтвердили готовность команд в отведённое время.",
         status: "DISPUTED"
       },
       where: {
@@ -1924,6 +2127,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     streamUrl: string | null;
     lobbyDeadlineAt: Date;
     confirmationDeadlineAt: Date | null;
+    captainAReadyAt: Date | null;
+    captainBReadyAt: Date | null;
+    spectatorAdmissionEndsAt: Date | null;
     resultDeadlineAt: Date | null;
     reportedWinnerEntryId: string | null;
     winnerEntryId: string | null;
@@ -1935,6 +2141,10 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       allowSpectators: match.allowSpectators,
       cheatsEnabled: match.cheatsEnabled,
       confirmationDeadlineAt: match.confirmationDeadlineAt?.toISOString() ?? null,
+      captainAReadyAt: match.captainAReadyAt?.toISOString() ?? null,
+      captainBReadyAt: match.captainBReadyAt?.toISOString() ?? null,
+      spectatorAdmissionEndsAt: match.spectatorAdmissionEndsAt?.toISOString() ?? null,
+      serverNow: new Date().toISOString(),
       entryA: { id: match.entryA.id, teamName: match.entryA.teamNameSnapshot },
       entryB: { id: match.entryB.id, teamName: match.entryB.teamNameSnapshot },
       gameMode: match.gameMode,
@@ -1947,7 +2157,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       roundNumber: match.roundNumber,
       scheduledAt: match.scheduledAt.toISOString(),
       serverRegion: match.serverRegion,
-      status: match.status,
+      status: this.matchDeadlineTransition(match, new Date())?.status ?? match.status,
       streamUrl: match.streamUrl,
       winnerEntryId: match.winnerEntryId
     };

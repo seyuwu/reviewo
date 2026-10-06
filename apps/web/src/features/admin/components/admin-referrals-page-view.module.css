@@ -1,0 +1,88 @@
+.filters,
+.section {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1.25rem;
+}
+.dateForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: end;
+}
+.dateForm label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+.dateForm input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.75rem;
+  color: var(--color-text);
+  font: inherit;
+  padding: 0.7rem;
+  min-height: 44px;
+  max-width: 100%;
+}
+.dateForm button,
+.pager button {
+  min-height: 44px;
+}
+.sectionHeading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.stat {
+  padding: 1.25rem;
+}
+.stat strong {
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+}
+.number {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.telegram {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--color-accent);
+  overflow-wrap: anywhere;
+}
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  align-items: center;
+}
+.empty {
+  padding: 2rem 0.5rem;
+  text-align: center;
+}
+.error {
+  color: var(--color-danger, #e5484d);
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (max-width: 600px) {
+  .dateForm label {
+    width: 100%;
+  }
+  .dateForm button {
+    flex: 1;
+  }
+  .sectionHeading {
+    align-items: flex-start;
+  }
+}

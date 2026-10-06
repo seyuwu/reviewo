@@ -9,6 +9,7 @@ def home_keyboard(
     is_recruiting: bool = False,
     is_looking: bool = False,
     site_url: str = "https://dota.opinia.ru",
+    can_share: bool = False,
 ) -> InlineKeyboardMarkup:
     first_label = "🔎 Ищу пати" if is_looking else "🎯 Ищу пати"
     first_action = "panel:looking" if is_looking else "search:looking"
@@ -22,6 +23,8 @@ def home_keyboard(
     if tournaments_url == "https://dota.opinia.ru":
         tournaments_url = "https://games.opinia.ru"
     rows.append([button_url("🏆 Турниры", f"{tournaments_url}/games/tournaments")])
+    if can_share:
+        rows.append([button("🔗 Пригласить друзей", "invite:friends")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -43,22 +46,36 @@ def admin_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def admin_compose_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[button("← Отмена", "admin:cancel")]]
-    )
+def admin_compose_keyboard(back_to_preview: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if back_to_preview:
+        rows.append([button("← К предпросмотру", "admin:broadcast:preview")])
+    rows.append([button("← Отмена", "admin:cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def admin_preview_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [button("📨 Отправить всем", "admin:broadcast:send")],
-            [button("🧪 Отправить тест себе", "admin:broadcast:test")],
-            [button("✏️ Изменить текст", "admin:broadcast:edit")],
-            [button("⏱ Изменить срок удаления", "admin:broadcast:duration")],
-            [button("← Отмена", "admin:cancel")],
-        ]
-    )
+def admin_preview_keyboard(has_photo: bool = False, page: int = 0, page_count: int = 1) -> InlineKeyboardMarkup:
+    rows = []
+    navigation = []
+    if page > 0:
+        navigation.append(button("← Текст", f"admin:broadcast:page:{page - 1}"))
+    if page + 1 < page_count:
+        navigation.append(button("Текст →", f"admin:broadcast:page:{page + 1}"))
+    if navigation:
+        rows.append(navigation)
+    rows.extend([
+        [button("📨 Отправить всем", "admin:broadcast:send")],
+        [button("🧪 Отправить тест себе", "admin:broadcast:test")],
+        [button("✏️ Изменить текст", "admin:broadcast:edit")],
+        [button("🖼 Заменить картинку" if has_photo else "🖼 Добавить картинку", "admin:broadcast:photo")],
+    ])
+    if has_photo:
+        rows.append([button("✖ Убрать картинку", "admin:broadcast:photo:remove")])
+    rows.extend([
+        [button("⏱ Изменить срок удаления", "admin:broadcast:duration")],
+        [button("← Отмена", "admin:cancel")],
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_broadcast_duration_keyboard() -> InlineKeyboardMarkup:
@@ -69,6 +86,13 @@ def admin_broadcast_duration_keyboard() -> InlineKeyboardMarkup:
             [button("24 часа", "admin:broadcast:ttl:86400"), button("Своё время", "admin:broadcast:ttl:custom")],
             [button("← Отмена", "admin:cancel")],
         ]
+    )
+
+
+def broadcast_delete_keyboard(campaign_id: int | None = None) -> InlineKeyboardMarkup:
+    callback_data = f"broadcast:delete:{campaign_id}" if campaign_id is not None else "broadcast:delete:test"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[button("🗑 Удалить это сообщение", callback_data)]]
     )
 
 

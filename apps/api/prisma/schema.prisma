@@ -1143,6 +1143,7 @@ enum DotaTournamentEntryRequestStatus {
 enum DotaTournamentMatchStatus {
   SCHEDULED
   LOBBY_CONFIRMATION
+  SPECTATOR_ADMISSION
   READY
   IN_PROGRESS
   RESULT_CONFIRMATION
@@ -1303,6 +1304,9 @@ model DotaTournamentMatch {
   lobbySubmittedAt           DateTime?                 @map("lobby_submitted_at") @db.Timestamptz(6)
   settingsConfirmedByUserId  String?                   @map("settings_confirmed_by_user_id") @db.Uuid
   settingsConfirmedAt        DateTime?                 @map("settings_confirmed_at") @db.Timestamptz(6)
+  captainAReadyAt             DateTime?                 @map("captain_a_ready_at") @db.Timestamptz(6)
+  captainBReadyAt             DateTime?                 @map("captain_b_ready_at") @db.Timestamptz(6)
+  spectatorAdmissionEndsAt    DateTime?                 @map("spectator_admission_ends_at") @db.Timestamptz(6)
   startedAt                  DateTime?                 @map("started_at") @db.Timestamptz(6)
   reportedWinnerEntryId      String?                   @map("reported_winner_entry_id") @db.Uuid
   resultReportedByUserId     String?                   @map("result_reported_by_user_id") @db.Uuid
@@ -1330,6 +1334,7 @@ model DotaTournamentMatch {
   @@index([tournamentId, scheduledAt])
   @@index([status, lobbyDeadlineAt])
   @@index([status, confirmationDeadlineAt])
+  @@index([status, spectatorAdmissionEndsAt])
   @@index([status, resultDeadlineAt])
   @@map("dota_tournament_matches")
   @@schema("social")
@@ -1567,6 +1572,28 @@ model GamesLaunchDevNoteLike {
 
   @@map("games_launch_dev_note_likes")
   @@schema("social")
+}
+
+/// First bot starts through personal invitation links; visible only to administrators.
+model FdpReferral {
+  inviteeTelegramId String @id @map("invitee_telegram_id") @db.VarChar(20)
+  inviterTelegramId String @map("inviter_telegram_id") @db.VarChar(20)
+  code String @db.VarChar(24)
+  inviterName String @map("inviter_name") @db.VarChar(128)
+  inviterUsername String? @map("inviter_username") @db.VarChar(32)
+  inviteeName String @map("invitee_name") @db.VarChar(128)
+  inviteeUsername String? @map("invitee_username") @db.VarChar(32)
+  startedAt DateTime @map("started_at") @db.Timestamptz(6)
+  accountCreatedAt DateTime? @map("account_created_at") @db.Timestamptz(6)
+  accountReadyAt DateTime? @map("account_ready_at") @db.Timestamptz(6)
+  searchStartedAt DateTime? @map("search_started_at") @db.Timestamptz(6)
+  partyJoinedAt DateTime? @map("party_joined_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([startedAt])
+  @@index([inviterTelegramId, startedAt])
+  @@map("fdp_referrals")
+  @@schema("community")
 }
 
 /// Aggregated product analytics (no raw event stream — counters only).

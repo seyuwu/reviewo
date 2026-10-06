@@ -6,11 +6,14 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, MessageEntity
+from aiogram.utils.text_decorations import html_decoration
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.callbacks import acknowledge_callback
+from ..services.broadcast_content import broadcast_preview_pages, normalize_broadcast_entities, validate_broadcast_content
+from ..services.broadcasts import send_broadcast_message
 from ..services.broadcast_duration import (
     BROADCAST_TTL_PRESETS,
     format_broadcast_duration,
@@ -33,6 +36,7 @@ _broadcast_send_locks: dict[int, asyncio.Lock] = {}
 
 class BroadcastDraft(StatesGroup):
     composing = State()
+    choosing_photo = State()
     choosing_duration = State()
     custom_duration = State()
     preview = State()
@@ -50,6 +54,7 @@ def _last_broadcast_text(summary: dict | None) -> str:
         f"Последняя рассылка #{summary['id']}: "
         f"{status_names.get(summary['status'], summary['status'])} · "
         f"доставлено {summary['sent']}/{summary['total']} · очередь {summary['pending']} · "
+        f"нажали «Удалить» {summary['delete_clicks']} · "
         f"пропущено {summary['skipped']} · блокировки {summary['blocked']} · ошибки {summary['failed']}"
     )
 
@@ -140,17 +145,20 @@ async def show_admin_panel(
     )
 
 
-def _preview_text(text: str, storage: BotStorage, ttl_seconds: int) -> str:
-    excerpt = escape(text[:120])
-    if len(text) > 120:
-        excerpt += "…"
+def _preview_text(
+    text: str, storage: BotStorage, ttl_seconds: int, has_photo: bool = False,
+    *, preview_body: str | None = None, page: int = 0, page_count: int = 1,
+) -> str:
     recipients = storage.bot_user_stats()["subscribers"]
+    page_label = f"Страница {page + 1} из {page_count}\n" if page_count > 1 else ""
     return (
         f"<b>Предпросмотр рассылки</b>\n\n"
-        f"Получателей: <b>{recipients}</b> · символов: <b>{len(text)}</b>\n\n"
-        f"Удаление: через <b>{format_broadcast_duration(ttl_seconds)}</b> после доставки каждому получателю.\n\n"
-        f"{excerpt}\n\n"
-        "Можно отправить полный тест себе, затем подтвердить рассылку."
+        f"Формат: {'фото с подписью' if has_photo and text else 'фото' if has_photo else 'текст'} · "
+        f"получателей: <b>{recipients}</b>\n"
+        f"Символов: <b>{len(text)}</b> · удаление через <b>{format_broadcast_duration(ttl_seconds)}</b>\n"
+        f"{page_label}\n"
+        f"{preview_body if preview_body is not None else escape(text) or 'Без подписи'}\n\n"
+        "Тест себе покажет сообщение без служебных строк."
     )
 
 
@@ -159,7 +167,12 @@ async def _get_draft_text(settings: Settings, state: FSMContext, telegram_user_i
         return None
     data = await state.get_data()
     value = data.get("broadcast_text")
-    return str(value) if isinstance(value, str) and value.strip() else None
+    try:
+        validate_broadcast_content(value, data.get("broadcast_photo_file_id"))
+        normalize_broadcast_entities(value, data.get("broadcast_entities"))
+    except ValueError:
+        return None
+    return value
 
 
 async def _get_draft_duration(state: FSMContext) -> int | None:
@@ -179,15 +192,23 @@ async def show_duration_picker(bot, api, settings, storage, state, user_id, chat
     )
 
 
-async def show_broadcast_preview(bot, api, settings, storage, state, user_id, chat_id) -> None:
+async def show_broadcast_preview(bot, api, settings, storage, state, user_id, chat_id, page: int = 0) -> None:
     text = await _get_draft_text(settings, state, user_id)
     ttl_seconds = await _get_draft_duration(state)
     if text is None or ttl_seconds is None:
         return
     await state.set_state(BroadcastDraft.preview)
+    data = await state.get_data()
+    photo_file_id = data.get("broadcast_photo_file_id")
+    pages = broadcast_preview_pages(text, data.get("broadcast_entities"))
+    page = max(0, min(page, len(pages) - 1))
+    chunk, entities = pages[page]
+    preview_body = html_decoration.unparse(chunk, [MessageEntity.model_validate(value) for value in entities]) or "Без подписи"
     await edit_panel_content(
         bot, storage, api, settings, user_id, "admin:broadcast:preview",
-        _preview_text(text, storage, ttl_seconds), admin_preview_keyboard(), chat_id,
+        _preview_text(text, storage, ttl_seconds, bool(photo_file_id), preview_body=preview_body, page=page, page_count=len(pages)),
+        admin_preview_keyboard(bool(photo_file_id), page, len(pages)), chat_id,
+        media_photo=photo_file_id,
     )
 
 
@@ -251,13 +272,17 @@ async def admin_action(
             settings,
             callback.from_user.id,
             "admin:broadcast:compose",
-            "<b>Новая рассылка</b>\n\nНапиши текст объявления. Затем выбери срок удаления. "
+            "<b>Новая рассылка</b>\n\nОтправь текст объявления или одну картинку с подписью. "
+            "Подпись к картинке — до 1024 символов, обычный текст — до 4096. Затем выбери срок удаления. "
+            "Можно использовать форматирование Telegram: жирный текст, курсив, ссылки и спойлеры. "
             "Сообщение получат пользователи, которые запускали бота и не заблокировали его.",
             admin_compose_keyboard(),
             chat_id,
         )
         return
     if action == "broadcast:edit":
+        if await _get_draft_text(settings, state, callback.from_user.id) is None:
+            return
         data = await state.get_data()
         await state.set_state(BroadcastDraft.composing)
         await edit_panel_content(
@@ -267,7 +292,8 @@ async def admin_action(
             settings,
             callback.from_user.id,
             "admin:broadcast:compose",
-            "<b>Изменить рассылку</b>\n\nОтправь новый текст объявления.",
+            "<b>Изменить рассылку</b>\n\nОтправь новый текст. Если в рассылке есть картинка, "
+            "он станет подписью к ней (до 1024 символов). Можно отправить новую картинку с подписью.",
             admin_compose_keyboard(),
             chat_id,
         )
@@ -275,6 +301,40 @@ async def admin_action(
             broadcast_text=data.get("broadcast_text"),
             broadcast_ttl_seconds=data.get("broadcast_ttl_seconds"),
         )
+        return
+    if action == "broadcast:preview":
+        await show_broadcast_preview(callback.bot, api, settings, storage, state, callback.from_user.id, chat_id)
+        return
+    if action.startswith("broadcast:page:"):
+        value = action.removeprefix("broadcast:page:")
+        if value.isdecimal() and await state.get_state() == BroadcastDraft.preview.state:
+            await show_broadcast_preview(callback.bot, api, settings, storage, state, callback.from_user.id, chat_id, int(value))
+        return
+    if action == "broadcast:photo":
+        if await _get_draft_text(settings, state, callback.from_user.id) is None:
+            return
+        await state.set_state(BroadcastDraft.choosing_photo)
+        await edit_panel_content(
+            callback.bot, storage, api, settings, callback.from_user.id, "admin:broadcast:compose",
+            "<b>Картинка для рассылки</b>\n\nОтправь одну картинку как фото. "
+            "Добавь подпись, чтобы заменить текст; без подписи сохранится текущий текст. "
+            "Подпись — до 1024 символов.",
+            admin_compose_keyboard(back_to_preview=True), chat_id,
+        )
+        return
+    if action == "broadcast:photo:remove":
+        if await _get_draft_text(settings, state, callback.from_user.id) is None:
+            return
+        await state.update_data(broadcast_photo_file_id=None)
+        if await _get_draft_text(settings, state, callback.from_user.id) is not None:
+            await show_broadcast_preview(callback.bot, api, settings, storage, state, callback.from_user.id, chat_id)
+        else:
+            await state.set_state(BroadcastDraft.composing)
+            await edit_panel_content(
+                callback.bot, storage, api, settings, callback.from_user.id, "admin:broadcast:compose",
+                "Картинка убрана. Отправь текст объявления или новую картинку с подписью.",
+                admin_compose_keyboard(), chat_id,
+            )
         return
     if action == "broadcast:duration":
         if await _get_draft_text(settings, state, callback.from_user.id) is not None:
@@ -302,7 +362,9 @@ async def admin_action(
         ttl_seconds = await _get_draft_duration(state)
         if text is None or ttl_seconds is None:
             return
-        test_message = await callback.bot.send_message(callback.from_user.id, text, disable_web_page_preview=True)
+        photo_file_id = (await state.get_data()).get("broadcast_photo_file_id")
+        entities = (await state.get_data()).get("broadcast_entities")
+        test_message = await send_broadcast_message(callback.bot, callback.from_user.id, text, photo_file_id, entities)
         storage.add_temporary_message(callback.from_user.id, test_message.chat.id, test_message.message_id, ttl_seconds)
         return
     if action == "broadcast:send":
@@ -312,7 +374,16 @@ async def admin_action(
             ttl_seconds = await _get_draft_duration(state)
             if text is None or ttl_seconds is None or await state.get_state() != BroadcastDraft.preview.state:
                 return
-            campaign_id, recipient_count = storage.create_broadcast(callback.from_user.id, text, ttl_seconds)
+            photo_file_id = (await state.get_data()).get("broadcast_photo_file_id")
+            entities = (await state.get_data()).get("broadcast_entities")
+            if photo_file_id or entities:
+                campaign_id, recipient_count = storage.create_broadcast(
+                    callback.from_user.id, text, ttl_seconds,
+                    **({"photo_file_id": photo_file_id} if photo_file_id else {}),
+                    **({"entities": entities} if entities else {}),
+                )
+            else:
+                campaign_id, recipient_count = storage.create_broadcast(callback.from_user.id, text, ttl_seconds)
             await state.clear()
         await show_admin_panel(
             callback.bot,
@@ -324,6 +395,47 @@ async def admin_action(
             f"Рассылка #{campaign_id} поставлена в очередь для {recipient_count} пользователей. "
             f"Удаление через {format_broadcast_duration(ttl_seconds)} после доставки.",
         )
+
+
+@router.callback_query(F.data.startswith("broadcast:delete:"))
+async def delete_broadcast_notification(
+    callback: CallbackQuery,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    message = callback.message
+    if (
+        message is None
+        or message.chat.type != "private"
+        or callback.from_user is None
+        or message.chat.id != callback.from_user.id
+    ):
+        await callback.answer("Эта кнопка доступна только получателю сообщения")
+        return
+
+    value = (callback.data or "").removeprefix("broadcast:delete:")
+    if value == "test":
+        if not is_admin(settings, callback.from_user.id):
+            await callback.answer("Нет доступа", show_alert=True)
+            return
+    elif value.isdecimal() and int(value) > 0:
+        recorded = storage.record_broadcast_delete_click(
+            int(value), callback.from_user.id, message.chat.id, message.message_id,
+        )
+        if recorded is None:
+            await callback.answer("Эта кнопка больше не действует")
+            return
+    else:
+        await callback.answer("Эта кнопка больше не действует")
+        return
+
+    try:
+        await callback.bot.delete_message(message.chat.id, message.message_id)
+    except TelegramAPIError:
+        await callback.answer("Не получилось удалить сообщение. Попробуй ещё раз.")
+        return
+    storage.remove_temporary_message(message.chat.id, message.message_id)
+    await callback.answer("Сообщение удалено")
 
 
 @router.callback_query(F.data.in_({"news:enable", "news:disable"}))
@@ -350,10 +462,14 @@ async def receive_broadcast_text(
     if message.chat.type != "private" or message.from_user is None or not is_admin(settings, message.from_user.id):
         await state.clear()
         return
-    text = (message.text or "").strip()
-    if not text:
+    text = message.text or ""
+    if not text.strip():
         return
-    if len(text) > 4096:
+    photo_file_id = (await state.get_data()).get("broadcast_photo_file_id")
+    try:
+        validate_broadcast_content(text, photo_file_id)
+        entities = normalize_broadcast_entities(text, getattr(message, "entities", None))
+    except ValueError as error:
         await edit_panel_content(
             message.bot,
             storage,
@@ -361,16 +477,72 @@ async def receive_broadcast_text(
             settings,
             message.from_user.id,
             "admin:broadcast:compose",
-            "Текст длиннее лимита Telegram. Сократи его до 4096 символов и отправь ещё раз.",
+            escape(str(error)),
             admin_compose_keyboard(),
             message.chat.id,
         )
         return
-    await state.update_data(broadcast_text=text)
+    await state.update_data(broadcast_text=text, broadcast_entities=entities)
     if await _get_draft_duration(state) is None:
         await show_duration_picker(message.bot, api, settings, storage, state, message.from_user.id, message.chat.id)
     else:
         await show_broadcast_preview(message.bot, api, settings, storage, state, message.from_user.id, message.chat.id)
+
+
+@router.message(BroadcastDraft.composing, F.photo)
+@router.message(BroadcastDraft.choosing_photo, F.photo)
+async def receive_broadcast_photo(
+    message: Message, state: FSMContext, api: OpiniaApi, settings: Settings, storage: BotStorage,
+) -> None:
+    if message.chat.type != "private" or message.from_user is None or not is_admin(settings, message.from_user.id):
+        await state.clear()
+        return
+    if message.media_group_id:
+        await edit_panel_content(
+            message.bot, storage, api, settings, message.from_user.id, "admin:broadcast:compose",
+            "Отправь одну картинку отдельным сообщением. Альбомы в рассылке не поддерживаются.",
+            admin_compose_keyboard(), message.chat.id,
+        )
+        return
+    data = await state.get_data()
+    if message.caption is not None:
+        text = message.caption
+        source_entities = getattr(message, "caption_entities", None)
+    else:
+        text = data.get("broadcast_text") or ""
+        source_entities = data.get("broadcast_entities")
+    photo_file_id = message.photo[-1].file_id
+    try:
+        validate_broadcast_content(text, photo_file_id)
+        entities = normalize_broadcast_entities(text, source_entities)
+    except ValueError as error:
+        await edit_panel_content(
+            message.bot, storage, api, settings, message.from_user.id, "admin:broadcast:compose",
+            escape(str(error)), admin_compose_keyboard(), message.chat.id,
+        )
+        return
+    await state.update_data(broadcast_text=text, broadcast_photo_file_id=photo_file_id, broadcast_entities=entities)
+    if await _get_draft_duration(state) is None:
+        await show_duration_picker(message.bot, api, settings, storage, state, message.from_user.id, message.chat.id)
+    else:
+        await show_broadcast_preview(message.bot, api, settings, storage, state, message.from_user.id, message.chat.id)
+
+
+@router.message(BroadcastDraft.composing, ~F.text.startswith("/"))
+@router.message(BroadcastDraft.choosing_photo, ~F.text.startswith("/"))
+async def receive_unsupported_broadcast_content(
+    message: Message, state: FSMContext, api: OpiniaApi, settings: Settings, storage: BotStorage,
+) -> None:
+    if message.chat.type != "private" or message.from_user is None or not is_admin(settings, message.from_user.id):
+        await state.clear()
+        return
+    await edit_panel_content(
+        message.bot, storage, api, settings, message.from_user.id, "admin:broadcast:compose",
+        "Отправь одну картинку как фото, а не файл, видео или альбом. "
+        "Для обычного текста выбери «Изменить текст» в предпросмотре.",
+        admin_compose_keyboard(back_to_preview=await _get_draft_text(settings, state, message.from_user.id) is not None),
+        message.chat.id,
+    )
 
 
 @router.message(BroadcastDraft.custom_duration, F.text & ~F.text.startswith("/"))

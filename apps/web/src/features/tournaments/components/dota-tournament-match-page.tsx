@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { useTranslation } from "../../i18n/locale-provider";
 import {
@@ -21,8 +21,12 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
   const [participantLoading, setParticipantLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
+  const refreshInFlight = useRef(false);
+  const requestRevision = useRef(0);
+  const actionInFlight = useRef(false);
 
   useEffect(() => {
+    requestRevision.current += 1;
     let active = true;
     setParticipant(null);
     setParticipantLoading(false);
@@ -62,23 +66,53 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
     };
   }, [slug, matchId, authSession?.accessToken, isAuthSessionLoaded]);
 
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
-    setError(false);
-    try {
-      const item = await fetchPublicDotaTournamentMatch(slug, matchId, authSession?.accessToken);
-      setMatch(item);
-      if (item.isParticipant && authSession?.accessToken) {
-        setParticipant(
-          await fetchDotaTournamentMatch(slug, matchId, authSession.accessToken).catch(() => null)
-        );
-      } else setParticipant(null);
-    } catch {
-      setError(true);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [slug, matchId, authSession?.accessToken]);
+  const refresh = useCallback(
+    async (silent = false) => {
+      if (refreshInFlight.current || (silent && actionInFlight.current)) return;
+      refreshInFlight.current = true;
+      const revision = requestRevision.current;
+      if (!silent) {
+        setRefreshing(true);
+        setError(false);
+      }
+      try {
+        const item = await fetchPublicDotaTournamentMatch(slug, matchId, authSession?.accessToken);
+        let details: DotaTournamentMatch | null = null;
+        if (item.isParticipant && authSession?.accessToken) {
+          details = await fetchDotaTournamentMatch(slug, matchId, authSession.accessToken).catch(
+            () => null
+          );
+        }
+        if (revision !== requestRevision.current) return;
+        setMatch(item);
+        setParticipant(details);
+      } catch {
+        if (!silent && revision === requestRevision.current) setError(true);
+      } finally {
+        refreshInFlight.current = false;
+        if (!silent) setRefreshing(false);
+      }
+    },
+    [slug, matchId, authSession?.accessToken]
+  );
+
+  const handleBusyChange = useCallback((busy: boolean) => {
+    actionInFlight.current = busy;
+    if (busy) requestRevision.current += 1;
+  }, []);
+
+  const currentStatus = participant?.status ?? match?.status;
+  useEffect(() => {
+    if (
+      !currentStatus ||
+      !["LOBBY_CONFIRMATION", "SPECTATOR_ADMISSION", "READY"].includes(currentStatus)
+    )
+      return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh(true);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [currentStatus, refresh]);
 
   const backHref = `/games/tournaments/${encodeURIComponent(match?.tournament.slug ?? safeSlug(slug))}#tournament-bracket`;
   if (loading) return <p className={styles.page}>{t("common.loadingEllipsis")}</p>;
@@ -124,6 +158,7 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
               initialDetails={participant}
               participantLoading={participantLoading}
               onChanged={refresh}
+              onBusyChange={handleBusyChange}
             />
           </div>
           <div className={styles.rosters}>

@@ -1,4 +1,5 @@
 import {
+  Equals,
   IsBoolean,
   IsDateString,
   IsIn,
@@ -89,6 +90,12 @@ export class SubmitDotaTournamentLobbyDto {
   @IsUrl({ require_protocol: true })
   @MaxLength(500)
   lobbyProofUrl?: string;
+}
+
+export class ConfirmDotaTournamentLobbyDto {
+  @IsBoolean()
+  @Equals(true)
+  playersReady!: boolean;
 }
 
 export class DisputeDotaTournamentMatchDto {

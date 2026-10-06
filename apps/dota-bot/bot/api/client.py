@@ -128,6 +128,11 @@ class OpiniaApi:
         )
         return result if isinstance(result, list) else []
 
+    async def sync_referrals(self, events: list[dict]) -> dict:
+        return await self._request(
+            "POST", "/telegram/referrals/sync", body={"events": events}, bot_secret=True
+        )
+
     async def search_metrics(self) -> dict:
         result = await self._request(
             "GET", "/dota/profiles/admin/search-metrics", bot_secret=True
@@ -229,7 +234,10 @@ class OpiniaApi:
 def extract_error_message(data: Any) -> str | None:
     if not isinstance(data, dict):
         return None
-    message = data.get("message")
+    error = data.get("error")
+    message = error.get("message") if isinstance(error, dict) else None
+    if not message:
+        message = data.get("message")
     if isinstance(message, list):
         return "; ".join(str(item) for item in message)
     return str(message) if message else None

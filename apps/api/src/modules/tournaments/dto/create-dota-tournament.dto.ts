@@ -26,7 +26,7 @@ export class CreateDotaTournamentDto {
   @IsOptional()
   @IsString()
   @MaxLength(120)
-  slug?: string;
+  slug?: string | null;
 
   @IsOptional()
   @IsString()
@@ -36,12 +36,12 @@ export class CreateDotaTournamentDto {
   @IsOptional()
   @IsString()
   @MaxLength(80)
-  format?: string;
+  format?: string | null;
 
   @IsOptional()
   @IsUrl({ require_protocol: true })
   @MaxLength(500)
-  rulesUrl?: string;
+  rulesUrl?: string | null;
 
   @IsOptional()
   @IsDateString()
@@ -55,7 +55,7 @@ export class CreateDotaTournamentDto {
   @IsInt()
   @Min(2)
   @Max(256)
-  maxTeams?: number;
+  maxTeams?: number | null;
 
   @IsOptional()
   @IsIn(DOTA_TOURNAMENT_GAME_MODES)
@@ -90,7 +90,7 @@ export class UpdateDotaTournamentDto {
   @IsOptional()
   @IsString()
   @MaxLength(120)
-  slug?: string;
+  slug?: string | null;
 
   @IsOptional()
   @IsString()
@@ -100,12 +100,12 @@ export class UpdateDotaTournamentDto {
   @IsOptional()
   @IsString()
   @MaxLength(80)
-  format?: string;
+  format?: string | null;
 
   @IsOptional()
   @IsUrl({ require_protocol: true })
   @MaxLength(500)
-  rulesUrl?: string;
+  rulesUrl?: string | null;
 
   @IsOptional()
   @IsDateString()
@@ -119,7 +119,7 @@ export class UpdateDotaTournamentDto {
   @IsInt()
   @Min(2)
   @Max(256)
-  maxTeams?: number;
+  maxTeams?: number | null;
 
   @IsOptional()
   @IsIn(DOTA_TOURNAMENT_GAME_MODES)

@@ -15,7 +15,12 @@ from ..services.panel import (
     edit_panel,
     edit_panel_content,
 )
-from ..services.start_links import parse_acquisition_tag, parse_party_start_payload
+from ..services.start_links import (
+    bot_friend_invite_url,
+    parse_acquisition_tag,
+    parse_party_start_payload,
+    parse_referral_start_payload,
+)
 from ..services.temporary_notifications import send_temporary_notification
 from ..storage.database import BotStorage
 from ..ui.formatters import party_text
@@ -80,6 +85,9 @@ async def open_party_link(
         message.from_user.id,
         acquisition_tag[0] if acquisition_tag else ("party_invite" if code else "direct"),
         acquisition_tag[1] if acquisition_tag else None,
+        referral_code=parse_referral_start_payload(command.args),
+        display_name=message.from_user.full_name,
+        username=message.from_user.username,
     )
     if code is None:
         await state.clear()
@@ -125,8 +133,11 @@ async def share_party_link(
         me = await callback.bot.get_me()
         if not me.username:
             raise ApiError("У бота не настроено имя пользователя для ссылки")
-        invite_url = f"t.me/{me.username}?start=party_{code}"
-        telegram_app_url = f"tg://resolve?domain={me.username}&start=party_{code}"
+        referral = storage.referral_code(callback.from_user.id, callback.from_user.full_name,
+                                         callback.from_user.username)
+        payload = f"party_{code}_ref_{referral}"
+        invite_url = f"https://t.me/{me.username}?start={payload}"
+        telegram_app_url = f"tg://resolve?domain={me.username}&start={payload}"
         roles = available_party_roles(party)
         roles_text = ", ".join(ROLE_NAMES[role] for role in (party.get("recruitedRoles") or []) if role in roles and role in ROLE_NAMES)
         if not roles_text:
@@ -150,6 +161,24 @@ async def share_party_link(
             f"<b>Не удалось создать приглашение</b>\n\n{escape(str(error))}", back_keyboard("party"),
             callback.message.chat.id if callback.message else None,
         )
+
+
+@router.callback_query(F.data == "invite:friends")
+async def share_bot_link(callback: CallbackQuery, storage: BotStorage) -> None:
+    acknowledge_callback(callback)
+    me = await callback.bot.get_me()
+    if not me.username:
+        return
+    code = storage.referral_code(callback.from_user.id, callback.from_user.full_name,
+                                 callback.from_user.username)
+    link = bot_friend_invite_url(me.username, code)
+    copy_text = f"🎮 Найдём пати в Dota 2? Заходи в FDP — поиск по ролям и MMR в Telegram:\n{link}"
+    await send_temporary_notification(
+        callback.bot, storage, callback.from_user.id, callback.from_user.id,
+        f"Твоя личная ссылка для приглашения друзей:\n{link}\n\n"
+        "Нажми «Скопировать текст» и отправь его друзьям. Новые запуски по ссылке будут учтены за тобой.",
+        20, reply_markup=party_invitation_copy_keyboard(copy_text), disable_web_page_preview=True,
+    )
 
 
 @router.callback_query(F.data.startswith("partyinvite:link:"))

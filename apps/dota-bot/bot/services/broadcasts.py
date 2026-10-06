@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from aiogram import Bot
+from aiogram.types import Message, MessageEntity
 from aiogram.exceptions import (
     TelegramAPIError,
     TelegramBadRequest,
@@ -11,10 +12,27 @@ from aiogram.exceptions import (
 )
 from ..storage.database import BotStorage
 from .temporary_notifications import send_temporary_notification
+from ..ui.keyboards import broadcast_delete_keyboard
 
 logger = logging.getLogger(__name__)
 SEND_INTERVAL_SECONDS = 0.05
 MAX_DELIVERY_ATTEMPTS = 5
+
+
+async def send_broadcast_message(
+    bot: Bot, user_id: int, text: str, photo_file_id: str | None = None,
+    entities: list[dict] | None = None,
+    campaign_id: int | None = None,
+) -> Message:
+    formatting = [MessageEntity.model_validate(value) for value in entities or []]
+    keyboard = broadcast_delete_keyboard(campaign_id)
+    if photo_file_id:
+        kwargs = {"caption_entities": formatting, "parse_mode": None} if formatting else {}
+        kwargs["reply_markup"] = keyboard
+        return await bot.send_photo(user_id, photo_file_id, caption=text or None, **kwargs)
+    kwargs = {"entities": formatting, "parse_mode": None} if formatting else {}
+    kwargs["reply_markup"] = keyboard
+    return await bot.send_message(user_id, text, disable_web_page_preview=True, **kwargs)
 
 
 async def broadcast_worker(bot: Bot, storage: BotStorage) -> None:
@@ -36,10 +54,9 @@ async def broadcast_worker(bot: Bot, storage: BotStorage) -> None:
                     await _send_completion_report(bot, storage, recipient)
                 continue
             try:
-                message = await bot.send_message(
-                    user_id,
-                    recipient["text"],
-                    disable_web_page_preview=True,
+                message = await send_broadcast_message(
+                    bot, user_id, recipient["text"], recipient.get("photo_file_id"), recipient.get("entities"),
+                    campaign_id=campaign_id,
                 )
             except TelegramRetryAfter as error:
                 await asyncio.sleep(float(error.retry_after) + 0.5)
@@ -89,6 +106,7 @@ async def _send_completion_report(bot: Bot, storage: BotStorage, campaign: dict)
     report = (
         f"Рассылка #{summary['id']} завершена.\n"
         f"Доставлено: {summary['sent']} из {summary['total']}.\n"
+        f"Нажали «Удалить»: {summary['delete_clicks']}.\n"
         f"Пропущено: {summary['skipped']}. Заблокировали бота: {summary['blocked']}.\n"
         f"Ошибок: {summary['failed']}."
     )

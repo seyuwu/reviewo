@@ -59,7 +59,7 @@ class FriendStartTests(unittest.IsolatedAsyncioTestCase):
     async def test_party_deep_link_still_opens_party_invitation_instead_of_home(self):
         from aiogram.filters.command import CommandObject
         from unittest.mock import Mock
-        message = SimpleNamespace(chat=SimpleNamespace(type="private", id=7), from_user=SimpleNamespace(id=7), bot=object())
+        message = SimpleNamespace(chat=SimpleNamespace(type="private", id=7), from_user=User(id=7, is_bot=False, first_name="Friend"), bot=object())
         storage = Mock()
         storage.get_panel.return_value = None
         state = SimpleNamespace(clear=AsyncMock())

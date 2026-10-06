@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { FormFeedback } from "../../../components/form-feedback";
@@ -28,6 +28,75 @@ const STATUSES: DotaTournamentStatus[] = [
   "CANCELLED"
 ];
 
+type TournamentAdminForm = {
+  automaticBracket: boolean;
+  allowSpectators: boolean;
+  cheatsEnabled: boolean;
+  description: string;
+  format: string;
+  gameMode: string;
+  maxTeams: string;
+  registrationClosesAt: string;
+  rulesUrl: string;
+  serverRegion: string;
+  slug: string;
+  startsAt: string;
+  status: DotaTournamentStatus;
+  title: string;
+};
+
+const EMPTY_TOURNAMENT_FORM: TournamentAdminForm = {
+  automaticBracket: true,
+  allowSpectators: false,
+  cheatsEnabled: false,
+  description: "",
+  format: "",
+  gameMode: "ALL_PICK",
+  maxTeams: "",
+  registrationClosesAt: "",
+  rulesUrl: "",
+  serverRegion: "EUROPE",
+  slug: "",
+  startsAt: "",
+  status: "DRAFT",
+  title: ""
+};
+
+function dateTimeInput(value: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+function tournamentToForm(item: DotaTournamentSummary): TournamentAdminForm {
+  return {
+    automaticBracket: item.automaticBracket ?? true,
+    allowSpectators: item.allowSpectators,
+    cheatsEnabled: item.cheatsEnabled,
+    description: item.description,
+    format: item.format ?? "",
+    gameMode: item.gameMode,
+    maxTeams: item.maxTeams === null ? "" : String(item.maxTeams),
+    registrationClosesAt: dateTimeInput(item.registrationClosesAt),
+    rulesUrl: item.rulesUrl ?? "",
+    serverRegion: item.serverRegion,
+    slug: item.slug,
+    startsAt: dateTimeInput(item.startsAt),
+    status: item.status,
+    title: item.title
+  };
+}
+
+function canEditTournament(item: DotaTournamentSummary): boolean {
+  return (
+    !item.bracketGeneratedAt &&
+    ["DRAFT", "REGISTRATION_OPEN", "REGISTRATION_CLOSED"].includes(item.status)
+  );
+}
+
 export function AdminDotaTournamentsView({
   allowTournamentModerator = false,
   basePath = "/admin/tournaments",
@@ -47,22 +116,9 @@ export function AdminDotaTournamentsView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    automaticBracket: true,
-    allowSpectators: false,
-    cheatsEnabled: false,
-    description: "",
-    format: "",
-    gameMode: "ALL_PICK",
-    maxTeams: "",
-    registrationClosesAt: "",
-    rulesUrl: "",
-    serverRegion: "EUROPE",
-    slug: "",
-    startsAt: "",
-    status: "DRAFT" as DotaTournamentStatus,
-    title: ""
-  });
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
+  const [form, setForm] = useState<TournamentAdminForm>(EMPTY_TOURNAMENT_FORM);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const refresh = useCallback(async (token: string) => {
     const next = await fetchAdminDotaTournaments(token);
@@ -105,9 +161,24 @@ export function AdminDotaTournamentsView({
     };
   }, [allowTournamentModerator, authSession?.accessToken, isAuthSessionLoaded, refresh, router, t]);
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!authSession?.accessToken || !form.title.trim() || busy) return;
+    const editingTournament = editingSlug
+      ? items.find((item) => item.slug === editingSlug)
+      : null;
+    if (
+      editingTournament &&
+      form.maxTeams &&
+      Number(form.maxTeams) < editingTournament.registeredTeams
+    ) {
+      setError(
+        t("dota.tournaments.admin.maxTeamsBelowRegistered", {
+          count: String(editingTournament.registeredTeams)
+        })
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     setFeedback(null);
@@ -116,44 +187,52 @@ export function AdminDotaTournamentsView({
         automaticBracket: form.automaticBracket,
         allowSpectators: form.allowSpectators,
         cheatsEnabled: form.cheatsEnabled,
+        description: form.description.trim(),
+        format: form.format.trim() || null,
         gameMode: form.gameMode,
+        maxTeams: form.maxTeams ? Number(form.maxTeams) : null,
+        registrationClosesAt: form.registrationClosesAt
+          ? new Date(form.registrationClosesAt).toISOString()
+          : null,
+        rulesUrl: form.rulesUrl.trim() || null,
         serverRegion: form.serverRegion,
+        slug: form.slug.trim() || null,
+        startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
         title: form.title.trim(),
-        status: form.status,
-        ...(form.slug.trim() ? { slug: form.slug.trim() } : {}),
-        ...(form.description.trim() ? { description: form.description.trim() } : {}),
-        ...(form.format.trim() ? { format: form.format.trim() } : {}),
-        ...(form.rulesUrl.trim() ? { rulesUrl: form.rulesUrl.trim() } : {}),
-        ...(form.startsAt ? { startsAt: new Date(form.startsAt).toISOString() } : {}),
-        ...(form.registrationClosesAt
-          ? { registrationClosesAt: new Date(form.registrationClosesAt).toISOString() }
-          : {}),
-        ...(form.maxTeams ? { maxTeams: Number(form.maxTeams) } : {})
+        status: form.status
       };
-      await createAdminDotaTournament(input, authSession.accessToken);
-      setForm({
-        automaticBracket: true,
-        allowSpectators: false,
-        cheatsEnabled: false,
-        description: "",
-        format: "",
-        gameMode: "ALL_PICK",
-        maxTeams: "",
-        registrationClosesAt: "",
-        rulesUrl: "",
-        serverRegion: "EUROPE",
-        slug: "",
-        startsAt: "",
-        status: "DRAFT",
-        title: ""
-      });
-      setFeedback(t("dota.tournaments.admin.created"));
+      if (editingSlug) {
+        await updateAdminDotaTournament(editingSlug, input, authSession.accessToken);
+      } else {
+        await createAdminDotaTournament(input, authSession.accessToken);
+      }
+      setEditingSlug(null);
+      setForm(EMPTY_TOURNAMENT_FORM);
+      setFeedback(
+        t(editingSlug ? "dota.tournaments.admin.tournamentUpdated" : "dota.tournaments.admin.created")
+      );
       await refresh(authSession.accessToken);
     } catch {
       setError(t("dota.tournaments.admin.error"));
     } finally {
       setBusy(false);
     }
+  }
+
+  function beginEdit(item: DotaTournamentSummary) {
+    if (!canEditTournament(item) || busy) return;
+    setEditingSlug(item.slug);
+    setForm(tournamentToForm(item));
+    setError(null);
+    setFeedback(null);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function cancelEdit() {
+    setEditingSlug(null);
+    setForm(EMPTY_TOURNAMENT_FORM);
+    setError(null);
+    setFeedback(null);
   }
 
   async function handleStatus(slug: string, status: DotaTournamentStatus) {
@@ -194,8 +273,17 @@ export function AdminDotaTournamentsView({
         <h1>{t("dota.tournaments.admin.title")}</h1>
       </header>
       <FormFeedback errorMessage={error} statusMessage={feedback} />
-      <form className={styles.form} onSubmit={(event) => void handleCreate(event)}>
-        <h2>{t("dota.tournaments.admin.create")}</h2>
+      <form ref={formRef} className={styles.form} onSubmit={(event) => void handleSubmit(event)}>
+        <h2>
+          {t(editingSlug ? "dota.tournaments.admin.editTournament" : "dota.tournaments.admin.create")}
+        </h2>
+        {editingSlug ? (
+          <p className="muted-copy">
+            {t("dota.tournaments.admin.editHint", {
+              count: String(items.find((item) => item.slug === editingSlug)?.registeredTeams ?? 0)
+            })}
+          </p>
+        ) : null}
         <label>
           {t("dota.tournaments.admin.titleLabel")}
           <input
@@ -337,8 +425,15 @@ export function AdminDotaTournamentsView({
           />
         </label>
         <button className="button-primary" disabled={busy || !form.title.trim()} type="submit">
-          {busy ? t("common.loadingEllipsis") : t("dota.tournaments.admin.create")}
+          {busy
+            ? t("common.loadingEllipsis")
+            : t(editingSlug ? "dota.tournaments.admin.saveChanges" : "dota.tournaments.admin.create")}
         </button>
+        {editingSlug ? (
+          <button className="button-secondary" disabled={busy} onClick={cancelEdit} type="button">
+            {t("dota.tournaments.admin.cancelEdit")}
+          </button>
+        ) : null}
       </form>
 
       <section className={styles.list}>
@@ -352,9 +447,22 @@ export function AdminDotaTournamentsView({
                 <strong>{item.title}</strong>
               </Link>
               <span>
-                {item.registeredTeams} · {item.slug}
+                {t("dota.tournaments.admin.teamCount", {
+                  current: String(item.registeredTeams),
+                  limit: item.maxTeams === null ? "∞" : String(item.maxTeams)
+                })} · {item.slug}
               </span>
             </div>
+            {canEditTournament(item) ? (
+              <button
+                className="button-secondary"
+                disabled={busy}
+                onClick={() => beginEdit(item)}
+                type="button"
+              >
+                {t("dota.tournaments.admin.editParameters")}
+              </button>
+            ) : null}
             <select
               disabled={busy}
               onChange={(event) =>

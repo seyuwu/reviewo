@@ -88,7 +88,7 @@ async function postMatchAction(
 }
 
 export function confirmDotaTournamentLobby(slug: string, matchId: string, token: string) {
-  return postMatchAction(slug, matchId, "confirm-lobby", token);
+  return postMatchAction(slug, matchId, "confirm-lobby", token, { playersReady: true });
 }
 
 export function startDotaTournamentMatch(slug: string, matchId: string, token: string) {
@@ -264,14 +264,14 @@ export interface AdminDotaTournamentInput {
   allowSpectators?: boolean;
   cheatsEnabled?: boolean;
   description?: string;
-  format?: string;
+  format?: string | null;
   gameMode?: string;
-  maxTeams?: number;
-  registrationClosesAt?: string;
-  rulesUrl?: string;
+  maxTeams?: number | null;
+  registrationClosesAt?: string | null;
+  rulesUrl?: string | null;
   serverRegion?: string;
-  slug?: string;
-  startsAt?: string;
+  slug?: string | null;
+  startsAt?: string | null;
   status?: DotaTournamentStatus;
   title: string;
 }

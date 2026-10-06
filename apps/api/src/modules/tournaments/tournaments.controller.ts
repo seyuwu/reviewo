@@ -29,6 +29,7 @@ import {
   UpdateDotaTournamentEntryJoinModeDto
 } from "./dto/join-dota-tournament-entry.dto.js";
 import {
+  ConfirmDotaTournamentLobbyDto,
   DisputeDotaTournamentMatchDto,
   SubmitDotaTournamentLobbyDto,
   SubmitDotaTournamentResultDto
@@ -97,11 +98,12 @@ export class DotaTournamentsController {
   async confirmLobby(
     @Param("slug") slug: string,
     @Param("matchId") matchId: string,
+    @Body() input: ConfirmDotaTournamentLobbyDto,
     @CurrentUser() currentUser: AuthenticatedUser,
     @Req() request: RequestLike
   ) {
     await this.rateLimit(currentUser, request);
-    return this.dotaTournamentsService.confirmLobby(slug, matchId, currentUser);
+    return this.dotaTournamentsService.confirmLobby(slug, matchId, input, currentUser);
   }
 
   @Post(":slug/matches/:matchId/start")
