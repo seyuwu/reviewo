@@ -8,8 +8,13 @@ import {
   fetchDotaTournamentMatch,
   fetchPublicDotaTournamentMatch
 } from "../api/dota-tournaments-api";
-import type { DotaTournamentMatch, PublicDotaTournamentMatch } from "../types/dota-tournament";
+import type { AdminDotaTournamentMatch, DotaTournamentMatch, PublicDotaTournamentMatch } from "../types/dota-tournament";
 import { DotaTournamentMatchCard } from "./dota-tournament-match-card";
+import { TournamentBackLink } from "./tournament-back-link";
+import { fetchStaffMatch } from "../api/tournament-match-chat-api";
+import { TournamentMatchChat } from "./tournament-match-chat";
+import { TournamentMatchResolution } from "./tournament-match-resolution";
+import { TournamentMatchSettings } from "./tournament-match-settings";
 import styles from "./dota-tournament-match-page.module.css";
 
 export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; matchId: string }) {
@@ -17,6 +22,7 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
   const { authSession, isAuthSessionLoaded } = useAuthSession();
   const [match, setMatch] = useState<PublicDotaTournamentMatch | null>(null);
   const [participant, setParticipant] = useState<DotaTournamentMatch | null>(null);
+  const [staffMatch, setStaffMatch] = useState<AdminDotaTournamentMatch | null>(null);
   const [loading, setLoading] = useState(true);
   const [participantLoading, setParticipantLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,6 +35,7 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
     requestRevision.current += 1;
     let active = true;
     setParticipant(null);
+    setStaffMatch(null);
     setParticipantLoading(false);
     if (!isAuthSessionLoaded)
       return () => {
@@ -42,6 +49,10 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
         if (!active) return;
         setMatch(item);
         setLoading(false);
+        if (item.canManageMatch && authSession?.accessToken) {
+          const staff = await fetchStaffMatch(slug, matchId, authSession.accessToken).catch(() => null);
+          if (active) setStaffMatch(staff);
+        }
         if (item.isParticipant && authSession?.accessToken) {
           setParticipantLoading(true);
           const details = await fetchDotaTournamentMatch(
@@ -78,6 +89,8 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
       try {
         const item = await fetchPublicDotaTournamentMatch(slug, matchId, authSession?.accessToken);
         let details: DotaTournamentMatch | null = null;
+        const staff = item.canManageMatch && authSession?.accessToken
+          ? await fetchStaffMatch(slug, matchId, authSession.accessToken).catch(() => null) : null;
         if (item.isParticipant && authSession?.accessToken) {
           details = await fetchDotaTournamentMatch(slug, matchId, authSession.accessToken).catch(
             () => null
@@ -86,6 +99,7 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
         if (revision !== requestRevision.current) return;
         setMatch(item);
         setParticipant(details);
+        setStaffMatch(staff);
       } catch {
         if (!silent && revision === requestRevision.current) setError(true);
       } finally {
@@ -102,6 +116,9 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
   }, []);
 
   const currentStatus = participant?.status ?? match?.status;
+  const hasStartedGame = match?.hasStarted ?? !!match?.gameResults?.some((game) => game.startedAt || game.winnerEntryId);
+  const canReschedule = !!match && !(match.gameResults ?? []).some((game) => game.startedAt && !game.winnerEntryId) &&
+    ["SCHEDULED", "LOBBY_CONFIRMATION", "READY", "SPECTATOR_ADMISSION", "DISPUTED"].includes(match.status);
   useEffect(() => {
     if (
       !currentStatus ||
@@ -119,9 +136,9 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
   return (
     <section className={styles.page}>
       <header className={styles.header}>
-        <Link href={backHref}>
-          ← {match?.tournament.title ?? t("dota.tournaments.bracket.title")}
-        </Link>
+        <TournamentBackLink href={backHref}>
+          {match?.tournament.title ?? t("dota.tournaments.bracket.title")}
+        </TournamentBackLink>
         <div className={styles.heading}>
           <h1>
             {match?.bracketKind === "BRONZE"
@@ -133,14 +150,30 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
                   })
                 : t("dota.tournaments.matchesTitle")}
           </h1>
-          <button
-            className="button-secondary"
-            disabled={refreshing}
-            type="button"
-            onClick={() => void refresh()}
-          >
-            {refreshing ? t("common.loadingEllipsis") : t("dota.tournaments.refreshMatch")}
-          </button>
+          <div className={styles.headingActions}>
+            <button
+              className="button-secondary"
+              disabled={refreshing}
+              type="button"
+              onClick={() => void refresh()}
+            >
+              {refreshing ? t("common.loadingEllipsis") : t("dota.tournaments.refreshMatch")}
+            </button>
+            {match?.canManageMatch && authSession?.accessToken && match && canReschedule ? (
+              <div className={styles.scheduleEditor}>
+              <TournamentMatchSettings
+                slug={match.tournament.slug}
+                matchId={match.id}
+                token={authSession.accessToken}
+                bestOf={match.bestOf ?? 1}
+                scheduledAt={match.scheduledAt}
+                canEditBestOf={canReschedule && !hasStartedGame}
+                canEditTime
+                onSaved={() => refresh()}
+              />
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
       {error ? (
@@ -150,17 +183,30 @@ export function DotaTournamentMatchPage({ slug, matchId }: { slug: string; match
       ) : null}
       {match ? (
         <>
-          <div className={styles.scoreboard}>
-            <DotaTournamentMatchCard
-              key={match.id}
-              match={match}
-              tournamentSlug={match.tournament.slug}
-              initialDetails={participant}
-              participantLoading={participantLoading}
-              onChanged={refresh}
-              onBusyChange={handleBusyChange}
-            />
+          <div className={styles.matchLayout}>
+            <div className={styles.matchColumn}>
+              <div className={styles.scoreboard}>
+                <DotaTournamentMatchCard
+                  key={match.id}
+                  match={match}
+                  tournamentSlug={match.tournament.slug}
+                  initialDetails={participant}
+                  staffMatch={staffMatch}
+                  participantLoading={participantLoading}
+                  onChanged={refresh}
+                  onBusyChange={handleBusyChange}
+                />
+              </div>
+              {match.bracketKind === "GRAND_FINAL" ? <aside className={styles.sideChoiceRule}>
+                <strong>{t("dota.tournaments.bracket.grandFinalSideChoice", { team: match.entryA.teamName })}</strong>
+                <p>{t("dota.tournaments.bracket.grandFinalSideChoiceHint")}</p>
+              </aside> : null}
+            </div>
+            {match.canReadChat && authSession?.accessToken ? <TournamentMatchChat
+              key={match.id + ":" + authSession.userId} slug={match.tournament.slug} matchId={match.id} token={authSession.accessToken} /> : null}
           </div>
+          {staffMatch && authSession?.accessToken ? <TournamentMatchResolution key={staffMatch.id}
+            match={staffMatch} token={authSession.accessToken} onChanged={refresh} /> : null}
           <div className={styles.rosters}>
             {(["A", "B"] as const).map((side) => (
               <section

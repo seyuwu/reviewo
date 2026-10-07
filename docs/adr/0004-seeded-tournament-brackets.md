@@ -1,5 +1,7 @@
 # Automatic tournament brackets use frozen MMR seeds
 
+This records the original single-elimination decision. ADR 0006 extends it with double elimination, configurable series, and persisted plans for future positions.
+
 ## Decision
 
 - New tournaments use single elimination with an optional third-place match. Existing events with manually assigned matches retain manual scheduling; unstarted events without matches adopt automatic scheduling.

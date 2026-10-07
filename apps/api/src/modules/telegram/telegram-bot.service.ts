@@ -254,6 +254,10 @@ export class TelegramBotService {
     Array<{ id: string; telegramUserId: string; payload: unknown }>
   > {
     const now = new Date();
+    await this.prismaService.telegramBotNotification.updateMany({
+      where: { eventKey: { startsWith: "tournament_dispute:" }, deliveredAt: null },
+      data: { deliveredAt: now }
+    });
     const linkedAccounts = await this.prismaService.userAuthIdentity.findMany({
       select: { providerUserId: true },
       where: { provider: "telegram" }
@@ -273,7 +277,52 @@ export class TelegramBotService {
       }
     });
 
-    for (const row of rows) {
+    // Dispute alerts are handled only in the site's notification center. Cancel
+    // any old queued Telegram alert so it cannot be sent after this rollout.
+    const disputeRows = rows.filter((row) => isTournamentDisputePayload(row.payload));
+    if (disputeRows.length) {
+      await this.prismaService.telegramBotNotification.updateMany({
+        where: { id: { in: disputeRows.map((row) => row.id) }, deliveredAt: null },
+        data: { deliveredAt: now }
+      });
+    }
+    const deliverableRows = rows.filter((row) => !isTournamentDisputePayload(row.payload));
+    const staleIds = new Set<string>();
+    const mentionRows = deliverableRows.filter((row) => isMatchMentionPayload(row.payload));
+    if (mentionRows.length) {
+      const [notices, identities] = await Promise.all([
+        this.prismaService.dotaTournamentMatchChatMention.findMany({
+          where: { id: { in: mentionRows.map((row) => (row.payload as { mentionId: string }).mentionId) }, readAt: null },
+          include: { message: { include: { match: { include: {
+            tournament: true,
+            entryA: { select: { members: { where: { isActive: true, roomLeftAt: null }, select: { userId: true } } } },
+            entryB: { select: { members: { where: { isActive: true, roomLeftAt: null }, select: { userId: true } } } }
+          } } } } }
+        }),
+        this.prismaService.userAuthIdentity.findMany({
+          where: { provider: "telegram", providerUserId: { in: mentionRows.map((row) => row.telegramUserId) }, user: { status: "active" } },
+          select: { providerUserId: true, user: { select: { id: true, role: true } } }
+        })
+      ]);
+      const noticeMap = new Map(notices.map((notice) => [notice.id, notice]));
+      const identityMap = new Map(identities.map((identity) => [identity.providerUserId, identity.user]));
+      for (const row of mentionRows) {
+        const notice = noticeMap.get((row.payload as { mentionId: string }).mentionId);
+        const user = identityMap.get(row.telegramUserId);
+        const match = notice?.message.match;
+        const organizer = user && (user.role === "ADMIN" || user.role === "TOURNAMENT_MODERATOR");
+        const expired = match && ["COMPLETED", "CANCELLED"].includes(match.tournament.status) &&
+          (match.tournament.finishedAt ?? match.tournament.updatedAt).getTime() + 12 * 60 * 60_000 <= now.getTime();
+        if (!notice || !user || user.id !== notice.targetUserId || !match || expired ||
+          (!organizer && (match.tournament.status === "DRAFT" || ![...match.entryA.members, ...match.entryB.members].some((member) => member.userId === user.id))))
+          staleIds.add(row.id);
+      }
+      await this.prismaService.telegramBotNotification.updateMany({
+        where: { id: { in: [...staleIds] }, deliveredAt: null }, data: { deliveredAt: now }
+      });
+    }
+    const eligibleRows = deliverableRows.filter((row) => !staleIds.has(row.id));
+    for (const row of eligibleRows) {
       await this.prismaService.telegramBotNotification.updateMany({
         data: {
           attempts: { increment: 1 },
@@ -283,7 +332,7 @@ export class TelegramBotService {
       });
     }
 
-    return rows.map(({ id, payload, telegramUserId }) => ({ id, payload, telegramUserId }));
+    return eligibleRows.map(({ id, payload, telegramUserId }) => ({ id, payload, telegramUserId }));
   }
 
   async recordDelivery(id: string, telegramUserId: string, delivered: boolean): Promise<void> {
@@ -292,9 +341,7 @@ export class TelegramBotService {
       where: { deliveredAt: null, id, telegramUserId }
     });
 
-    if (!notification) {
-      return;
-    }
+    if (!notification) return;
 
     if (delivered) {
       await this.prismaService.telegramBotNotification.updateMany({
@@ -331,4 +378,19 @@ export class TelegramBotService {
   getUnavailableStatus(): typeof HttpStatus.SERVICE_UNAVAILABLE {
     return HttpStatus.SERVICE_UNAVAILABLE;
   }
+}
+
+function isTournamentDisputePayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const item = payload as Record<string, unknown>;
+  return item.type === "tournament_dispute" && typeof item.matchId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.matchId) &&
+    typeof item.disputeNotifiedAt === "string";
+}
+
+function isMatchMentionPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const item = payload as Record<string, unknown>;
+  return item.type === "tournament_match_mention" && typeof item.mentionId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.mentionId);
 }

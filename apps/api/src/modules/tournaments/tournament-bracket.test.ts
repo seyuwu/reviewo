@@ -122,3 +122,58 @@ test("final alone does not complete four-team tournament; disputes never advance
   });
   assert.equal(buildBracket(4, entries, matches).complete, false);
 });
+
+test("double elimination supports every team count and ends after one grand final", () => {
+  for (let count = 2; count <= 256; count++) {
+      const size = 2 ** Math.ceil(Math.log2(count));
+      const matches: BracketMatch[] = [];
+      const losses = new Map<string, number>();
+      let bracket = buildBracket(size, seeds(count), matches, "DOUBLE_ELIMINATION");
+      for (let guard = 0; !bracket.complete && guard < 30; guard++) {
+        assert.ok(bracket.ready.length, "Double bracket stalled: " + count);
+        const playing = new Set<string>();
+        for (const node of bracket.ready) {
+          const a = node.entryAId!;
+          const b = node.entryBId!;
+          assert.notEqual(a, b);
+          assert.ok(!playing.has(a) && !playing.has(b), "A team has two simultaneous matches");
+          assert.ok((losses.get(a) ?? 0) < 2 && (losses.get(b) ?? 0) < 2);
+          playing.add(a); playing.add(b);
+          const winner = Number(a.split("-")[1]) < Number(b.split("-")[1]) ? a : b;
+          const loser = winner === a ? b : a;
+          losses.set(loser, (losses.get(loser) ?? 0) + 1);
+          matches.push({
+            id: node.key, bracketKind: node.kind, roundNumber: node.roundNumber,
+            matchNumber: node.matchNumber, entryAId: a, entryBId: b, status: "COMPLETED",
+            winnerEntryId: winner
+          });
+        }
+        bracket = buildBracket(size, seeds(count), matches, "DOUBLE_ELIMINATION");
+      }
+      assert.equal(bracket.complete, true, "Team count: " + count);
+      assert.equal(new Set(matches.map((match) => match.id)).size, matches.length);
+      assert.equal(matches.length, 2 * count - 2);
+      assert.equal(matches.filter((match) => match.bracketKind === "BRONZE").length, 0);
+      assert.equal(bracket.nodes.filter((node) => node.kind === "GRAND_FINAL").length, 1);
+      assert.equal(bracket.podium[0], "team-1");
+      assert.equal(bracket.podium[1], "team-2");
+      assert.equal(bracket.podium[2], count > 2 ? "team-3" : null);
+      for (const team of seeds(count))
+        assert.equal(losses.get(team.entryId) ?? 0, team.entryId === bracket.podium[0] ? 0 : 2);
+      assert.equal(bracket.ready.length, 0);
+  }
+});
+
+test("double bracket disputes block dependent matches and lower drop-ins identify their sources", () => {
+  const first = buildBracket(4, seeds(4), [], "DOUBLE_ELIMINATION");
+  assert.equal(first.ready.length, 2);
+  assert.equal(first.nodes.find((node) => node.kind === "LOWER")!.sourceAResult, "LOSER");
+  const disputed = first.ready.map((node) => ({
+    id: node.key, bracketKind: node.kind, roundNumber: node.roundNumber, matchNumber: node.matchNumber,
+    entryAId: node.entryAId!, entryBId: node.entryBId!, status: "DISPUTED", winnerEntryId: node.entryAId
+  }));
+  const blocked = buildBracket(4, seeds(4), disputed, "DOUBLE_ELIMINATION");
+  assert.equal(blocked.complete, false);
+  assert.equal(blocked.ready.length, 0);
+  assert.throws(() => buildBracket(4, seeds(4), [], "unknown"));
+});

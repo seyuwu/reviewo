@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { fetchMyDotaProfile } from "../../dota/api/dota-api";
 import type { DotaProfile } from "../../dota/types/dota";
 import { useTranslation } from "../../i18n/locale-provider";
+import { getCurrentUserProfile } from "../../profile/api/profile";
 import { DotaTournamentBracket } from "./dota-tournament-bracket";
 import { DotaTournamentPodium } from "./dota-tournament-podium";
+import { TournamentBackLink } from "./tournament-back-link";
 import {
   assignDotaTournamentEntryPosition,
   createDotaTournamentSquad,
@@ -22,19 +25,29 @@ import {
 } from "../api/dota-tournaments-api";
 import type { DotaTournament, DotaTournamentManagedEntry } from "../types/dota-tournament";
 import { formatDate, statusLabel } from "./dota-tournaments-view";
+import { tournamentRoomUrl } from "../api/tournament-rooms-api";
+import { fetchTournamentPlan } from "../api/tournament-plans-api";
 import styles from "./dota-tournaments-view.module.css";
 
 export function DotaTournamentDetailView({ slug }: { slug: string }) {
   const t = useTranslation();
+  const router = useRouter();
   const { authSession } = useAuthSession();
   const [tournament, setTournament] = useState<DotaTournament | null>(null);
+  const [managedBracket, setManagedBracket] = useState<DotaTournament | null>(null);
   const hasBracket = Boolean(tournament?.bracket || tournament?.matches?.length);
   const [bracketOpen, setBracketOpen] = useState(false);
   const [refreshingBracket, setRefreshingBracket] = useState(false);
   async function refreshTournament() {
     setRefreshingBracket(true);
     try {
-      setTournament(await fetchDotaTournament(slug));
+      const updated = await fetchDotaTournament(slug);
+      setTournament(updated);
+      if (canReviewChats && authSession?.accessToken && updated.automaticBracket) {
+        setManagedBracket(await fetchTournamentPlan(slug, authSession.accessToken).catch(() => null));
+      } else {
+        setManagedBracket(null);
+      }
     } catch {
       setJoinError(t("dota.tournaments.loadError"));
     } finally {
@@ -58,6 +71,28 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
   const [inviteHashHandled, setInviteHashHandled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [canReviewChats, setCanReviewChats] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+
+  useEffect(() => {
+    setCanReviewChats(false);
+    if (!authSession?.accessToken) return;
+    let active = true;
+    void getCurrentUserProfile(authSession.accessToken).then((profile) => {
+      if (active) setCanReviewChats(profile.role === "ADMIN" || profile.role === "TOURNAMENT_MODERATOR");
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [authSession?.accessToken]);
+
+  useEffect(() => {
+    setManagedBracket(null);
+    if (!canReviewChats || !authSession?.accessToken || !tournament?.automaticBracket) return;
+    let active = true;
+    void fetchTournamentPlan(slug, authSession.accessToken)
+      .then((plan) => { if (active) setManagedBracket(plan); })
+      .catch(() => { if (active) setManagedBracket(null); });
+    return () => { active = false; };
+  }, [authSession?.accessToken, canReviewChats, slug, tournament?.automaticBracket]);
 
   useEffect(() => {
     let active = true;
@@ -203,6 +238,9 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
       setCreateSquadOpen(false);
       setSquadName("");
       setJoinFeedback(t("dota.tournaments.squadCreated"));
+      const created = updated.entries.find((entry) =>
+        entry.members.some((member) => member.dotaProfileSlug === myProfile?.slug));
+      if (created) router.push(tournamentRoomUrl(slug, created.id));
       await refreshManagedEntries();
     } catch {
       setJoinError(t("dota.tournaments.squadCreateError"));
@@ -281,7 +319,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
     if (typeof window === "undefined") return;
     try {
       await navigator.clipboard.writeText(
-        `${window.location.origin}/games/tournaments/${encodeURIComponent(slug)}#entry-${entryId}`
+        window.location.origin + tournamentRoomUrl(slug, entryId)
       );
       setCopiedEntryId(entryId);
       window.setTimeout(
@@ -371,11 +409,19 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
     );
   }
 
+  const ownEntry = tournament.entries.find((entry) =>
+    entry.members.some((member) => !!member.dotaProfileSlug && member.dotaProfileSlug === myProfile?.slug));
+  const entriesByStatus = [...tournament.entries].sort((left, right) =>
+    Number(left.status === "RESERVE") - Number(right.status === "RESERVE")
+  );
+  const visibleEntries = ownEntry
+    ? [ownEntry, ...entriesByStatus.filter((entry) => entry.id !== ownEntry.id)]
+    : entriesByStatus;
   return (
     <section className={styles.page}>
-      <Link className={styles.back} href="/games/tournaments">
-        ← {t("dota.tournaments.backToTournaments")}
-      </Link>
+      <TournamentBackLink href="/games/tournaments">
+        {t("dota.tournaments.backToTournaments")}
+      </TournamentBackLink>
       <header className={styles.hero}>
         <div>
           <p className={styles.eyebrow}>{t("dota.tournaments.eyebrow")}</p>
@@ -403,18 +449,13 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
               })}
             </span>
           </div>
-          {tournament.rulesUrl ? (
-            <a
-              className="button-secondary"
-              href={tournament.rulesUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
-              {t("dota.tournaments.rules")}
-            </a>
-          ) : null}
         </div>
-        {tournament.status === "REGISTRATION_OPEN" ? (
+        <div className={styles.heroActions}>
+        {ownEntry ? (
+          <Link className="button-primary" href={tournamentRoomUrl(slug, ownEntry.id)}>
+            {t("dota.tournaments.room.myTeam")}
+          </Link>
+        ) : tournament.status === "REGISTRATION_OPEN" ? (
           <button
             className={`button-primary ${styles.teamSignupPrimary}`}
             onClick={() => {
@@ -426,7 +467,37 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
             {t("dota.tournaments.joinOrCreateTeam")}
           </button>
         ) : null}
+        {canReviewChats ? <Link className="button-secondary" href={"/games/tournaments/manage/" + encodeURIComponent(tournament.slug)}>
+          {t("dota.tournaments.bracket.settings")}
+        </Link> : null}
+        {tournament.rulesUrl ? (
+          <a className="button-secondary" href={tournament.rulesUrl} rel="noreferrer" target="_blank">
+            {t("dota.tournaments.rules")}
+          </a>
+        ) : (
+          <button className="button-secondary" type="button" aria-expanded={rulesOpen}
+            aria-controls="tournament-rules" onClick={() => setRulesOpen((open) => !open)}>
+            {t("dota.tournaments.rules")}
+          </button>
+        )}
+        </div>
       </header>
+
+      {rulesOpen && !tournament.rulesUrl ? (
+        <section className={styles.rulesPanel} id="tournament-rules">
+          <h2>{t("dota.tournaments.rules")}</h2>
+          <dl>
+            <div><dt>{t("dota.tournaments.admin.gameModeLabel")}</dt><dd>{t(`dota.tournaments.mode.${tournament.gameMode}` as never)}</dd></div>
+            <div><dt>{t("dota.tournaments.admin.serverRegionLabel")}</dt><dd>{t(`dota.tournaments.region.${tournament.serverRegion}` as never)}</dd></div>
+          </dl>
+          <div className={styles.meta}>
+            <span>{t(tournament.allowSpectators ? "dota.tournaments.spectatorsEnabled" : "dota.tournaments.spectatorsDisabled")}</span>
+            <span>{t(tournament.cheatsEnabled ? "dota.tournaments.cheatsEnabled" : "dota.tournaments.cheatsDisabled")}</span>
+            {tournament.automaticBracket ? <span>{t(tournament.bracketFormat === "DOUBLE_ELIMINATION"
+              ? "dota.tournaments.bracket.double" : "dota.tournaments.bracket.single")}</span> : null}
+          </div>
+        </section>
+      ) : null}
 
       {tournament.status === "COMPLETED" ? (
         <>
@@ -441,11 +512,17 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
           </button>
         </>
       ) : null}
-      {tournament.status !== "COMPLETED" || bracketOpen ? (
+      {tournament.status !== "COMPLETED" || bracketOpen || canReviewChats ? (
         <>
-          {hasBracket ? (
+          {hasBracket && (tournament.status !== "COMPLETED" || bracketOpen) ? (
             <>
-              <DotaTournamentBracket tournament={tournament} />
+              <DotaTournamentBracket
+                tournament={managedBracket ?? tournament}
+                {...(canReviewChats && authSession?.accessToken && managedBracket ? { editor: {
+                  token: authSession.accessToken,
+                  onSaved: refreshTournament
+                } } : {})}
+              />
               {tournament.status !== "COMPLETED" ? (
                 <button
                   className="button-secondary"
@@ -458,7 +535,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
               ) : null}
             </>
           ) : null}
-          {!hasBracket && tournament.status !== "COMPLETED" ? (
+          {tournament.status !== "COMPLETED" || canReviewChats ? (
             <>
               <div className={styles.teamHeading} id="registered-teams">
                 <div>
@@ -468,6 +545,8 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                 {tournament.status === "REGISTRATION_OPEN" ? (
                   <button
                     className="button-secondary"
+                    disabled={!!ownEntry}
+                    title={ownEntry ? t("dota.team.createTeamDisabled") : undefined}
                     onClick={() => setCreateSquadOpen((open) => !open)}
                     type="button"
                   >
@@ -477,7 +556,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                   </button>
                 ) : null}
               </div>
-              {createSquadOpen && tournament.status === "REGISTRATION_OPEN" ? (
+              {createSquadOpen && !ownEntry && tournament.status === "REGISTRATION_OPEN" ? (
                 <section className={styles.squadCreatePanel}>
                   <div>
                     <h3>{t("dota.tournaments.createSquadTitle")}</h3>
@@ -555,15 +634,21 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                 </div>
               ) : (
                 <div className={styles.grid}>
-                  {tournament.entries.map((entry) => {
+                  {visibleEntries.map((entry) => {
                     const isCurrentMember = entry.members.some(
                       (member) =>
                         member.dotaProfileSlug && member.dotaProfileSlug === myProfile?.slug
                     );
+                    const registrationWindowOpen = tournament.status === "REGISTRATION_OPEN" &&
+                      (!tournament.registrationClosesAt || Date.parse(tournament.registrationClosesAt) > Date.now());
+                    const reserveWindowOpen = entry.status === "RESERVE" &&
+                      tournament.status === "REGISTRATION_CLOSED";
                     const canJoin =
-                      tournament.status === "REGISTRATION_OPEN" &&
+                      (registrationWindowOpen || reserveWindowOpen) &&
                       entry.members.length < 5 &&
                       !isCurrentMember;
+                    const reserveJoinOpen = reserveWindowOpen && entry.members.length < 5;
+                    const mayManageEntry = registrationWindowOpen || reserveWindowOpen;
                     const unassignedMembers = entry.members.filter(
                       (member) =>
                         !member.positionRole ||
@@ -573,14 +658,24 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                     );
 
                     return (
-                      <article className={styles.teamCard} id={`entry-${entry.id}`} key={entry.id}>
+                      <article className={styles.teamCard} id={`entry-${entry.id}`} key={entry.id}
+                        onClick={(event) => {
+                          if (!(event.target instanceof HTMLElement) ||
+                            event.target.closest("a,button,input,select,textarea,label")) return;
+                          router.push(tournamentRoomUrl(slug, entry.id));
+                        }}>
                         <div className={styles.teamCardTop}>
-                          <h3>{entry.teamName}</h3>
+                          <h3><Link href={tournamentRoomUrl(slug, entry.id)}>{entry.teamName}</Link></h3>
                           <div className={styles.teamCardBadges}>
                             <span
-                              className={`${styles.status} ${entry.status === "RECRUITING" ? styles.recruiting : ""}`}
+                              className={`${styles.status} ${entry.status === "RECRUITING" ? styles.recruiting : entry.status === "RESERVE" ? styles.reserve : ""}`}
+                              title={entry.status === "RESERVE" ? t("dota.tournaments.reserveHint") : undefined}
                             >
-                              {entry.status === "RECRUITING"
+                              {entry.status === "RESERVE"
+                                ? reserveJoinOpen
+                                  ? t("dota.tournaments.reserveJoinOpen")
+                                  : t("dota.tournaments.reserveStatus")
+                                : entry.status === "RECRUITING"
                                 ? tournament.status === "REGISTRATION_OPEN"
                                   ? t("dota.tournaments.recruiting")
                                   : t("dota.tournaments.recruitingClosed")
@@ -630,7 +725,8 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                             >
                               <span className={styles.position}>—</span>
                               <span className={styles.playerName}>
-                                {member.displayName} · {t("dota.tournaments.unassignedPosition")}
+                                {member.dotaProfileSlug ? <Link href={"/dota/" + encodeURIComponent(member.dotaProfileSlug)}>{member.displayName}</Link> : member.displayName}
+                                {" · "}{t("dota.tournaments.unassignedPosition")}
                               </span>
                               <span className={styles.mmr}>
                                 {member.mmr ? `${member.mmr} MMR` : "— MMR"}
@@ -638,10 +734,14 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                             </li>
                           ))}
                         </ul>
+                        {entry.status === "RESERVE" ? (
+                          <p className={styles.reserveHint}>{t("dota.tournaments.reserveHint")}</p>
+                        ) : null}
                         <div className={styles.teamCardActions}>
                           {managedEntries.some((managed) => managed.entryId === entry.id) ? (
                             <TournamentEntryManager
                               busy={busyEntryId === entry.id}
+                              locked={!mayManageEntry}
                               entry={
                                 managedEntries.find((managed) => managed.entryId === entry.id)!
                               }
@@ -665,7 +765,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                           >
                             {isCurrentMember &&
                             myProfile &&
-                            tournament.status === "REGISTRATION_OPEN" &&
+                            mayManageEntry &&
                             unassignedMembers.some(
                               (member) => member.dotaProfileSlug === myProfile.slug
                             ) ? (
@@ -748,6 +848,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                                   <label>
                                     <span>{t("dota.tournaments.selectPosition")}</span>
                                     <select
+                                      disabled={!!ownEntry}
                                       onChange={(event) =>
                                         setSelectedRoles((current) => ({
                                           ...current,
@@ -773,8 +874,10 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                                     className="button-primary"
                                     disabled={
                                       busyEntryId !== null ||
+                                      !!ownEntry ||
                                       availableRoles(entry.members, myProfile.roles).length === 0
                                     }
+                                    title={ownEntry ? t("dota.tournaments.room.alreadyMember") : undefined}
                                     onClick={() =>
                                       void handleJoin(
                                         entry.id,
@@ -794,15 +897,15 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                                 </div>
                               )
                             ) : null}
-                            {entry.teamPartySlug ? (
+                            {
                               <Link
                                 className={`button-secondary ${styles.teamPageLink} ${canJoin || isCurrentMember ? "" : styles.teamPageOnly}`}
-                                href={`/dota/teams/${encodeURIComponent(entry.teamPartySlug)}`}
+                                href={tournamentRoomUrl(slug, entry.id)}
                               >
-                                {t("dota.tournaments.openTeam")}
+                                {t("dota.tournaments.room.open")}
                               </Link>
-                            ) : null}
-                            {tournament.status === "REGISTRATION_OPEN" &&
+                            }
+                            {mayManageEntry &&
                             entry.members.length < 5 ? (
                               <button
                                 className={`button-secondary ${styles.teamPageLink}`}
@@ -862,12 +965,14 @@ function roleLabel(role: string, t: ReturnType<typeof useTranslation>): string {
 
 function TournamentEntryManager({
   busy,
+  locked,
   entry,
   onDecision,
   onJoinModeChange,
   onWithdraw
 }: {
   busy: boolean;
+  locked: boolean;
   entry: DotaTournamentManagedEntry;
   onDecision: (requestId: string, decision: "ACCEPT" | "DECLINE") => void;
   onJoinModeChange: (joinMode: "OPEN" | "CONFIRM") => void;
@@ -880,7 +985,7 @@ function TournamentEntryManager({
         <label>
           <span>{t("dota.tournaments.teamJoinMode")}</span>
           <select
-            disabled={busy}
+            disabled={busy || locked}
             onChange={(event) => onJoinModeChange(event.target.value as "OPEN" | "CONFIRM")}
             value={entry.joinMode}
           >
@@ -888,7 +993,7 @@ function TournamentEntryManager({
             <option value="OPEN">{t("dota.tournaments.openJoin")}</option>
           </select>
         </label>
-        <button className="button-secondary" disabled={busy} onClick={onWithdraw} type="button">
+        <button className="button-secondary" disabled={busy || locked} onClick={onWithdraw} type="button">
           {t("dota.tournaments.withdrawSquad")}
         </button>
       </div>
@@ -904,7 +1009,7 @@ function TournamentEntryManager({
               <div>
                 <button
                   className="button-primary"
-                  disabled={busy}
+                  disabled={busy || locked}
                   onClick={() => onDecision(request.id, "ACCEPT")}
                   type="button"
                 >
@@ -912,7 +1017,7 @@ function TournamentEntryManager({
                 </button>
                 <button
                   className="button-secondary"
-                  disabled={busy}
+                  disabled={busy || locked}
                   onClick={() => onDecision(request.id, "DECLINE")}
                   type="button"
                 >

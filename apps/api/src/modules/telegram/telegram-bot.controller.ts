@@ -86,6 +86,7 @@ class NotificationDeliveryDto {
   @IsString()
   @Matches(/^\d{1,32}$/)
   telegramUserId!: string;
+
 }
 
 class TelegramWebAccessTicketDto {

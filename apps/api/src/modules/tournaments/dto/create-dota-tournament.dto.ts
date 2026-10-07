@@ -19,6 +19,9 @@ export class CreateDotaTournamentDto {
   @IsOptional()
   @IsBoolean()
   automaticBracket?: boolean;
+  @IsOptional()
+  @IsIn(["SINGLE_ELIMINATION", "DOUBLE_ELIMINATION"])
+  bracketFormat?: "SINGLE_ELIMINATION" | "DOUBLE_ELIMINATION";
   @IsString()
   @MaxLength(120)
   title!: string;
@@ -79,6 +82,9 @@ export class CreateDotaTournamentDto {
 }
 
 export class UpdateDotaTournamentDto {
+  @IsOptional()
+  @IsIn(["SINGLE_ELIMINATION", "DOUBLE_ELIMINATION"])
+  bracketFormat?: "SINGLE_ELIMINATION" | "DOUBLE_ELIMINATION";
   @IsOptional()
   @IsBoolean()
   automaticBracket?: boolean;

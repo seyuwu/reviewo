@@ -188,6 +188,20 @@
   text-decoration: none;
 }
 
+.rulesPanel {
+  background: rgb(16 19 30 / 95%);
+  border: 1px solid rgb(167 139 250 / 22%);
+  border-radius: 1rem;
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.rulesPanel h2 { font-size: 1.15rem; margin: 0; }
+.rulesPanel dl { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin: 0; }
+.rulesPanel dt { color: var(--color-text-muted); font-size: 0.8rem; }
+.rulesPanel dd { font-weight: 600; margin: 0.3rem 0 0; }
+
 .teamHeading h2,
 .teamHeading p {
   margin: 0;
@@ -267,6 +281,10 @@
   font-size: 1rem;
   margin: 0;
 }
+
+.teamCard { cursor: pointer; }
+.teamCard h3 a { color: inherit; text-decoration: none; }
+.teamCard h3 a:hover { color: #c4b5fd; }
 
 .memberList {
   display: grid;
@@ -471,6 +489,19 @@
   background: rgb(245 158 11 / 13%);
   border-color: rgb(245 158 11 / 23%);
   color: #fcd34d;
+}
+
+.reserve {
+  background: rgb(59 130 246 / 12%);
+  border-color: rgb(96 165 250 / 28%);
+  color: #bfdbfe;
+}
+
+.reserveHint {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: -0.15rem 0 0;
 }
 
 .emptySlot {

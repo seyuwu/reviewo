@@ -7,7 +7,8 @@ import {
 } from "@nestjs/common";
 import type { Prisma } from "#prisma/client";
 import { PrismaService } from "../../database/prisma.service.js";
-import { buildBracket, rankEntries } from "./tournament-bracket.js";
+import { bracketRoundOffset, buildBracket, rankEntries } from "./tournament-bracket.js";
+import { TOURNAMENT_AFTERPARTY_MS } from "./tournament-room-policy.js";
 
 const entryInclude = { members: { where: { isActive: true } } } as const;
 
@@ -16,6 +17,7 @@ export class DotaTournamentBracketService implements OnModuleInit, OnModuleDestr
   private readonly logger = new Logger(DotaTournamentBracketService.name);
   private timer?: NodeJS.Timeout;
   private scanning = false;
+  private closingCursor: string | undefined;
   private dueCursor: string | undefined;
   private activeCursor: string | undefined;
   constructor(private readonly prisma: PrismaService) {}
@@ -40,6 +42,10 @@ export class DotaTournamentBracketService implements OnModuleInit, OnModuleDestr
     ) {
       throw new ConflictException("Сетку можно создать только после открытия регистрации");
     }
+    await tx.dotaTournamentEntry.updateMany({
+      data: { status: "RESERVE" },
+      where: { tournamentId, status: "RECRUITING" }
+    });
     const entries = await tx.dotaTournamentEntry.findMany({
       where: { tournamentId, status: "REGISTERED" },
       include: entryInclude
@@ -99,7 +105,7 @@ export class DotaTournamentBracketService implements OnModuleInit, OnModuleDestr
   async reconcileLocked(tx: Prisma.TransactionClient, tournamentId: string) {
     const tournament = await tx.dotaTournament.findUniqueOrThrow({
       where: { id: tournamentId },
-      include: { bracketSeeds: true, matches: true }
+      include: { bracketSeeds: true, matches: true, matchPlans: true }
     });
     if (
       !tournament.bracketSize ||
@@ -110,12 +116,18 @@ export class DotaTournamentBracketService implements OnModuleInit, OnModuleDestr
     const bracket = buildBracket(
       tournament.bracketSize,
       tournament.bracketSeeds,
-      tournament.matches
+      tournament.matches,
+      tournament.bracketFormat
     );
     const now = new Date();
+    const plans = new Map(tournament.matchPlans.map((plan) =>
+      [plan.bracketKind + "-" + plan.roundOffset + "-" + plan.matchNumber, plan]));
     if (bracket.ready.length)
       await tx.dotaTournamentMatch.createMany({
-        data: bracket.ready.map((node) => ({
+        data: bracket.ready.map((node) => {
+          const plan = plans.get(node.kind + "-" + bracketRoundOffset(tournament.bracketSize!, node.kind, node.roundNumber) + "-" + node.matchNumber);
+          const scheduledAt = new Date(Math.max(now.getTime(), plan?.scheduledAt?.getTime() ?? 0));
+          return {
           tournamentId,
           createdByUserId: tournament.createdByUserId,
           bracketKind: node.kind,
@@ -125,25 +137,63 @@ export class DotaTournamentBracketService implements OnModuleInit, OnModuleDestr
           entryBId: node.entryBId!,
           hostSide: "A",
           status: "SCHEDULED",
-          scheduledAt: now,
-          lobbyDeadlineAt: new Date(now.getTime() + 15 * 60_000),
+          scheduledAt,
+          bestOf: plan?.bestOf ?? 1,
+          lobbyDeadlineAt: new Date(scheduledAt.getTime() + 15 * 60_000),
           gameMode: tournament.gameMode,
           serverRegion: tournament.serverRegion,
           allowSpectators: tournament.allowSpectators,
           cheatsEnabled: tournament.cheatsEnabled
-        }))
+        };
+        })
       });
-    if (bracket.complete)
+    if (bracket.complete) {
       await tx.dotaTournament.update({
         where: { id: tournamentId },
-        data: { status: "COMPLETED" }
+        data: { status: "COMPLETED", finishedAt: now }
       });
+      await tx.dotaTournamentRoom.updateMany({
+        where: { entry: { tournamentId }, expiresAt: null },
+        data: { expiresAt: new Date(now.getTime() + TOURNAMENT_AFTERPARTY_MS) }
+      });
+    }
   }
 
   private async scan() {
     if (this.scanning) return;
     this.scanning = true;
     try {
+      const now = new Date();
+      const closing = await this.prisma.dotaTournament.findMany({
+        select: { id: true },
+        take: 25,
+        orderBy: { id: "asc" },
+        where: {
+          ...(this.closingCursor ? { id: { gt: this.closingCursor } } : {}),
+          registrationClosesAt: { lte: now },
+          status: "REGISTRATION_OPEN"
+        }
+      });
+      this.closingCursor = closing.length === 25 ? closing.at(-1)?.id : undefined;
+      for (const item of closing) {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${item.id}`}))`;
+          const tournament = await tx.dotaTournament.findUnique({
+            select: { id: true, registrationClosesAt: true, status: true },
+            where: { id: item.id }
+          });
+          if (tournament?.status !== "REGISTRATION_OPEN" ||
+            !tournament.registrationClosesAt || tournament.registrationClosesAt > new Date()) return;
+          await tx.dotaTournament.update({
+            data: { status: "REGISTRATION_CLOSED" },
+            where: { id: tournament.id }
+          });
+          await tx.dotaTournamentEntry.updateMany({
+            data: { status: "RESERVE" },
+            where: { tournamentId: tournament.id, status: "RECRUITING" }
+          });
+        });
+      }
       const due = await this.prisma.dotaTournament.findMany({
         select: { id: true },
         take: 25,

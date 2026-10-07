@@ -18,7 +18,6 @@ export function DotaTournamentsView() {
   const [canManageTournaments, setCanManageTournaments] = useState(false);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-
   useEffect(() => {
     let active = true;
     void fetchDotaTournaments()
@@ -74,9 +73,6 @@ export function DotaTournamentsView() {
               {t("dota.tournaments.admin.create")}
             </Link>
           ) : null}
-          <Link className="button-primary" href="/dota/teams/create?from=tournaments">
-            {t("dota.tournaments.createTeam")}
-          </Link>
         </div>
       </header>
 

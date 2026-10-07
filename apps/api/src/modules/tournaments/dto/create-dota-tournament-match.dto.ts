@@ -6,6 +6,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsOptional,
+  Matches,
   IsString,
   IsUrl,
   IsUUID,
@@ -35,6 +36,9 @@ export const DOTA_TOURNAMENT_REGIONS = [
 ] as const;
 
 export class CreateDotaTournamentMatchDto {
+  @IsOptional()
+  @IsIn([1, 3, 5])
+  bestOf?: 1 | 3 | 5;
   @IsUUID()
   entryAId!: string;
 
@@ -98,6 +102,27 @@ export class ConfirmDotaTournamentLobbyDto {
   playersReady!: boolean;
 }
 
+export class ConfirmDotaTournamentStageDto {
+  @IsIn(["LOBBY", "RESULT"])
+  stage!: "LOBBY" | "RESULT";
+
+  @IsIn(["A", "B"])
+  side!: "A" | "B";
+}
+
+export class SubmitDotaTournamentMatchGameDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  gameNumber?: number;
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^\d{1,20}$/)
+  @MaxLength(20)
+  dotaMatchId!: string;
+}
+
 export class DisputeDotaTournamentMatchDto {
   @IsString()
   @MaxLength(1000)
@@ -115,8 +140,8 @@ export class SubmitDotaTournamentResultDto {
 }
 
 export class ResolveDotaTournamentMatchDto {
-  @IsIn(["ENTRY_A", "ENTRY_B", "REPLAY", "CANCEL"])
-  resolution!: "ENTRY_A" | "ENTRY_B" | "REPLAY" | "CANCEL";
+  @IsIn(["ENTRY_A", "ENTRY_B", "ENTRY_A_SERIES", "ENTRY_B_SERIES", "REPLAY", "CANCEL"])
+  resolution!: "ENTRY_A" | "ENTRY_B" | "ENTRY_A_SERIES" | "ENTRY_B_SERIES" | "REPLAY" | "CANCEL";
 
   @IsString()
   @IsNotEmpty()

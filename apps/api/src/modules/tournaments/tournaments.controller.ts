@@ -31,6 +31,7 @@ import {
 import {
   ConfirmDotaTournamentLobbyDto,
   DisputeDotaTournamentMatchDto,
+  SubmitDotaTournamentMatchGameDto,
   SubmitDotaTournamentLobbyDto,
   SubmitDotaTournamentResultDto
 } from "./dto/create-dota-tournament-match.dto.js";
@@ -116,6 +117,19 @@ export class DotaTournamentsController {
   ) {
     await this.rateLimit(currentUser, request);
     return this.dotaTournamentsService.startMatch(slug, matchId, currentUser);
+  }
+
+  @Post(":slug/matches/:matchId/game-id")
+  @UseGuards(JwtAuthGuard)
+  async submitMatchGameId(
+    @Param("slug") slug: string,
+    @Param("matchId", new ParseUUIDPipe()) matchId: string,
+    @Body() input: SubmitDotaTournamentMatchGameDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ) {
+    await this.rateLimit(currentUser, request);
+    return this.dotaTournamentsService.submitMatchGameId(slug, matchId, input, currentUser);
   }
 
   @Post(":slug/matches/:matchId/result")
@@ -263,6 +277,19 @@ export class DotaTournamentsController {
     @CurrentUser() currentUser: AuthenticatedUser
   ) {
     return this.dotaTournamentsService.listTeamEntries(teamSlug, currentUser);
+  }
+
+  @Delete(":slug/entries/:entryId/members/:userId")
+  @UseGuards(JwtAuthGuard)
+  async removeMember(
+    @Param("slug") slug: string,
+    @Param("entryId", ParseUUIDPipe) entryId: string,
+    @Param("userId", ParseUUIDPipe) userId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ) {
+    await this.rateLimit(currentUser, request);
+    return this.dotaTournamentsService.removeEntryMember(slug, entryId, userId, currentUser);
   }
 
   @Delete(":slug/entries/:entryId")

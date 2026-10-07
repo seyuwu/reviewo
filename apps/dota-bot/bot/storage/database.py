@@ -239,12 +239,131 @@ class BotStorage:
             """INSERT OR IGNORE INTO bot_funnel_events (telegram_user_id, event_type, occurred_at)
                SELECT telegram_user_id, 'account_ready', updated_at FROM telegram_sessions"""
         )
+        self.connection.executescript("""
+            CREATE TABLE IF NOT EXISTS registration_notice_config (
+              id INTEGER PRIMARY KEY CHECK (id=1), enabled INTEGER NOT NULL DEFAULT 0,
+              text TEXT NOT NULL DEFAULT '', photo_file_id TEXT,
+              entities_json TEXT NOT NULL DEFAULT '[]', ttl_seconds INTEGER NOT NULL DEFAULT 3600
+            );
+            CREATE TABLE IF NOT EXISTS registration_notice_deliveries (
+              telegram_user_id INTEGER PRIMARY KEY, status TEXT NOT NULL,
+              created_at TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', photo_file_id TEXT,
+              entities_json TEXT NOT NULL DEFAULT '[]', ttl_seconds INTEGER NOT NULL DEFAULT 3600,
+              retry_at TEXT, sent_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_registration_notice_pending
+              ON registration_notice_deliveries(status, retry_at, created_at);
+        """)
+        first_install = self.connection.execute(
+            "INSERT OR IGNORE INTO registration_notice_config(id) VALUES(1)"
+        ).rowcount == 1
+        if first_install:
+            # Existing registrations must never receive this new announcement retroactively.
+            self.connection.execute("""
+                INSERT OR IGNORE INTO registration_notice_deliveries(telegram_user_id,status,created_at)
+                SELECT telegram_user_id,'skipped',MIN(occurred_at) FROM bot_funnel_events
+                WHERE event_type IN ('account_created','account_ready') GROUP BY telegram_user_id
+            """)
+        # Telegram sends have no idempotency key. Never repeat an uncertain in-flight send after restart.
+        self.connection.execute(
+            "UPDATE registration_notice_deliveries SET status='failed',text='',photo_file_id=NULL,entities_json='[]' WHERE status='sending'"
+        )
         self.connection.commit()
 
     def close(self) -> None:
         if self.connection is not None:
             self.connection.close()
             self.connection = None
+
+    def registration_notice_config(self) -> dict:
+        row = dict(self._connection().execute(
+            "SELECT * FROM registration_notice_config WHERE id=1"
+        ).fetchone())
+        row["enabled"] = bool(row["enabled"])
+        row["entities"] = json.loads(row.pop("entities_json"))
+        return row
+
+    def save_registration_notice(self, text: str, ttl_seconds: int, *,
+                                 photo_file_id: str | None = None, entities=None) -> None:
+        validate_broadcast_content(text, photo_file_id)
+        ttl_seconds = validate_broadcast_duration(ttl_seconds)
+        formatting = normalize_broadcast_entities(text, entities)
+        with self.lock:
+            self._connection().execute("""
+                UPDATE registration_notice_config SET enabled=1,text=?,ttl_seconds=?,
+                  photo_file_id=?,entities_json=? WHERE id=1
+            """, (text, ttl_seconds, photo_file_id, json.dumps(formatting, ensure_ascii=False)))
+            self._connection().commit()
+
+    def disable_registration_notice(self) -> None:
+        with self.lock:
+            self._connection().execute("UPDATE registration_notice_config SET enabled=0 WHERE id=1")
+            self._connection().execute(
+                "UPDATE registration_notice_deliveries SET status='skipped',text='',photo_file_id=NULL,entities_json='[]' WHERE status='pending'"
+            )
+            self._connection().commit()
+
+    def remove_registration_notice(self) -> None:
+        with self.lock:
+            self.disable_registration_notice()
+            self._connection().execute("""
+                UPDATE registration_notice_config SET text='',photo_file_id=NULL,entities_json='[]' WHERE id=1
+            """)
+            self._connection().commit()
+
+    def queue_registration_notice(self, telegram_user_id: int) -> None:
+        """Record the first completed profile even when announcements are disabled."""
+        with self.lock:
+            self._connection().execute("""
+                INSERT OR IGNORE INTO registration_notice_deliveries
+                  (telegram_user_id,status,created_at,text,photo_file_id,entities_json,ttl_seconds)
+                SELECT ?,CASE WHEN enabled=1 THEN 'pending' ELSE 'skipped' END,?,
+                  CASE WHEN enabled=1 THEN text ELSE '' END,
+                  CASE WHEN enabled=1 THEN photo_file_id ELSE NULL END,
+                  CASE WHEN enabled=1 THEN entities_json ELSE '[]' END,
+                  ttl_seconds FROM registration_notice_config WHERE id=1
+            """, (telegram_user_id, timestamp()))
+            self._connection().commit()
+
+    def next_registration_notice(self) -> dict | None:
+        row = self._connection().execute("""
+            SELECT * FROM registration_notice_deliveries WHERE status='pending'
+              AND (retry_at IS NULL OR retry_at<=?) ORDER BY created_at LIMIT 1
+        """, (timestamp(),)).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        result["entities"] = json.loads(result.pop("entities_json"))
+        return result
+
+    def claim_registration_notice(self, telegram_user_id: int) -> bool:
+        with self.lock:
+            changed = self._connection().execute("""
+                UPDATE registration_notice_deliveries SET status='sending'
+                WHERE telegram_user_id=? AND status='pending'
+                  AND EXISTS(SELECT 1 FROM registration_notice_config WHERE id=1 AND enabled=1)
+            """, (telegram_user_id,)).rowcount
+            self._connection().commit()
+            return changed == 1
+
+    def finish_registration_notice(self, telegram_user_id: int, status: str,
+                                   retry_seconds: float | None = None) -> None:
+        if status not in {'sent', 'failed', 'pending', 'skipped'}:
+            raise ValueError('Invalid registration notice status')
+        retry_at = (datetime.now(UTC) + timedelta(seconds=retry_seconds)).isoformat() if retry_seconds else None
+        with self.lock:
+            if status == 'pending' and not self.registration_notice_config()["enabled"]:
+                status = 'skipped'
+            self._connection().execute("""
+                UPDATE registration_notice_deliveries SET status=?,sent_at=?,retry_at=?
+                WHERE telegram_user_id=? AND status='sending'
+            """, (status, timestamp() if status == 'sent' else None, retry_at, telegram_user_id))
+            if status != 'pending':
+                self._connection().execute("""
+                    UPDATE registration_notice_deliveries SET text='',photo_file_id=NULL,entities_json='[]'
+                    WHERE telegram_user_id=? AND status=?
+                """, (telegram_user_id, status))
+            self._connection().commit()
 
     def save_session(
         self,

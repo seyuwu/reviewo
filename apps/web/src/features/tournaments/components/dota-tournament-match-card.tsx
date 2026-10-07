@@ -1,18 +1,24 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { useTranslation } from "../../i18n/locale-provider";
 import {
   confirmDotaTournamentLobby,
   confirmDotaTournamentResult,
+  confirmManagedDotaTournamentStage,
   disputeDotaTournamentMatch,
+  resolveAdminDotaTournamentMatch,
   startDotaTournamentMatch,
+  startManagedDotaTournamentMatch,
+  submitDotaTournamentMatchGameId,
+  submitManagedDotaTournamentLobby,
+  submitManagedDotaTournamentMatchGameId,
   submitDotaTournamentLobby,
   submitDotaTournamentResult
 } from "../api/dota-tournaments-api";
-import type { DotaTournamentMatch, DotaTournamentMatchSummary } from "../types/dota-tournament";
+import type { AdminDotaTournamentMatch, DotaTournamentMatch, DotaTournamentMatchSummary } from "../types/dota-tournament";
 import { formatDate } from "./dota-tournaments-view";
 import styles from "./dota-tournament-match-card.module.css";
 
@@ -22,6 +28,7 @@ export function DotaTournamentMatchCard({
   onChanged,
   onBusyChange,
   initialDetails = null,
+  staffMatch = null,
   participantLoading = false
 }: {
   match: DotaTournamentMatchSummary;
@@ -29,24 +36,75 @@ export function DotaTournamentMatchCard({
   onChanged?: () => Promise<void>;
   onBusyChange?: (busy: boolean) => void;
   initialDetails?: DotaTournamentMatch | null;
+  staffMatch?: AdminDotaTournamentMatch | null;
   participantLoading?: boolean;
 }) {
   const t = useTranslation();
   const { authSession } = useAuthSession();
   const [details, setDetails] = useState<DotaTournamentMatch | null>(initialDetails);
-  useEffect(() => {
-    setDetails(initialDetails);
-  }, [initialDetails]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lobbyName, setLobbyName] = useState("");
   const [lobbyPassword, setLobbyPassword] = useState("");
   const [lobbyProofUrl, setLobbyProofUrl] = useState("");
+  const [managedGameMode, setManagedGameMode] = useState(match.gameMode);
+  const [managedServerRegion, setManagedServerRegion] = useState(match.serverRegion);
+  const [managedAllowSpectators, setManagedAllowSpectators] = useState(match.allowSpectators);
+  const [managedCheatsEnabled, setManagedCheatsEnabled] = useState(match.cheatsEnabled);
+  const [lobbyFormDirty, setLobbyFormDirty] = useState(false);
   const [winnerEntryId, setWinnerEntryId] = useState(match.entryA.id);
   const [resultEvidenceUrl, setResultEvidenceUrl] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
+  const [managerDecisionNote, setManagerDecisionNote] = useState("");
+  const [dotaMatchId, setDotaMatchId] = useState("");
+  const [idGameNumber, setIdGameNumber] = useState(1);
+  const [copiedDotaMatchId, setCopiedDotaMatchId] = useState<string | null>(null);
   const [playersReady, setPlayersReady] = useState(false);
+  const [showLobbyHostOnboarding, setShowLobbyHostOnboarding] = useState(false);
+  const onboardingVisit = useRef<string | null>(null);
   const [serverNowMs, setServerNowMs] = useState(() => Date.parse(match.serverNow));
+  useEffect(() => {
+    setDetails(initialDetails);
+  }, [initialDetails]);
+  useEffect(() => {
+    setShowLobbyHostOnboarding(false);
+    if (
+      !authSession?.userId ||
+      details?.status !== "SCHEDULED" ||
+      !details.canManageLobby ||
+      match.canManageMatch
+    ) {
+      return;
+    }
+
+    const seenKey = `tournament-lobby-host-onboarding:v1:${authSession.userId}`;
+    const visitKey = `${authSession.userId}:${details.id}`;
+    if (onboardingVisit.current === visitKey) {
+      setShowLobbyHostOnboarding(true);
+      return;
+    }
+    try {
+      if (window.localStorage.getItem(seenKey) === "1") return;
+      window.localStorage.setItem(seenKey, "1");
+    } catch {
+      // Keep the onboarding useful for this visit when browser storage is unavailable.
+    }
+    onboardingVisit.current = visitKey;
+    setShowLobbyHostOnboarding(true);
+  }, [authSession?.userId, details?.id, details?.status, details?.canManageLobby, match.canManageMatch]);
+  useEffect(() => {
+    if (lobbyFormDirty) return;
+    setLobbyName(staffMatch?.lobbyName ?? "");
+    setLobbyPassword(staffMatch?.lobbyPassword ?? "");
+    setLobbyProofUrl(staffMatch?.lobbyProofUrl ?? "");
+    setManagedGameMode(staffMatch?.gameMode ?? match.gameMode);
+    setManagedServerRegion(staffMatch?.serverRegion ?? match.serverRegion);
+    setManagedAllowSpectators(staffMatch?.allowSpectators ?? match.allowSpectators);
+    setManagedCheatsEnabled(staffMatch?.cheatsEnabled ?? match.cheatsEnabled);
+  }, [staffMatch?.lobbyName, staffMatch?.lobbyPassword, staffMatch?.lobbyProofUrl,
+    staffMatch?.gameMode, staffMatch?.serverRegion, staffMatch?.allowSpectators,
+    staffMatch?.cheatsEnabled, match.gameMode, match.serverRegion, match.allowSpectators,
+    match.cheatsEnabled, lobbyFormDirty]);
 
   async function updateDetails(action: () => Promise<DotaTournamentMatch>) {
     onBusyChange?.(true);
@@ -55,11 +113,112 @@ export function DotaTournamentMatchCard({
     try {
       setDetails(await action());
       await onChanged?.();
+      return true;
+    } catch {
+      setError(t("dota.tournaments.matchActionError"));
+      return false;
+    } finally {
+      setBusy(false);
+      onBusyChange?.(false);
+    }
+  }
+
+  async function confirmManagedStage(stage: "LOBBY" | "RESULT", side: "A" | "B") {
+    if (!authSession?.accessToken || busy) return;
+    onBusyChange?.(true);
+    setBusy(true);
+    setError(null);
+    try {
+      await confirmManagedDotaTournamentStage(
+        tournamentSlug,
+        match.id,
+        stage,
+        side,
+        authSession.accessToken
+      );
+      await onChanged?.();
     } catch {
       setError(t("dota.tournaments.matchActionError"));
     } finally {
       setBusy(false);
       onBusyChange?.(false);
+    }
+  }
+
+  async function submitManagedLobby(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!authSession?.accessToken || busy) return;
+    onBusyChange?.(true);
+    setBusy(true);
+    setError(null);
+    try {
+      await submitManagedDotaTournamentLobby(tournamentSlug, match.id, {
+        allowSpectators: managedAllowSpectators,
+        cheatsEnabled: managedCheatsEnabled,
+        gameMode: managedGameMode,
+        lobbyName: lobbyName.trim(),
+        lobbyPassword: lobbyPassword.trim(),
+        ...(lobbyProofUrl.trim() ? { lobbyProofUrl: lobbyProofUrl.trim() } : {}),
+        serverRegion: managedServerRegion
+      }, authSession.accessToken);
+      await onChanged?.();
+      setLobbyFormDirty(false);
+    } catch {
+      setError(t("dota.tournaments.matchActionError"));
+    } finally {
+      setBusy(false);
+      onBusyChange?.(false);
+    }
+  }
+
+  async function runManagedAction(action: () => Promise<unknown>) {
+    if (!authSession?.accessToken || busy) return;
+    onBusyChange?.(true);
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await onChanged?.();
+    } catch {
+      setError(t("dota.tournaments.matchActionError"));
+    } finally {
+      setBusy(false);
+      onBusyChange?.(false);
+    }
+  }
+
+  function awardTechnicalForfeit(losingSide: "A" | "B") {
+    if (!authSession?.accessToken || busy || !managerDecisionNote.trim()) return;
+    const losingTeam = losingSide === "A" ? current.entryA.teamName : current.entryB.teamName;
+    if (!window.confirm(t("dota.tournaments.matchManagerForfeitConfirm", { team: losingTeam }))) return;
+    const resolution = losingSide === "A" ? "ENTRY_B_SERIES" : "ENTRY_A_SERIES";
+    void runManagedAction(() => resolveAdminDotaTournamentMatch(
+      match.id, resolution, managerDecisionNote.trim(), authSession.accessToken!
+    ));
+  }
+
+  async function submitGameId(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!authSession?.accessToken || !details || busy || !/^\d{1,20}$/.test(dotaMatchId.trim()))
+      return;
+    await updateDetails(() =>
+      submitDotaTournamentMatchGameId(
+        tournamentSlug,
+        match.id,
+        dotaMatchId.trim(),
+        authSession.accessToken!,
+        idGameNumber
+      )
+    );
+  }
+
+  async function copyGameId(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedDotaMatchId(value);
+      window.setTimeout(() => setCopiedDotaMatchId(null), 1500);
+    } catch {
+      setError(t("dota.tournaments.matchActionError"));
     }
   }
 
@@ -111,6 +270,16 @@ export function DotaTournamentMatchCard({
   }
 
   const current = details ?? match;
+  const eligibleGames = (current.gameResults ?? []).filter((game) => !!game.startedAt &&
+    (!!game.winnerEntryId || game.gameNumber === current.gameNumber &&
+      ["RESULT_CONFIRMATION", "DISPUTED", "COMPLETED"].includes(current.status)));
+  const idSignature = eligibleGames.map((game) => game.gameNumber + ":" + (game.dotaMatchId ?? "")).join("|");
+  useEffect(() => {
+    const game = eligibleGames.find((item) => item.gameNumber === idGameNumber) ?? eligibleGames.at(-1);
+    if (game) { setIdGameNumber(game.gameNumber); setDotaMatchId(game.dotaMatchId ?? ""); }
+  }, [idSignature, idGameNumber]);
+  const games = current.gameResults?.length ? current.gameResults : current.dotaMatchId
+    ? [{ gameNumber: 1, dotaMatchId: current.dotaMatchId, winnerEntryId: null }] : [];
   useEffect(() => {
     const receivedAt = performance.now();
     const serverTime = Date.parse(current.serverNow);
@@ -137,11 +306,24 @@ export function DotaTournamentMatchCard({
         ? current.entryB.teamName
         : null;
   const canConfirmLobby =
+    !match.canManageMatch &&
     details?.status === "LOBBY_CONFIRMATION" &&
     details.canConfirmLobby &&
     !(details.viewerSide === "A" ? details.captainAReadyAt : details.captainBReadyAt);
   const canConfirmResult =
+    !match.canManageMatch &&
     details?.status === "RESULT_CONFIRMATION" && details.viewerSide !== details.resultReporterSide;
+  const canManageLobbyStage = current.status === "LOBBY_CONFIRMATION" &&
+    (!current.captainAReadyAt || !current.captainBReadyAt);
+  const canManageResultStage = current.status === "RESULT_CONFIRMATION" &&
+    !!staffMatch?.resultReporterSide;
+  const canManageLobbyDetails = match.canManageMatch && staffMatch &&
+    ["SCHEDULED", "LOBBY_CONFIRMATION", "READY", "SPECTATOR_ADMISSION"].includes(current.status);
+  const canStartManagedMatch = match.canManageMatch && !!staffMatch?.lobbyName &&
+    !!staffMatch.lobbyPassword && !!current.captainAReadyAt && !!current.captainBReadyAt &&
+    ["READY", "SPECTATOR_ADMISSION"].includes(current.status);
+  const canForfeitMatch = match.canManageMatch &&
+    ["SCHEDULED", "LOBBY_CONFIRMATION", "READY", "SPECTATOR_ADMISSION", "IN_PROGRESS", "RESULT_CONFIRMATION"].includes(current.status);
 
   return (
     <article className={styles.card} id={`tournament-match-${match.id}`}>
@@ -164,6 +346,8 @@ export function DotaTournamentMatchCard({
         <span className={styles.status}>{statusLabel}</span>
       </div>
       <div className={styles.meta}>
+        <strong>{t("dota.tournaments.seriesScore", { bestOf: String(current.bestOf ?? 1),
+          a: String(current.score?.A ?? 0), b: String(current.score?.B ?? 0), game: String(current.gameNumber ?? 1) })}</strong>
         <span>{formatDate(current.scheduledAt)}</span>
         <span>{t(`dota.tournaments.mode.${current.gameMode}` as never)}</span>
         <span>{t(`dota.tournaments.region.${current.serverRegion}` as never)}</span>
@@ -188,7 +372,29 @@ export function DotaTournamentMatchCard({
         ) : null}
       </div>
       {winnerName ? (
-        <strong>{t("dota.tournaments.matchWinnerLabel", { team: winnerName })}</strong>
+        <strong>{t(current.technicalVictory ? "dota.tournaments.seriesTechnicalWin" : "dota.tournaments.matchWinnerLabel", { team: winnerName })}</strong>
+      ) : null}
+      {games.length ? (
+        <section className={styles.gameIdSection} aria-label={t("dota.tournaments.matchGameIdTitle")}>
+          <strong>{t("dota.tournaments.matchGameIdTitle")}</strong>
+          {games.map((game) => <div className={styles.gameId} key={game.gameNumber}>
+            <span>{t("dota.tournaments.seriesGame", { number: String(game.gameNumber) })}
+              {game.winnerEntryId ? " · " + (game.winnerEntryId === current.entryA.id ? current.entryA.teamName : current.entryB.teamName) : ""}</span>
+            <code>{game.dotaMatchId ?? "—"}</code>
+            {game.dotaMatchId ? (
+            <button
+              className="button-secondary"
+              onClick={() => void copyGameId(game.dotaMatchId!)}
+              type="button"
+            >
+              {copiedDotaMatchId === game.dotaMatchId
+                ? t("dota.tournaments.matchGameIdCopied")
+                : t("dota.tournaments.matchGameIdCopy")}
+            </button>
+            ) : null}
+          </div>)}
+          <p>{t("dota.tournaments.matchGameIdReplayHint")}</p>
+        </section>
       ) : null}
       {current.status === "LOBBY_CONFIRMATION" ? (
         <div className={styles.readiness}>
@@ -281,8 +487,14 @@ export function DotaTournamentMatchCard({
           ) : null}
           {details.disputeReason ? <p className={styles.dispute}>{details.disputeReason}</p> : null}
 
-          {details.status === "SCHEDULED" && details.canManageLobby ? (
+          {details.status === "SCHEDULED" && details.canManageLobby && !match.canManageMatch ? (
             <form className={styles.actionForm} onSubmit={(event) => void submitLobby(event)}>
+              {showLobbyHostOnboarding ? (
+                <div className={styles.hostOnboarding} role="status">
+                  <strong>{t("dota.tournaments.matchLobbyHostFirstTimeTitle")}</strong>
+                  <p>{t("dota.tournaments.matchLobbyHostFirstTimeHint")}</p>
+                </div>
+              ) : null}
               <label>
                 {t("dota.tournaments.matchLobbyName")}
                 <input
@@ -301,22 +513,13 @@ export function DotaTournamentMatchCard({
                   value={lobbyPassword}
                 />
               </label>
-              <label>
-                {t("dota.tournaments.matchLobbyProof")}
-                <input
-                  maxLength={500}
-                  onChange={(event) => setLobbyProofUrl(event.target.value)}
-                  type="url"
-                  value={lobbyProofUrl}
-                />
-              </label>
               <p>{t("dota.tournaments.matchSettingsConfirmHint")}</p>
               <button className="button-primary" disabled={busy} type="submit">
                 {busy ? t("common.loadingEllipsis") : t("dota.tournaments.matchSubmitLobby")}
               </button>
             </form>
           ) : null}
-          {details.status === "SCHEDULED" && !details.canManageLobby ? (
+          {details.status === "SCHEDULED" && !details.canManageLobby && !match.canManageMatch ? (
             <p>{t("dota.tournaments.matchWaitHost")}</p>
           ) : null}
           {details.status === "LOBBY_CONFIRMATION" && canConfirmLobby ? (
@@ -344,7 +547,7 @@ export function DotaTournamentMatchCard({
               </button>
             </>
           ) : null}
-          {details.status === "LOBBY_CONFIRMATION" && !canConfirmLobby ? (
+          {details.status === "LOBBY_CONFIRMATION" && !canConfirmLobby && !match.canManageMatch ? (
             <p>
               {t(
                 details.canConfirmLobby
@@ -354,10 +557,10 @@ export function DotaTournamentMatchCard({
             </p>
           ) : null}
           {(details.status === "READY" || details.status === "SPECTATOR_ADMISSION") &&
-          details.canManageLobby ? (
+          details.canManageLobby && !match.canManageMatch ? (
             <button
               className="button-primary"
-              disabled={busy || (details.status === "SPECTATOR_ADMISSION" && spectatorSeconds > 0)}
+              disabled={busy || Date.parse(details.scheduledAt) > serverNowMs || (details.status === "SPECTATOR_ADMISSION" && spectatorSeconds > 0)}
               onClick={() =>
                 void updateDetails(() =>
                   startDotaTournamentMatch(tournamentSlug, match.id, authSession!.accessToken)
@@ -370,6 +573,8 @@ export function DotaTournamentMatchCard({
                 : t("dota.tournaments.matchStart")}
             </button>
           ) : null}
+          {["READY", "SPECTATOR_ADMISSION"].includes(details.status) && Date.parse(details.scheduledAt) > serverNowMs ?
+            <p>{t("dota.tournaments.seriesNotBefore", { time: formatDate(details.scheduledAt) })}</p> : null}
           {details.status === "READY" && !details.canManageLobby ? (
             <p>{t("dota.tournaments.matchWaitHost")}</p>
           ) : null}
@@ -382,7 +587,7 @@ export function DotaTournamentMatchCard({
               t={t}
             />
           ) : null}
-          {details.status === "IN_PROGRESS" ? (
+          {details.status === "IN_PROGRESS" && !match.canManageMatch ? (
             <form className={styles.actionForm} onSubmit={(event) => void submitResult(event)}>
               <label>
                 {t("dota.tournaments.matchWinner")}
@@ -431,13 +636,185 @@ export function DotaTournamentMatchCard({
               />
             </>
           ) : null}
-          {details.status === "RESULT_CONFIRMATION" && !canConfirmResult ? (
+          {details.status === "RESULT_CONFIRMATION" && !canConfirmResult && !match.canManageMatch ? (
             <p>{t("dota.tournaments.matchWaitResult")}</p>
           ) : null}
           {details.status === "DISPUTED" ? <p>{t("dota.tournaments.matchDisputeSent")}</p> : null}
+          {details.canSubmitMatchGameId && !match.canManageMatch ? (
+            <form className={styles.actionForm} onSubmit={(event) => void submitGameId(event)}>
+              {eligibleGames.length > 1 ? <label>{t("dota.tournaments.matchGameIdTitle")}
+                <select value={idGameNumber} onChange={(event) => setIdGameNumber(Number(event.target.value))}>
+                  {eligibleGames.map((game) => <option key={game.gameNumber} value={game.gameNumber}>
+                    {t("dota.tournaments.seriesGame", { number: String(game.gameNumber) })}</option>)}
+                </select>
+              </label> : null}
+              <label>
+                {t("dota.tournaments.matchGameIdLabel")}
+                <input
+                  autoComplete="off"
+                  inputMode="numeric"
+                  maxLength={20}
+                  onChange={(event) => setDotaMatchId(event.target.value)}
+                  pattern="[0-9]{1,20}"
+                  required
+                  value={dotaMatchId}
+                />
+              </label>
+              <p>{t("dota.tournaments.matchGameIdCaptainHint")}</p>
+              <button
+                className="button-primary"
+                disabled={busy || !/^\d{1,20}$/.test(dotaMatchId.trim())}
+                type="submit"
+              >
+                {busy ? t("common.loadingEllipsis") : t("dota.tournaments.matchGameIdSave")}
+              </button>
+            </form>
+          ) : null}
         </div>
       ) : participantLoading ? (
         <p>{t("common.loadingEllipsis")}</p>
+      ) : null}
+      {match.canManageMatch && staffMatch && authSession?.accessToken &&
+      (canManageLobbyDetails || canManageLobbyStage || canStartManagedMatch ||
+        current.status === "IN_PROGRESS" || current.status === "RESULT_CONFIRMATION" || eligibleGames.length > 0) ? (
+        <section className={styles.managerStage}>
+          {canManageLobbyDetails ? (
+            <form className={styles.actionForm} onSubmit={(event) => void submitManagedLobby(event)}>
+              <label>
+                {t("dota.tournaments.matchLobbyName")}
+                <input maxLength={120} onChange={(event) => { setLobbyName(event.target.value); setLobbyFormDirty(true); }} required value={lobbyName} />
+              </label>
+              <label>
+                {t("dota.tournaments.matchLobbyPassword")}
+                <input maxLength={120} onChange={(event) => { setLobbyPassword(event.target.value); setLobbyFormDirty(true); }} required value={lobbyPassword} />
+              </label>
+              <label>
+                {t("dota.tournaments.matchGameMode")}
+                <select value={managedGameMode} onChange={(event) => { setManagedGameMode(event.target.value); setLobbyFormDirty(true); }}>
+                  {["ALL_PICK", "RANDOM_DRAFT", "CAPTAINS_MODE", "CAPTAINS_DRAFT", "SINGLE_DRAFT"].map((mode) =>
+                    <option key={mode} value={mode}>{t(`dota.tournaments.mode.${mode}` as never)}</option>)}
+                </select>
+              </label>
+              <label>
+                {t("dota.tournaments.matchRegion")}
+                <select value={managedServerRegion} onChange={(event) => { setManagedServerRegion(event.target.value); setLobbyFormDirty(true); }}>
+                  {["EUROPE", "RUSSIA", "US_EAST", "US_WEST", "SOUTH_AMERICA", "SOUTHEAST_ASIA", "CHINA", "AUSTRALIA", "SOUTH_AFRICA"].map((region) =>
+                    <option key={region} value={region}>{t(`dota.tournaments.region.${region}` as never)}</option>)}
+                </select>
+              </label>
+              <label className={styles.managerToggle}>
+                <input checked={managedAllowSpectators} onChange={(event) => { setManagedAllowSpectators(event.target.checked); setLobbyFormDirty(true); }} type="checkbox" />
+                {t("dota.tournaments.matchAllowSpectators")}
+              </label>
+              <label className={styles.managerToggle}>
+                <input checked={managedCheatsEnabled} onChange={(event) => { setManagedCheatsEnabled(event.target.checked); setLobbyFormDirty(true); }} type="checkbox" />
+                {t("dota.tournaments.matchCheatsEnabled")}
+              </label>
+              <button className="button-primary" disabled={busy || !lobbyFormDirty || !lobbyName.trim() || !lobbyPassword.trim()} type="submit">
+                {busy ? t("common.loadingEllipsis") : t("dota.tournaments.matchManagerSaveLobby")}
+              </button>
+            </form>
+          ) : null}
+          {canManageLobbyStage ? (
+            <div className={styles.managerStageActions}>
+              {(["A", "B"] as const).map((side) => {
+                const readyAt = side === "A" ? current.captainAReadyAt : current.captainBReadyAt;
+                const teamName = side === "A" ? current.entryA.teamName : current.entryB.teamName;
+                return readyAt ? null : (
+                  <button
+                    className="button-secondary"
+                    disabled={busy}
+                    key={side}
+                    onClick={() => void confirmManagedStage("LOBBY", side)}
+                    type="button"
+                  >
+                    {t("dota.tournaments.matchManagerConfirmLobbyFor", { team: teamName })}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+          {canManageResultStage && staffMatch.resultReporterSide ? (() => {
+            const side = staffMatch.resultReporterSide === "A" ? "B" : "A";
+            const teamName = side === "A" ? current.entryA.teamName : current.entryB.teamName;
+            return (
+              <div className={styles.managerStageActions}>
+                <button
+                  className="button-primary"
+                  disabled={busy}
+                  onClick={() => void confirmManagedStage("RESULT", side)}
+                  type="button"
+                >
+                  {t("dota.tournaments.matchManagerConfirmResultFor", { team: teamName })}
+                </button>
+              </div>
+            );
+          })() : null}
+          {canStartManagedMatch ? (
+            <button className="button-primary" disabled={busy} onClick={() => void runManagedAction(() =>
+              startManagedDotaTournamentMatch(tournamentSlug, match.id, authSession.accessToken!))} type="button">
+              {t("dota.tournaments.matchStart")}
+            </button>
+          ) : null}
+          {canForfeitMatch ? (
+            <div className={styles.managerResult}>
+              <strong>{t("dota.tournaments.matchManagerForfeitTitle")}</strong>
+              <p>{t("dota.tournaments.matchManagerForfeitHint")}</p>
+              <label>
+                {t("dota.tournaments.matchManagerDecisionNote")}
+                <textarea maxLength={1000} onChange={(event) => setManagerDecisionNote(event.target.value)} rows={2} value={managerDecisionNote} />
+              </label>
+              <div className={styles.managerStageActions}>
+                {(["A", "B"] as const).map((losingSide) => {
+                  const teamName = losingSide === "A" ? current.entryA.teamName : current.entryB.teamName;
+                  return <button className="button-secondary" disabled={busy || !managerDecisionNote.trim()} key={losingSide}
+                    onClick={() => awardTechnicalForfeit(losingSide)} type="button">
+                    {t("dota.tournaments.matchManagerForfeitFor", { team: teamName })}
+                  </button>;
+                })}
+              </div>
+            </div>
+          ) : null}
+          {match.canManageMatch && ["IN_PROGRESS", "RESULT_CONFIRMATION"].includes(current.status) ? (
+            <div className={styles.managerResult}>
+              <label>
+                {t("dota.tournaments.matchManagerDecisionNote")}
+                <textarea maxLength={1000} onChange={(event) => setManagerDecisionNote(event.target.value)} rows={2} value={managerDecisionNote} />
+              </label>
+              <div className={styles.managerStageActions}>
+                {(["A", "B"] as const).map((side) => {
+                  const teamName = side === "A" ? current.entryA.teamName : current.entryB.teamName;
+                  return <button className="button-secondary" disabled={busy || !managerDecisionNote.trim()} key={side}
+                    onClick={() => void runManagedAction(() => resolveAdminDotaTournamentMatch(
+                      match.id, side === "A" ? "ENTRY_A" : "ENTRY_B", managerDecisionNote.trim(), authSession.accessToken!))} type="button">
+                    {t("dota.tournaments.matchManagerAwardGameFor", { team: teamName })}
+                  </button>;
+                })}
+              </div>
+            </div>
+          ) : null}
+          {match.canManageMatch && eligibleGames.length > 0 ? (
+            <form className={styles.actionForm} onSubmit={(event) => {
+              event.preventDefault();
+              if (!authSession?.accessToken || !/^\d{1,20}$/.test(dotaMatchId.trim())) return;
+              void runManagedAction(() => submitManagedDotaTournamentMatchGameId(
+                tournamentSlug, match.id, dotaMatchId.trim(), authSession.accessToken!, idGameNumber));
+            }}>
+              {eligibleGames.length > 1 ? <label>{t("dota.tournaments.matchGameIdTitle")}
+                <select value={idGameNumber} onChange={(event) => setIdGameNumber(Number(event.target.value))}>
+                  {eligibleGames.map((game) => <option key={game.gameNumber} value={game.gameNumber}>
+                    {t("dota.tournaments.seriesGame", { number: String(game.gameNumber) })}</option>)}
+                </select>
+              </label> : null}
+              <label>{t("dota.tournaments.matchGameIdLabel")}
+                <input autoComplete="off" inputMode="numeric" maxLength={20} onChange={(event) => setDotaMatchId(event.target.value)} pattern="[0-9]{1,20}" required value={dotaMatchId} />
+              </label>
+              <button className="button-secondary" disabled={busy || !/^\d{1,20}$/.test(dotaMatchId.trim())} type="submit">
+                {t("dota.tournaments.matchGameIdSave")}
+              </button>
+            </form>
+          ) : null}
+        </section>
       ) : null}
       {error ? <p className={styles.error}>{error}</p> : null}
     </article>

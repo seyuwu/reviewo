@@ -42,6 +42,7 @@ model User {
   createdDotaTournamentEntries DotaTournamentEntry[] @relation("DotaTournamentEntryCreator")
   dotaTournamentEntryMembers DotaTournamentEntryMember[]
   dotaTournamentJoinRequests DotaTournamentEntryRequest[]
+  dotaTournamentRoomMessages DotaTournamentRoomMessage[]
   gamePartyInvitesSent   GamePartyInvite[] @relation("GamePartyInviter")
   gamePartyInvitesReceived GamePartyInvite[] @relation("GamePartyInvitee")
   gamePartyChatMessages  GamePartyChatMessage[]
@@ -1123,6 +1124,7 @@ enum DotaTournamentStatus {
 enum DotaTournamentEntryStatus {
   RECRUITING
   REGISTERED
+  RESERVE
   WITHDRAWN
   DISQUALIFIED
 
@@ -1216,9 +1218,11 @@ model DotaTournament {
   registrationClosesAt  DateTime?            @map("registration_closes_at") @db.Timestamptz(6)
   maxTeams              Int?                 @map("max_teams")
   automaticBracket      Boolean              @default(true) @map("automatic_bracket")
+  bracketFormat         String               @default("SINGLE_ELIMINATION") @map("bracket_format") @db.VarChar(24)
   bracketGeneratedAt    DateTime?            @map("bracket_generated_at") @db.Timestamptz(6)
   bracketSize           Int?                 @map("bracket_size")
   status                DotaTournamentStatus @default(DRAFT)
+  finishedAt            DateTime?            @map("finished_at") @db.Timestamptz(6)
   gameMode              String               @default("ALL_PICK") @map("game_mode") @db.VarChar(32)
   serverRegion          String               @default("EUROPE") @map("server_region") @db.VarChar(32)
   allowSpectators       Boolean              @default(false) @map("allow_spectators")
@@ -1232,9 +1236,11 @@ model DotaTournament {
   entryMembers          DotaTournamentEntryMember[]
   matches               DotaTournamentMatch[]
   bracketSeeds          DotaTournamentBracketSeed[]
+  matchPlans            DotaTournamentMatchPlan[]
 
   @@index([status, registrationClosesAt])
   @@index([automaticBracket, status, startsAt])
+  @@index([status, finishedAt])
   @@map("dota_tournaments")
   @@schema("social")
 }
@@ -1259,6 +1265,7 @@ model DotaTournamentEntry {
   matchesAsA            DotaTournamentMatch[]        @relation("DotaTournamentMatchEntryA")
   matchesAsB            DotaTournamentMatch[]        @relation("DotaTournamentMatchEntryB")
   bracketSeed           DotaTournamentBracketSeed?
+  room                  DotaTournamentRoom?
 
   @@unique([tournamentId, teamPartyId])
   @@index([tournamentId, status, createdAt])
@@ -1290,6 +1297,7 @@ model DotaTournamentMatch {
   roundNumber                Int                       @map("round_number")
   matchNumber                Int                       @map("match_number")
   bracketKind                String                    @default("MANUAL") @map("bracket_kind") @db.VarChar(16)
+  bestOf                     Int                       @default(1) @map("best_of")
   scheduledAt                DateTime                  @map("scheduled_at") @db.Timestamptz(6)
   status                     DotaTournamentMatchStatus @default(SCHEDULED)
   gameMode                   String                    @map("game_mode") @db.VarChar(32)
@@ -1316,6 +1324,7 @@ model DotaTournamentMatch {
   resultEvidenceUrl          String?                   @map("result_evidence_url") @db.VarChar(500)
   streamUrl                  String?                   @map("stream_url") @db.VarChar(500)
   disputeReason              String?                   @map("dispute_reason") @db.VarChar(1000)
+  disputeNotifiedAt          DateTime?                 @map("dispute_notified_at") @db.Timestamptz(6)
   winnerEntryId              String?                   @map("winner_entry_id") @db.Uuid
   resolutionNote             String?                   @map("resolution_note") @db.VarChar(1000)
   resolvedByUserId           String?                   @map("resolved_by_user_id") @db.Uuid
@@ -1329,14 +1338,96 @@ model DotaTournamentMatch {
   tournament                 DotaTournament            @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   entryA                     DotaTournamentEntry       @relation("DotaTournamentMatchEntryA", fields: [entryAId], references: [id], onDelete: Cascade)
   entryB                     DotaTournamentEntry       @relation("DotaTournamentMatchEntryB", fields: [entryBId], references: [id], onDelete: Cascade)
+  games                      DotaTournamentMatchGame[]
+  chatMessages               DotaTournamentMatchChatMessage[]
+  mentionCooldowns           DotaTournamentMatchMentionCooldown[]
 
-  @@unique([tournamentId, roundNumber, matchNumber])
+  @@unique([tournamentId, bracketKind, roundNumber, matchNumber], map: "dota_tournament_matches_bracket_round_match_key")
   @@index([tournamentId, scheduledAt])
   @@index([status, lobbyDeadlineAt])
   @@index([status, confirmationDeadlineAt])
   @@index([status, spectatorAdmissionEndsAt])
   @@index([status, resultDeadlineAt])
+  @@index([status, disputeNotifiedAt])
   @@map("dota_tournament_matches")
+  @@schema("social")
+}
+
+model DotaTournamentMatchChatMessage {
+  id           String @id @default(uuid()) @db.Uuid
+  matchId      String @map("match_id") @db.Uuid
+  userId       String @map("user_id") @db.Uuid
+  displayName  String @map("display_name") @db.VarChar(200)
+  message      String @db.VarChar(4000)
+  mentions     Json @default("[]")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  match        DotaTournamentMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  notifications DotaTournamentMatchChatMention[]
+
+  @@index([matchId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("dota_tournament_match_chat_messages")
+  @@schema("social")
+}
+
+model DotaTournamentMatchChatMention {
+  id           String @id @default(uuid()) @db.Uuid
+  messageId    String @map("message_id") @db.Uuid
+  targetUserId String @map("target_user_id") @db.Uuid
+  readAt       DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  message      DotaTournamentMatchChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, targetUserId])
+  @@index([targetUserId, readAt, createdAt(sort: Desc)])
+  @@map("dota_tournament_match_chat_mentions")
+  @@schema("social")
+}
+
+model DotaTournamentMatchMentionCooldown {
+  matchId      String @map("match_id") @db.Uuid
+  targetUserId String @map("target_user_id") @db.Uuid
+  notifiedAt   DateTime @map("notified_at") @db.Timestamptz(6)
+  match        DotaTournamentMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, targetUserId])
+  @@map("dota_tournament_match_mention_cooldowns")
+  @@schema("social")
+}
+
+model DotaTournamentMatchGame {
+  id          String             @id @default(uuid()) @db.Uuid
+  matchId     String             @map("match_id") @db.Uuid
+  gameNumber  Int                @default(1) @map("game_number")
+  dotaMatchId String?            @unique @map("dota_match_id") @db.VarChar(20)
+  winnerEntryId String?          @map("winner_entry_id") @db.Uuid
+  startedAt   DateTime?          @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime?          @map("completed_at") @db.Timestamptz(6)
+  resultEvidenceUrl String?      @map("result_evidence_url") @db.VarChar(500)
+  resolutionNote String?         @map("resolution_note") @db.VarChar(1000)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  match       DotaTournamentMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, gameNumber], map: "dota_tournament_match_games_match_game_key")
+
+  @@map("dota_tournament_match_games")
+  @@schema("social")
+}
+
+/// Settings belong to a bracket position, even before its opponents are known.
+model DotaTournamentMatchPlan {
+  id              String @id @default(uuid()) @db.Uuid
+  tournamentId    String @map("tournament_id") @db.Uuid
+  bracketKind     String @map("bracket_kind") @db.VarChar(16)
+  roundOffset     Int    @map("round_offset")
+  matchNumber     Int    @map("match_number")
+  bestOf          Int    @default(1) @map("best_of")
+  scheduledAt     DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  updatedByUserId String @map("updated_by_user_id") @db.Uuid
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tournament      DotaTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, bracketKind, roundOffset, matchNumber], map: "dota_tournament_match_plans_position_key")
+  @@map("dota_tournament_match_plans")
   @@schema("social")
 }
 
@@ -1374,6 +1465,7 @@ model DotaTournamentEntryMember {
   mmr            Int?
   positionRole   String?            @map("position_role") @db.VarChar(8)
   isActive       Boolean            @default(true) @map("is_active")
+  roomLeftAt     DateTime?           @map("room_left_at") @db.Timestamptz(6)
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   entry          DotaTournamentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   tournament     DotaTournament      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
@@ -1383,6 +1475,49 @@ model DotaTournamentEntryMember {
   @@index([tournamentId, isActive])
   @@index([userId])
   @@map("dota_tournament_entry_members")
+  @@schema("social")
+}
+
+/// Live collaboration space; historical tournament lineups survive room cleanup.
+model DotaTournamentRoom {
+  id                   String   @id @default(uuid()) @db.Uuid
+  entryId              String   @unique @map("entry_id") @db.Uuid
+  expiresAt            DateTime? @map("expires_at") @db.Timestamptz(6)
+  discordChannelId     String?   @map("discord_channel_id") @db.VarChar(32)
+  discordInviteUrl     String?   @map("discord_invite_url") @db.VarChar(256)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  entry                DotaTournamentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  messages             DotaTournamentRoomMessage[]
+  voiceGrants          DotaTournamentRoomVoiceGrant[]
+
+  @@index([expiresAt])
+  @@map("dota_tournament_rooms")
+  @@schema("social")
+}
+
+model DotaTournamentRoomMessage {
+  id           String @id @default(uuid()) @db.Uuid
+  roomId       String @map("room_id") @db.Uuid
+  senderUserId String? @map("sender_user_id") @db.Uuid
+  senderName   String @map("sender_name") @db.VarChar(80)
+  body         String @db.VarChar(10000)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  room         DotaTournamentRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender       User? @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+
+  @@index([roomId, createdAt, id])
+  @@map("dota_tournament_room_messages")
+  @@schema("social")
+}
+
+model DotaTournamentRoomVoiceGrant {
+  roomId        String @map("room_id") @db.Uuid
+  userId        String @map("user_id") @db.Uuid
+  discordUserId String @map("discord_user_id") @db.VarChar(32)
+  room          DotaTournamentRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, userId])
+  @@map("dota_tournament_room_voice_grants")
   @@schema("social")
 }
 

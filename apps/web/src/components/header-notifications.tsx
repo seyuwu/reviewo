@@ -24,6 +24,7 @@ import {
 import { FRIEND_REQUEST_NOTIFICATION_EVENT, type FriendNotificationEventDetail } from "../features/social/lib/friend-notifications";
 import type { FriendshipRequest, GamePartyInvite } from "../features/social/types/social";
 import { OpiniaIcon } from "./opinia-icon";
+import { fetchTournamentNotifications, readMatchMention, type TournamentDisputeNotification } from "../features/tournaments/api/tournament-notifications-api";
 import styles from "./header-notifications.module.css";
 
 /** Fallback badge refresh while the tab is visible (realtime via socket). */
@@ -41,6 +42,9 @@ export function HeaderNotifications() {
   const [open, setOpen] = useState(false);
   const [incomingFriends, setIncomingFriends] = useState<FriendshipRequest[]>([]);
   const [partyInvites, setPartyInvites] = useState<GamePartyInvite[]>([]);
+  const [tournamentDisputes, setTournamentDisputes] = useState<TournamentDisputeNotification[]>([]);
+  const [matchMentions, setMatchMentions] = useState<TournamentDisputeNotification[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -49,12 +53,32 @@ export function HeaderNotifications() {
   const pendingForceRef = useRef(false);
   const lastFetchAtRef = useRef(0);
   const accessTokenRef = useRef<string | null>(null);
+  const dismissStorageKey = authSession?.userId
+    ? `opinia.notifications.dismissed.v1:${authSession.userId}`
+    : null;
   const knownPartyInviteIdsRef = useRef<Set<string> | null>(null);
   const knownPartyInviteStatusRef = useRef<Map<string, GamePartyInvite["status"]> | null>(null);
   const toastedEventIdsRef = useRef<Set<string>>(new Set());
   const knownFriendIdsRef = useRef<Set<string> | null>(null);
+  const knownDisputesRef = useRef<Set<string> | null>(null);
+  const knownMentionsRef = useRef<Set<string> | null>(null);
 
   accessTokenRef.current = authSession?.accessToken ?? null;
+
+  useEffect(() => {
+    setDismissedIds(new Set());
+    if (!dismissStorageKey) return;
+    try {
+      const stored: unknown = JSON.parse(window.localStorage.getItem(dismissStorageKey) ?? "[]");
+      if (Array.isArray(stored)) setDismissedIds(new Set(stored.filter((item): item is string => typeof item === "string")));
+    } catch { /* Ignore unavailable or malformed local notification preferences. */ }
+  }, [dismissStorageKey]);
+
+  useEffect(() => {
+    setTournamentDisputes([]);
+    knownDisputesRef.current = null;
+    setMatchMentions([]); knownMentionsRef.current = null;
+  }, [authSession?.accessToken]);
 
   const loadNotifications = useCallback(async (options?: { force?: boolean }) => {
     const accessToken = accessTokenRef.current;
@@ -82,9 +106,10 @@ export function HeaderNotifications() {
     lastFetchAtRef.current = now;
 
     try {
-      const [friends, parties] = await Promise.all([
+      const [friends, parties, disputes] = await Promise.all([
         fetchFriendRequests(accessToken),
-        fetchMyParties(accessToken)
+        fetchMyParties(accessToken),
+        fetchTournamentNotifications(accessToken).catch(() => null)
       ]);
 
       if (accessTokenRef.current === accessToken) {
@@ -136,6 +161,29 @@ export function HeaderNotifications() {
         }
 
         const knownFriends = knownFriendIdsRef.current;
+
+        if (disputes) {
+          setTournamentDisputes(disputes.items);
+          const mentions = disputes.mentions ?? [];
+          setMatchMentions(mentions);
+          if (knownMentionsRef.current) for (const notice of mentions) {
+            if (!knownMentionsRef.current.has(notice.id)) pushToastOnce("match-mention-" + notice.id, {
+              title: t("dota.tournaments.matchChat.mentioned"), body: notice.reason,
+              ctaLabel: t("dota.tournaments.matchChat.open"), href: notice.href
+            });
+          }
+          knownMentionsRef.current = new Set(mentions.map((notice) => notice.id));
+          if (knownDisputesRef.current) {
+            for (const notice of disputes.items) {
+              if (!knownDisputesRef.current.has(notice.eventId)) pushToastOnce("tournament-dispute-" + notice.eventId, {
+                title: t("dota.tournaments.disputeNotificationTitle"),
+                body: notice.tournamentTitle + ": " + notice.teams,
+                ctaLabel: t("dota.tournaments.disputeNotificationOpen"), href: notice.href
+              });
+            }
+          }
+          knownDisputesRef.current = new Set(disputes.items.map((notice) => notice.eventId));
+        }
 
         if (knownFriends) {
           for (const request of friends.incoming) {
@@ -285,6 +333,8 @@ export function HeaderNotifications() {
     if (!authSession?.accessToken) {
       setIncomingFriends([]);
       setPartyInvites([]);
+      setTournamentDisputes([]);
+      knownDisputesRef.current = null;
       setActionError(null);
       knownPartyInviteIdsRef.current = null;
       knownPartyInviteStatusRef.current = null;
@@ -443,7 +493,32 @@ export function HeaderNotifications() {
     return null;
   }
 
-  const totalCount = incomingFriends.length + partyInvites.length;
+  const visibleFriends = incomingFriends.filter((item) => !dismissedIds.has(`friend:${item.id}`));
+  const visiblePartyInvites = partyInvites.filter((item) => !dismissedIds.has(`party:${item.id}`));
+  const visibleDisputes = tournamentDisputes.filter((item) => !dismissedIds.has(`dispute:${item.eventId}`));
+  const visibleMentions = matchMentions.filter((item) => !dismissedIds.has(`mention:${item.id}`));
+  const totalCount = visibleFriends.length + visiblePartyInvites.length +
+    visibleDisputes.length + visibleMentions.length;
+
+  function dismissNotification(id: string) {
+    const next = new Set(dismissedIds);
+    next.add(id);
+    setDismissedIds(next);
+    if (!dismissStorageKey) return;
+    try {
+      window.localStorage.setItem(dismissStorageKey, JSON.stringify(Array.from(next).slice(-500)));
+    } catch { /* Dismissal still applies for the current session if storage is unavailable. */ }
+  }
+
+  function dismissButton(id: string) {
+    return <button
+      aria-label={t("web.nav.dismissNotification")}
+      className={styles.dismiss}
+      onClick={(event) => { event.preventDefault(); event.stopPropagation(); dismissNotification(id); }}
+      title={t("web.nav.dismissNotification")}
+      type="button"
+    >×</button>;
+  }
 
   function canAcceptPartyInvite(invite: GamePartyInvite): boolean {
     // Only captain can accept APPLICATIONS; applicants withdraw via decline.
@@ -580,12 +655,46 @@ export function HeaderNotifications() {
             <p className={styles.empty}>{t("web.nav.notificationsEmpty")}</p>
           ) : null}
 
-          {incomingFriends.length > 0 ? (
+          {visibleDisputes.length > 0 ? (
+            <section className={styles.section}>
+              <h3>{t("dota.tournaments.disputeNotificationTitle")}</h3>
+              <ul className={styles.list}>
+                {visibleDisputes.map((notice) => <li key={notice.eventId}>
+                  {dismissButton(`dispute:${notice.eventId}`)}
+                  <div className={styles.itemCopy}>
+                    <strong>{notice.tournamentTitle}</strong>
+                    <span>{notice.teams}</span>
+                    <span>{notice.reason}</span>
+                    <Link href={notice.href} onClick={() => setOpen(false)}>{t("dota.tournaments.disputeNotificationOpen")}</Link>
+                  </div>
+                </li>)}
+              </ul>
+            </section>
+          ) : null}
+
+          {visibleMentions.length > 0 ? <section className={styles.section}>
+            <h3>{t("dota.tournaments.matchChat.mentioned")}</h3>
+            <ul className={styles.list}>{visibleMentions.map((notice) => <li key={notice.id}>
+              {dismissButton(`mention:${notice.id}`)}
+              <div className={styles.itemCopy}><strong>{notice.tournamentTitle}</strong><span>{notice.teams}</span><span>{notice.reason}</span>
+                <Link href={notice.href} onClick={() => {
+                  setOpen(false);
+                  const token = authSession?.accessToken;
+                  if (token) void readMatchMention(notice.id, token).then(() => {
+                    if (accessTokenRef.current === token) void loadNotifications({ force: true });
+                  }).catch(() => undefined);
+                }}>{t("dota.tournaments.matchChat.open")}</Link>
+              </div>
+            </li>)}</ul>
+          </section> : null}
+
+          {visibleFriends.length > 0 ? (
             <section className={styles.section}>
               <h3>{t("web.nav.notificationsFriends")}</h3>
               <ul className={styles.list}>
-                {incomingFriends.map((request) => (
+                {visibleFriends.map((request) => (
                   <li key={request.id}>
+                    {dismissButton(`friend:${request.id}`)}
                     <div className={styles.itemCopy}>
                       {request.otherUser.dotaSlug ? (
                         <Link href={`/dota/${request.otherUser.dotaSlug}`} onClick={() => setOpen(false)}>
@@ -620,11 +729,11 @@ export function HeaderNotifications() {
             </section>
           ) : null}
 
-          {partyInvites.length > 0 ? (
+          {visiblePartyInvites.length > 0 ? (
             <section className={styles.section}>
               <h3>{t("web.nav.notificationsParties")}</h3>
               <ul className={styles.list}>
-                {partyInvites.map((invite) => {
+                {visiblePartyInvites.map((invite) => {
                   const isCaptainApplication =
                     invite.inviteKind === "APPLICATION" && invite.direction === "outgoing";
                   const showAccept = canAcceptPartyInvite(invite);
@@ -635,6 +744,7 @@ export function HeaderNotifications() {
 
                   return (
                   <li key={invite.id}>
+                    {dismissButton(`party:${invite.id}`)}
                     <div className={styles.itemCopy}>
                       <Link href={`/dota/teams/${invite.partySlug}`} onClick={() => setOpen(false)}>
                         {title}

@@ -113,7 +113,36 @@
   border-radius: var(--radius-card);
   display: grid;
   gap: 0.5rem;
-  padding: 0.65rem;
+  padding: 0.65rem 2.2rem 0.65rem 0.65rem;
+  position: relative;
+}
+
+.dismiss {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 1.1rem;
+  height: 1.65rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  position: absolute;
+  right: 0.4rem;
+  top: 0.35rem;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  width: 1.65rem;
+}
+
+.dismiss:hover, .dismiss:focus-visible {
+  background: rgb(127 29 29 / 16%);
+  border-color: rgb(248 113 113 / 30%);
+  color: #fca5a5;
+  outline: none;
 }
 
 .itemCopy {
@@ -193,6 +222,17 @@
 
 :global([data-product="games"]) .itemCopy span {
   color: #9aa3b5;
+}
+
+:global([data-product="games"]) .dismiss {
+  color: #9aa3b5;
+}
+
+:global([data-product="games"]) .dismiss:hover,
+:global([data-product="games"]) .dismiss:focus-visible {
+  background: rgb(248 113 113 / 12%);
+  border-color: rgb(248 113 113 / 28%);
+  color: #fca5a5;
 }
 
 :global([data-product="games"]) .declineButton {

@@ -14,6 +14,7 @@ from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.broadcast_content import broadcast_preview_pages, normalize_broadcast_entities, validate_broadcast_content
 from ..services.broadcasts import send_broadcast_message
+from ..services.registration_notices import send_registration_message
 from ..services.broadcast_duration import (
     BROADCAST_TTL_PRESETS,
     format_broadcast_duration,
@@ -28,6 +29,7 @@ from ..ui.keyboards import (
     admin_keyboard,
     admin_preview_keyboard,
     admin_broadcast_duration_keyboard,
+    admin_registration_notice_keyboard,
 )
 
 router = Router(name="admin")
@@ -192,6 +194,27 @@ async def show_duration_picker(bot, api, settings, storage, state, user_id, chat
     )
 
 
+async def show_registration_notice_settings(bot, api, settings, storage, state, user_id, chat_id):
+    await state.clear()
+    config = storage.registration_notice_config()
+    has_content = bool(config["text"] or config["photo_file_id"])
+    text = (
+        "<b>Сообщение после регистрации</b>\n\n"
+        f"Отправка: <b>{'включена' if config['enabled'] else 'отключена'}</b>\n"
+        "Только один раз после первого завершения регистрации в боте. "
+        "Старым пользователям и при редактировании профиля не отправляется.\n\n"
+    )
+    if has_content:
+        text += f"Удаление: через <b>{format_broadcast_duration(config['ttl_seconds'])}</b> после доставки.\n"
+        text += "Сохранённое сообщение можно посмотреть, изменить или протестировать на себе."
+    else:
+        text += "Сообщение пока не настроено. Можно отправить текст или фото с подписью."
+    await edit_panel_content(
+        bot, storage, api, settings, user_id, "admin:registration", text,
+        admin_registration_notice_keyboard(has_content, config["enabled"]), chat_id,
+    )
+
+
 async def show_broadcast_preview(bot, api, settings, storage, state, user_id, chat_id, page: int = 0) -> None:
     text = await _get_draft_text(settings, state, user_id)
     ttl_seconds = await _get_draft_duration(state)
@@ -204,10 +227,22 @@ async def show_broadcast_preview(bot, api, settings, storage, state, user_id, ch
     page = max(0, min(page, len(pages) - 1))
     chunk, entities = pages[page]
     preview_body = html_decoration.unparse(chunk, [MessageEntity.model_validate(value) for value in entities]) or "Без подписи"
+    registration = data.get("broadcast_target") == "registration"
+    if registration:
+        page_label = f"Страница {page + 1} из {len(pages)}\n" if len(pages) > 1 else ""
+        preview_text = (
+            "<b>Предпросмотр сообщения после регистрации</b>\n\n"
+            "Получатель: новый пользователь после первой регистрации.\n"
+            f"Удаление через <b>{format_broadcast_duration(ttl_seconds)}</b> после доставки.\n"
+            f"{page_label}\n{preview_body}\n\n"
+            "«Сохранить и включить» применит сообщение для будущих регистраций."
+        )
+    else:
+        preview_text = _preview_text(text, storage, ttl_seconds, bool(photo_file_id), preview_body=preview_body, page=page, page_count=len(pages))
     await edit_panel_content(
         bot, storage, api, settings, user_id, "admin:broadcast:preview",
-        _preview_text(text, storage, ttl_seconds, bool(photo_file_id), preview_body=preview_body, page=page, page_count=len(pages)),
-        admin_preview_keyboard(bool(photo_file_id), page, len(pages)), chat_id,
+        preview_text,
+        admin_preview_keyboard(bool(photo_file_id), page, len(pages), registration=True) if registration else admin_preview_keyboard(bool(photo_file_id), page, len(pages)), chat_id,
         media_photo=photo_file_id,
     )
 
@@ -262,6 +297,47 @@ async def admin_action(
         await state.clear()
         await show_admin_panel(callback.bot, api, settings, storage, callback.from_user.id, chat_id)
         return
+    if action in {"registration", "registration:disable", "registration:remove"}:
+        if action == "registration:disable":
+            storage.disable_registration_notice()
+        elif action == "registration:remove":
+            storage.remove_registration_notice()
+        await show_registration_notice_settings(callback.bot, api, settings, storage, state, callback.from_user.id, chat_id)
+        return
+    if action in {"registration:edit", "registration:preview"}:
+        config = storage.registration_notice_config()
+        await state.clear()
+        await state.update_data(
+            broadcast_target="registration", broadcast_text=config["text"],
+            broadcast_photo_file_id=config["photo_file_id"], broadcast_entities=config["entities"],
+            broadcast_ttl_seconds=config["ttl_seconds"] if config["text"] or config["photo_file_id"] else None,
+        )
+        if action == "registration:preview" and (config["text"] or config["photo_file_id"]):
+            await show_broadcast_preview(callback.bot, api, settings, storage, state, callback.from_user.id, chat_id)
+        else:
+            await state.set_state(BroadcastDraft.composing)
+            await edit_panel_content(
+                callback.bot, storage, api, settings, callback.from_user.id, "admin:registration:compose",
+                "<b>Сообщение после регистрации</b>\n\nОтправь текст или одну картинку с подписью. "
+                "Можно использовать форматирование Telegram. Затем выбери время до удаления. "
+                "Отправка начнётся только после «Сохранить и включить».",
+                admin_compose_keyboard(), chat_id,
+            )
+        return
+    if action == "registration:save":
+        lock = _broadcast_send_locks.setdefault(callback.from_user.id, asyncio.Lock())
+        async with lock:
+            data = await state.get_data()
+            if data.get("broadcast_target") != "registration" or await state.get_state() != BroadcastDraft.preview.state:
+                return
+            text = await _get_draft_text(settings, state, callback.from_user.id)
+            ttl = await _get_draft_duration(state)
+            if text is None or ttl is None:
+                return
+            storage.save_registration_notice(text, ttl, photo_file_id=data.get("broadcast_photo_file_id"), entities=data.get("broadcast_entities"))
+            await state.clear()
+        await show_registration_notice_settings(callback.bot, api, settings, storage, state, callback.from_user.id, chat_id)
+        return
     if action == "broadcast:new":
         await state.clear()
         await state.set_state(BroadcastDraft.composing)
@@ -285,6 +361,7 @@ async def admin_action(
             return
         data = await state.get_data()
         await state.set_state(BroadcastDraft.composing)
+        title = "Изменить сообщение после регистрации" if data.get("broadcast_target") == "registration" else "Изменить рассылку"
         await edit_panel_content(
             callback.bot,
             storage,
@@ -292,7 +369,7 @@ async def admin_action(
             settings,
             callback.from_user.id,
             "admin:broadcast:compose",
-            "<b>Изменить рассылку</b>\n\nОтправь новый текст. Если в рассылке есть картинка, "
+            f"<b>{title}</b>\n\nОтправь новый текст. Если в сообщении есть картинка, "
             "он станет подписью к ней (до 1024 символов). Можно отправить новую картинку с подписью.",
             admin_compose_keyboard(),
             chat_id,
@@ -364,12 +441,17 @@ async def admin_action(
             return
         photo_file_id = (await state.get_data()).get("broadcast_photo_file_id")
         entities = (await state.get_data()).get("broadcast_entities")
-        test_message = await send_broadcast_message(callback.bot, callback.from_user.id, text, photo_file_id, entities)
+        if (await state.get_data()).get("broadcast_target") == "registration":
+            test_message = await send_registration_message(callback.bot, callback.from_user.id, {"text": text, "photo_file_id": photo_file_id, "entities": entities or []})
+        else:
+            test_message = await send_broadcast_message(callback.bot, callback.from_user.id, text, photo_file_id, entities)
         storage.add_temporary_message(callback.from_user.id, test_message.chat.id, test_message.message_id, ttl_seconds)
         return
     if action == "broadcast:send":
         lock = _broadcast_send_locks.setdefault(callback.from_user.id, asyncio.Lock())
         async with lock:
+            if (await state.get_data()).get("broadcast_target") == "registration":
+                return
             text = await _get_draft_text(settings, state, callback.from_user.id)
             ttl_seconds = await _get_draft_duration(state)
             if text is None or ttl_seconds is None or await state.get_state() != BroadcastDraft.preview.state:

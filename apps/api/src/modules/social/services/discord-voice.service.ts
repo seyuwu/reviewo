@@ -36,6 +36,7 @@ export class DiscordVoiceService {
   async createPartyVoice(input: {
     maxAgeSeconds: number;
     name: string;
+    strictAccess?: boolean;
   }): Promise<DiscordPartyVoiceResult> {
     const token = this.requireBotToken();
     const guildId = this.requireGuildId();
@@ -58,6 +59,7 @@ export class DiscordVoiceService {
       try {
         await this.applyEveryoneVoiceAcl(channel.id, guildId, token);
       } catch (aclError) {
+        if (input.strictAccess) throw aclError;
         this.logger.warn(
           `Skipped Discord voice ACL for ${channel.id}: ${
             aclError instanceof Error ? aclError.message : "unknown"
@@ -129,12 +131,16 @@ export class DiscordVoiceService {
   }
 
   /** Remove per-member CONNECT after leave/kick. */
-  async revokeMemberVoiceAccess(channelId: string, discordUserId: string): Promise<void> {
+  async revokeMemberVoiceAccess(channelId: string, discordUserId: string, strict = false): Promise<void> {
     const token = this.requireBotToken();
 
     try {
       await this.request("DELETE", `/channels/${channelId}/permissions/${discordUserId}`, token);
     } catch (error) {
+      if (strict) {
+        if (error instanceof Error && /\(404\)/.test(error.message)) return;
+        throw error;
+      }
       this.logger.warn(
         `Failed to revoke Discord voice access for ${discordUserId} on ${channelId}: ${
           error instanceof Error ? error.message : "unknown"
@@ -319,6 +325,7 @@ export class DiscordVoiceService {
     body?: Record<string, unknown>
   ): Promise<T> {
     const init: RequestInit = {
+      signal: AbortSignal.timeout(10_000),
       headers: {
         Authorization: `Bot ${token}`,
         "Content-Type": "application/json"

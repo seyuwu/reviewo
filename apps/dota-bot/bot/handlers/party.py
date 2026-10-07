@@ -1,9 +1,10 @@
 import logging
 import time
 from html import escape
+from urllib.parse import quote
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
@@ -86,6 +87,23 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
     invite = payload.get("invite") or {}
     invite_id = invite.get("id")
     try:
+        if event_type == "tournament_match_mention":
+            title = escape(str(payload.get("tournamentTitle") or "Турнир"))
+            author = escape(str(payload.get("author") or "Участник матча"))
+            teams = escape(str(payload.get("teams") or ""))
+            text = escape(str(payload.get("message") or ""))
+            slug = quote(str(payload.get("tournamentSlug") or ""), safe="")
+            match_id = quote(str(payload.get("matchId") or ""), safe="")
+            url = f"{settings.site_url.rstrip('/')}/games/tournaments/{slug}/matches/{match_id}#match-chat"
+            await bot.send_message(
+                telegram_user_id,
+                f"💬 <b>Тебя упомянули в чате матча</b>\n\n<b>{title}</b>\n{teams}\n\n<b>{author}</b>:\n{text}",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="Открыть чат матча", url=url)
+                ]]),
+            )
+            return True
         if event_type == "party_updated":
             parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
             active = parties.get("party") or ((parties.get("parties") or [None])[-1])

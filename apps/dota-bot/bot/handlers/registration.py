@@ -926,6 +926,7 @@ async def continue_after_profile_saved(
         await edit_panel(bot, storage, api, settings, telegram_user_id, "profile", chat_id)
         return
 
+    storage.queue_registration_notice(telegram_user_id)
     invite_code = data.get("party_invite_code")
     invite_role = data.get("party_invite_role")
     if invite_code and invite_role in POSITION_NAMES:

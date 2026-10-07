@@ -30,6 +30,7 @@ const STATUSES: DotaTournamentStatus[] = [
 
 type TournamentAdminForm = {
   automaticBracket: boolean;
+  bracketFormat: "SINGLE_ELIMINATION" | "DOUBLE_ELIMINATION";
   allowSpectators: boolean;
   cheatsEnabled: boolean;
   description: string;
@@ -47,6 +48,7 @@ type TournamentAdminForm = {
 
 const EMPTY_TOURNAMENT_FORM: TournamentAdminForm = {
   automaticBracket: true,
+  bracketFormat: "SINGLE_ELIMINATION",
   allowSpectators: false,
   cheatsEnabled: false,
   description: "",
@@ -74,6 +76,7 @@ function dateTimeInput(value: string | null): string {
 function tournamentToForm(item: DotaTournamentSummary): TournamentAdminForm {
   return {
     automaticBracket: item.automaticBracket ?? true,
+    bracketFormat: item.bracketFormat ?? "SINGLE_ELIMINATION",
     allowSpectators: item.allowSpectators,
     cheatsEnabled: item.cheatsEnabled,
     description: item.description,
@@ -185,6 +188,7 @@ export function AdminDotaTournamentsView({
     try {
       const input: AdminDotaTournamentInput = {
         automaticBracket: form.automaticBracket,
+        bracketFormat: form.automaticBracket ? form.bracketFormat : "SINGLE_ELIMINATION",
         allowSpectators: form.allowSpectators,
         cheatsEnabled: form.cheatsEnabled,
         description: form.description.trim(),
@@ -307,7 +311,7 @@ export function AdminDotaTournamentsView({
             <input
               maxLength={80}
               onChange={(event) => setForm({ ...form, format: event.target.value })}
-              placeholder="5×5 · single elimination"
+              placeholder="5×5"
               value={form.format}
             />
           </label>
@@ -346,6 +350,18 @@ export function AdminDotaTournamentsView({
             {t("dota.tournaments.bracket.auto")}
           </label>
           <p>{t("dota.tournaments.bracket.autoLead")}</p>
+          <label>
+            {t("dota.tournaments.bracket.formatLabel")}
+            <select disabled={!form.automaticBracket}
+              value={form.bracketFormat}
+              onChange={(event) => setForm({ ...form, bracketFormat: event.target.value as TournamentAdminForm["bracketFormat"] })}>
+              <option value="SINGLE_ELIMINATION">{t("dota.tournaments.bracket.single")}</option>
+              <option value="DOUBLE_ELIMINATION">{t("dota.tournaments.bracket.double")}</option>
+            </select>
+          </label>
+          <p>{t(form.bracketFormat === "DOUBLE_ELIMINATION" && form.automaticBracket
+            ? "dota.tournaments.bracket.doubleLead" : "dota.tournaments.bracket.singleLead")}</p>
+          <p>{t("dota.tournaments.bracket.bo1Timing")}</p>
           <label className={styles.checkboxLabel}>
             <input
               checked={form.allowSpectators}

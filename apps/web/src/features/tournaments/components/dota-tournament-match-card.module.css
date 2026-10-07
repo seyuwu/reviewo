@@ -139,8 +139,85 @@
   padding-top: 0.85rem;
 }
 
+.managerStage {
+  background: linear-gradient(135deg, rgb(119 82 247 / 10%), rgb(6 9 17 / 48%));
+  border: 1px solid rgb(151 124 255 / 24%);
+  border-radius: 0.8rem;
+  padding: 0.8rem;
+}
+
+.managerStageActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.managerStageActions button {
+  font-size: 0.82rem;
+}
+
+.managerResult {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.managerResult label {
+  color: var(--color-text-muted);
+  display: grid;
+  font-size: 0.8rem;
+  gap: 0.35rem;
+}
+
+.managerResult textarea {
+  background: rgb(8 11 19 / 85%);
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.6rem;
+  color: var(--color-text);
+  font: inherit;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.managerToggle {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: flex !important;
+  gap: 0.55rem !important;
+}
+
+.actionForm .managerToggle input {
+  accent-color: var(--color-accent, #7752f7);
+  flex: 0 0 auto;
+  height: 1rem;
+  margin: 0;
+  padding: 0;
+  width: 1rem;
+}
+
+.hostOnboarding {
+  background: rgb(119 82 247 / 12%);
+  border: 1px solid rgb(151 124 255 / 30%);
+  border-radius: 0.65rem;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.7rem 0.75rem;
+}
+
+.hostOnboarding strong {
+  color: #e9e1ff;
+  font-size: 0.85rem;
+}
+
+.actionForm .hostOnboarding p {
+  margin: 0;
+}
+
 .settings,
-.lobbySecret {
+.lobbySecret,
+.gameIdSection {
   background: rgb(6 9 17 / 42%);
   border: 1px solid rgb(139 125 190 / 16%);
   border-radius: 0.7rem;
@@ -150,6 +227,32 @@
   min-width: 0;
   overflow-wrap: anywhere;
   padding: 0.7rem;
+}
+
+.gameId {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8.5rem, 1fr) 7.8rem;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+}
+
+.gameId + .gameId {
+  border-top: 1px solid rgb(139 125 190 / 16%);
+}
+
+.gameId code {
+  color: #fff;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+.gameId > span { color: var(--color-text-muted); font-size: .8rem; overflow-wrap: anywhere; }
+.gameId code { white-space: nowrap; }
+
+.gameId button {
+  font-size: 0.78rem;
+  padding: 0.4rem 0.65rem;
 }
 
 .settings strong {
@@ -194,7 +297,8 @@
 }
 
 .actionForm p,
-.workflow > p {
+.workflow > p,
+.gameIdSection p {
   color: var(--color-text-muted);
   font-size: 0.8rem;
   margin: 0;
@@ -223,4 +327,13 @@
   .heading {
     flex-direction: column;
   }
+
+  .gameId {
+    grid-template-columns: minmax(0, 1fr) 7.8rem;
+    gap: 0.4rem 0.65rem;
+  }
+
+  .gameId > span { grid-column: 1; }
+  .gameId code { grid-column: 1; font-size: 0.85rem; }
+  .gameId button { grid-column: 2; grid-row: 1 / 3; }
 }

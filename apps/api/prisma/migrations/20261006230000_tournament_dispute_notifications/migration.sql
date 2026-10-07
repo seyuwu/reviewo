@@ -1,0 +1,3 @@
+ALTER TABLE social.dota_tournament_matches ADD COLUMN dispute_notified_at timestamptz;
+CREATE INDEX dota_tournament_matches_status_dispute_notified_at_idx
+  ON social.dota_tournament_matches(status, dispute_notified_at);

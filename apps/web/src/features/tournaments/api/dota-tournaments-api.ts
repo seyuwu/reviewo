@@ -16,7 +16,7 @@ function authHeaders(accessToken: string) {
 
 // Route params can still contain percent-encoded Cyrillic in Next.js.
 // Canonical slugs contain only letters, numbers and hyphens.
-function tournamentPathSegment(slug: string) {
+export function tournamentPathSegment(slug: string) {
   try {
     return encodeURIComponent(decodeURIComponent(slug));
   } catch {
@@ -93,6 +93,16 @@ export function confirmDotaTournamentLobby(slug: string, matchId: string, token:
 
 export function startDotaTournamentMatch(slug: string, matchId: string, token: string) {
   return postMatchAction(slug, matchId, "start", token);
+}
+
+export function submitDotaTournamentMatchGameId(
+  slug: string,
+  matchId: string,
+  dotaMatchId: string,
+  token: string,
+  gameNumber?: number
+) {
+  return postMatchAction(slug, matchId, "game-id", token, { dotaMatchId, ...(gameNumber === undefined ? {} : { gameNumber }) });
 }
 
 export function submitDotaTournamentResult(
@@ -261,6 +271,7 @@ export function assignDotaTournamentEntryPosition(
 
 export interface AdminDotaTournamentInput {
   automaticBracket?: boolean;
+  bracketFormat?: "SINGLE_ELIMINATION" | "DOUBLE_ELIMINATION";
   allowSpectators?: boolean;
   cheatsEnabled?: boolean;
   description?: string;
@@ -277,6 +288,7 @@ export interface AdminDotaTournamentInput {
 }
 
 export interface AdminDotaTournamentMatchInput {
+  bestOf?: 1 | 3 | 5;
   entryAId: string;
   entryBId: string;
   hostSide: "A" | "B";
@@ -324,6 +336,63 @@ export function fetchAdminDotaTournamentMatches(
   );
 }
 
+export function confirmManagedDotaTournamentStage(
+  slug: string,
+  matchId: string,
+  stage: "LOBBY" | "RESULT",
+  side: "A" | "B",
+  accessToken: string
+): Promise<AdminDotaTournamentMatch> {
+  return apiRequest<AdminDotaTournamentMatch>(
+    `/dota/tournament-management/${tournamentPathSegment(slug)}/matches/${encodeURIComponent(matchId)}/confirm-stage`,
+    { body: { side, stage }, headers: authHeaders(accessToken), method: "POST" }
+  );
+}
+
+export function submitManagedDotaTournamentLobby(
+  slug: string,
+  matchId: string,
+  body: {
+    allowSpectators: boolean;
+    cheatsEnabled: boolean;
+    gameMode: string;
+    lobbyName: string;
+    lobbyPassword: string;
+    lobbyProofUrl?: string;
+    serverRegion: string;
+  },
+  accessToken: string
+): Promise<AdminDotaTournamentMatch> {
+  return apiRequest<AdminDotaTournamentMatch>(
+    `/dota/tournament-management/${tournamentPathSegment(slug)}/matches/${encodeURIComponent(matchId)}/lobby`,
+    { body, headers: authHeaders(accessToken), method: "POST" }
+  );
+}
+
+export function startManagedDotaTournamentMatch(
+  slug: string,
+  matchId: string,
+  accessToken: string
+): Promise<AdminDotaTournamentMatch> {
+  return apiRequest<AdminDotaTournamentMatch>(
+    `/dota/tournament-management/${tournamentPathSegment(slug)}/matches/${encodeURIComponent(matchId)}/start`,
+    { headers: authHeaders(accessToken), method: "POST" }
+  );
+}
+
+export function submitManagedDotaTournamentMatchGameId(
+  slug: string,
+  matchId: string,
+  dotaMatchId: string,
+  accessToken: string,
+  gameNumber?: number
+): Promise<AdminDotaTournamentMatch> {
+  return apiRequest<AdminDotaTournamentMatch>(
+    `/dota/tournament-management/${tournamentPathSegment(slug)}/matches/${encodeURIComponent(matchId)}/game-id`,
+    { body: { dotaMatchId, ...(gameNumber === undefined ? {} : { gameNumber }) }, headers: authHeaders(accessToken), method: "POST" }
+  );
+}
+
 export function createAdminDotaTournamentMatch(
   slug: string,
   input: AdminDotaTournamentMatchInput,
@@ -337,7 +406,7 @@ export function createAdminDotaTournamentMatch(
 
 export function resolveAdminDotaTournamentMatch(
   matchId: string,
-  resolution: "ENTRY_A" | "ENTRY_B" | "REPLAY" | "CANCEL",
+  resolution: "ENTRY_A" | "ENTRY_B" | "ENTRY_A_SERIES" | "ENTRY_B_SERIES" | "REPLAY" | "CANCEL",
   note: string,
   accessToken: string
 ): Promise<AdminDotaTournamentMatch> {
@@ -345,6 +414,23 @@ export function resolveAdminDotaTournamentMatch(
     `/dota/tournament-management/matches/${encodeURIComponent(matchId)}/resolve`,
     {
       body: { note, resolution },
+      headers: authHeaders(accessToken),
+      method: "POST"
+    }
+  );
+}
+
+export function replaceDotaTournamentMatchSideWithReserve(
+  slug: string,
+  matchId: string,
+  side: "A" | "B",
+  reserveEntryId: string,
+  accessToken: string
+): Promise<AdminDotaTournamentMatch> {
+  return apiRequest<AdminDotaTournamentMatch>(
+    `/dota/tournament-management/${tournamentPathSegment(slug)}/matches/${encodeURIComponent(matchId)}/replace-reserve`,
+    {
+      body: { reserveEntryId, side },
       headers: authHeaders(accessToken),
       method: "POST"
     }

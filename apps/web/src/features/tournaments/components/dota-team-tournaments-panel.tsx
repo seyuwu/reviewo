@@ -74,7 +74,7 @@ export function DotaTeamTournamentsPanel({
           !entries.some(
             (entry) =>
               entry.tournament.slug === tournament.slug &&
-              ["RECRUITING", "REGISTERED"].includes(entry.status)
+              ["RECRUITING", "REGISTERED", "RESERVE"].includes(entry.status)
           )
       ),
     [entries, tournaments]
@@ -171,7 +171,7 @@ export function DotaTeamTournamentsPanel({
     }
   }
 
-  const activeEntries = entries.filter((entry) => ["RECRUITING", "REGISTERED"].includes(entry.status));
+  const activeEntries = entries.filter((entry) => ["RECRUITING", "REGISTERED", "RESERVE"].includes(entry.status));
 
   return (
     <section className={styles.panel}>
@@ -194,9 +194,11 @@ export function DotaTeamTournamentsPanel({
                 <Link href={`/games/tournaments/${encodeURIComponent(entry.tournament.slug)}`}>
                   <strong>{entry.tournament.title}</strong>
                   <span>
-                    {entry.status === "RECRUITING"
-                      ? t("dota.tournaments.recruiting")
-                      : t("dota.tournaments.lineupComplete")}
+                    {entry.status === "RESERVE"
+                      ? t("dota.tournaments.reserveStatus")
+                      : entry.status === "RECRUITING"
+                        ? t("dota.tournaments.recruiting")
+                        : t("dota.tournaments.lineupComplete")}
                     {` · ${t("dota.tournaments.rosterCount", {
                       current: String(entry.members.length),
                       max: "5"

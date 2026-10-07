@@ -27,6 +27,16 @@ The API migration `20261005020000_party_manual_rejoin` must be applied before ru
 
 The API migration is applied by the normal production API startup command. For development, run the repository database migration command before starting the bot.
 
+## First-registration announcement
+
+In `/admin`, **«Сообщение после регистрации»** configures an optional text or photo
+announcement for first-time completed bot registrations. Preview/test it, choose
+automatic deletion after 1 second to 47 hours, then save and enable. It is disabled
+by default; disabling or removing it cancels pending deliveries. Existing users,
+profile edits and repeated registration do not trigger it. Settings and delivery
+markers persist in SQLite; delivery runs in the background. See
+[`fdp-registration-announcement.md`](../../docs/features/fdp-registration-announcement.md).
+
 ## Account linking
 
 An existing user opens **Profile → Account settings → Telegram bot → Link Telegram** on the website, then sends `/link CODE` to this bot within ten minutes. The bot never asks for website passwords. New users can create a guest profile in the bot; its recovery URL is encrypted in bot storage and can be shown from the account panel.

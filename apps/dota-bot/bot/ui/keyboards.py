@@ -41,6 +41,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [button("✉️ Создать рассылку", "admin:broadcast:new")],
+            [button("👋 Сообщение после регистрации", "admin:registration")],
             [button("🔄 Обновить статистику", "admin:refresh")],
         ]
     )
@@ -54,7 +55,8 @@ def admin_compose_keyboard(back_to_preview: bool = False) -> InlineKeyboardMarku
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def admin_preview_keyboard(has_photo: bool = False, page: int = 0, page_count: int = 1) -> InlineKeyboardMarkup:
+def admin_preview_keyboard(has_photo: bool = False, page: int = 0, page_count: int = 1,
+                           *, registration: bool = False) -> InlineKeyboardMarkup:
     rows = []
     navigation = []
     if page > 0:
@@ -64,7 +66,8 @@ def admin_preview_keyboard(has_photo: bool = False, page: int = 0, page_count: i
     if navigation:
         rows.append(navigation)
     rows.extend([
-        [button("📨 Отправить всем", "admin:broadcast:send")],
+        [button("💾 Сохранить и включить" if registration else "📨 Отправить всем",
+                "admin:registration:save" if registration else "admin:broadcast:send")],
         [button("🧪 Отправить тест себе", "admin:broadcast:test")],
         [button("✏️ Изменить текст", "admin:broadcast:edit")],
         [button("🖼 Заменить картинку" if has_photo else "🖼 Добавить картинку", "admin:broadcast:photo")],
@@ -75,6 +78,18 @@ def admin_preview_keyboard(has_photo: bool = False, page: int = 0, page_count: i
         [button("⏱ Изменить срок удаления", "admin:broadcast:duration")],
         [button("← Отмена", "admin:cancel")],
     ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_registration_notice_keyboard(has_content: bool, enabled: bool) -> InlineKeyboardMarkup:
+    rows = [[button("✏️ Изменить сообщение" if has_content else "➕ Настроить сообщение", "admin:registration:edit")]]
+    if has_content:
+        rows.append([button("👁 Посмотреть и настроить", "admin:registration:preview")])
+    if enabled:
+        rows.append([button("⏹ Отключить отправку", "admin:registration:disable")])
+    if has_content:
+        rows.append([button("🗑 Убрать сообщение", "admin:registration:remove")])
+    rows.append([button("← В админку", "admin:cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

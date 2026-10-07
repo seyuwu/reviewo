@@ -8,6 +8,7 @@ export type DotaTournamentStatus =
 
 export interface DotaTournamentSummary {
   automaticBracket?: boolean;
+  bracketFormat?: "SINGLE_ELIMINATION" | "DOUBLE_ELIMINATION";
   bracketGeneratedAt?: string | null;
   podium?: Array<{
     place: number;
@@ -43,24 +44,33 @@ export interface DotaTournamentEntry {
   id: string;
   joinMode: "OPEN" | "CONFIRM";
   members: DotaTournamentEntryMember[];
-  status: "RECRUITING" | "REGISTERED" | "WITHDRAWN" | "DISQUALIFIED";
+  status: "RECRUITING" | "REGISTERED" | "RESERVE" | "WITHDRAWN" | "DISQUALIFIED";
   teamName: string;
   teamPartySlug: string | null;
 }
 
 export interface DotaTournament extends DotaTournamentSummary {
+  planning?: boolean;
   bracket?: {
     size: number;
     seeds: Array<{ entryId: string; seed: number; averageMmr: number | null }>;
     nodes: Array<{
       key: string;
-      kind: "MAIN" | "BRONZE";
+      kind: "MAIN" | "BRONZE" | "LOWER" | "GRAND_FINAL";
       roundNumber: number;
       matchNumber: number;
       entryAId: string | null;
       entryBId: string | null;
       sourceA: string | null;
       sourceB: string | null;
+      sourceAResult?: "WINNER" | "LOSER" | null;
+      sourceBResult?: "WINNER" | "LOSER" | null;
+      bestOf?: number;
+      scheduledAt?: string | null;
+      roundOffset?: number;
+      canEditBestOf?: boolean;
+      canEditTime?: boolean;
+      score?: { A: number; B: number } | null;
       matchId: string | null;
       status: string;
       winnerEntryId: string | null;
@@ -71,6 +81,15 @@ export interface DotaTournament extends DotaTournamentSummary {
 }
 
 export interface DotaTournamentMatchSummary {
+  canManageMatch?: boolean;
+  bestOf?: number;
+  gameNumber?: number;
+  technicalVictory?: boolean;
+  hasStarted?: boolean;
+  score?: { A: number; B: number };
+  gameResults?: Array<{ gameNumber: number; dotaMatchId: string | null; winnerEntryId: string | null;
+    startedAt: string | null; completedAt: string | null }>;
+  dotaMatchId?: string | null;
   bracketKind?: string;
   allowSpectators: boolean;
   cheatsEnabled: boolean;
@@ -108,6 +127,7 @@ export interface DotaTournamentMatchSummary {
 export interface DotaTournamentMatch extends DotaTournamentMatchSummary {
   canConfirmLobby: boolean;
   canManageLobby: boolean;
+  canSubmitMatchGameId?: boolean;
   disputeReason: string | null;
   lobbyName: string | null;
   lobbyPassword: string | null;
@@ -118,6 +138,7 @@ export interface DotaTournamentMatch extends DotaTournamentMatchSummary {
 }
 
 export interface PublicDotaTournamentMatch extends DotaTournamentMatchSummary {
+  canReadChat?: boolean;
   isParticipant: boolean;
   tournament: { slug: string; title: string };
   rosters: { A: DotaTournamentEntryMember[]; B: DotaTournamentEntryMember[] };
@@ -126,8 +147,10 @@ export interface PublicDotaTournamentMatch extends DotaTournamentMatchSummary {
 export interface AdminDotaTournamentMatch extends DotaTournamentMatchSummary {
   disputeReason: string | null;
   lobbyName: string | null;
+  lobbyPassword: string | null;
   lobbyProofUrl: string | null;
   resultEvidenceUrl: string | null;
+  resultReporterSide: "A" | "B" | null;
   resolutionNote: string | null;
 }
 
@@ -142,7 +165,7 @@ export interface DotaTournamentTeamEntry {
     mmr: number | null;
     positionRole: string;
   }>;
-  status: "RECRUITING" | "REGISTERED" | "WITHDRAWN" | "DISQUALIFIED";
+  status: "RECRUITING" | "REGISTERED" | "RESERVE" | "WITHDRAWN" | "DISQUALIFIED";
   tournament: DotaTournamentSummary;
 }
 
@@ -157,5 +180,5 @@ export interface DotaTournamentManagedEntry {
     mmr: number | null;
     positionRole: string;
   }>;
-  status: "RECRUITING" | "REGISTERED";
+  status: "RECRUITING" | "REGISTERED" | "RESERVE";
 }

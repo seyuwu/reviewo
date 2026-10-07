@@ -17,13 +17,15 @@ export interface BracketMatch {
 
 export interface BracketNode {
   key: string;
-  kind: "MAIN" | "BRONZE";
+  kind: "MAIN" | "BRONZE" | "LOWER" | "GRAND_FINAL";
   roundNumber: number;
   matchNumber: number;
   entryAId: string | null;
   entryBId: string | null;
   sourceA: string | null;
   sourceB: string | null;
+  sourceAResult: "WINNER" | "LOSER" | null;
+  sourceBResult: "WINNER" | "LOSER" | null;
   matchId: string | null;
   status: string;
   winnerEntryId: string | null;
@@ -41,6 +43,22 @@ export function seedOrder(size: number): number[] {
     order = order.flatMap((seed) => [seed, nextSize + 1 - seed]);
   }
   return order;
+}
+
+export function bracketRoundOffset(size: number, kind: string, roundNumber: number) {
+  const rounds = Math.log2(size);
+  return kind === "MAIN" ? rounds - roundNumber
+    : kind === "LOWER" ? 2 * (rounds - 1) - roundNumber : 0;
+}
+
+export function bracketPlanningNodes(size: number, format: string) {
+  const seeds = Array.from({ length: size }, (_, index) => ({
+    entryId: "seed-" + index, seed: index + 1, averageMmr: null
+  }));
+  const nodes = buildBracket(size, seeds, [], format).nodes.map((node) => ({
+    ...node, entryAId: null, entryBId: null, status: "WAITING"
+  }));
+  return nodes;
 }
 
 export function rankEntries<
@@ -71,11 +89,14 @@ export function rankEntries<
     .map(({ entryId, averageMmr }, index) => ({ entryId, averageMmr, seed: index + 1 }));
 }
 
-export function buildBracket(size: number, seeds: BracketSeed[], matches: BracketMatch[]) {
+export function buildBracket(size: number, seeds: BracketSeed[], matches: BracketMatch[], format = "SINGLE_ELIMINATION") {
+  if (!["SINGLE_ELIMINATION", "DOUBLE_ELIMINATION"].includes(format))
+    throw new Error("Unknown bracket format");
   const slots = seedOrder(size).map(
     (seed) => seeds.find((item) => item.seed === seed)?.entryId ?? null
   );
   const nodes: BracketNode[] = [];
+  const readyKeys = new Set<string>();
   const byKey = new Map(
     matches.map((match) => [
       `${match.bracketKind}-${match.roundNumber}-${match.matchNumber}`,
@@ -90,7 +111,9 @@ export function buildBracket(size: number, seeds: BracketSeed[], matches: Bracke
     entryBId: string | null,
     sourceA: string | null,
     sourceB: string | null,
-    feedsResolved: boolean
+    feedsResolved: boolean,
+    sourceAResult: BracketNode["sourceAResult"] = sourceA ? (kind === "BRONZE" ? "LOSER" : "WINNER") : null,
+    sourceBResult: BracketNode["sourceBResult"] = sourceB ? (kind === "BRONZE" ? "LOSER" : "WINNER") : null
   ): BracketNode => {
     const key = `${kind}-${roundNumber}-${matchNumber}`;
     const match = byKey.get(key);
@@ -109,6 +132,8 @@ export function buildBracket(size: number, seeds: BracketSeed[], matches: Bracke
       entryBId,
       sourceA,
       sourceB,
+      sourceAResult,
+      sourceBResult,
       matchId: match?.id ?? null,
       status: match?.status ?? (bye ? "BYE" : "WAITING"),
       winnerEntryId,
@@ -116,6 +141,7 @@ export function buildBracket(size: number, seeds: BracketSeed[], matches: Bracke
       resolved: !!validResult || bye
     };
     nodes.push(node);
+    if (!match && feedsResolved && entryAId && entryBId) readyKeys.add(key);
     return node;
   };
   let previous: BracketNode[] = [];
@@ -143,6 +169,52 @@ export function buildBracket(size: number, seeds: BracketSeed[], matches: Bracke
     previous = current;
   }
   const final = previous[0]!;
+  if (format === "DOUBLE_ELIMINATION") {
+    const upperRounds = Array.from({ length: rounds }, (_, index) =>
+      nodes.filter((node) => node.kind === "MAIN" && node.roundNumber === index + 1));
+    let lower: BracketNode[] = [];
+    if (rounds > 1) {
+      const first = upperRounds[0]!;
+      for (let index = 0; index < first.length / 2; index++) {
+        const a = first[index * 2]!;
+        const b = first[index * 2 + 1]!;
+        lower.push(makeNode("LOWER", 1, index + 1, a.loserEntryId, b.loserEntryId,
+          a.key, b.key, a.resolved && b.resolved, "LOSER", "LOSER"));
+      }
+      for (let upperRound = 2; upperRound <= rounds; upperRound++) {
+        if (upperRound > 2) {
+          const merged: BracketNode[] = [];
+          for (let index = 0; index < lower.length / 2; index++) {
+            const a = lower[index * 2]!;
+            const b = lower[index * 2 + 1]!;
+            merged.push(makeNode("LOWER", upperRound * 2 - 3, index + 1,
+              a.winnerEntryId, b.winnerEntryId, a.key, b.key, a.resolved && b.resolved));
+          }
+          lower = merged;
+        }
+        const drops = upperRounds[upperRound - 1]!;
+        lower = lower.map((a, index) => {
+          // Cross the drop-ins when possible to postpone immediate rematches.
+          const b = drops[drops.length > 1 ? index ^ 1 : index]!;
+          return makeNode("LOWER", upperRound * 2 - 2, index + 1,
+            a.winnerEntryId, b.loserEntryId, a.key, b.key, a.resolved && b.resolved,
+            "WINNER", "LOSER");
+        });
+      }
+    }
+    const lowerFinal = lower[0] ?? null;
+    const grandFinal = makeNode("GRAND_FINAL", 1, 1, final.winnerEntryId,
+      lowerFinal ? lowerFinal.winnerEntryId : final.loserEntryId,
+      final.key, lowerFinal?.key ?? final.key,
+      final.resolved && (!lowerFinal || lowerFinal.resolved), "WINNER",
+      lowerFinal ? "WINNER" : "LOSER");
+    return {
+      nodes,
+      ready: nodes.filter((node) => readyKeys.has(node.key)),
+      complete: grandFinal.resolved && !!grandFinal.winnerEntryId,
+      podium: [grandFinal.winnerEntryId, grandFinal.loserEntryId, lowerFinal?.loserEntryId ?? null]
+    };
+  }
   const bronze =
     semifinals.length === 2
       ? makeNode(

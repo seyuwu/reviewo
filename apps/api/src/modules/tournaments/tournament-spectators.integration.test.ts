@@ -26,12 +26,10 @@ describe(
 
     before(async () => {
       const url = new URL(connectionString!);
-      assert.equal(url.hostname, "127.0.0.1");
-      assert.equal(
-        url.pathname,
-        "/fdp_spectator_qa",
-        "Tests require the dedicated disposable database"
-      );
+      assert.ok(url.hostname === "127.0.0.1" ||
+        (url.hostname === "postgres" && process.env["TOURNAMENT_ROOMS_QA_LOCAL_DOCKER"] === "1"));
+      assert.ok(["/fdp_spectator_qa", "/fdp_rooms_qa"].includes(url.pathname),
+        "Tests require a dedicated disposable database");
       prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString! }) });
       const db = prisma as unknown as PrismaService;
       service = new DotaTournamentsService(
