@@ -10,6 +10,10 @@ build/
 .next/
 coverage/
 backups/
+/docker-compose.host-override.yml*
+/deploy.sh
+/scripts/
+/tmp/
 **/dist/
 **/build/
 **/.next/
