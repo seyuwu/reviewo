@@ -1,10 +1,9 @@
 import { ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
-import { randomBytes, randomInt } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { AuthenticatedUser } from "../../common/interfaces/authenticated-request.js";
 import { PrismaService } from "../../database/prisma.service.js";
 import { RedisService } from "../../redis/redis.service.js";
 import { AuthService } from "../auth/services/auth.service.js";
-import { matchesTelegramVerificationCode } from "./telegram-verification-code.js";
 
 const LINK_TTL_SECONDS = 5 * 60;
 const claimLinkScript = `
@@ -43,7 +42,6 @@ type BotLinkRequest = {
   status: "pending" | "processing" | "approved" | "conflict";
   telegramUserId?: string;
   userId: string;
-  verificationCode: string;
 };
 
 @Injectable()
@@ -86,8 +84,7 @@ export class TelegramTournamentBotService {
     if (current.botStarted) return { botStarted: true as const };
 
     const requestId = randomBytes(16).toString("hex");
-    const verificationCode = String(randomInt(100000, 1000000));
-    const request: BotLinkRequest = { status: "pending", userId: user.id, verificationCode };
+    const request: BotLinkRequest = { status: "pending", userId: user.id };
     const client = await this.redis.getClient();
     const stored = await client.set(this.key(requestId), JSON.stringify(request), {
       EX: LINK_TTL_SECONDS,
@@ -103,8 +100,7 @@ export class TelegramTournamentBotService {
       botStarted: false as const,
       botUrl: `https://t.me/${username}?start=tournament_link_${requestId}`,
       expiresIn: LINK_TTL_SECONDS,
-      requestId,
-      verificationCode
+      requestId
     };
   }
 
@@ -129,19 +125,21 @@ export class TelegramTournamentBotService {
     if (!raw) throw new UnauthorizedException("Telegram link request expired");
     const request = JSON.parse(raw) as BotLinkRequest;
     if (request.status === "conflict") throw new ConflictException("Telegram account is already linked elsewhere");
-    return { valid: true as const };
+    const account = await this.prisma.user.findUnique({
+      select: { displayName: true, status: true, username: true },
+      where: { id: request.userId }
+    });
+    if (!account || account.status !== "active") throw new UnauthorizedException("Account is not active");
+    return { valid: true as const, account: { displayName: account.displayName, username: account.username } };
   }
 
-  async confirm(requestId: string, telegramUserId: string, verificationCode: string, telegramUsername?: string | null) {
+  async confirm(requestId: string, telegramUserId: string, telegramUsername?: string | null) {
     const client = await this.redis.getClient();
     const key = this.key(requestId);
     const raw = await client.get(key);
     if (!raw) throw new UnauthorizedException("Telegram link request expired");
     const initial = JSON.parse(raw) as BotLinkRequest;
     if (initial.status === "conflict") throw new ConflictException("Telegram account is already linked elsewhere");
-    if (!matchesTelegramVerificationCode(initial.verificationCode, verificationCode))
-      throw new UnauthorizedException("Telegram connection confirmation code is invalid");
-
     // A valid confirmation can only be sent by the bot after a real private-chat interaction.
     await this.recordBotStarted(telegramUserId);
 
@@ -213,11 +211,7 @@ export class TelegramTournamentBotService {
     });
   }
 
-  async linkVerifiedIdentity(userId: string, telegramUserId: string, telegramUsername?: string | null) {
-    return this.linkIdentity(userId, telegramUserId, telegramUsername, true);
-  }
-
-  private async linkIdentity(userId: string, telegramUserId: string, telegramUsername?: string | null, serializable = false) {
+  private async linkIdentity(userId: string, telegramUserId: string, telegramUsername?: string | null) {
     return this.prisma.$transaction(async (transaction) => {
       const user = await transaction.user.findUnique({ where: { id: userId } });
       if (!user || user.status !== "active") throw new UnauthorizedException("Account is not active");
@@ -251,7 +245,7 @@ export class TelegramTournamentBotService {
         });
       }
       return user;
-    }, serializable ? { isolationLevel: "Serializable" } : undefined);
+    });
   }
 
   private async setStatus(client: Awaited<ReturnType<RedisService["getClient"]>>, key: string,

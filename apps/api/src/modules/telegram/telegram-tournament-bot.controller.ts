@@ -20,7 +20,6 @@ import {
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { TelegramBotService } from "./telegram-bot.service.js";
 import { TelegramTournamentBotService } from "./telegram-tournament-bot.service.js";
-import { TelegramOfficialLoginService } from "./telegram-official-login.service.js";
 
 class LinkRequestDto {
   @IsString()
@@ -32,10 +31,6 @@ class ConfirmLinkDto extends LinkRequestDto {
   @IsString()
   @Matches(/^\d{1,32}$/)
   telegramUserId!: string;
-
-  @IsString()
-  @Matches(/^\d{6}$/)
-  verificationCode!: string;
 
   @IsOptional()
   @IsString()
@@ -60,8 +55,7 @@ export class TelegramTournamentBotController {
   constructor(
     private readonly onboarding: TelegramTournamentBotService,
     private readonly bot: TelegramBotService,
-    private readonly limiter: ApiRateLimiterService,
-    private readonly official: TelegramOfficialLoginService
+    private readonly limiter: ApiRateLimiterService
   ) {}
 
   @Get("tournament-bot-link/status")
@@ -86,8 +80,7 @@ export class TelegramTournamentBotController {
     ]);
     return {
       ...(await this.onboarding.status(user.id)),
-      canAccessTournamentsWithoutTelegram: user.role === "ADMIN",
-      officialLoginAvailable: this.official.configuration().enabled
+      canAccessTournamentsWithoutTelegram: user.role === "ADMIN"
     };
   }
 
@@ -172,7 +165,7 @@ export class TelegramTournamentBotController {
         message: "Too many attempts for this Telegram link request"
       }
     ]);
-    return this.onboarding.confirm(input.requestId, input.telegramUserId, input.verificationCode, input.telegramUsername);
+    return this.onboarding.confirm(input.requestId, input.telegramUserId, input.telegramUsername);
   }
 
   @Post("tournament-bot-started")

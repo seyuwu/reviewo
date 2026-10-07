@@ -13,6 +13,9 @@ class BrowserLoginRequestDto {
 class BrowserLoginPollDto extends BrowserLoginRequestDto {
   @IsString() @Matches(/^[A-Za-z0-9_-]{43}$/) pollToken!: string;
 }
+class BrowserLoginPreviewDto extends BrowserLoginRequestDto {
+  @IsString() @Matches(/^\d{1,32}$/) telegramUserId!: string;
+}
 class BrowserLoginConfirmDto extends BrowserLoginRequestDto {
   @IsString() @Matches(/^\d{1,32}$/) telegramUserId!: string;
   @IsString() @Matches(/^\d{6}$/) verificationCode!: string;
@@ -38,9 +41,10 @@ export class TelegramBrowserLoginController {
   }
 
   @Post("preview") @HttpCode(200) @UseGuards(JwtAuthGuard) @Header("Cache-Control", "private, no-store")
-  preview(@Body() input: BrowserLoginRequestDto, @Headers("x-telegram-bot-secret") secret?: string) {
+  preview(@Body() input: BrowserLoginPreviewDto, @CurrentUser() user: AuthenticatedUser,
+    @Headers("x-telegram-bot-secret") secret?: string) {
     this.bot.assertBotSecret(secret);
-    return this.login.preview(input.requestId);
+    return this.login.preview(input.requestId, input.telegramUserId, user);
   }
 
   @Post("confirm") @HttpCode(200) @UseGuards(JwtAuthGuard) @Header("Cache-Control", "private, no-store")

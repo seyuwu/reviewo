@@ -50,11 +50,17 @@ export class TelegramBrowserLoginService {
       botUrl: `https://t.me/${username}?start=web_login_${requestId}` };
   }
 
-  async preview(requestId: string) {
+  async preview(requestId: string, telegramUserId: string, user: AuthenticatedUser) {
     const client = await this.redis.getClient();
     const raw = await client.get(this.key(requestId));
     if (!raw) this.expired();
-    return { valid: true as const };
+    const identity = await this.prisma.userAuthIdentity.findUnique({
+      select: { userId: true },
+      where: { provider_providerUserId: { provider: "telegram", providerUserId: telegramUserId } }
+    });
+    if (user.status !== "active" || identity?.userId !== user.id)
+      throw new UnauthorizedException("This Telegram account is not linked to your FDP account");
+    return { valid: true as const, account: { displayName: user.displayName, username: user.username } };
   }
 
   async confirm(requestId: string, telegramUserId: string, verificationCode: string, user: AuthenticatedUser) {

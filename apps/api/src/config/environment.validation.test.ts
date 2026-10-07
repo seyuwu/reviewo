@@ -12,16 +12,6 @@ const productionBase = {
 } as const;
 
 describe("validateEnvironment", () => {
-  it("enables official Telegram login only for the configured bot", () => {
-    const DOTA_BOT_TOKEN = "123456789:abcdefghijklmnopqrstuvwx";
-    assert.equal(validateEnvironment({ ...productionBase, DOTA_BOT_TOKEN,
-      TELEGRAM_LOGIN_CLIENT_ID: "123456789" }).TELEGRAM_LOGIN_CLIENT_ID, "123456789");
-    assert.throws(() => validateEnvironment({ ...productionBase, DOTA_BOT_TOKEN,
-      TELEGRAM_LOGIN_CLIENT_ID: "987654321" }), /must match/);
-    assert.throws(() => validateEnvironment({ ...productionBase,
-      TELEGRAM_LOGIN_CLIENT_ID: "123456789" }), /must match/);
-    assert.equal(validateEnvironment({ ...productionBase }).TELEGRAM_LOGIN_CLIENT_ID, undefined);
-  });
   it("accepts a valid production configuration", () => {
     const config = validateEnvironment({ ...productionBase });
 

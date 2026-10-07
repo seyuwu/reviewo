@@ -4,7 +4,6 @@ export type TelegramTournamentBotStatus = {
   botStarted: boolean;
   telegramLinked: boolean;
   canAccessTournamentsWithoutTelegram: boolean;
-  officialLoginAvailable: boolean;
 };
 
 export type TelegramTournamentBotLinkRequest =
@@ -14,7 +13,6 @@ export type TelegramTournamentBotLinkRequest =
       botUrl: string;
       expiresIn: number;
       requestId: string;
-      verificationCode: string;
     };
 
 export type TelegramTournamentBotLinkPoll =

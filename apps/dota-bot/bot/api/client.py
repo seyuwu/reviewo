@@ -105,7 +105,7 @@ class OpiniaApi:
             telegram_user_id,
             "POST",
             "/telegram/browser-login/preview",
-            {"requestId": request_id},
+            {"requestId": request_id, "telegramUserId": str(telegram_user_id)},
             bot_secret=True,
         )
 
@@ -137,7 +137,6 @@ class OpiniaApi:
         request_id: str,
         telegram_user_id: int,
         telegram_username: str | None,
-        verification_code: str,
     ) -> dict:
         return await self._request(
             "POST",
@@ -146,7 +145,6 @@ class OpiniaApi:
                 "requestId": request_id,
                 "telegramUserId": str(telegram_user_id),
                 "telegramUsername": telegram_username,
-                "verificationCode": verification_code,
             },
             bot_secret=True,
         )
