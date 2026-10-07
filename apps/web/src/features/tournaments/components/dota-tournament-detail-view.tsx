@@ -12,6 +12,7 @@ import { getCurrentUserProfile } from "../../profile/api/profile";
 import { DotaTournamentBracket } from "./dota-tournament-bracket";
 import { DotaTournamentPodium } from "./dota-tournament-podium";
 import { TournamentBackLink } from "./tournament-back-link";
+import { TournamentDiscordButton } from "./tournament-discord-invite";
 import {
   assignDotaTournamentEntryPosition,
   createDotaTournamentSquad,
@@ -411,6 +412,10 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
 
   const ownEntry = tournament.entries.find((entry) =>
     entry.members.some((member) => !!member.dotaProfileSlug && member.dotaProfileSlug === myProfile?.slug));
+  const creatingReserve = tournament.status === "REGISTRATION_CLOSED";
+  const canCreateSquad = (tournament.status === "REGISTRATION_OPEN" &&
+    (!tournament.registrationClosesAt || Date.parse(tournament.registrationClosesAt) > Date.now())) ||
+    (creatingReserve && !tournament.bracketGeneratedAt);
   const entriesByStatus = [...tournament.entries].sort((left, right) =>
     Number(left.status === "RESERVE") - Number(right.status === "RESERVE")
   );
@@ -451,11 +456,12 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
           </div>
         </div>
         <div className={styles.heroActions}>
+        <TournamentDiscordButton />
         {ownEntry ? (
           <Link className="button-primary" href={tournamentRoomUrl(slug, ownEntry.id)}>
             {t("dota.tournaments.room.myTeam")}
           </Link>
-        ) : tournament.status === "REGISTRATION_OPEN" ? (
+        ) : canCreateSquad ? (
           <button
             className={`button-primary ${styles.teamSignupPrimary}`}
             onClick={() => {
@@ -464,7 +470,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
             }}
             type="button"
           >
-            {t("dota.tournaments.joinOrCreateTeam")}
+            {t(creatingReserve ? "dota.tournaments.createReserveSquad" : "dota.tournaments.joinOrCreateTeam")}
           </button>
         ) : null}
         {canReviewChats ? <Link className="button-secondary" href={"/games/tournaments/manage/" + encodeURIComponent(tournament.slug)}>
@@ -542,7 +548,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                   <h2>{t("dota.tournaments.registeredTeams")}</h2>
                   <p>{t("dota.tournaments.teamsLead")}</p>
                 </div>
-                {tournament.status === "REGISTRATION_OPEN" ? (
+                {canCreateSquad ? (
                   <button
                     className="button-secondary"
                     disabled={!!ownEntry}
@@ -552,15 +558,15 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                   >
                     {createSquadOpen
                       ? t("dota.tournaments.cancelCreateSquad")
-                      : t("dota.tournaments.createSquad")}
+                      : t(creatingReserve ? "dota.tournaments.createReserveSquad" : "dota.tournaments.createSquad")}
                   </button>
                 ) : null}
               </div>
-              {createSquadOpen && !ownEntry && tournament.status === "REGISTRATION_OPEN" ? (
+              {createSquadOpen && !ownEntry && canCreateSquad ? (
                 <section className={styles.squadCreatePanel}>
                   <div>
-                    <h3>{t("dota.tournaments.createSquadTitle")}</h3>
-                    <p>{t("dota.tournaments.createSquadLead")}</p>
+                    <h3>{t(creatingReserve ? "dota.tournaments.createReserveSquad" : "dota.tournaments.createSquadTitle")}</h3>
+                    <p>{t(creatingReserve ? "dota.tournaments.createReserveSquadLead" : "dota.tournaments.createSquadLead")}</p>
                   </div>
                   {!authSession?.accessToken ? (
                     <Link className="button-primary" href="/profile">
@@ -620,7 +626,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                       >
                         {createSquadBusy
                           ? t("common.loadingEllipsis")
-                          : t("dota.tournaments.createSquad")}
+                          : t(creatingReserve ? "dota.tournaments.createReserveSquad" : "dota.tournaments.createSquad")}
                       </button>
                     </form>
                   )}

@@ -229,7 +229,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         statusCode: HttpStatus.NOT_FOUND
       });
     }
-    this.assertRegistrationOpen(tournament);
+    this.assertEntryCanRecruit(tournament, "RESERVE");
 
     let profile;
     try {
@@ -260,7 +260,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           statusCode: HttpStatus.NOT_FOUND
         });
       }
-      this.assertRegistrationOpen(latestTournament);
+      this.assertEntryCanRecruit(latestTournament, "RESERVE");
 
       const existingMember = await tx.dotaTournamentEntryMember.findFirst({
         where: { isActive: true, tournamentId: tournament.id, userId: currentUser.id }
@@ -280,7 +280,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         data: {
           createdByUserId: currentUser.id,
           joinMode: input.joinMode ?? "CONFIRM",
-          status: "RECRUITING",
+          status: latestTournament.status === "REGISTRATION_CLOSED" ? "RESERVE" : "RECRUITING",
           teamNameSnapshot: name.slice(0, 80),
           teamPartyId: null,
           teamSlugSnapshot: `tournament-squad-${randomUUID()}`,

@@ -91,6 +91,27 @@ describe("Tournament reserves (isolated local PostgreSQL)", { skip: !connectionS
     return prisma.dotaTournamentMatch.findFirstOrThrow({ where: { tournamentId } });
   }
 
+  it("creates new reserve squads after the main slots fill, without exceeding the limit", async () => {
+    await close();
+    await service.createSquad(slug, { name: "New reserve", positionRole: "1", joinMode: "OPEN" }, users[20]!);
+    let view = await service.getPublic(slug);
+    const reserve = view.entries.find((entry) => entry.teamName === "New reserve")!;
+    assert.equal(reserve.status, "RESERVE");
+    assert.equal(reserve.members.length, 1);
+    assert.equal(view.registeredTeams, 2);
+    await assert.rejects(service.createSquad(slug, { name: "Duplicate", positionRole: "2" }, users[20]!), rejectsStatus(409));
+    for (let role = 2; role <= 5; role++) {
+      await service.joinEntry(slug, reserve.id, { positionRole: String(role) as Role }, users[19 + role]!);
+    }
+    view = await service.getPublic(slug);
+    assert.equal(view.entries.find((entry) => entry.id === reserve.id)!.members.length, 5);
+    assert.equal(view.entries.find((entry) => entry.id === reserve.id)!.status, "RESERVE");
+    assert.equal(view.registeredTeams, 2);
+    assert.equal((await rooms.get(slug, reserve.id, users[20]!)).canReadChat, true);
+    await service.update(slug, { status: "IN_PROGRESS" });
+    await assert.rejects(service.createSquad(slug, { name: "Too late", positionRole: "1" }, users[25]!), rejectsStatus(409));
+    assert.equal(await prisma.dotaTournamentBracketSeed.count({ where: { tournamentId } }), 2);
+  });
   it("counts only complete main squads; a concurrent final slot cannot exceed the limit", async () => {
     const partyCount = await prisma.gameParty.count();
     const searchCount = await prisma.dotaSearchSession.count();
