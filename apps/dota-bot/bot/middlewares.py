@@ -23,6 +23,17 @@ class DeletePrivateMessagesMiddleware(BaseMiddleware):
                 storage.record_bot_user(event.from_user.id)
             if command_name == "/start":
                 # Keep /start visible until the handler has delivered the replacement panel.
+                api = data.get("api")
+                if event.from_user is not None and api is not None:
+                    try:
+                        await api.record_telegram_bot_started(event.from_user.id)
+                    except Exception:
+                        # Keep bot onboarding available during a temporary API outage;
+                        # another /start or a successful link confirmation will retry.
+                        logger.exception(
+                            "Could not record Telegram bot start for user=%s",
+                            event.from_user.id,
+                        )
                 return await handler(event, data)
             try:
                 await event.delete()

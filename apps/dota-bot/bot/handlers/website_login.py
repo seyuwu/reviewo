@@ -2,6 +2,7 @@ import re
 from html import escape
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.types import ForceReply, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
@@ -259,3 +260,8 @@ async def open_telegram_bot_session(
     storage.save_session(user_id, auth["accessToken"], auth["refreshToken"])
 
     await edit_panel(message.bot, storage, api, settings, user_id, "home", message.chat.id)
+    try:
+        await message.delete()
+    except TelegramAPIError:
+        # The home panel is already open; Telegram may refuse to delete the command.
+        pass

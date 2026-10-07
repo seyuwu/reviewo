@@ -60,6 +60,7 @@ services:
       <<: *app-environment
       DOTA_BOT_TOKEN: ${DOTA_BOT_TOKEN:-}
       DOTA_BOT_USERNAME: ${DOTA_BOT_USERNAME:-FDPdotabot}
+      TELEGRAM_LOGIN_CLIENT_ID: ${TELEGRAM_LOGIN_CLIENT_ID:-}
     image: reviewo-api:${IMAGE_TAG:-local}
     build:
       context: .

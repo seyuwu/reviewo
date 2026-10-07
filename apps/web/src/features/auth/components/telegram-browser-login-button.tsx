@@ -9,6 +9,8 @@ import {
   type TelegramBrowserLoginStart
 } from "../api/telegram-login";
 import type { AuthResponse } from "../types/auth";
+import { getTelegramOfficialConfiguration } from "../api/telegram-official-login";
+import { TelegramOfficialButton } from "./telegram-official-button";
 
 interface TelegramBrowserLoginButtonProps {
   disabled?: boolean;
@@ -20,6 +22,50 @@ const POLL_INTERVAL_MS = 2500;
 type TelegramLoginErrorKey = "auth.telegram.error.expired" | "auth.telegram.error.start";
 
 export function TelegramBrowserLoginButton({
+  disabled = false,
+  onAuthSuccess,
+  onBusyChange
+}: TelegramBrowserLoginButtonProps) {
+  const [official, setOfficial] = useState<boolean | null>(null);
+  const t = useTranslation();
+  useEffect(() => {
+    let cancelled = false;
+    void getTelegramOfficialConfiguration()
+      .then(({ enabled }) => {
+        if (!cancelled) setOfficial(enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setOfficial(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (official === null)
+    return (
+      <button type="button" className="telegram-browser-login__button" disabled>
+        {t("auth.telegram.preparing")}
+      </button>
+    );
+  if (official)
+    return (
+      <TelegramOfficialButton
+        intent="login"
+        disabled={disabled}
+        onSuccess={onAuthSuccess}
+        onBusyChange={onBusyChange}
+      />
+    );
+  return (
+    <LegacyTelegramBrowserLoginButton
+      disabled={disabled}
+      onAuthSuccess={onAuthSuccess}
+      onBusyChange={onBusyChange}
+    />
+  );
+}
+
+function LegacyTelegramBrowserLoginButton({
   disabled = false,
   onAuthSuccess,
   onBusyChange
@@ -160,7 +206,10 @@ export function TelegramBrowserLoginButton({
       {attempt ? (
         <div className="telegram-browser-login__pending" aria-live="polite">
           <p>{t("auth.telegram.codeHint")}</p>
-          <output className="telegram-browser-login__code" aria-label={t("auth.telegram.codeLabel")}>
+          <output
+            className="telegram-browser-login__code"
+            aria-label={t("auth.telegram.codeLabel")}
+          >
             {attempt.verificationCode}
           </output>
           <a
@@ -172,9 +221,7 @@ export function TelegramBrowserLoginButton({
             {t("auth.telegram.openBot")}
           </a>
           <p className="telegram-browser-login__status">
-            {connectionIssue
-              ? t("auth.telegram.connectionIssue")
-              : t("auth.telegram.waiting")}
+            {connectionIssue ? t("auth.telegram.connectionIssue") : t("auth.telegram.waiting")}
           </p>
           {popupBlocked ? (
             <p className="telegram-browser-login__status">{t("auth.telegram.popupBlocked")}</p>

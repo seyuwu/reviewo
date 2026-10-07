@@ -1,6 +1,11 @@
 import { apiRequest } from "../../../lib/api/api-client";
 
-export type TelegramTournamentBotStatus = { botStarted: boolean };
+export type TelegramTournamentBotStatus = {
+  botStarted: boolean;
+  telegramLinked: boolean;
+  canAccessTournamentsWithoutTelegram: boolean;
+  officialLoginAvailable: boolean;
+};
 
 export type TelegramTournamentBotLinkRequest =
   | { botStarted: true }

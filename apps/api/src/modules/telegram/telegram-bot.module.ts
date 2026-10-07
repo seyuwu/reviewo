@@ -9,11 +9,13 @@ import { TelegramBrowserLoginController } from "./telegram-browser-login.control
 import { TelegramBrowserLoginService } from "./telegram-browser-login.service.js";
 import { TelegramTournamentBotController } from "./telegram-tournament-bot.controller.js";
 import { TelegramTournamentBotService } from "./telegram-tournament-bot.service.js";
+import { TelegramOfficialLoginController } from "./telegram-official-login.controller.js";
+import { TelegramOfficialLoginService } from "./telegram-official-login.service.js";
 
 @Module({
-  controllers: [TelegramBotController, TelegramBrowserLoginController, TelegramTournamentBotController],
+  controllers: [TelegramBotController, TelegramBrowserLoginController, TelegramTournamentBotController, TelegramOfficialLoginController],
   exports: [TelegramBotService],
   imports: [AuthModule, RateLimitingModule, UsersModule],
-  providers: [TelegramBotService, TelegramBrowserLoginService, TelegramTournamentBotService]
+  providers: [TelegramBotService, TelegramBrowserLoginService, TelegramTournamentBotService, TelegramOfficialLoginService]
 })
 export class TelegramBotModule {}

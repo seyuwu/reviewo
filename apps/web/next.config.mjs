@@ -51,6 +51,7 @@ function createSecurityHeaders() {
     "'self'",
     apiOrigin,
     websocketOrigin,
+    "https://oauth.telegram.org",
     "https://www.google-analytics.com",
     "https://region1.google-analytics.com"
   ].filter(Boolean);
@@ -61,12 +62,14 @@ function createSecurityHeaders() {
     "form-action 'self'",
     "img-src 'self' data: https:",
     "object-src 'none'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://telegram.org",
+    "frame-src 'self' https://oauth.telegram.org",
     "style-src 'self' 'unsafe-inline'",
     `connect-src ${connectSources.join(" ")}`
   ].join("; ");
 
   return [
+    { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
     {
       key: "Content-Security-Policy",
       value: contentSecurityPolicy

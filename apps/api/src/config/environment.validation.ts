@@ -15,6 +15,7 @@ export interface EnvironmentVariables {
   TRUST_PROXY_HOPS: number;
   TELEGRAM_BOT_API_SECRET?: string;
   DOTA_BOT_TOKEN?: string;
+  TELEGRAM_LOGIN_CLIENT_ID?: string;
 }
 
 const DEFAULT_API_PORT = 3000;
@@ -54,6 +55,10 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   const trustProxyHops = parseTrustProxyHops(config["TRUST_PROXY_HOPS"]);
   const telegramBotApiSecret = parseOptionalSecret(config["TELEGRAM_BOT_API_SECRET"]);
   const dotaBotToken = parseOptionalBotToken(config["DOTA_BOT_TOKEN"]);
+  const telegramLoginClientId = config["TELEGRAM_LOGIN_CLIENT_ID"];
+  if (telegramLoginClientId && (typeof telegramLoginClientId !== "string" ||
+    !/^[1-9]\d{4,14}$/.test(telegramLoginClientId) || dotaBotToken?.split(":")[0] !== telegramLoginClientId))
+    throw new Error("TELEGRAM_LOGIN_CLIENT_ID must match the ID of DOTA_BOT_TOKEN");
 
   return {
     API_PORT: apiPort,
@@ -67,7 +72,8 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     REPUTATION_ENGINE_ENABLED: reputationEngineEnabled,
     TRUST_PROXY_HOPS: trustProxyHops,
     ...(telegramBotApiSecret ? { TELEGRAM_BOT_API_SECRET: telegramBotApiSecret } : {}),
-    ...(dotaBotToken ? { DOTA_BOT_TOKEN: dotaBotToken } : {})
+    ...(dotaBotToken ? { DOTA_BOT_TOKEN: dotaBotToken } : {}),
+    ...(telegramLoginClientId ? { TELEGRAM_LOGIN_CLIENT_ID: telegramLoginClientId as string } : {})
   };
 }
 

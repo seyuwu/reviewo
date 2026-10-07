@@ -1,9 +1,12 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
+import { TelegramOfficialButton } from "../../auth/components/telegram-official-button";
+import { TelegramBrowserLoginButton } from "../../auth/components/telegram-browser-login-button";
 import { buildDotaBotProfileUrl } from "../../../lib/config/dota-bot";
 import { useTranslation } from "../../i18n/locale-provider";
 import {
@@ -37,22 +40,40 @@ export function TournamentTelegramButton() {
 
 export function TournamentTelegramOnboarding({ children }: { children: ReactNode }) {
   const t = useTranslation();
-  const { authSession, isAuthSessionLoaded } = useAuthSession();
+  const pathname = usePathname();
+  const { authSession, isAuthSessionLoaded, storeAuthSession } = useAuthSession();
   const generation = useRef(0);
+  const statusGeneration = useRef(0);
+  const activeStatusUserId = useRef<string | null | undefined>(undefined);
+  const statusRequest = useRef<{ userId: string; generation: number } | null>(null);
   const pollTimer = useRef<number | null>(null);
   const popup = useRef<Window | null>(null);
-  const [accountState, setAccountState] = useState<"loading" | "linked" | "needs-link" | "guest" | "error">("loading");
+  const [accountState, setAccountState] = useState<"loading" | "allowed" | "needs-link" | "needs-start" | "guest" | "error">("loading");
   const [verifiedUserId, setVerifiedUserId] = useState<string | null>(null);
   const [challenge, setChallenge] = useState<Extract<TelegramTournamentBotLinkRequest, { botStarted: false }> | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
   const [error, setError] = useState<OnboardingError | null>(null);
   const [connectionIssue, setConnectionIssue] = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
+  const [officialLoginAvailable, setOfficialLoginAvailable] = useState(false);
+  const [isTelegramLoginPending, setIsTelegramLoginPending] = useState(false);
+  const isTournamentRoute = pathname === "/games/tournaments" || pathname.startsWith("/games/tournaments/");
 
   useEffect(() => {
     if (!isAuthSessionLoaded) return;
-    const currentGeneration = ++generation.current;
-    setVerifiedUserId(null);
+    const currentUserId = authSession?.userId ?? null;
+    if (activeStatusUserId.current !== currentUserId) {
+      activeStatusUserId.current = currentUserId;
+      statusGeneration.current += 1;
+      statusRequest.current = null;
+      setVerifiedUserId(null);
+      setAccountState(authSession ? "loading" : "guest");
+      setChallenge(null);
+      setError(null);
+      setOfficialLoginAvailable(false);
+    }
+
+    if (!isTournamentRoute) return;
     if (!authSession) {
       setAccountState("guest");
       setChallenge(null);
@@ -60,24 +81,86 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
       return;
     }
 
-    let cancelled = false;
+    if (verifiedUserId === authSession.userId && accountState !== "loading" && accountState !== "needs-start") return;
+    if (
+      statusRequest.current?.userId === authSession.userId &&
+      statusRequest.current.generation === statusGeneration.current
+    ) return;
+
+    const currentGeneration = statusGeneration.current;
+    statusRequest.current = { userId: authSession.userId, generation: currentGeneration };
     setAccountState("loading");
     void getTelegramTournamentBotStatus(authSession.accessToken)
-      .then(({ botStarted }) => {
-        if (cancelled || generation.current !== currentGeneration) return;
+      .then(({ botStarted, telegramLinked, canAccessTournamentsWithoutTelegram, officialLoginAvailable: officialAvailable }) => {
+        if (
+          activeStatusUserId.current !== authSession.userId ||
+          statusGeneration.current !== currentGeneration
+        ) return;
         setVerifiedUserId(authSession.userId);
-        setAccountState(botStarted ? "linked" : "needs-link");
+        setOfficialLoginAvailable(Boolean(officialAvailable));
+        setAccountState(
+          botStarted || canAccessTournamentsWithoutTelegram
+            ? "allowed"
+            : telegramLinked ? "needs-start" : "needs-link"
+        );
       })
       .catch(() => {
-        if (cancelled || generation.current !== currentGeneration) return;
+        if (
+          activeStatusUserId.current !== authSession.userId ||
+          statusGeneration.current !== currentGeneration
+        ) return;
         setAccountState("error");
         setError("status");
+      })
+      .finally(() => {
+        if (
+          statusRequest.current?.userId === authSession.userId &&
+          statusRequest.current.generation === currentGeneration
+        ) {
+          statusRequest.current = null;
+        }
       });
+  }, [accountState, authSession, isAuthSessionLoaded, isTournamentRoute, verifiedUserId]);
 
+  useEffect(() => {
+    if (!isTournamentRoute || !authSession || accountState !== "needs-start") return;
+    let cancelled = false;
+    let timer: number | null = null;
+    const checkBotStart = async () => {
+      try {
+        const status = await getTelegramTournamentBotStatus(authSession.accessToken);
+        if (cancelled) return;
+        if (status.botStarted || status.canAccessTournamentsWithoutTelegram) {
+          setVerifiedUserId(authSession.userId);
+          setAccountState("allowed");
+          return;
+        }
+      } catch {
+        // Keep the start prompt visible and retry without interrupting the user.
+      }
+      if (!cancelled) timer = window.setTimeout(checkBotStart, POLL_INTERVAL_MS);
+    };
+    timer = window.setTimeout(checkBotStart, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
     };
-  }, [authSession?.accessToken, authSession?.userId, isAuthSessionLoaded]);
+  }, [accountState, authSession, isTournamentRoute]);
+
+  useEffect(() => {
+    if (isTournamentRoute) return;
+    generation.current += 1;
+    if (pollTimer.current !== null) {
+      window.clearTimeout(pollTimer.current);
+      pollTimer.current = null;
+    }
+    popup.current?.close();
+    popup.current = null;
+    setChallenge(null);
+    setIsPreparing(false);
+    setConnectionIssue(false);
+    setPopupBlocked(false);
+  }, [isTournamentRoute]);
 
   useEffect(
     () => () => {
@@ -113,7 +196,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
         popup.current = null;
         setPopupBlocked(!pendingPopup || pendingPopup.closed);
         setVerifiedUserId(authSession.userId);
-        setAccountState("linked");
+        setAccountState("allowed");
         return;
       }
       const botUrl = validateBotLinkUrl(response.botUrl, response.requestId);
@@ -141,7 +224,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
         popup.current = null;
         setChallenge(null);
         setVerifiedUserId(authSession?.userId ?? null);
-        setAccountState("linked");
+        setAccountState("allowed");
         return;
       }
       if (result.status === "conflict") {
@@ -175,21 +258,25 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
     if (!authSession) return;
     setError(null);
     setVerifiedUserId(null);
+    statusGeneration.current += 1;
+    statusRequest.current = null;
     setAccountState("loading");
-    void getTelegramTournamentBotStatus(authSession.accessToken)
-      .then(({ botStarted }) => {
-        setVerifiedUserId(authSession.userId);
-        setAccountState(botStarted ? "linked" : "needs-link");
-      })
-      .catch(() => {
-        setError("status");
-        setAccountState("error");
-      });
+  }
+
+  function handleOfficialLinkSuccess() {
+    window.location.assign(SESSION_BOT_URL);
+  }
+
+  function handleTelegramLoginSuccess(auth: Parameters<typeof storeAuthSession>[0]) {
+    storeAuthSession(auth);
+    window.location.assign(SESSION_BOT_URL);
   }
 
   const busy = isPreparing || Boolean(challenge);
 
-  if (isAuthSessionLoaded && authSession && accountState === "linked" && verifiedUserId === authSession.userId) {
+  if (!isTournamentRoute) return children;
+
+  if (isAuthSessionLoaded && authSession && accountState === "allowed" && verifiedUserId === authSession.userId) {
     return children;
   }
 
@@ -200,12 +287,14 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
         <h2 id="tournament-telegram-title">
           {accountState === "guest" || !isAuthSessionLoaded
             ? t("dota.tournaments.telegram.loginTitle")
-            : t("dota.tournaments.telegram.title")}
+            : t(officialLoginAvailable ? "auth.telegram.official.title" : "dota.tournaments.telegram.title")}
         </h2>
         <p id="tournament-telegram-description">
           {accountState === "guest" || !isAuthSessionLoaded
             ? t("dota.tournaments.telegram.loginDescription")
-            : t("dota.tournaments.telegram.description")}
+            : accountState === "needs-start"
+              ? t("dota.tournaments.telegram.startRequired")
+            : t(officialLoginAvailable ? "auth.telegram.official.description" : "dota.tournaments.telegram.description")}
         </p>
 
         {accountState === "loading" ? (
@@ -234,13 +323,25 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
           </div>
         ) : accountState === "guest" ? (
           <div className={styles.actions}>
-            <button className={styles.joinButton} type="button" onClick={() => void startLink()}>{t("dota.tournaments.telegram.login")}</button>
+            <TelegramBrowserLoginButton
+              disabled={isTelegramLoginPending}
+              onAuthSuccess={handleTelegramLoginSuccess}
+              onBusyChange={setIsTelegramLoginPending}
+            />
+          </div>
+        ) : accountState === "needs-start" ? (
+          <div className={styles.actions}>
+            <TournamentTelegramButton />
+            <p className={styles.status} aria-live="polite">{t("dota.tournaments.telegram.waitingForStart")}</p>
           </div>
         ) : accountState !== "loading" && !challenge ? (
           <div className={styles.actions}>
+            {officialLoginAvailable && authSession ? <TelegramOfficialButton intent="link"
+              accessToken={authSession.accessToken} buttonClassName={styles.joinButton ?? "telegram-browser-login__button"}
+              onSuccess={handleOfficialLinkSuccess} /> :
             <button className={styles.joinButton} type="button" disabled={busy} onClick={() => void startLink()}>
               <TelegramIcon />{isPreparing ? t("dota.tournaments.telegram.preparing") : t("dota.tournaments.telegram.connect")}
-            </button>
+            </button>}
           </div>
         ) : null}
       </div>

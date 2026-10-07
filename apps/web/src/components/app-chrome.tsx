@@ -24,6 +24,7 @@ import { HeaderChromeSearch } from "./header-chrome-search";
 import { HeaderGamesNav } from "./header-games-nav";
 import { HeaderStatusIndicators } from "./header-status-indicators";
 import { ProductBrandSwitcher } from "./product-brand-switcher";
+import { TournamentTelegramOnboarding } from "../features/tournaments/components/tournament-telegram-onboarding";
 
 // Socket-connected chrome widgets pull socket.io-client into the page bundle; load them lazily
 // on the client so static pages stay lean. They render nothing until their chunk arrives.
@@ -204,7 +205,7 @@ export function AppChrome({ children }: AppChromeProps) {
             </div>
           </div>
         </header>
-        {children}
+        <TournamentTelegramOnboarding>{children}</TournamentTelegramOnboarding>
         {hideChromeForCinematic ? null : <FriendsDock />}
         <NotificationToastsHost />
       </div>

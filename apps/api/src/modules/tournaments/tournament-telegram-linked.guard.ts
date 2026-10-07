@@ -21,6 +21,9 @@ export class TournamentTelegramLinkedGuard implements CanActivate {
       });
     }
 
+    // Only the server-authenticated ADMIN role may bypass the Telegram-link requirement.
+    if (user.role === "ADMIN") return true;
+
     const identity = await this.prisma.userAuthIdentity.findFirst({
       select: { id: true },
       where: { provider: "telegram", userId: user.id }

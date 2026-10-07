@@ -58,12 +58,26 @@ export class TelegramTournamentBotService {
     return `auth:telegram-tournament-bot:${requestId}`;
   }
 
-  async status(userId: string): Promise<{ botStarted: boolean }> {
+  async status(userId: string): Promise<{ botStarted: boolean; telegramLinked: boolean }> {
     const identity = await this.prisma.userAuthIdentity.findFirst({
-      select: { id: true },
+      select: { providerUserId: true },
       where: { provider: "telegram", userId }
     });
-    return { botStarted: Boolean(identity) };
+    if (!identity) return { botStarted: false, telegramLinked: false };
+
+    const started = await this.prisma.telegramBotStart.findUnique({
+      select: { telegramUserId: true },
+      where: { telegramUserId: identity.providerUserId }
+    });
+    return { botStarted: Boolean(started), telegramLinked: true };
+  }
+
+  async recordBotStarted(telegramUserId: string): Promise<void> {
+    await this.prisma.telegramBotStart.upsert({
+      create: { telegramUserId },
+      update: { startedAt: new Date() },
+      where: { telegramUserId }
+    });
   }
 
   async createLinkRequest(user: AuthenticatedUser) {
@@ -127,6 +141,9 @@ export class TelegramTournamentBotService {
     if (initial.status === "conflict") throw new ConflictException("Telegram account is already linked elsewhere");
     if (!matchesTelegramVerificationCode(initial.verificationCode, verificationCode))
       throw new UnauthorizedException("Telegram connection confirmation code is invalid");
+
+    // A valid confirmation can only be sent by the bot after a real private-chat interaction.
+    await this.recordBotStarted(telegramUserId);
 
     const lockToken = randomBytes(16).toString("hex");
     const lockKeys = [
@@ -196,7 +213,11 @@ export class TelegramTournamentBotService {
     });
   }
 
-  private async linkIdentity(userId: string, telegramUserId: string, telegramUsername?: string | null) {
+  async linkVerifiedIdentity(userId: string, telegramUserId: string, telegramUsername?: string | null) {
+    return this.linkIdentity(userId, telegramUserId, telegramUsername, true);
+  }
+
+  private async linkIdentity(userId: string, telegramUserId: string, telegramUsername?: string | null, serializable = false) {
     return this.prisma.$transaction(async (transaction) => {
       const user = await transaction.user.findUnique({ where: { id: userId } });
       if (!user || user.status !== "active") throw new UnauthorizedException("Account is not active");
@@ -230,7 +251,7 @@ export class TelegramTournamentBotService {
         });
       }
       return user;
-    });
+    }, serializable ? { isolationLevel: "Serializable" } : undefined);
   }
 
   private async setStatus(client: Awaited<ReturnType<RedisService["getClient"]>>, key: string,

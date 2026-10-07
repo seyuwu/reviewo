@@ -43,6 +43,30 @@ describe("TournamentTelegramLinkedGuard", () => {
     );
   });
 
+  it("allows an active administrator without a Telegram identity", async () => {
+    let identityLookups = 0;
+    const prisma = {
+      userAuthIdentity: { findFirst: async () => { identityLookups += 1; return null; } }
+    } as unknown as PrismaService;
+    const guard = new TournamentTelegramLinkedGuard(prisma);
+
+    assert.equal(await guard.canActivate(executionContext({ user: { ...user, role: "ADMIN" } })), true);
+    assert.equal(identityLookups, 0);
+  });
+
+  it("still blocks a moderator without a Telegram identity", async () => {
+    const prisma = {
+      userAuthIdentity: { findFirst: async () => null }
+    } as unknown as PrismaService;
+    const guard = new TournamentTelegramLinkedGuard(prisma);
+
+    await assert.rejects(
+      guard.canActivate(executionContext({ user: { ...user, role: "TOURNAMENT_MODERATOR" } })),
+      (error: unknown) => typeof error === "object" && error !== null && "getStatus" in error &&
+        typeof error.getStatus === "function" && error.getStatus() === 403
+    );
+  });
+
   it("does not permit missing or inactive users", async () => {
     const prisma = {
       userAuthIdentity: { findFirst: async () => ({ id: "telegram-identity" }) }

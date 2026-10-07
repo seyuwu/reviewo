@@ -20,6 +20,7 @@ import {
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { TelegramBotService } from "./telegram-bot.service.js";
 import { TelegramTournamentBotService } from "./telegram-tournament-bot.service.js";
+import { TelegramOfficialLoginService } from "./telegram-official-login.service.js";
 
 class LinkRequestDto {
   @IsString()
@@ -48,12 +49,19 @@ class BotSessionDto {
   telegramUserId!: string;
 }
 
+class BotStartedDto {
+  @IsString()
+  @Matches(/^\d{1,32}$/)
+  telegramUserId!: string;
+}
+
 @Controller("telegram")
 export class TelegramTournamentBotController {
   constructor(
     private readonly onboarding: TelegramTournamentBotService,
     private readonly bot: TelegramBotService,
-    private readonly limiter: ApiRateLimiterService
+    private readonly limiter: ApiRateLimiterService,
+    private readonly official: TelegramOfficialLoginService
   ) {}
 
   @Get("tournament-bot-link/status")
@@ -76,7 +84,11 @@ export class TelegramTournamentBotController {
         message: "Too many Telegram bot status checks"
       }
     ]);
-    return this.onboarding.status(user.id);
+    return {
+      ...(await this.onboarding.status(user.id)),
+      canAccessTournamentsWithoutTelegram: user.role === "ADMIN",
+      officialLoginAvailable: this.official.configuration().enabled
+    };
   }
 
   @Post("tournament-bot-link")
@@ -161,6 +173,35 @@ export class TelegramTournamentBotController {
       }
     ]);
     return this.onboarding.confirm(input.requestId, input.telegramUserId, input.verificationCode, input.telegramUsername);
+  }
+
+  @Post("tournament-bot-started")
+  @HttpCode(200)
+  @Header("Cache-Control", "private, no-store")
+  async recordBotStarted(
+    @Body() input: BotStartedDto,
+    @Req() request: RequestLike,
+    @Headers("x-telegram-bot-secret") secret?: string
+  ) {
+    this.bot.assertBotSecret(secret);
+    await this.limiter.assertWithinLimits([
+      {
+        key: input.telegramUserId,
+        namespace: "telegram:tournament-bot-started:user",
+        limit: 120,
+        windowSeconds: 60,
+        message: "Too many Telegram bot start events"
+      },
+      {
+        key: resolveRequestIp(request),
+        namespace: "telegram:tournament-bot-started:ip",
+        limit: 1200,
+        windowSeconds: 60,
+        message: "Too many Telegram bot start events"
+      }
+    ]);
+    await this.onboarding.recordBotStarted(input.telegramUserId);
+    return { recorded: true as const };
   }
 
   @Post("bot-session")

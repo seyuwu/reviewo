@@ -159,6 +159,14 @@ class OpiniaApi:
             bot_secret=True,
         )
 
+    async def record_telegram_bot_started(self, telegram_user_id: int) -> None:
+        await self._request(
+            "POST",
+            "/telegram/tournament-bot-started",
+            body={"telegramUserId": str(telegram_user_id)},
+            bot_secret=True,
+        )
+
     async def complete_link(self, code: str, telegram_user_id: int) -> dict:
         return await self._request(
             "POST",
