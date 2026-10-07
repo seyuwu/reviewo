@@ -159,13 +159,7 @@ export function TelegramBrowserLoginButton({
 
       {attempt ? (
         <div className="telegram-browser-login__pending" aria-live="polite">
-          <p>{t("auth.telegram.codeHint")}</p>
-          <output
-            className="telegram-browser-login__code"
-            aria-label={t("auth.telegram.codeLabel")}
-          >
-            {attempt.verificationCode}
-          </output>
+          <p>{t("auth.telegram.confirmHint")}</p>
           <a
             className="telegram-browser-login__open"
             href={attempt.botUrl}

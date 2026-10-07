@@ -101,26 +101,20 @@ class OpiniaApi:
         return str(result["ticket"])
 
     async def preview_telegram_browser_login(self, telegram_user_id: int, request_id: str) -> dict:
-        return await self.user(
-            telegram_user_id,
+        return await self._request(
             "POST",
             "/telegram/browser-login/preview",
-            {"requestId": request_id, "telegramUserId": str(telegram_user_id)},
+            body={"requestId": request_id, "telegramUserId": str(telegram_user_id)},
             bot_secret=True,
         )
 
     async def confirm_telegram_browser_login(
-        self, telegram_user_id: int, request_id: str, verification_code: str
+        self, telegram_user_id: int, request_id: str
     ) -> dict:
-        return await self.user(
-            telegram_user_id,
+        return await self._request(
             "POST",
             "/telegram/browser-login/confirm",
-            {
-                "requestId": request_id,
-                "telegramUserId": str(telegram_user_id),
-                "verificationCode": verification_code,
-            },
+            body={"requestId": request_id, "telegramUserId": str(telegram_user_id)},
             bot_secret=True,
         )
 

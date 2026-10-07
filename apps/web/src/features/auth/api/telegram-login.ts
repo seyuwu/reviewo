@@ -6,7 +6,6 @@ export type TelegramBrowserLoginStart = {
   expiresIn: number;
   pollToken: string;
   requestId: string;
-  verificationCode: string;
 };
 
 export type TelegramBrowserLoginPoll =
