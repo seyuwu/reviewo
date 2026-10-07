@@ -172,7 +172,7 @@ async def share_bot_link(callback: CallbackQuery, storage: BotStorage) -> None:
     code = storage.referral_code(callback.from_user.id, callback.from_user.full_name,
                                  callback.from_user.username)
     link = bot_friend_invite_url(me.username, code)
-    copy_text = f"🎮 Найдём пати в Dota 2? Заходи в FDP — поиск по ролям и MMR в Telegram:\n{link}"
+    copy_text = f"Удобный бот для поиска пати, заходи пробуй: {link}"
     await send_temporary_notification(
         callback.bot, storage, callback.from_user.id, callback.from_user.id,
         f"Твоя личная ссылка для приглашения друзей:\n{link}\n\n"
