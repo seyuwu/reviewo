@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 PARTY_INVITATION_MESSAGE_TTL_SECONDS = 3 * 60 * 60
 
 
-@router.callback_query(F.data.startswith("invite:"))
+@router.callback_query(F.data.regexp(r"^invite:[^:]+:(?:accept|decline)$"))
 async def resolve_invite(
     callback: CallbackQuery,
     api: OpiniaApi,
