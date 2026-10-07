@@ -12,7 +12,7 @@ import { getCurrentUserProfile } from "../../profile/api/profile";
 import { DotaTournamentBracket } from "./dota-tournament-bracket";
 import { DotaTournamentPodium } from "./dota-tournament-podium";
 import { TournamentBackLink } from "./tournament-back-link";
-import { TournamentDiscordButton } from "./tournament-discord-invite";
+import { TournamentTelegramButton } from "./tournament-telegram-onboarding";
 import {
   assignDotaTournamentEntryPosition,
   createDotaTournamentSquad,
@@ -456,7 +456,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
           </div>
         </div>
         <div className={styles.heroActions}>
-        <TournamentDiscordButton />
+        <TournamentTelegramButton />
         {ownEntry ? (
           <Link className="button-primary" href={tournamentRoomUrl(slug, ownEntry.id)}>
             {t("dota.tournaments.room.myTeam")}

@@ -4,9 +4,10 @@ import type { AuthenticatedUser } from "../../common/interfaces/authenticated-re
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { TournamentDisputeNotificationsService } from "./tournament-dispute-notifications.service.js";
 import { TournamentMatchChatService } from "./tournament-match-chat.service.js";
+import { TournamentTelegramLinkedGuard } from "./tournament-telegram-linked.guard.js";
 
 @Controller("dota/tournament-notifications")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, TournamentTelegramLinkedGuard)
 export class TournamentNotificationsController {
   constructor(private readonly notifications: TournamentDisputeNotificationsService, private readonly chat: TournamentMatchChatService) {}
   @Get()

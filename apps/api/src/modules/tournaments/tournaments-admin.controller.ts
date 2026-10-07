@@ -4,6 +4,7 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../common/interfaces/authenticated-request.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { TournamentManagerGuard } from "./tournament-manager.guard.js";
+import { TournamentTelegramLinkedGuard } from "./tournament-telegram-linked.guard.js";
 import {
   CreateDotaTournamentDto,
   UpdateDotaTournamentDto
@@ -21,7 +22,7 @@ import { UpdateTournamentMatchPlanDto, UpdateTournamentSeriesSettingsDto } from 
 import { ReplaceTournamentMatchSideDto } from "./dto/replace-tournament-match-side.dto.js";
 
 @Controller("dota/tournament-management")
-@UseGuards(JwtAuthGuard, TournamentManagerGuard)
+@UseGuards(JwtAuthGuard, TournamentTelegramLinkedGuard, TournamentManagerGuard)
 export class AdminDotaTournamentsController {
   constructor(private readonly dotaTournamentsService: DotaTournamentsService,
     private readonly plans: DotaTournamentPlansService) {}

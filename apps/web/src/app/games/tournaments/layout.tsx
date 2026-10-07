@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { TournamentDiscordOnboarding } from "../../../features/tournaments/components/tournament-discord-invite";
+import { TournamentTelegramOnboarding } from "../../../features/tournaments/components/tournament-telegram-onboarding";
 
 export default function TournamentsLayout({ children }: { children: ReactNode }) {
-  return <>{children}<TournamentDiscordOnboarding /></>;
+  return <TournamentTelegramOnboarding>{children}</TournamentTelegramOnboarding>;
 }

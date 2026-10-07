@@ -6,9 +6,10 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { TournamentMatchChatService } from "./tournament-match-chat.service.js";
 import { TournamentMatchChatMessageDto } from "./dto/tournament-match-chat.dto.js";
 import { TournamentRoomMessagesQueryDto } from "./dto/tournament-room.dto.js";
+import { TournamentTelegramLinkedGuard } from "./tournament-telegram-linked.guard.js";
 
 @Controller("dota/tournaments/:slug/matches/:matchId/chat")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, TournamentTelegramLinkedGuard)
 export class TournamentMatchChatController {
   constructor(private readonly chat: TournamentMatchChatService, private readonly limiter: ApiRateLimiterService) {}
   @Get()

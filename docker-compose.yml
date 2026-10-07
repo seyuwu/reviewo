@@ -59,6 +59,7 @@ services:
     environment:
       <<: *app-environment
       DOTA_BOT_TOKEN: ${DOTA_BOT_TOKEN:-}
+      DOTA_BOT_USERNAME: ${DOTA_BOT_USERNAME:-FDPdotabot}
     image: reviewo-api:${IMAGE_TAG:-local}
     build:
       context: .

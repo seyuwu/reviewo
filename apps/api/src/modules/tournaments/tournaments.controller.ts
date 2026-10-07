@@ -20,7 +20,7 @@ import {
 } from "../../common/rate-limiting/api-rate-limiter.service.js";
 import { createSocialWriteRateLimitRules } from "../../common/rate-limiting/write-rate-limit-rules.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
-import { OptionalJwtAuthGuard } from "../auth/guards/optional-jwt-auth.guard.js";
+import { TournamentTelegramLinkedGuard } from "./tournament-telegram-linked.guard.js";
 import { RegisterDotaTournamentTeamDto } from "./dto/register-dota-tournament-team.dto.js";
 import { CreateDotaTournamentSquadDto } from "./dto/create-dota-tournament-squad.dto.js";
 import {
@@ -38,6 +38,7 @@ import {
 import { DotaTournamentsService } from "./tournaments.service.js";
 
 @Controller("dota/tournaments")
+@UseGuards(JwtAuthGuard, TournamentTelegramLinkedGuard)
 export class DotaTournamentsController {
   constructor(
     private readonly apiRateLimiterService: ApiRateLimiterService,
@@ -55,13 +56,11 @@ export class DotaTournamentsController {
   }
 
   @Get(":slug/managed-entries")
-  @UseGuards(JwtAuthGuard)
   listManagedEntries(@Param("slug") slug: string, @CurrentUser() currentUser: AuthenticatedUser) {
     return this.dotaTournamentsService.listManagedEntries(slug, currentUser);
   }
 
   @Get(":slug/matches/:matchId")
-  @UseGuards(JwtAuthGuard)
   getMatch(
     @Param("slug") slug: string,
     @Param("matchId") matchId: string,
@@ -71,18 +70,16 @@ export class DotaTournamentsController {
   }
 
   @Get(":slug/matches/:matchId/public")
-  @UseGuards(OptionalJwtAuthGuard)
   @Header("Cache-Control", "private, no-store")
   getPublicMatch(
     @Param("slug") slug: string,
     @Param("matchId", new ParseUUIDPipe()) matchId: string,
-    @CurrentUser() currentUser?: AuthenticatedUser
+    @CurrentUser() currentUser: AuthenticatedUser
   ) {
     return this.dotaTournamentsService.getPublicMatch(slug, matchId, currentUser);
   }
 
   @Post(":slug/matches/:matchId/lobby")
-  @UseGuards(JwtAuthGuard)
   async submitLobby(
     @Param("slug") slug: string,
     @Param("matchId") matchId: string,
@@ -95,7 +92,6 @@ export class DotaTournamentsController {
   }
 
   @Post(":slug/matches/:matchId/confirm-lobby")
-  @UseGuards(JwtAuthGuard)
   async confirmLobby(
     @Param("slug") slug: string,
     @Param("matchId") matchId: string,
@@ -108,7 +104,6 @@ export class DotaTournamentsController {
   }
 
   @Post(":slug/matches/:matchId/start")
-  @UseGuards(JwtAuthGuard)
   async startMatch(
     @Param("slug") slug: string,
     @Param("matchId") matchId: string,
@@ -120,7 +115,6 @@ export class DotaTournamentsController {
   }
 
   @Post(":slug/matches/:matchId/game-id")
-  @UseGuards(JwtAuthGuard)
   async submitMatchGameId(
     @Param("slug") slug: string,
     @Param("matchId", new ParseUUIDPipe()) matchId: string,
@@ -133,7 +127,6 @@ export class DotaTournamentsController {
   }
 
   @Post(":slug/matches/:matchId/result")
-  @UseGuards(JwtAuthGuard)
   async submitResult(
     @Param("slug") slug: string,
     @Param("matchId") matchId: string,
@@ -146,7 +139,6 @@ export class DotaTournamentsController {
   }
 
   @Post(":slug/matches/:matchId/confirm-result")
-  @UseGuards(JwtAuthGuard)
   async confirmResult(
     @Param("slug") slug: string,
     @Param("matchId") matchId: string,
@@ -158,7 +150,6 @@ export class DotaTournamentsController {
   }
 
   @Post(":slug/matches/:matchId/dispute")
-  @UseGuards(JwtAuthGuard)
   async disputeMatch(
     @Param("slug") slug: string,
     @Param("matchId") matchId: string,
@@ -171,7 +162,6 @@ export class DotaTournamentsController {
   }
 
   @Post(":slug/entries")
-  @UseGuards(JwtAuthGuard)
   async registerTeam(
     @Param("slug") slug: string,
     @Body() input: RegisterDotaTournamentTeamDto,
@@ -183,7 +173,6 @@ export class DotaTournamentsController {
   }
 
   @Post(":slug/squads")
-  @UseGuards(JwtAuthGuard)
   async createSquad(
     @Param("slug") slug: string,
     @Body() input: CreateDotaTournamentSquadDto,
@@ -195,7 +184,6 @@ export class DotaTournamentsController {
   }
 
   @Post(":slug/entries/:entryId/join")
-  @UseGuards(JwtAuthGuard)
   async joinEntry(
     @Param("slug") slug: string,
     @Param("entryId") entryId: string,
@@ -208,7 +196,6 @@ export class DotaTournamentsController {
   }
 
   @Patch(":slug/entries/:entryId/join-mode")
-  @UseGuards(JwtAuthGuard)
   async setJoinMode(
     @Param("slug") slug: string,
     @Param("entryId") entryId: string,
@@ -221,7 +208,6 @@ export class DotaTournamentsController {
   }
 
   @Patch(":slug/entries/:entryId/requests/:requestId")
-  @UseGuards(JwtAuthGuard)
   async decideJoinRequest(
     @Param("slug") slug: string,
     @Param("entryId") entryId: string,
@@ -241,7 +227,6 @@ export class DotaTournamentsController {
   }
 
   @Patch(":slug/entries/:entryId/members/me/position")
-  @UseGuards(JwtAuthGuard)
   async assignPosition(
     @Param("slug") slug: string,
     @Param("entryId") entryId: string,
@@ -259,7 +244,6 @@ export class DotaTournamentsController {
   }
 
   @Delete(":slug/entries/:entryId/members/me")
-  @UseGuards(JwtAuthGuard)
   async leaveEntry(
     @Param("slug") slug: string,
     @Param("entryId") entryId: string,
@@ -271,7 +255,6 @@ export class DotaTournamentsController {
   }
 
   @Get("teams/:teamSlug/entries")
-  @UseGuards(JwtAuthGuard)
   listTeamEntries(
     @Param("teamSlug") teamSlug: string,
     @CurrentUser() currentUser: AuthenticatedUser
@@ -280,7 +263,6 @@ export class DotaTournamentsController {
   }
 
   @Delete(":slug/entries/:entryId/members/:userId")
-  @UseGuards(JwtAuthGuard)
   async removeMember(
     @Param("slug") slug: string,
     @Param("entryId", ParseUUIDPipe) entryId: string,
@@ -293,7 +275,6 @@ export class DotaTournamentsController {
   }
 
   @Delete(":slug/entries/:entryId")
-  @UseGuards(JwtAuthGuard)
   async withdrawTeam(
     @Param("slug") slug: string,
     @Param("entryId") entryId: string,

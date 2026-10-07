@@ -100,6 +100,65 @@ class OpiniaApi:
         result = await self.user(telegram_user_id, "POST", "/telegram/web-access-ticket")
         return str(result["ticket"])
 
+    async def preview_telegram_browser_login(self, telegram_user_id: int, request_id: str) -> dict:
+        return await self.user(
+            telegram_user_id,
+            "POST",
+            "/telegram/browser-login/preview",
+            {"requestId": request_id},
+            bot_secret=True,
+        )
+
+    async def confirm_telegram_browser_login(
+        self, telegram_user_id: int, request_id: str, verification_code: str
+    ) -> dict:
+        return await self.user(
+            telegram_user_id,
+            "POST",
+            "/telegram/browser-login/confirm",
+            {
+                "requestId": request_id,
+                "telegramUserId": str(telegram_user_id),
+                "verificationCode": verification_code,
+            },
+            bot_secret=True,
+        )
+
+    async def preview_telegram_tournament_link(self, request_id: str) -> dict:
+        return await self._request(
+            "POST",
+            "/telegram/tournament-bot-link/preview",
+            body={"requestId": request_id},
+            bot_secret=True,
+        )
+
+    async def confirm_telegram_tournament_link(
+        self,
+        request_id: str,
+        telegram_user_id: int,
+        telegram_username: str | None,
+        verification_code: str,
+    ) -> dict:
+        return await self._request(
+            "POST",
+            "/telegram/tournament-bot-link/confirm",
+            body={
+                "requestId": request_id,
+                "telegramUserId": str(telegram_user_id),
+                "telegramUsername": telegram_username,
+                "verificationCode": verification_code,
+            },
+            bot_secret=True,
+        )
+
+    async def login_telegram_bot_session(self, telegram_user_id: int) -> dict:
+        return await self._request(
+            "POST",
+            "/telegram/bot-session",
+            body={"telegramUserId": str(telegram_user_id)},
+            bot_secret=True,
+        )
+
     async def complete_link(self, code: str, telegram_user_id: int) -> dict:
         return await self._request(
             "POST",

@@ -1,0 +1,90 @@
+.serverButton {
+  align-items: center;
+  background: rgb(42 171 238 / 12%);
+  border: 1px solid rgb(85 190 245 / 32%);
+  border-radius: 0.8rem;
+  color: #d8f2ff;
+  cursor: pointer;
+  font: inherit;
+  display: inline-flex;
+  font-size: 0.9rem;
+  font-weight: 700;
+  gap: 0.55rem;
+  min-height: 44px;
+  padding: 0.65rem 0.9rem;
+  text-decoration: none;
+}
+.serverButton:hover { background: rgb(42 171 238 / 22%); border-color: #66c4f4; }
+.serverButton svg, .joinButton svg { flex-shrink: 0; height: 1.2rem; width: 1.2rem; }
+.serverButton > span { color: #9ad8fa; font-weight: 400; }
+.gate {
+  align-items: center;
+  background: #131625;
+  background-image: radial-gradient(ellipse at 50% 0%, rgb(42 171 238 / 12%), transparent 60%);
+  display: grid;
+  min-height: 100svh;
+  padding: 1.5rem;
+}
+.content {
+  background: linear-gradient(145deg, #171b2d, #10131e 65%);
+  border: 1px solid #354b67;
+  border-radius: 1.5rem;
+  box-shadow: 0 24px 96px rgb(0 0 0 / 55%);
+  color: #f4f2ff;
+  margin: auto;
+  max-width: 34rem;
+  padding: clamp(1.4rem, 5vw, 2.5rem);
+  text-align: center;
+  width: min(100%, 34rem);
+}
+.logo {
+  align-items: center;
+  background: linear-gradient(140deg, #2aabee, #168bd0);
+  border-radius: 1.15rem;
+  color: #fff;
+  display: flex;
+  height: 4rem;
+  justify-content: center;
+  margin: 0 auto 1.5rem;
+  width: 4rem;
+}
+.logo svg { height: 2.2rem; width: 2.5rem; }
+.content h2 { font-size: clamp(1.6rem, 5vw, 2rem); letter-spacing: -0.035em; line-height: 1.15; margin: 0; }
+.content > p { color: #b3b4cc; font-size: 0.95rem; line-height: 1.65; margin: 0.9rem 0 1.4rem; }
+.status { color: #b3b4cc; font-size: 0.95rem; margin: 1.25rem 0 0; }
+.actions { display: grid; gap: 0.7rem; }
+.joinButton {
+  align-items: center;
+  border-radius: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  gap: 0.6rem;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.75rem;
+  text-decoration: none;
+  width: 100%;
+}
+.joinButton { background: #168bd0; border: 1px solid #50b7ed; color: #fff; }
+.joinButton:hover { background: #229ce0; }
+.joinButton:disabled { cursor: wait; opacity: 0.68; }
+.serverButton:focus-visible, .joinButton:focus-visible { outline: 3px solid #b4dfff; outline-offset: 4px; }
+.challenge {
+  align-items: center;
+  background: rgb(42 171 238 / 8%);
+  border: 1px solid rgb(85 190 245 / 26%);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.7rem;
+  justify-items: center;
+  margin: 1.1rem 0;
+  padding: 1rem;
+  text-align: center;
+}
+.challenge p { color: #b3b4cc; font-size: 0.88rem; line-height: 1.5; margin: 0; }
+.challenge output { color: #fff; font-size: 1.9rem; font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: 0.22em; padding-inline-start: 0.22em; }
+.challenge .joinButton { min-height: 42px; }
+.error { color: #ff8b8b; font-size: 0.9rem; line-height: 1.5; margin: 0.8rem 0; }

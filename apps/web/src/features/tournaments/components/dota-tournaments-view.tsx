@@ -9,7 +9,7 @@ import { getCurrentUserProfile } from "../../profile/api/profile";
 import { fetchDotaTournaments } from "../api/dota-tournaments-api";
 import type { DotaTournamentSummary } from "../types/dota-tournament";
 import { DotaTournamentPodium } from "./dota-tournament-podium";
-import { TournamentDiscordButton } from "./tournament-discord-invite";
+import { TournamentTelegramButton } from "./tournament-telegram-onboarding";
 import styles from "./dota-tournaments-view.module.css";
 
 export function DotaTournamentsView() {
@@ -69,7 +69,7 @@ export function DotaTournamentsView() {
           <p>{t("dota.tournaments.lead")}</p>
         </div>
         <div className={styles.heroActions}>
-          <TournamentDiscordButton />
+          <TournamentTelegramButton />
           {canManageTournaments ? (
             <Link className="button-secondary" href="/games/tournaments/manage">
               {t("dota.tournaments.admin.create")}

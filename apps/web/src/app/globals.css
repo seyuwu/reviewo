@@ -739,6 +739,125 @@ button:disabled {
   gap: 1rem;
 }
 
+.telegram-browser-login {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.telegram-browser-login__button,
+.telegram-browser-login__open {
+  align-items: center;
+  background: linear-gradient(135deg, #2aabee, #168bd0);
+  border: 1px solid rgb(85 190 245 / 35%);
+  border-radius: 0.85rem;
+  color: #fff;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  gap: 0.65rem;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  text-decoration: none;
+  transition: filter 150ms ease, transform 150ms ease;
+}
+
+.telegram-browser-login__button:not(:disabled),
+.telegram-browser-login__open {
+  cursor: pointer;
+}
+
+.telegram-browser-login__button:not(:disabled):hover,
+.telegram-browser-login__open:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.telegram-browser-login__button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.telegram-browser-login__button svg {
+  height: 1.2rem;
+  width: 1.2rem;
+}
+
+.telegram-browser-login__pending {
+  align-items: center;
+  background: rgb(42 171 238 / 8%);
+  border: 1px solid rgb(42 171 238 / 25%);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.65rem;
+  justify-items: center;
+  padding: 1rem;
+  text-align: center;
+}
+
+.telegram-browser-login__pending p {
+  color: var(--text-secondary, #aab3c5);
+  margin: 0;
+}
+
+.telegram-browser-login__hint {
+  color: var(--text-secondary, #8f98aa);
+  font-size: 0.84rem;
+  margin: 0;
+  text-align: center;
+}
+
+.telegram-browser-login__code {
+  color: var(--text-primary, #fff);
+  font-size: 1.8rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  padding-inline-start: 0.2em;
+}
+
+.telegram-browser-login__open {
+  min-height: 2.5rem;
+  width: 100%;
+}
+
+.telegram-browser-login__status,
+.telegram-browser-login__cancel,
+.telegram-browser-login__error {
+  font-size: 0.9rem;
+}
+
+.telegram-browser-login__cancel {
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary, #aab3c5);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.25rem 0.5rem;
+  text-decoration: underline;
+}
+
+.telegram-browser-login__error {
+  color: var(--color-danger, #ff7777);
+  margin: 0;
+}
+
+.auth-method-divider {
+  align-items: center;
+  color: var(--text-secondary, #8f98aa);
+  display: flex;
+  font-size: 0.82rem;
+  gap: 0.75rem;
+}
+
+.auth-method-divider::before,
+.auth-method-divider::after {
+  background: var(--border-subtle, rgb(255 255 255 / 12%));
+  content: "";
+  flex: 1;
+  height: 1px;
+}
+
 .auth-display-name-slot {
   display: grid;
   grid-template-rows: 0fr;

@@ -1,13 +1,13 @@
 import { Injectable, type OnModuleInit, type OnModuleDestroy } from "@nestjs/common";
 import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WebSocketServer, type OnGatewayInit } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
+import { PrismaService } from "../../database/prisma.service.js";
 import { JwtTokenService } from "../auth/services/jwt-token.service.js";
 import { UsersService } from "../users/services/users.service.js";
 import { ApiRateLimiterService } from "../../common/rate-limiting/api-rate-limiter.service.js";
 import { DotaTournamentRoomsService } from "./tournament-rooms.service.js";
 import { TournamentRoomEvents } from "./tournament-room-events.js";
 import { TournamentMatchChatService } from "./tournament-match-chat.service.js";
-
 @Injectable()
 @WebSocketGateway({ namespace: "/tournament-rooms" })
 export class DotaTournamentRoomsGateway implements OnGatewayInit, OnModuleInit, OnModuleDestroy {
@@ -17,7 +17,7 @@ export class DotaTournamentRoomsGateway implements OnGatewayInit, OnModuleInit, 
   constructor(private readonly rooms: DotaTournamentRoomsService,
     private readonly jwt: JwtTokenService, private readonly users: UsersService,
     private readonly limiter: ApiRateLimiterService, private readonly events: TournamentRoomEvents,
-    private readonly matchChat: TournamentMatchChatService) {}
+    private readonly matchChat: TournamentMatchChatService, private readonly prisma: PrismaService) {}
 
   afterInit(server: Server) {
     server.use((client, next) => {
@@ -26,6 +26,11 @@ export class DotaTournamentRoomsGateway implements OnGatewayInit, OnModuleInit, 
         const verified = typeof token === "string" ? this.jwt.verifyAccessToken(token) : null;
         const user = verified ? await this.users.findAuthenticatedUserById(verified.userId) : null;
         if (!user || user.status !== "active") return next(new Error("Authentication required"));
+        const telegramIdentity = await this.prisma.userAuthIdentity.findFirst({
+          select: { id: true },
+          where: { provider: "telegram", userId: user.id }
+        });
+        if (!telegramIdentity) return next(new Error("Telegram bot connection required"));
         client.data.user = user;
         next();
       })().catch(() => next(new Error("Authentication failed")));
@@ -49,6 +54,7 @@ export class DotaTournamentRoomsGateway implements OnGatewayInit, OnModuleInit, 
     try {
       const user = client.data.user ? await this.users.findAuthenticatedUserById(client.data.user.id) : null;
       if (!user || user.status !== "active") return { ok: false };
+      if (!await this.hasTelegramIdentity(user.id)) return { ok: false };
       await this.limiter.assertWithinLimits([{ key: user.id, namespace: "tournament:match-chat:subscribe", limit: 30,
         windowSeconds: 60, message: "Too many subscriptions" }]);
       await this.matchChat.requireReader(payload.slug, payload.matchId, user);
@@ -67,6 +73,7 @@ export class DotaTournamentRoomsGateway implements OnGatewayInit, OnModuleInit, 
       return { ok: false };
     try {
       if (!client.data.user) return { ok: false };
+      if (!await this.hasTelegramIdentity(client.data.user.id)) return { ok: false };
       await this.limiter.assertWithinLimits([{
         key: client.data.user.id, namespace: "tournament:room:subscribe", limit: 30,
         windowSeconds: 60, message: "Too many room subscriptions"
@@ -77,5 +84,13 @@ export class DotaTournamentRoomsGateway implements OnGatewayInit, OnModuleInit, 
       await client.join(client.data.room);
       return { ok: true };
     } catch { return { ok: false }; }
+  }
+
+  private async hasTelegramIdentity(userId: string) {
+    const identity = await this.prisma.userAuthIdentity.findFirst({
+      select: { id: true },
+      where: { provider: "telegram", userId }
+    });
+    return Boolean(identity);
   }
 }

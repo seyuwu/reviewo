@@ -75,7 +75,9 @@ function isAuthEndpoint(path: string): boolean {
     path === "/auth/logout" ||
     path === "/auth/refresh" ||
     path === "/auth/register" ||
-    path === "/telegram/login"
+    path === "/telegram/login" ||
+    path === "/telegram/browser-login" ||
+    path.startsWith("/telegram/browser-login/")
   );
 }
 

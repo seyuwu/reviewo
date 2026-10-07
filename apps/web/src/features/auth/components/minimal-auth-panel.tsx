@@ -6,6 +6,7 @@ import { useTranslation } from "../../i18n/locale-provider";
 import { login, register } from "../api/authenticate";
 import { ApiError } from "../../../lib/api/api-error";
 import type { AuthResponse, StoredAuthSession } from "../types/auth";
+import { TelegramBrowserLoginButton } from "./telegram-browser-login-button";
 
 type AuthMode = "login" | "register";
 
@@ -29,10 +30,12 @@ export function MinimalAuthPanel({
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
+  const [isTelegramLoginPending, setIsTelegramLoginPending] = useState(false);
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
+    if (isTelegramLoginPending) return;
     setIsSubmittingAuth(true);
 
     try {
@@ -87,6 +90,7 @@ export function MinimalAuthPanel({
               <button
                 type="button"
                 aria-pressed={authMode === "register"}
+                disabled={isTelegramLoginPending}
                 onClick={() => {
                   handleAuthModeChange("register");
                 }}
@@ -96,6 +100,7 @@ export function MinimalAuthPanel({
               <button
                 type="button"
                 aria-pressed={authMode === "login"}
+                disabled={isTelegramLoginPending}
                 onClick={() => {
                   handleAuthModeChange("login");
                 }}
@@ -103,6 +108,20 @@ export function MinimalAuthPanel({
                 {t("auth.mode.login")}
               </button>
             </div>
+
+            {authMode === "login" ? (
+              <>
+                <TelegramBrowserLoginButton
+                  disabled={isSubmittingAuth}
+                  onAuthSuccess={onAuthSuccess}
+                  onBusyChange={setIsTelegramLoginPending}
+                />
+
+                <div className="auth-method-divider">
+                  <span>{t("auth.telegram.orEmail")}</span>
+                </div>
+              </>
+            ) : null}
 
             <div
               className={`auth-display-name-slot${authMode === "register" ? " is-visible" : ""}`}
@@ -159,7 +178,7 @@ export function MinimalAuthPanel({
               type="submit"
               className="primary-button"
               data-analytics={authMode === "register" ? "auth_register_submit" : "auth_login_submit"}
-              disabled={isSubmittingAuth}
+              disabled={isSubmittingAuth || isTelegramLoginPending}
             >
               {isSubmittingAuth
                 ? t("auth.signingIn")
