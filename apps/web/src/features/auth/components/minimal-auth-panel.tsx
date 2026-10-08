@@ -13,6 +13,7 @@ type AuthMode = "login" | "register";
 interface MinimalAuthPanelProps {
   authSession: StoredAuthSession | null;
   contextLabel: string;
+  initialMode?: AuthMode;
   onAuthSuccess: (authResponse: AuthResponse) => void;
   onSignOut: () => void;
 }
@@ -20,11 +21,12 @@ interface MinimalAuthPanelProps {
 export function MinimalAuthPanel({
   authSession,
   contextLabel,
+  initialMode = "login",
   onAuthSuccess,
   onSignOut
 }: MinimalAuthPanelProps) {
   const t = useTranslation();
-  const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [authMode, setAuthMode] = useState<AuthMode>(initialMode);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

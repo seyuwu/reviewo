@@ -122,7 +122,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
 
   useEffect(() => {
     if (isTournamentRoute && isAuthSessionLoaded && !authSession) {
-      router.replace("/dota/create?intent=search", { scroll: false });
+      router.replace("/profile?mode=register&next=%2Fgames%2Fsearch", { scroll: false });
     }
   }, [authSession, isAuthSessionLoaded, isTournamentRoute, router]);
 
@@ -177,7 +177,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
 
   async function startLink() {
     if (!authSession) {
-      router.replace("/dota/create?intent=search", { scroll: false });
+      router.replace("/profile?mode=register&next=%2Fgames%2Fsearch", { scroll: false });
       return;
     }
     if (isPreparing || challenge) return;

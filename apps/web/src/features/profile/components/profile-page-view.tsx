@@ -136,6 +136,7 @@ export function ProfilePageView() {
             <MinimalAuthPanel
               authSession={authSession}
               contextLabel={t("auth.context.registerOrSignIn")}
+              initialMode={searchParams.get("mode") === "register" ? "register" : "login"}
               onAuthSuccess={(authResponse) => {
                 storeAuthSession(authResponse);
                 const next = safeInternalNextPath(
