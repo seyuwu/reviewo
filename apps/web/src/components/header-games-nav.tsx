@@ -21,7 +21,7 @@ export function HeaderGamesNav() {
   const pathname = usePathname();
   const { authSession } = useAuthSession();
   const profileNav = useMyDotaProfileNav();
-  const { status: launchStatus, isLoading: isLaunchStatusLoading } = useGamesLaunchStatus();
+  const { status: launchStatus } = useGamesLaunchStatus();
   const searchLive = launchStatus.searchLive;
   const isTeammateSearch = pathname === "/games/search" || pathname.startsWith("/games/search/");
   const isTournamentSection = pathname.startsWith("/games/tournaments");
@@ -49,14 +49,12 @@ export function HeaderGamesNav() {
     };
   }, []);
 
-  // While status is unknown, don't assume waitlist (avoids nav flicker after going live).
-  if (isLaunchStatusLoading) {
-    return (
-      <nav aria-label={t("web.nav.gamesActivityAriaLabel")} className="app-chrome-nav">
-        <span className="muted-copy">{t("common.loadingEllipsis")}</span>
-      </nav>
-    );
-  }
+  useEffect(() => {
+    if (!isTeammateSearch) {
+      setCinematicTargetPending(false);
+    }
+  }, [isTeammateSearch]);
+
   const isGamesHub = pathname === "/games";
   const isDotaSection =
     pathname.startsWith("/dota") &&
@@ -76,27 +74,23 @@ export function HeaderGamesNav() {
   const showCinematicProfileSlot =
     searchLive && isTeammateSearch && !profileNav.isLoading && !profileNav.hasProfile;
   const cinematicNavHidden =
-    searchLive && isTeammateSearch && (!profileNav.hasProfile || cinematicTargetPending);
+    searchLive && isTeammateSearch && cinematicTargetPending;
 
   return (
     <nav
       aria-label={t("web.nav.gamesActivityAriaLabel")}
-      className={`app-chrome-nav${
-        cinematicNavHidden ? " app-chrome-nav--cinematic-hidden" : " app-chrome-nav--cinematic-revealed"
-      }`}
+      className={`app-chrome-nav${cinematicNavHidden ? " app-chrome-nav--cinematic-hidden" : ""}`}
     >
-      {searchLive ? (
-        <Link
-          className={navLinkClass(isGamesHub, "games")}
-          href="/games"
-          title={t("web.nav.gamesHub")}
-        >
-          <span className="app-chrome-nav-icon app-chrome-nav-icon--games">
-            <OpiniaIcon className="app-chrome-nav-icon-svg" name="gamepad" />
-          </span>
-          <span>{t("web.nav.gamesHub")}</span>
-        </Link>
-      ) : null}
+      <Link
+        className={navLinkClass(isGamesHub, "games")}
+        href="/games"
+        title={t("web.nav.gamesHub")}
+      >
+        <span className="app-chrome-nav-icon app-chrome-nav-icon--games">
+          <OpiniaIcon className="app-chrome-nav-icon-svg" name="gamepad" />
+        </span>
+        <span>{t("web.nav.gamesHub")}</span>
+      </Link>
 
       <Link
         className={navLinkClass(isTeammateSearch, "objects")}
@@ -121,18 +115,16 @@ export function HeaderGamesNav() {
         <span>{t("web.nav.tournaments")}</span>
       </Link>
 
-      {searchLive ? (
-        <Link
-          className={navLinkClass(isDotaSection, "battles")}
-          href="/dota"
-          title={t("web.nav.dotaVertical")}
-        >
-          <span className="app-chrome-nav-icon app-chrome-nav-icon--battles">
-            <OpiniaIcon className="app-chrome-nav-icon-svg" name="battle" />
-          </span>
-          <span>{t("web.nav.dotaVertical")}</span>
-        </Link>
-      ) : null}
+      <Link
+        className={navLinkClass(isDotaSection, "battles")}
+        href="/dota"
+        title={t("web.nav.dotaVertical")}
+      >
+        <span className="app-chrome-nav-icon app-chrome-nav-icon--battles">
+          <OpiniaIcon className="app-chrome-nav-icon-svg" name="battle" />
+        </span>
+        <span>{t("web.nav.dotaVertical")}</span>
+      </Link>
 
       {authSession && profileNav.hasProfile ? (
         <Link
@@ -147,6 +139,15 @@ export function HeaderGamesNav() {
           </span>
           <span>{t("web.nav.myDotaProfile")}</span>
         </Link>
+      ) : null}
+
+      {profileNav.isLoading && !profileNav.hasProfile ? (
+        <span aria-hidden="true" className="app-chrome-nav-link app-chrome-nav-profile-slot">
+          <span className="app-chrome-nav-icon app-chrome-nav-icon--spotlight">
+            <OpiniaIcon className="app-chrome-nav-icon-svg" name="spotlight" />
+          </span>
+          <span>{t("web.nav.myDotaProfile")}</span>
+        </span>
       ) : null}
 
       {showCinematicProfileSlot ? (

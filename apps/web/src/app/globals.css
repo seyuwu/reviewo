@@ -137,10 +137,6 @@ body {
   opacity: 1;
 }
 
-[data-product="games"] .app-chrome--cinematic-revealed .app-chrome-brand {
-  transition-delay: 220ms;
-}
-
 [data-product="games"] .app-chrome-tools > * {
   transition:
     filter 520ms cubic-bezier(0.18, 0.8, 0.22, 1),
@@ -151,30 +147,6 @@ body {
 [data-product="games"] .app-chrome--cinematic-hidden .app-chrome-tools > * {
   filter: blur(6px);
   opacity: 0;
-  transform: translateY(-0.45rem);
-}
-
-[data-product="games"]
-  .app-chrome--cinematic-hidden
-  .app-chrome-tools
-  > .app-chrome-auth {
-  transform: none;
-}
-
-[data-product="games"] .app-chrome--cinematic-revealed .app-chrome-tools > :first-child {
-  transition-delay: 900ms;
-}
-
-[data-product="games"] .app-chrome--cinematic-revealed .app-chrome-tools > :nth-child(2) {
-  transition-delay: 1100ms;
-}
-
-[data-product="games"] .app-chrome--cinematic-revealed .app-chrome-tools > :nth-child(3) {
-  transition-delay: 1250ms;
-}
-
-[data-product="games"] .app-chrome--cinematic-revealed .app-chrome-tools > .app-chrome-auth {
-  transition-delay: 40ms;
 }
 
 [data-product="games"] .app-chrome-nav-link {
@@ -214,45 +186,13 @@ body {
 [data-product="games"] .app-chrome-nav > * {
   transition:
     filter 520ms cubic-bezier(0.18, 0.8, 0.22, 1),
-    opacity 520ms cubic-bezier(0.18, 0.8, 0.22, 1),
-    transform 520ms cubic-bezier(0.18, 0.8, 0.22, 1);
+    opacity 520ms cubic-bezier(0.18, 0.8, 0.22, 1);
 }
 
 [data-product="games"] .app-chrome-nav--cinematic-hidden > * {
   filter: blur(6px);
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-0.45rem) scale(0.97);
-}
-
-[data-product="games"] .app-chrome-nav--cinematic-hidden > [data-cinematic-profile-target] {
-  transform: none;
-}
-
-[data-product="games"] .app-chrome-nav--cinematic-revealed > :first-child {
-  transition-delay: 420ms;
-}
-
-[data-product="games"] .app-chrome-nav--cinematic-revealed > :nth-child(2) {
-  transition-delay: 580ms;
-}
-
-[data-product="games"] .app-chrome-nav--cinematic-revealed > :nth-child(3) {
-  transition-delay: 740ms;
-}
-
-[data-product="games"] .app-chrome-nav--cinematic-revealed > :nth-child(4) {
-  transition-delay: 900ms;
-}
-
-[data-product="games"] .app-chrome-nav--cinematic-revealed > :nth-child(5) {
-  transition-delay: 1060ms;
-}
-
-[data-product="games"]
-  .app-chrome-nav--cinematic-revealed
-  > [data-cinematic-profile-target] {
-  transition-delay: 80ms;
 }
 
 .app-chrome-nav-profile-slot {
@@ -1694,6 +1634,15 @@ button:disabled {
   justify-content: flex-end;
 }
 
+.app-chrome-widget-slot {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  flex: 0 0 2.65rem;
+  min-height: 2.25rem;
+  width: 2.65rem;
+}
+
 .app-activity-nav {
   align-items: center;
   display: inline-flex;
@@ -1867,7 +1816,7 @@ button:disabled {
 .app-chrome-auth[data-state="loading"] .signed-in-cluster {
   opacity: 0;
   pointer-events: none;
-  transform: translateY(4px);
+  transform: none;
   visibility: hidden;
 }
 

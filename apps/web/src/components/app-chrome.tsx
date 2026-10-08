@@ -60,7 +60,6 @@ export function AppChrome({ children }: AppChromeProps) {
   const t = useTranslation();
   const [hostname, setHostname] = useState("");
   const [cinematicProfileFlight, setCinematicProfileFlight] = useState(false);
-  const [cinematicChromeRevealed, setCinematicChromeRevealed] = useState(false);
   const [showCinematicCreatedBadge, setShowCinematicCreatedBadge] = useState(false);
 
   useEffect(() => {
@@ -80,7 +79,6 @@ export function AppChrome({ children }: AppChromeProps) {
 
     function handleCinematicArrived() {
       setCinematicProfileFlight(false);
-      setCinematicChromeRevealed(true);
       setShowCinematicCreatedBadge(true);
       badgeTimeout = window.setTimeout(() => {
         setShowCinematicCreatedBadge(false);
@@ -102,7 +100,6 @@ export function AppChrome({ children }: AppChromeProps) {
   useEffect(() => {
     if (pathname !== "/games/search" && !pathname.startsWith("/games/search/")) {
       setCinematicProfileFlight(false);
-      setCinematicChromeRevealed(false);
       setShowCinematicCreatedBadge(false);
     }
   }, [pathname]);
@@ -123,7 +120,7 @@ export function AppChrome({ children }: AppChromeProps) {
   const hideChromeForCinematic =
     isGamesSearch &&
     gamesLaunchStatus.searchLive &&
-    ((!profileNav.isLoading && !profileNav.hasProfile) || cinematicProfileFlight);
+    cinematicProfileFlight;
 
   return (
     <NotificationToastsProvider>
@@ -131,13 +128,7 @@ export function AppChrome({ children }: AppChromeProps) {
       <div className="app-layout" data-product={mode}>
         <header
           aria-hidden={hideChromeForCinematic}
-          className={`app-chrome${
-            hideChromeForCinematic
-              ? " app-chrome--cinematic-hidden"
-              : cinematicChromeRevealed
-                ? " app-chrome--cinematic-revealed"
-                : ""
-          }`}
+          className={`app-chrome${hideChromeForCinematic ? " app-chrome--cinematic-hidden" : ""}`}
           inert={hideChromeForCinematic ? true : undefined}
         >
           <div
@@ -160,8 +151,8 @@ export function AppChrome({ children }: AppChromeProps) {
             )}
 
             <div className="app-chrome-tools">
-              {isGamesMode ? <HeaderRostersMenu /> : null}
-              <HeaderNotifications />
+              {isGamesMode ? <div className="app-chrome-widget-slot"><HeaderRostersMenu /></div> : null}
+              <div className="app-chrome-widget-slot"><HeaderNotifications /></div>
               {isGamesMode ? null : <HeaderStatusIndicators />}
               <LocaleSwitcher />
               <div className="app-chrome-auth" data-state={authNavState}>
