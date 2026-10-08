@@ -233,6 +233,7 @@ export function DotaCreateForm() {
         storeAuthSession({
           accessToken: guestResponse.accessToken,
           expiresIn: guestResponse.expiresIn,
+          ...(guestResponse.refreshToken ? { refreshToken: guestResponse.refreshToken } : {}),
           tokenType: guestResponse.tokenType,
           user: {
             avatarUrl: guestResponse.user.avatarUrl ?? null,

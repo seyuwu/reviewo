@@ -45,6 +45,7 @@ export function createDotaProfile(
 export interface GuestDotaProfileCreateResponse {
   accessToken: string;
   expiresIn: number;
+  refreshToken?: string;
   tokenType: "Bearer";
   user: {
     avatarUrl?: string | null;

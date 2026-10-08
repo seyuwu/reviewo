@@ -322,6 +322,7 @@ export function GamesSearchCinematic({
     storeAuthSession({
       accessToken: response.accessToken,
       expiresIn: response.expiresIn,
+      ...(response.refreshToken ? { refreshToken: response.refreshToken } : {}),
       tokenType: response.tokenType,
       user: {
         avatarUrl: response.user.avatarUrl ?? null,
