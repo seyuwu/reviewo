@@ -9,7 +9,7 @@ import {
 } from "@reviewo/shared";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { getOrCreateVisitorId } from "../../../lib/site-presence";
 import { isApiError, readApiErrorMessage } from "../../../lib/api/read-api-error";
@@ -410,6 +410,9 @@ function mergeOutgoingInvites(
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
+let cachedSearchResults: { userKey: string; results: DotaLfgHit[]; fetchedAt: number } | null = null;
+const SEARCH_CACHE_TTL_MS = 60_000;
+
 export function GamesSearchView() {
   const t = useTranslation();
   const router = useRouter();
@@ -444,6 +447,9 @@ export function GamesSearchView() {
   const [batchIndex, setBatchIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const searchUserKey = isAuthSessionLoaded ? authSession?.userId ?? "guest" : null;
+  const activeSearchUserKey = useRef(searchUserKey);
+  activeSearchUserKey.current = searchUserKey;
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLooking, setIsLooking] = useState(false);
   const [lookingBusy, setLookingBusy] = useState(false);
@@ -467,8 +473,23 @@ export function GamesSearchView() {
   const autoMatchInFlightRef = useRef(false);
   const autoMatchRoutedPartyRef = useRef<string | null>(null);
 
+  useLayoutEffect(() => {
+    if (searchUserKey === null || !searchLive) return;
+    if (cachedSearchResults?.userKey === searchUserKey &&
+        Date.now() - cachedSearchResults.fetchedAt < SEARCH_CACHE_TTL_MS) {
+      setResults(cachedSearchResults.results);
+      setHasLoadedOnce(true);
+    } else {
+      cachedSearchResults = null;
+      setResults([]);
+      setHasLoadedOnce(false);
+    }
+  }, [searchLive, searchUserKey]);
+
   const refreshList = useCallback(
     async (options?: { advanceBatch?: boolean; quiet?: boolean }) => {
+      const requestUserKey = searchUserKey;
+      if (requestUserKey === null) return;
       if (!options?.quiet) {
         setIsLoading(true);
       }
@@ -479,6 +500,8 @@ export function GamesSearchView() {
         const response = await fetchDotaLfg(
           authSession?.accessToken ? { accessToken: authSession.accessToken } : undefined
         );
+        if (activeSearchUserKey.current !== requestUserKey) return;
+        cachedSearchResults = { userKey: requestUserKey, results: response.results, fetchedAt: Date.now() };
         setResults(response.results);
 
         if (options?.advanceBatch) {
@@ -488,23 +511,34 @@ export function GamesSearchView() {
           setBatchIndex(0);
         }
       } catch {
+        if (activeSearchUserKey.current !== requestUserKey) return;
         setLoadError(t("games.search.loadError"));
-
-        if (!options?.quiet) {
-          setResults([]);
-        }
       } finally {
-        if (!options?.quiet) {
-          setIsLoading(false);
+        if (activeSearchUserKey.current === requestUserKey) {
+          if (!options?.quiet) setIsLoading(false);
+          setHasLoadedOnce(true);
         }
-
-        setHasLoadedOnce(true);
       }
     },
-    [authSession?.accessToken, t]
+    [authSession?.accessToken, searchUserKey, t]
   );
 
+  useLayoutEffect(() => {
+    const profile = myDotaProfile.profile;
+    if (!profile) return;
+    setMyMmr(profile.mmr);
+    setMyServer(profile.server);
+    const roles = profile.searchAllRoles ? ["1", "2", "3", "4", "5"] : profile.roles;
+    setMyRoles(
+      roles.filter((role): role is DotaPositionRole => ["1", "2", "3", "4", "5"].includes(role))
+    );
+    if (profile.matchMode && isDotaMatchMode(profile.matchMode)) {
+      setMatchMode(profile.matchMode);
+    }
+  }, [myDotaProfile.profile]);
+
   const refreshParties = useCallback(async () => {
+    const requestUserKey = searchUserKey;
     if (!authSession?.accessToken || !myDotaProfile.hasProfile) {
       setMyMmr(null);
       setMyRoles([]);
@@ -518,6 +552,7 @@ export function GamesSearchView() {
 
     try {
       const parties = await fetchMyParties(authSession.accessToken);
+      if (activeSearchUserKey.current !== requestUserKey) return;
       const activeMemberParty =
         parties.party ??
         [...(parties.parties ?? [])].reverse().find((party) => party.isMember) ??
@@ -541,6 +576,7 @@ export function GamesSearchView() {
 
       try {
         const profile = await fetchMyDotaProfile(authSession.accessToken);
+        if (activeSearchUserKey.current !== requestUserKey) return;
         setMyMmr(profile.mmr);
         setMyServer(profile.server);
         const searchRoles = profile.searchAllRoles
@@ -566,18 +602,19 @@ export function GamesSearchView() {
     } catch {
       // Keep previous invites on transient /social/parties/me failures.
     }
-  }, [authSession?.accessToken, intentMode, isLooking, myDotaProfile.hasProfile, router]);
+  }, [authSession?.accessToken, intentMode, isLooking, myDotaProfile.hasProfile, router, searchUserKey]);
 
   useEffect(() => {
+    if (isLaunchStatusLoading) return;
     if (!searchLive) {
       setResults([]);
       setIsLoading(false);
-      setHasLoadedOnce(true);
+      setHasLoadedOnce(false);
       return;
     }
 
     void refreshList();
-  }, [refreshList, searchLive]);
+  }, [isLaunchStatusLoading, refreshList, searchLive]);
 
   useEffect(() => {
     if (!searchLive) {
@@ -1637,38 +1674,35 @@ export function GamesSearchView() {
       ? `/dota/create?intent=stack&target=${encodeURIComponent(gateSlug)}`
       : "/dota/create?intent=search";
   const hasSearchProfile = myDotaProfile.hasProfile || cinematicProfileReady;
+  const isPageLoading =
+    isLaunchStatusLoading ||
+    !isAuthSessionLoaded ||
+    myDotaProfile.isLoading ||
+    (searchLive && cinematicMode === "checking");
 
-  if (isLaunchStatusLoading) {
-    return (
-      <section className={styles.page}>
-        <p className="muted-copy">{t("common.loadingEllipsis")}</p>
-      </section>
-    );
-  }
-
-  if (!searchLive) {
+  if (!searchLive && !isLaunchStatusLoading) {
     return <GamesSearchWaitlistView />;
   }
 
   return (
-    <section className={styles.page}>
+    <section aria-busy={isPageLoading} className={styles.page}>
       <h1 className="sr-only">{t("games.search.pageTitle")}</h1>
 
       <div
         className={`${styles.searchStage}${
-          cinematicMode !== "done" ? ` ${styles.searchStageCinematic}` : ""
+          cinematicMode === "active" ? ` ${styles.searchStageCinematic}` : ""
         }`}
       >
         <div
-          aria-hidden={cinematicMode !== "done"}
+          aria-hidden={cinematicMode === "active"}
           className={`${styles.layout}${
-            cinematicMode !== "done" ? ` ${styles.layoutCinematic}` : ""
+            cinematicMode === "active" ? ` ${styles.layoutCinematic}` : ""
           }${cinematicVisualPhase !== "hidden" ? ` ${styles.layoutShowLeft}` : ""}${
             cinematicVisualPhase === "feed" || cinematicVisualPhase === "rail"
               ? ` ${styles.layoutShowFeed}`
               : ""
           }${cinematicVisualPhase === "rail" ? ` ${styles.layoutShowRail}` : ""}`}
-          inert={cinematicMode !== "done" ? true : undefined}
+          inert={cinematicMode === "active" ? true : undefined}
         >
           <aside
             className={styles.sidebar}
@@ -1676,7 +1710,7 @@ export function GamesSearchView() {
               controlsRef.current = node;
             }}
           >
-            {!hasSearchProfile ? (
+            {!hasSearchProfile && !isPageLoading ? (
               <section className={`${styles.panel} ${styles.promoPanel}`}>
                 <p className={styles.promoTitle}>{t("games.search.promoTitle")}</p>
                 <p className={styles.promoLead}>{t("games.search.promoLead")}</p>
@@ -1685,21 +1719,37 @@ export function GamesSearchView() {
                 </Link>
               </section>
             ) : (
-              <section className={styles.panel} data-cinematic-left-target>
+              <section
+                aria-busy={isPageLoading}
+                className={`${styles.panel} ${styles.profilePanel}`}
+                data-cinematic-left-target
+                inert={isPageLoading ? true : undefined}
+              >
                 <div className={styles.searchProfileSummary}>
                   <div className={styles.searchProfileMmr} data-cinematic-target="mmr">
                     <span>MMR</span>
-                    <strong>{formatDotaMmr(myMmr)}</strong>
+                    {isPageLoading ? (
+                      <span aria-hidden="true" className={styles.loadingMmr} />
+                    ) : (
+                      <strong>{formatDotaMmr(myMmr ?? myDotaProfile.profile?.mmr ?? null)}</strong>
+                    )}
                   </div>
                   <div
                     aria-label={t("games.search.cinematic.yourRoles")}
                     className={styles.searchProfileRoles}
                   >
-                    {myRoles.map((role) => (
-                      <span data-cinematic-target={`role-${role}`} key={`my-role-${role}`}>
-                        {t("games.search.cinematic.positionShort", { role })}
-                      </span>
-                    ))}
+                    {isPageLoading ? (
+                      <>
+                        <span aria-hidden="true" className={styles.loadingRole} />
+                        <span aria-hidden="true" className={styles.loadingRole} />
+                      </>
+                    ) : (
+                      myRoles.map((role) => (
+                        <span data-cinematic-target={`role-${role}`} key={`my-role-${role}`}>
+                          {t("games.search.cinematic.positionShort", { role })}
+                        </span>
+                      ))
+                    )}
                   </div>
                 </div>
                 <div className={styles.controlDivider} />
@@ -1825,7 +1875,7 @@ export function GamesSearchView() {
             <div className={styles.statusBar}>
               <div className={styles.statsRow}>
                 <p className={styles.statusText}>
-                  {t("games.search.lookingCount", { count: lookingCount })}
+                  {t("games.search.lookingCount", { count: hasLoadedOnce ? lookingCount : "—" })}
                 </p>
                 <p className={styles.statusText}>
                   {t("games.search.onlineCount", {
@@ -1852,11 +1902,11 @@ export function GamesSearchView() {
                 ) : null}
                 <button
                   className="button-secondary"
-                  disabled={isLoading}
+                  disabled={isLoading || isPageLoading}
                   onClick={() => void refreshList({ advanceBatch: true })}
                   type="button"
                 >
-                  {isLoading ? t("common.loadingEllipsis") : t("games.search.refresh")}
+                  {t("games.search.refresh")}
                 </button>
               </div>
             </div>
@@ -1886,8 +1936,13 @@ export function GamesSearchView() {
               </div>
             ) : null}
 
-            {isLoading && !hasLoadedOnce ? (
-              <p className={styles.feedback}>{t("common.loadingEllipsis")}</p>
+            {!hasLoadedOnce || isPageLoading ? (
+              <div aria-busy="true" className={`${styles.empty} ${styles.loadingFeed}`}>
+                <span className="sr-only" role="status">{t("common.loadingEllipsis")}</span>
+                <div aria-hidden="true" className={styles.loadingResults}>
+                  {[0, 1, 2].map((item) => <div className={styles.loadingResult} key={item} />)}
+                </div>
+              </div>
             ) : visiblePlayers.length === 0 ? (
               <div className={styles.empty}>
                 <div className={styles.emptyIcon} aria-hidden="true">

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../../../lib/api/api-error";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { fetchMyDotaProfile } from "../api/dota-api";
+import type { DotaProfile } from "../types/dota";
 
 type LoadState = "idle" | "loading" | "loaded" | "error";
 
@@ -19,6 +20,7 @@ export interface DotaProfileCreatedEventDetail {
 export function useMyDotaProfileNav() {
   const { authSession, isAuthSessionLoaded } = useAuthSession();
   const [slug, setSlug] = useState<string | null>(null);
+  const [profile, setProfile] = useState<DotaProfile | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [loadedAccessToken, setLoadedAccessToken] = useState<string | null>();
 
@@ -29,6 +31,7 @@ export function useMyDotaProfileNav() {
 
     if (!authSession?.accessToken) {
       setSlug(null);
+      setProfile(null);
       setLoadState("loaded");
       setLoadedAccessToken(null);
       return;
@@ -36,12 +39,14 @@ export function useMyDotaProfileNav() {
 
     let isCancelled = false;
     setSlug(null);
+    setProfile(null);
     setLoadState("loading");
 
     void fetchMyDotaProfile(authSession.accessToken)
       .then((profile) => {
         if (!isCancelled) {
           setSlug(profile.slug);
+          setProfile(profile);
           setLoadState("loaded");
           setLoadedAccessToken(authSession.accessToken);
         }
@@ -94,6 +99,7 @@ export function useMyDotaProfileNav() {
       !isAuthSessionLoaded ||
       loadState !== "loaded" ||
       loadedAccessToken !== expectedAccessToken,
-    slug
+    slug,
+    profile: loadedAccessToken === expectedAccessToken ? profile : null
   };
 }

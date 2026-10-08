@@ -15,6 +15,7 @@ import {
   type TelegramTournamentBotLinkRequest
 } from "../api/telegram-bot-onboarding-api";
 import styles from "./tournament-telegram-onboarding.module.css";
+import { TournamentPageSkeleton } from "./tournament-page-skeleton";
 
 const SESSION_BOT_URL = `${buildDotaBotProfileUrl()}?start=web_session`;
 const POLL_INTERVAL_MS = 2500;
@@ -78,6 +79,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
       return;
     }
 
+    if (accountState === "error") return;
     if (verifiedUserId === authSession.userId && accountState !== "loading" && accountState !== "needs-start") return;
     if (
       statusRequest.current?.userId === authSession.userId &&
@@ -267,6 +269,14 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
 
   if (!isTournamentRoute) return children;
 
+  if (
+    !isAuthSessionLoaded ||
+    accountState === "loading" ||
+    (authSession && verifiedUserId !== authSession.userId && accountState !== "error")
+  ) {
+    return <TournamentPageSkeleton detail={pathname !== "/games/tournaments"} />;
+  }
+
   if (isAuthSessionLoaded && authSession && accountState === "allowed" && verifiedUserId === authSession.userId) {
     return children;
   }
@@ -287,10 +297,6 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
               ? t("dota.tournaments.telegram.startRequired")
             : t("dota.tournaments.telegram.description")}
         </p>
-
-        {accountState === "loading" ? (
-          <p className={styles.status} aria-live="polite">{t("dota.tournaments.telegram.checking")}</p>
-        ) : null}
 
         {challenge ? (
           <div className={styles.challenge} aria-live="polite">
@@ -324,7 +330,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
             <TournamentTelegramButton />
             <p className={styles.status} aria-live="polite">{t("dota.tournaments.telegram.waitingForStart")}</p>
           </div>
-        ) : accountState !== "loading" && !challenge ? (
+        ) : !challenge ? (
           <div className={styles.actions}>
             <button className={styles.joinButton} type="button" disabled={busy} onClick={() => void startLink()}>
               <TelegramIcon />{isPreparing ? t("dota.tournaments.telegram.preparing") : t("dota.tournaments.telegram.connect")}

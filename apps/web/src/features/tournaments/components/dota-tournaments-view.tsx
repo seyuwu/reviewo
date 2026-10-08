@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { useTranslation } from "../../i18n/locale-provider";
@@ -11,6 +11,10 @@ import type { DotaTournamentSummary } from "../types/dota-tournament";
 import { DotaTournamentPodium } from "./dota-tournament-podium";
 import { TournamentTelegramButton } from "./tournament-telegram-onboarding";
 import styles from "./dota-tournaments-view.module.css";
+import { TournamentCardsSkeleton } from "./tournament-page-skeleton";
+
+let cachedDirectory: { userId: string; items: DotaTournamentSummary[]; fetchedAt: number } | null = null;
+const DIRECTORY_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export function DotaTournamentsView() {
   const t = useTranslation();
@@ -19,11 +23,28 @@ export function DotaTournamentsView() {
   const [canManageTournaments, setCanManageTournaments] = useState(false);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  useLayoutEffect(() => {
+    if (cachedDirectory && cachedDirectory.userId === authSession?.userId && Date.now() - cachedDirectory.fetchedAt < DIRECTORY_CACHE_TTL_MS) {
+      setTournaments(cachedDirectory.items);
+      setLoading(false);
+    }
+  }, [authSession?.userId]);
+
   useEffect(() => {
+    if (!isAuthSessionLoaded) return;
+    if (!authSession?.accessToken) {
+      setTournaments([]);
+      setLoading(false);
+      return;
+    }
+
     let active = true;
-    void fetchDotaTournaments()
+    void fetchDotaTournaments(authSession.accessToken)
       .then((items) => {
-        if (active) setTournaments(items);
+        if (active) {
+          cachedDirectory = { userId: authSession.userId, items, fetchedAt: Date.now() };
+          setTournaments(items);
+        }
       })
       .catch(() => {
         if (active) setFailed(true);
@@ -34,7 +55,7 @@ export function DotaTournamentsView() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [authSession?.accessToken, isAuthSessionLoaded]);
 
   useEffect(() => {
     if (!isAuthSessionLoaded || !authSession?.accessToken) {
@@ -69,74 +90,81 @@ export function DotaTournamentsView() {
           <p>{t("dota.tournaments.lead")}</p>
         </div>
         <div className={styles.heroActions}>
-          <TournamentTelegramButton />
           {canManageTournaments ? (
             <Link className="button-secondary" href="/games/tournaments/manage">
               {t("dota.tournaments.admin.create")}
             </Link>
           ) : null}
+          <TournamentTelegramButton />
         </div>
       </header>
 
-      {loading ? <p className={styles.muted}>{t("common.loadingEllipsis")}</p> : null}
-      {failed ? <p className={styles.empty}>{t("dota.tournaments.loadError")}</p> : null}
-      {!loading && !failed && tournaments.length === 0 ? (
-        <div className={styles.emptyState}>
-          <span aria-hidden="true">🏆</span>
-          <h2>{t("dota.tournaments.emptyTitle")}</h2>
-          <p>{t("dota.tournaments.emptyLead")}</p>
-        </div>
+      {loading ? (
+        <span className={styles.visuallyHidden} role="status">
+          {t("common.loadingEllipsis")}
+        </span>
       ) : null}
-      <div className={styles.grid}>
-        {tournaments.map((tournament) => (
-          <Link
-            className={styles.card}
-            href={`/games/tournaments/${encodeURIComponent(tournament.slug)}${tournament.status === "COMPLETED" ? "#tournament-bracket" : ""}`}
-            key={tournament.id}
-          >
-            <div className={styles.cardTop}>
-              <span className={styles.status}>{statusLabel(tournament.status, t)}</span>
-              <span className={styles.teamsCount}>
-                {t("dota.tournaments.teamCount", {
-                  count: String(tournament.registeredTeams),
-                  max: tournament.maxTeams ? String(tournament.maxTeams) : "∞"
-                })}
-              </span>
-            </div>
-            <h2>{tournament.title}</h2>
-            {tournament.status === "COMPLETED" ? (
-              <DotaTournamentPodium tournament={tournament} compact />
-            ) : (
-              <>
-                <p className={styles.description}>
-                  {tournament.description || t("dota.tournaments.noDescription")}
-                </p>
-                <div className={styles.meta}>
-                  {tournament.format ? <span>{tournament.format}</span> : null}
-                  {tournament.startsAt ? (
-                    <span>
-                      {t("dota.tournaments.startsAt", { date: formatDate(tournament.startsAt) })}
-                    </span>
-                  ) : null}
-                  {tournament.registrationClosesAt ? (
-                    <span>
-                      {t("dota.tournaments.registrationUntil", {
-                        date: formatDate(tournament.registrationClosesAt)
-                      })}
-                    </span>
-                  ) : null}
+      <div aria-busy={loading} className={`${styles.grid} ${styles.directoryGrid}`}>
+        {loading ? <TournamentCardsSkeleton /> : null}
+        {!loading && failed ? <p className={styles.empty}>{t("dota.tournaments.loadError")}</p> : null}
+        {!loading && !failed && tournaments.length === 0 ? (
+          <div className={styles.emptyState}>
+            <span aria-hidden="true">🏆</span>
+            <h2>{t("dota.tournaments.emptyTitle")}</h2>
+            <p>{t("dota.tournaments.emptyLead")}</p>
+          </div>
+        ) : null}
+        {!loading && !failed
+          ? tournaments.map((tournament) => (
+              <Link
+                className={styles.card}
+                href={`/games/tournaments/${encodeURIComponent(tournament.slug)}${tournament.status === "COMPLETED" ? "#tournament-bracket" : ""}`}
+                key={tournament.id}
+              >
+                <div className={styles.cardTop}>
+                  <span className={styles.status}>{statusLabel(tournament.status, t)}</span>
+                  <span className={styles.teamsCount}>
+                    {t("dota.tournaments.teamCount", {
+                      count: String(tournament.registeredTeams),
+                      max: tournament.maxTeams ? String(tournament.maxTeams) : "∞"
+                    })}
+                  </span>
                 </div>
-              </>
-            )}
-            <strong className={styles.cardCta}>
-              {t(
-                tournament.status === "COMPLETED"
-                  ? "dota.tournaments.bracket.show"
-                  : "dota.tournaments.openTournament"
-              )}
-            </strong>
-          </Link>
-        ))}
+                <h2>{tournament.title}</h2>
+                {tournament.status === "COMPLETED" ? (
+                  <DotaTournamentPodium tournament={tournament} compact />
+                ) : (
+                  <>
+                    <p className={styles.description}>
+                      {tournament.description || t("dota.tournaments.noDescription")}
+                    </p>
+                    <div className={styles.meta}>
+                      {tournament.format ? <span>{tournament.format}</span> : null}
+                      {tournament.startsAt ? (
+                        <span>
+                          {t("dota.tournaments.startsAt", { date: formatDate(tournament.startsAt) })}
+                        </span>
+                      ) : null}
+                      {tournament.registrationClosesAt ? (
+                        <span>
+                          {t("dota.tournaments.registrationUntil", {
+                            date: formatDate(tournament.registrationClosesAt)
+                          })}
+                        </span>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+                <strong className={styles.cardCta}>
+                  {t(
+                    tournament.status === "COMPLETED"
+                      ? "dota.tournaments.bracket.show"
+                      : "dota.tournaments.openTournament"
+                  )}
+                </strong>
+              </Link>
+            ))
+          : null}
       </div>
     </section>
   );

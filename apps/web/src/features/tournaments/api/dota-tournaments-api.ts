@@ -24,8 +24,11 @@ export function tournamentPathSegment(slug: string) {
   }
 }
 
-export function fetchDotaTournaments(): Promise<DotaTournamentSummary[]> {
-  return apiRequest<DotaTournamentSummary[]>("/dota/tournaments");
+export function fetchDotaTournaments(accessToken?: string): Promise<DotaTournamentSummary[]> {
+  return apiRequest<DotaTournamentSummary[]>(
+    "/dota/tournaments",
+    accessToken ? { headers: authHeaders(accessToken) } : undefined
+  );
 }
 
 export function fetchDotaTournament(slug: string, accessToken?: string): Promise<DotaTournament> {

@@ -1,4 +1,5 @@
 .page {
+  align-content: start;
   display: grid;
   gap: 1.15rem;
   margin: 0 auto;
@@ -15,10 +16,9 @@
     linear-gradient(130deg, rgb(22 25 39 / 95%), rgb(13 17 27 / 91%));
   border: 1px solid rgb(167 139 250 / 22%);
   border-radius: 1.1rem;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 1.25rem;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) auto;
   padding: clamp(1.1rem, 3vw, 2rem);
 }
 
@@ -29,12 +29,16 @@
 }
 
 .heroActions {
-  align-items: center;
+  align-items: stretch;
   display: flex;
   flex: 0 0 auto;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.65rem;
   justify-content: flex-end;
+  justify-self: end;
+  max-width: 100%;
+  min-height: calc(88px + 0.65rem);
+  width: 15.5rem;
 }
 
 .hero h1 {
@@ -66,6 +70,91 @@
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
 }
 
+.directoryGrid {
+  align-content: start;
+  min-height: 15.5rem;
+}
+
+.directoryGrid > .emptyState,
+.directoryGrid > .empty {
+  grid-column: 1 / -1;
+  min-height: inherit;
+}
+
+.cardSkeleton {
+  background: linear-gradient(145deg, rgb(21 25 38 / 94%), rgb(13 17 27 / 94%));
+  border: 1px solid var(--color-card-border);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 0.9rem;
+  min-height: 15.5rem;
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.skeletonBar {
+  animation: tournament-skeleton-shimmer 1.4s ease-in-out infinite;
+  background: linear-gradient(90deg, rgb(167 139 250 / 7%), rgb(167 139 250 / 16%), rgb(167 139 250 / 7%));
+  background-size: 200% 100%;
+  border-radius: 0.45rem;
+  display: block;
+}
+
+.skeletonStatus {
+  height: 1.35rem;
+  width: 7rem;
+}
+
+.skeletonTitle {
+  height: 1.5rem;
+  margin-top: 0.15rem;
+  width: min(80%, 17rem);
+}
+
+.skeletonDescription,
+.skeletonDescriptionShort {
+  height: 0.7rem;
+  width: 100%;
+}
+
+.skeletonDescriptionShort {
+  margin-top: -0.25rem;
+  width: 72%;
+}
+
+.skeletonMeta {
+  height: 0.8rem;
+  margin-top: 0.15rem;
+  width: 56%;
+}
+
+.skeletonAction {
+  align-self: end;
+  height: 0.85rem;
+  margin-top: auto;
+  width: 8.5rem;
+}
+
+.skeletonHeroAction {
+  height: 44px;
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .hero { grid-template-columns: 1fr; }
+  .heroActions { justify-self: start; }
+  .directoryGrid { min-height: calc(31rem + 1rem); }
+}
+
+@keyframes tournament-skeleton-shimmer {
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonBar { animation: none; }
+}
+
 .matchGrid {
   display: grid;
   gap: 14px;
@@ -87,6 +176,7 @@
 }
 
 .card {
+  min-height: 15.5rem;
   transition:
     border-color 160ms ease,
     transform 160ms ease;
