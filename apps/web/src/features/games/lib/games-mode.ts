@@ -2,7 +2,7 @@ import { isGamesVerticalHostname } from "../../../lib/config/product-hosts";
 
 /** Path-based Games chrome (local same-origin `/games` + `/dota`). */
 export function isGamesModePath(pathname: string): boolean {
-  return pathname === "/games" || pathname.startsWith("/games/") || pathname.startsWith("/dota");
+  return pathname === "/games" || pathname.startsWith("/games/") || pathname.startsWith("/dota") || pathname === "/telegram/connect";
 }
 
 /**

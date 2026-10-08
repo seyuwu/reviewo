@@ -173,7 +173,7 @@ async def start_selected_action(
             "<b>Осталось немного — давайте создадим аккаунт</b>\n\n"
             f"Аккаунт нужен, чтобы {action_text}. Создание профиля займёт всего несколько шагов.\n\n"
             "Если аккаунт Opinia уже есть, напишите <code>/login</code> для входа.",
-            onboarding_keyboard(),
+            onboarding_keyboard(settings.site_url),
             chat_id,
         )
         return

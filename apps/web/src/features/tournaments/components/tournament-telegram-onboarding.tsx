@@ -16,6 +16,7 @@ import {
 } from "../api/telegram-bot-onboarding-api";
 import styles from "./tournament-telegram-onboarding.module.css";
 import { TournamentPageSkeleton } from "./tournament-page-skeleton";
+import { telegramAppUrl } from "../../../lib/telegram/native-bot-link";
 
 const SESSION_BOT_URL = `${buildDotaBotProfileUrl()}?start=web_session`;
 const POLL_INTERVAL_MS = 2500;
@@ -27,7 +28,7 @@ export function TournamentTelegramButton() {
   return (
     <a
       className={styles.serverButton}
-      href={SESSION_BOT_URL}
+      href={telegramAppUrl(SESSION_BOT_URL)}
       rel="noopener noreferrer"
       target="_blank"
     >
@@ -190,7 +191,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
       const response = await createTelegramTournamentBotLink(authSession.accessToken);
       if (generation.current !== currentGeneration) return;
       if (response.botStarted) {
-        if (pendingPopup && !pendingPopup.closed) pendingPopup.location.replace(SESSION_BOT_URL);
+        if (pendingPopup && !pendingPopup.closed) pendingPopup.location.replace(telegramAppUrl(SESSION_BOT_URL));
         popup.current = null;
         setPopupBlocked(!pendingPopup || pendingPopup.closed);
         setVerifiedUserId(authSession.userId);
@@ -201,7 +202,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
       const nextChallenge = { ...response, botUrl };
       setChallenge(nextChallenge);
       setPopupBlocked(!pendingPopup || pendingPopup.closed);
-      if (pendingPopup && !pendingPopup.closed) pendingPopup.location.replace(botUrl);
+      if (pendingPopup && !pendingPopup.closed) pendingPopup.location.replace(telegramAppUrl(botUrl));
       void pollLink(authSession.accessToken, response.requestId, currentGeneration);
     } catch {
       if (generation.current === currentGeneration) setError("connect");
@@ -301,7 +302,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
         {challenge ? (
           <div className={styles.challenge} aria-live="polite">
             <p>{t("dota.tournaments.telegram.confirmHint")}</p>
-            <a className={styles.joinButton} href={challenge.botUrl} rel="noreferrer" target="_blank">
+            <a className={styles.joinButton} href={telegramAppUrl(challenge.botUrl)} rel="noreferrer" target="_blank">
               <TelegramIcon />{t("dota.tournaments.telegram.openBot")}<span aria-hidden="true">↗</span>
             </a>
             <p>{connectionIssue ? t("dota.tournaments.telegram.connectionIssue") : t("dota.tournaments.telegram.waiting")}</p>

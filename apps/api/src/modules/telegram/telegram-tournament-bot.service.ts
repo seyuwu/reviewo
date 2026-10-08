@@ -78,10 +78,10 @@ export class TelegramTournamentBotService {
     });
   }
 
-  async createLinkRequest(user: AuthenticatedUser) {
+  async createLinkRequest(user: AuthenticatedUser, forceConfirmation = false) {
     if (user.status !== "active") throw new UnauthorizedException("Account is not active");
     const current = await this.status(user.id);
-    if (current.botStarted) return { botStarted: true as const };
+    if (current.botStarted && !forceConfirmation) return { botStarted: true as const };
 
     const requestId = randomBytes(16).toString("hex");
     const request: BotLinkRequest = { status: "pending", userId: user.id };
@@ -104,10 +104,11 @@ export class TelegramTournamentBotService {
     };
   }
 
-  async poll(requestId: string, userId: string) {
+  async poll(requestId: string, userId: string, requireConfirmation = false) {
     const client = await this.redis.getClient();
     const raw = await client.get(this.key(requestId));
     if (!raw) {
+      if (requireConfirmation) return { status: "expired" as const };
       const current = await this.status(userId);
       return current.botStarted ? { status: "approved" as const } : { status: "expired" as const };
     }

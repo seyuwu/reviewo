@@ -22,15 +22,17 @@ def home_keyboard(
     if tournaments_url == "https://dota.opinia.ru":
         tournaments_url = "https://games.opinia.ru"
     rows.append([button_url("🏆 Турниры", f"{tournaments_url}/games/tournaments")])
+    rows.append([button_url("🌐 Войти через сайт", f"{site_url.rstrip('/')}/telegram/connect?from=bot")])
     if can_share:
         rows.append([button("🔗 Пригласить друзей", "invite:friends")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def onboarding_keyboard() -> InlineKeyboardMarkup:
+def onboarding_keyboard(site_url: str = "https://dota.opinia.ru") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [button("Создать аккаунт", "onboarding:register")],
+            [button_url("🌐 Войти через сайт", f"{site_url.rstrip('/')}/telegram/connect?from=bot")],
             [button("← Назад", "panel:home")],
         ]
     )
@@ -369,6 +371,7 @@ def account_keyboard(
     has_party: bool = False,
     has_invites: bool = False,
     profile_url: str | None = None,
+    site_url: str = "https://dota.opinia.ru",
 ) -> InlineKeyboardMarkup:
     if linked:
         account_button = (
@@ -377,7 +380,7 @@ def account_keyboard(
             else button("🔗 Аккаунт FDP", "account:open")
         )
     else:
-        account_button = button("🔑 Уже есть аккаунт? Войти", "account:help")
+        account_button = button_url("🌐 Войти через сайт", f"{site_url.rstrip('/')}/telegram/connect?from=bot")
     rows = [
         [
             button("👤 Профиль", "panel:profile"),

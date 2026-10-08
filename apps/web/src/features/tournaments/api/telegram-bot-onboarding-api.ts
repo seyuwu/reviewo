@@ -32,16 +32,17 @@ export function getTelegramTournamentBotStatus(accessToken: string) {
   });
 }
 
-export function createTelegramTournamentBotLink(accessToken: string) {
+export function createTelegramTournamentBotLink(accessToken: string, forceConfirmation = false) {
   return apiRequest<TelegramTournamentBotLinkRequest>("/telegram/tournament-bot-link", {
     headers: authHeaders(accessToken),
-    method: "POST"
+    method: "POST",
+    body: { forceConfirmation }
   });
 }
 
-export function pollTelegramTournamentBotLink(accessToken: string, requestId: string) {
+export function pollTelegramTournamentBotLink(accessToken: string, requestId: string, requireConfirmation = false) {
   return apiRequest<TelegramTournamentBotLinkPoll>("/telegram/tournament-bot-link/poll", {
-    body: { requestId },
+    body: { requestId, requireConfirmation },
     headers: authHeaders(accessToken),
     method: "POST"
   });

@@ -9,7 +9,7 @@ import {
   Req,
   UseGuards
 } from "@nestjs/common";
-import { IsOptional, IsString, Matches } from "class-validator";
+import { IsBoolean, IsOptional, IsString, Matches } from "class-validator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../common/interfaces/authenticated-request.js";
 import {
@@ -25,6 +25,18 @@ class LinkRequestDto {
   @IsString()
   @Matches(/^[a-f0-9]{32}$/)
   requestId!: string;
+}
+
+class CreateLinkRequestDto {
+  @IsOptional()
+  @IsBoolean()
+  forceConfirmation?: boolean;
+}
+
+class PollLinkRequestDto extends LinkRequestDto {
+  @IsOptional()
+  @IsBoolean()
+  requireConfirmation?: boolean;
 }
 
 class ConfirmLinkDto extends LinkRequestDto {
@@ -88,7 +100,7 @@ export class TelegramTournamentBotController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(200)
   @Header("Cache-Control", "private, no-store")
-  async create(@CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike) {
+  async create(@CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike, @Body() input: CreateLinkRequestDto) {
     await this.limiter.assertWithinLimits([
       {
         key: user.id,
@@ -105,7 +117,7 @@ export class TelegramTournamentBotController {
         message: "Too many Telegram link requests"
       }
     ]);
-    return this.onboarding.createLinkRequest(user);
+    return this.onboarding.createLinkRequest(user, input?.forceConfirmation === true);
   }
 
   @Post("tournament-bot-link/poll")
@@ -113,7 +125,7 @@ export class TelegramTournamentBotController {
   @HttpCode(200)
   @Header("Cache-Control", "private, no-store")
   async poll(
-    @Body() input: LinkRequestDto,
+    @Body() input: PollLinkRequestDto,
     @CurrentUser() user: AuthenticatedUser,
     @Req() request: RequestLike
   ) {
@@ -133,7 +145,7 @@ export class TelegramTournamentBotController {
         message: "Too many Telegram link checks"
       }
     ]);
-    return this.onboarding.poll(input.requestId, user.id);
+    return this.onboarding.poll(input.requestId, user.id, input.requireConfirmation === true);
   }
 
   @Post("tournament-bot-link/preview")

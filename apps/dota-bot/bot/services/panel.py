@@ -582,7 +582,7 @@ async def render_screen(
                 "<b>Аккаунт</b>\n\n"
                 "Создайте Dota-профиль или войдите в существующий аккаунт FDP.\n\n"
                 "Удалили окно бота? Отправьте /start — бот пришлёт новое. Удалённое сообщение восстановить нельзя.",
-                account_keyboard(False, False, False),
+                account_keyboard(False, False, False, site_url=settings.site_url),
             )
         return (
             "<b>Поиск пати Dota 2 · FDP</b>\n"
@@ -724,6 +724,7 @@ async def render_screen(
                 bool(my_parties.get("party") or my_parties.get("parties")),
                 bool(invites),
                 profile_url=profile_url,
+                site_url=settings.site_url,
             ),
         )
 

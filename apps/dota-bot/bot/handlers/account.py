@@ -23,7 +23,7 @@ CODE_PATTERN = re.compile(r"^\d{8}$")
 def link_help_keyboard(settings: Settings) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Открыть профиль FDP", url=f"{settings.site_url}/profile")],
+            [InlineKeyboardButton(text="Войти через сайт", url=f"{settings.site_url}/telegram/connect?from=bot")],
             [InlineKeyboardButton(text="← В меню", callback_data="panel:home")],
         ]
     )
@@ -166,9 +166,9 @@ async def show_account_link_help(
         settings,
         telegram_user_id,
         "account:link",
-        "<b>Привязка аккаунта FDP</b>\n\nОткройте сайт и войдите в аккаунт. В профиле нажмите "
-        "«Привязать Telegram», затем отправьте сюда код командой <code>/link 12345678</code>. "
-        "Код действует 10 минут.",
+        "<b>Вход в FDP через сайт</b>\n\nОткройте сайт кнопкой ниже. Если вы уже вошли там в аккаунт, "
+        "он появится на странице. Нажмите «Войти в бота» и подтвердите имя аккаунта в приложении Telegram. "
+        "После подтверждения откроется главное меню этого аккаунта FDP. Вводить код не нужно.",
         link_help_keyboard(settings),
         chat_id,
     )
