@@ -93,10 +93,11 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
-  async getPublic(slug: string) {
+  async getPublic(slug: string, currentUser?: AuthenticatedUser) {
     const tournament = await this.prismaService.dotaTournament.findFirst({
       include: {
         _count: { select: { entries: { where: { status: "REGISTERED" } } } },
+        sponsors: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
         bracketSeeds: true,
         matchPlans: true,
         matches: {
@@ -130,8 +131,18 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
+    const sponsorGateCompleted = currentUser && tournament.sponsors.length > 0
+      ? Boolean(await this.prismaService.dotaTournamentSponsorClick.findUnique({
+          where: {
+            tournamentId_userId: { tournamentId: tournament.id, userId: currentUser.id }
+          },
+          select: { id: true }
+        }))
+      : false;
+
     return {
       ...this.toTournamentSummary(tournament),
+      sponsorGateCompleted,
       ...this.bracketPresentation(tournament),
       matches: tournament.matches.map((match) => this.toMatchSummary(match)),
       entries: tournament.entries.map((entry) => ({
@@ -148,6 +159,53 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         teamPartySlug: entry.teamParty?.slug ?? null
       }))
     };
+  }
+
+  async recordSponsorClick(
+    tournamentSlug: string,
+    sponsorId: string,
+    currentUser: AuthenticatedUser
+  ) {
+    const tournament = await this.prismaService.dotaTournament.findFirst({
+      select: { id: true },
+      where: { slug: tournamentSlug, status: { in: PUBLIC_TOURNAMENT_STATUSES } }
+    });
+    if (!tournament) {
+      throw createAppException({
+        code: AppErrorCode.NotFound,
+        message: "Tournament was not found",
+        statusCode: HttpStatus.NOT_FOUND
+      });
+    }
+    await this.prismaService.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${tournament.id}`}))`;
+      const sponsor = await tx.dotaTournamentSponsor.findFirst({
+        select: { id: true },
+        where: { id: sponsorId, tournamentId: tournament.id }
+      });
+      if (!sponsor) {
+        throw createAppException({
+          code: AppErrorCode.NotFound,
+          message: "Tournament sponsor was not found",
+          statusCode: HttpStatus.NOT_FOUND
+        });
+      }
+      await tx.dotaTournamentSponsorClick.upsert({
+        create: {
+          sponsorId: sponsor.id,
+          tournamentId: tournament.id,
+          userId: currentUser.id
+        },
+        update: {},
+        where: {
+          tournamentId_userId: {
+            tournamentId: tournament.id,
+            userId: currentUser.id
+          }
+        }
+      });
+    });
+    return { sponsorGateCompleted: true };
   }
 
   async listManagedEntries(tournamentSlug: string, currentUser: AuthenticatedUser) {
@@ -260,6 +318,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           statusCode: HttpStatus.NOT_FOUND
         });
       }
+      await this.assertSponsorGate(tx, latestTournament.id, currentUser.id);
       this.assertEntryCanRecruit(latestTournament, "RESERVE");
 
       const existingMember = await tx.dotaTournamentEntryMember.findFirst({
@@ -301,7 +360,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       });
     });
 
-    return this.getPublic(tournamentSlug);
+    return this.getPublic(tournamentSlug, currentUser);
   }
 
   async listTeamEntries(teamSlug: string, currentUser: AuthenticatedUser) {
@@ -427,6 +486,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           });
         }
         this.assertEntryCanRecruit(latest.tournament, latest.status);
+        await this.assertSponsorGate(tx, latest.tournamentId, currentUser.id);
 
         const existingMember = await tx.dotaTournamentEntryMember.findUnique({
           where: { entryId_userId: { entryId, userId: currentUser.id } }
@@ -538,7 +598,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.roomsService?.notifyChanged(entryId);
-    return { entryId, result, tournament: await this.getPublic(tournamentSlug) };
+    return { entryId, result, tournament: await this.getPublic(tournamentSlug, currentUser) };
   }
 
   async decideJoinRequest(
@@ -583,7 +643,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         }
       });
       this.roomsService?.notifyChanged(entryId);
-      return { ok: true, tournament: await this.getPublic(tournamentSlug) };
+      return { ok: true, tournament: await this.getPublic(tournamentSlug, currentUser) };
     }
 
     this.assertEntryCanRecruit(entry.tournament, entry.status);
@@ -624,6 +684,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           });
         }
         this.assertEntryCanRecruit(currentTournament, latestEntry.status);
+        await this.assertSponsorGate(tx, currentTournament.id, request.userId);
         await this.assertTournamentSlotAvailable(tx, {
           entryId,
           positionRole: request.positionRole,
@@ -668,7 +729,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       throw error;
     }
     this.roomsService?.notifyChanged(entryId);
-    return { ok: true, tournament: await this.getPublic(tournamentSlug) };
+    return { ok: true, tournament: await this.getPublic(tournamentSlug, currentUser) };
   }
 
   async assignEntryPosition(
@@ -711,7 +772,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       await this.syncEntryRegistrationStatus(tx, entryId);
     });
     this.roomsService?.notifyChanged(entryId);
-    return this.getPublic(tournamentSlug);
+    return this.getPublic(tournamentSlug, currentUser);
   }
 
   async leaveEntry(tournamentSlug: string, entryId: string, currentUser: AuthenticatedUser) {
@@ -786,7 +847,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       });
     });
     await this.roomsService?.syncAccess(entryId);
-    return { ok: true, tournament: await this.getPublic(tournamentSlug) };
+    return { ok: true, tournament: await this.getPublic(tournamentSlug, currentUser) };
   }
 
   async removeEntryMember(tournamentSlug: string, entryId: string, userId: string, currentUser: AuthenticatedUser) {
@@ -1886,6 +1947,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
             statusCode: HttpStatus.CONFLICT
           });
         }
+        await this.assertSponsorGate(tx, currentTournament.id, currentUser.id);
 
         const existing = await tx.dotaTournamentEntry.findUnique({
           where: {
@@ -1992,7 +2054,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       throw error;
     }
 
-    return this.getPublic(tournamentSlug);
+    return this.getPublic(tournamentSlug, currentUser);
   }
 
   async withdrawTeam(tournamentSlug: string, entryId: string, currentUser: AuthenticatedUser) {
@@ -2052,13 +2114,16 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     });
 
     await this.roomsService?.syncAccess(entryId);
-    return this.getPublic(tournamentSlug);
+    return this.getPublic(tournamentSlug, currentUser);
   }
 
   listForAdmin() {
     return this.prismaService.dotaTournament
       .findMany({
-        include: { _count: { select: { entries: { where: { status: "REGISTERED" } } } } },
+        include: {
+          _count: { select: { entries: { where: { status: "REGISTERED" } } } },
+          sponsors: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }
+        },
         orderBy: [{ createdAt: "desc" }]
       })
       .then((items) => items.map((item) => this.toTournamentSummary(item)));
@@ -2115,8 +2180,12 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           startsAt: input.startsAt ? new Date(input.startsAt) : null,
           status: input.status ?? "DRAFT",
           finishedAt: ["COMPLETED", "CANCELLED"].includes(input.status ?? "DRAFT") ? new Date() : null,
-          title
-        }
+          title,
+          ...(input.sponsors?.length
+            ? { sponsors: { create: this.toSponsorCreateData(input.sponsors) } }
+            : {})
+        },
+        include: { sponsors: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } }
       })
     );
   }
@@ -2167,7 +2236,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         "gameMode",
         "serverRegion",
         "allowSpectators",
-        "cheatsEnabled"
+        "cheatsEnabled",
+        "sponsors"
       ] as const;
       if (latest.finishedAt && input.status && input.status !== latest.status) {
         throw this.matchConflict("A finished tournament cannot be reopened");
@@ -2260,6 +2330,34 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         },
         where: { id: current.id }
       });
+      if (input.sponsors !== undefined) {
+        const sponsors = this.toSponsorCreateData(input.sponsors);
+        const existingSponsors = await tx.dotaTournamentSponsor.findMany({
+          orderBy: { sortOrder: "asc" },
+          select: { logoUrl: true, name: true, sortOrder: true, url: true },
+          where: { tournamentId: latest.id }
+        });
+        const sponsorsChanged =
+          sponsors.length !== existingSponsors.length ||
+          sponsors.some((sponsor, index) => {
+            const existingSponsor = existingSponsors[index];
+            return (
+              !existingSponsor ||
+              sponsor.name !== existingSponsor.name ||
+              sponsor.url !== existingSponsor.url ||
+              sponsor.logoUrl !== existingSponsor.logoUrl ||
+              sponsor.sortOrder !== existingSponsor.sortOrder
+            );
+          });
+        if (sponsorsChanged) {
+          await tx.dotaTournamentSponsor.deleteMany({ where: { tournamentId: latest.id } });
+          if (sponsors.length) {
+            await tx.dotaTournamentSponsor.createMany({
+              data: sponsors.map((sponsor) => ({ ...sponsor, tournamentId: latest.id }))
+            });
+          }
+        }
+      }
       if (
         input.gameMode !== undefined ||
         input.serverRegion !== undefined ||
@@ -2287,7 +2385,10 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       }
       if (automaticBracket && result.status === "IN_PROGRESS") {
         await this.bracketService.startLocked(tx, current.id);
-        return tx.dotaTournament.findUniqueOrThrow({ where: { id: current.id } });
+        return tx.dotaTournament.findUniqueOrThrow({
+          where: { id: current.id },
+          include: { sponsors: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } }
+        });
       }
       if (latest.bracketGeneratedAt && result.status === "CANCELLED") {
         await tx.dotaTournamentMatch.updateMany({
@@ -2301,7 +2402,10 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           data: { expiresAt: new Date(result.finishedAt.getTime() + TOURNAMENT_AFTERPARTY_MS) }
         });
       }
-      return result;
+      return tx.dotaTournament.findUniqueOrThrow({
+        where: { id: result.id },
+        include: { sponsors: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } }
+      });
     });
     return this.toTournamentSummary(updated);
   }
@@ -2923,6 +3027,12 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     maxTeams: number | null;
     registrationClosesAt: Date | null;
     rulesUrl: string | null;
+    sponsors?: Array<{
+      id: string;
+      name: string;
+      url: string;
+      logoUrl: string | null;
+    }>;
     serverRegion: string;
     slug: string;
     startsAt: Date | null;
@@ -2943,12 +3053,80 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       registeredTeams: tournament._count?.entries ?? 0,
       registrationClosesAt: tournament.registrationClosesAt?.toISOString() ?? null,
       rulesUrl: tournament.rulesUrl,
+      sponsors: tournament.sponsors?.map(({ id, name, url, logoUrl }) => ({ id, name, url, logoUrl })) ?? [],
       serverRegion: tournament.serverRegion,
       slug: tournament.slug,
       startsAt: tournament.startsAt?.toISOString() ?? null,
       status: tournament.status,
       title: tournament.title
     };
+  }
+
+  private async assertSponsorGate(
+    tx: Prisma.TransactionClient,
+    tournamentId: string,
+    userId: string
+  ) {
+    const sponsorCount = await tx.dotaTournamentSponsor.count({ where: { tournamentId } });
+    if (sponsorCount === 0) return;
+    const click = await tx.dotaTournamentSponsorClick.findUnique({
+      where: { tournamentId_userId: { tournamentId, userId } },
+      select: { id: true }
+    });
+    if (!click) {
+      throw createAppException({
+        code: AppErrorCode.Forbidden,
+        message: "Open at least one tournament sponsor before joining",
+        statusCode: HttpStatus.FORBIDDEN
+      });
+    }
+  }
+
+  private toSponsorCreateData(
+    sponsors: Array<{ name: string; url: string; logoUrl?: string | null }>
+  ) {
+    return sponsors.map((sponsor, sortOrder) => {
+      const name = sponsor.name.trim();
+      if (!name) {
+        throw createAppException({
+          code: AppErrorCode.ValidationError,
+          message: "Sponsor name is required",
+          statusCode: HttpStatus.BAD_REQUEST
+        });
+      }
+      return {
+        logoUrl: sponsor.logoUrl?.trim() ? this.normalizeSponsorUrl(sponsor.logoUrl) : null,
+        name: name.slice(0, 100),
+        sortOrder,
+        url: this.normalizeSponsorUrl(sponsor.url)
+      };
+    });
+  }
+
+  private normalizeSponsorUrl(value: string): string {
+    let url: URL;
+    try {
+      url = new URL(value.trim());
+    } catch {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Sponsor links must be valid HTTP or HTTPS URLs",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      !url.hostname ||
+      url.username.length > 0 ||
+      url.password.length > 0
+    ) {
+      throw createAppException({
+        code: AppErrorCode.ValidationError,
+        message: "Sponsor links must be valid HTTP or HTTPS URLs",
+        statusCode: HttpStatus.BAD_REQUEST
+      });
+    }
+    return url.toString();
   }
 
   private slugify(value: string): string {

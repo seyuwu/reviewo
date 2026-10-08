@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsBoolean,
   IsIn,
@@ -8,14 +10,40 @@ import {
   IsUrl,
   Max,
   MaxLength,
-  Min
+  Min,
+  MinLength,
+  ValidateNested
 } from "class-validator";
+import { Type } from "class-transformer";
 import {
   DOTA_TOURNAMENT_GAME_MODES,
   DOTA_TOURNAMENT_REGIONS
 } from "./create-dota-tournament-match.dto.js";
 
+export class DotaTournamentSponsorDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  name!: string;
+
+  @IsUrl({ protocols: ["http", "https"], require_protocol: true })
+  @MaxLength(1000)
+  url!: string;
+
+  @IsOptional()
+  @IsUrl({ protocols: ["http", "https"], require_protocol: true })
+  @MaxLength(1000)
+  logoUrl?: string | null;
+}
+
 export class CreateDotaTournamentDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @ValidateNested({ each: true })
+  @Type(() => DotaTournamentSponsorDto)
+  sponsors?: DotaTournamentSponsorDto[];
+
   @IsOptional()
   @IsBoolean()
   automaticBracket?: boolean;
@@ -82,6 +110,13 @@ export class CreateDotaTournamentDto {
 }
 
 export class UpdateDotaTournamentDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(8)
+  @ValidateNested({ each: true })
+  @Type(() => DotaTournamentSponsorDto)
+  sponsors?: DotaTournamentSponsorDto[];
+
   @IsOptional()
   @IsIn(["SINGLE_ELIMINATION", "DOUBLE_ELIMINATION"])
   bracketFormat?: "SINGLE_ELIMINATION" | "DOUBLE_ELIMINATION";

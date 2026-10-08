@@ -72,6 +72,61 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.sponsorFields {
+  background: rgb(10 13 22 / 62%);
+  border: 1px solid rgb(167 139 250 / 19%);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+}
+
+.sponsorFieldsHeading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.sponsorFieldsHeading h3,
+.sponsorFieldsHeading p {
+  margin: 0;
+}
+
+.sponsorFieldsHeading p {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+.sponsorFieldsRow {
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.7rem;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  min-width: 0;
+  padding: 0.75rem;
+}
+
+.sponsorFieldsRow legend {
+  color: #c4b5fd;
+  font-size: 0.76rem;
+  padding: 0 0.3rem;
+}
+
+.sponsorFieldsRow button {
+  justify-self: start;
+}
+
+@media (max-width: 600px) {
+  .sponsorFieldsRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .item {
   align-items: center;
   border-top: 1px solid var(--color-card-border);

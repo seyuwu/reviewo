@@ -28,8 +28,22 @@ export function fetchDotaTournaments(): Promise<DotaTournamentSummary[]> {
   return apiRequest<DotaTournamentSummary[]>("/dota/tournaments");
 }
 
-export function fetchDotaTournament(slug: string): Promise<DotaTournament> {
-  return apiRequest<DotaTournament>(`/dota/tournaments/${tournamentPathSegment(slug)}`);
+export function fetchDotaTournament(slug: string, accessToken?: string): Promise<DotaTournament> {
+  return apiRequest<DotaTournament>(
+    `/dota/tournaments/${tournamentPathSegment(slug)}`,
+    accessToken ? { headers: authHeaders(accessToken) } : undefined
+  );
+}
+
+export function recordDotaTournamentSponsorClick(
+  tournamentSlug: string,
+  sponsorId: string,
+  accessToken: string
+): Promise<{ sponsorGateCompleted: boolean }> {
+  return apiRequest<{ sponsorGateCompleted: boolean }>(
+    `/dota/tournaments/${tournamentPathSegment(tournamentSlug)}/sponsors/${encodeURIComponent(sponsorId)}/click`,
+    { headers: authHeaders(accessToken), method: "POST" }
+  );
 }
 
 export function fetchDotaTournamentMatch(
@@ -280,6 +294,7 @@ export interface AdminDotaTournamentInput {
   maxTeams?: number | null;
   registrationClosesAt?: string | null;
   rulesUrl?: string | null;
+  sponsors?: Array<{ name: string; url: string; logoUrl?: string | null }>;
   serverRegion?: string;
   slug?: string | null;
   startsAt?: string | null;

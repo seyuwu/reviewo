@@ -39,6 +39,7 @@ type TournamentAdminForm = {
   maxTeams: string;
   registrationClosesAt: string;
   rulesUrl: string;
+  sponsors: Array<{ name: string; url: string; logoUrl: string }>;
   serverRegion: string;
   slug: string;
   startsAt: string;
@@ -57,6 +58,7 @@ const EMPTY_TOURNAMENT_FORM: TournamentAdminForm = {
   maxTeams: "",
   registrationClosesAt: "",
   rulesUrl: "",
+  sponsors: [],
   serverRegion: "EUROPE",
   slug: "",
   startsAt: "",
@@ -85,6 +87,11 @@ function tournamentToForm(item: DotaTournamentSummary): TournamentAdminForm {
     maxTeams: item.maxTeams === null ? "" : String(item.maxTeams),
     registrationClosesAt: dateTimeInput(item.registrationClosesAt),
     rulesUrl: item.rulesUrl ?? "",
+    sponsors: item.sponsors.map((sponsor) => ({
+      name: sponsor.name,
+      url: sponsor.url,
+      logoUrl: sponsor.logoUrl ?? ""
+    })),
     serverRegion: item.serverRegion,
     slug: item.slug,
     startsAt: dateTimeInput(item.startsAt),
@@ -182,6 +189,13 @@ export function AdminDotaTournamentsView({
       );
       return;
     }
+    const configuredSponsors = form.sponsors.filter(
+      (sponsor) => sponsor.name.trim() || sponsor.url.trim() || sponsor.logoUrl.trim()
+    );
+    if (configuredSponsors.some((sponsor) => !sponsor.name.trim() || !sponsor.url.trim())) {
+      setError(t("dota.tournaments.admin.sponsorFieldsRequired"));
+      return;
+    }
     setBusy(true);
     setError(null);
     setFeedback(null);
@@ -199,6 +213,11 @@ export function AdminDotaTournamentsView({
           ? new Date(form.registrationClosesAt).toISOString()
           : null,
         rulesUrl: form.rulesUrl.trim() || null,
+        sponsors: configuredSponsors.map((sponsor) => ({
+          name: sponsor.name.trim(),
+          url: sponsor.url.trim(),
+          logoUrl: sponsor.logoUrl.trim() || null
+        })),
         serverRegion: form.serverRegion,
         slug: form.slug.trim() || null,
         startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null,
@@ -440,6 +459,79 @@ export function AdminDotaTournamentsView({
             value={form.description}
           />
         </label>
+        <section className={styles.sponsorFields} aria-labelledby="tournament-sponsors-title">
+          <div className={styles.sponsorFieldsHeading}>
+            <div>
+              <h3 id="tournament-sponsors-title">{t("dota.tournaments.admin.sponsorsTitle")}</h3>
+              <p>{t("dota.tournaments.admin.sponsorsLead")}</p>
+            </div>
+            <button
+              className="button-secondary"
+              disabled={busy || form.sponsors.length >= 8}
+              onClick={() => setForm({
+                ...form,
+                sponsors: [...form.sponsors, { name: "", url: "", logoUrl: "" }]
+              })}
+              type="button"
+            >
+              {t("dota.tournaments.admin.addSponsor")}
+            </button>
+          </div>
+          {form.sponsors.map((sponsor, index) => (
+            <fieldset className={styles.sponsorFieldsRow} key={`sponsor-${index}`}>
+              <legend>{t("dota.tournaments.admin.sponsorNumber", { number: String(index + 1) })}</legend>
+              <label>
+                {t("dota.tournaments.admin.sponsorName")}
+                <input
+                  maxLength={100}
+                  onChange={(event) => setForm({
+                    ...form,
+                    sponsors: form.sponsors.map((item, itemIndex) => itemIndex === index
+                      ? { ...item, name: event.target.value } : item)
+                  })}
+                  value={sponsor.name}
+                />
+              </label>
+              <label>
+                {t("dota.tournaments.admin.sponsorUrl")}
+                <input
+                  maxLength={1000}
+                  onChange={(event) => setForm({
+                    ...form,
+                    sponsors: form.sponsors.map((item, itemIndex) => itemIndex === index
+                      ? { ...item, url: event.target.value } : item)
+                  })}
+                  type="url"
+                  value={sponsor.url}
+                />
+              </label>
+              <label>
+                {t("dota.tournaments.admin.sponsorLogoUrl")}
+                <input
+                  maxLength={1000}
+                  onChange={(event) => setForm({
+                    ...form,
+                    sponsors: form.sponsors.map((item, itemIndex) => itemIndex === index
+                      ? { ...item, logoUrl: event.target.value } : item)
+                  })}
+                  type="url"
+                  value={sponsor.logoUrl}
+                />
+              </label>
+              <button
+                className="button-secondary"
+                disabled={busy}
+                onClick={() => setForm({
+                  ...form,
+                  sponsors: form.sponsors.filter((_, itemIndex) => itemIndex !== index)
+                })}
+                type="button"
+              >
+                {t("dota.tournaments.admin.removeSponsor")}
+              </button>
+            </fieldset>
+          ))}
+        </section>
         <button className="button-primary" disabled={busy || !form.title.trim()} type="submit">
           {busy
             ? t("common.loadingEllipsis")

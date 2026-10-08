@@ -43,6 +43,7 @@ model User {
   dotaTournamentEntryMembers DotaTournamentEntryMember[]
   dotaTournamentJoinRequests DotaTournamentEntryRequest[]
   dotaTournamentRoomMessages DotaTournamentRoomMessage[]
+  dotaTournamentSponsorClicks DotaTournamentSponsorClick[]
   gamePartyInvitesSent   GamePartyInvite[] @relation("GamePartyInviter")
   gamePartyInvitesReceived GamePartyInvite[] @relation("GamePartyInvitee")
   gamePartyChatMessages  GamePartyChatMessage[]
@@ -1245,11 +1246,45 @@ model DotaTournament {
   matches               DotaTournamentMatch[]
   bracketSeeds          DotaTournamentBracketSeed[]
   matchPlans            DotaTournamentMatchPlan[]
+  sponsors              DotaTournamentSponsor[]
+  sponsorClicks         DotaTournamentSponsorClick[]
 
   @@index([status, registrationClosesAt])
   @@index([automaticBracket, status, startsAt])
   @@index([status, finishedAt])
   @@map("dota_tournaments")
+  @@schema("social")
+}
+
+model DotaTournamentSponsor {
+  id           String   @id @default(uuid()) @db.Uuid
+  tournamentId String   @map("tournament_id") @db.Uuid
+  name         String   @db.VarChar(100)
+  url          String   @db.VarChar(1000)
+  logoUrl      String?  @map("logo_url") @db.VarChar(1000)
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tournament   DotaTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  clicks       DotaTournamentSponsorClick[]
+
+  @@index([tournamentId, sortOrder])
+  @@map("dota_tournament_sponsors")
+  @@schema("social")
+}
+
+model DotaTournamentSponsorClick {
+  id           String   @id @default(uuid()) @db.Uuid
+  tournamentId String   @map("tournament_id") @db.Uuid
+  sponsorId    String   @map("sponsor_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  clickedAt    DateTime @default(now()) @map("clicked_at") @db.Timestamptz(6)
+  tournament   DotaTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  sponsor      DotaTournamentSponsor @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, userId])
+  @@index([sponsorId, clickedAt])
+  @@map("dota_tournament_sponsor_clicks")
   @@schema("social")
 }
 

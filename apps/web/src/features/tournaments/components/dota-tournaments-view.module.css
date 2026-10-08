@@ -603,3 +603,128 @@
     grid-column: 1;
   }
 }
+
+.sponsorGateDialog {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgb(124 88 255 / 23%), transparent 46%),
+    linear-gradient(145deg, #161a29 0%, #0d111b 75%);
+  border: 1px solid rgb(167 139 250 / 42%);
+  border-radius: 1.2rem;
+  box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 60%), 0 0 3.5rem rgb(124 88 255 / 15%);
+  color: var(--color-text, #f5f3ff);
+  margin: auto;
+  max-height: min(88vh, 54rem);
+  max-width: min(92vw, 38rem);
+  overflow: auto;
+  padding: 0;
+  width: 100%;
+}
+
+.sponsorGateDialog::backdrop {
+  backdrop-filter: blur(8px);
+  background: rgb(3 5 11 / 78%);
+}
+
+.sponsorGateContent {
+  display: grid;
+  gap: 0.9rem;
+  padding: clamp(1.1rem, 4vw, 1.8rem);
+}
+
+.sponsorGateContent h2,
+.sponsorGateContent p {
+  margin: 0;
+}
+
+.sponsorGateContent h2 {
+  font-size: clamp(1.35rem, 4vw, 1.8rem);
+  line-height: 1.15;
+}
+
+.sponsorGateLead {
+  color: var(--color-text-muted, #aab2c7);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.sponsorGateList {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
+.sponsorGateCard {
+  align-items: center;
+  background: linear-gradient(135deg, rgb(30 34 53 / 95%), rgb(14 18 30 / 96%));
+  border: 1px solid rgb(148 163 184 / 20%);
+  border-radius: 0.85rem;
+  color: inherit;
+  display: flex;
+  gap: 0.75rem;
+  min-height: 4.1rem;
+  padding: 0.65rem 0.8rem;
+  text-decoration: none;
+  transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+}
+
+.sponsorGateCard:hover,
+.sponsorGateCard:focus-visible {
+  background: linear-gradient(135deg, rgb(49 41 82 / 98%), rgb(18 22 36 / 98%));
+  border-color: rgb(167 139 250 / 72%);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.sponsorGateCard[aria-disabled="true"] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.sponsorLogo {
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 0.6rem;
+  flex: 0 0 3rem;
+  height: 3rem;
+  object-fit: contain;
+  padding: 0.2rem;
+  width: 3rem;
+}
+
+.sponsorCardText {
+  display: grid;
+  flex: 1;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.sponsorCardText strong {
+  overflow-wrap: anywhere;
+}
+
+.sponsorCardText > span {
+  color: #b8addc;
+  font-size: 0.78rem;
+}
+
+.sponsorOpenIcon {
+  color: #c4b5fd;
+  font-size: 1.15rem;
+}
+
+.sponsorGateError {
+  color: #fca5a5;
+  font-size: 0.85rem;
+}
+
+.sponsorGateStatus {
+  background: rgb(124 88 255 / 11%);
+  border: 1px solid rgb(167 139 250 / 22%);
+  border-radius: 0.65rem;
+  color: #c7b8ff;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  text-align: center;
+}

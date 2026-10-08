@@ -51,8 +51,19 @@ export class DotaTournamentsController {
   }
 
   @Get(":slug")
-  get(@Param("slug") slug: string) {
-    return this.dotaTournamentsService.getPublic(slug);
+  get(@Param("slug") slug: string, @CurrentUser() currentUser: AuthenticatedUser) {
+    return this.dotaTournamentsService.getPublic(slug, currentUser);
+  }
+
+  @Post(":slug/sponsors/:sponsorId/click")
+  async recordSponsorClick(
+    @Param("slug") slug: string,
+    @Param("sponsorId", ParseUUIDPipe) sponsorId: string,
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Req() request: RequestLike
+  ) {
+    await this.rateLimit(currentUser, request);
+    return this.dotaTournamentsService.recordSponsorClick(slug, sponsorId, currentUser);
   }
 
   @Get(":slug/managed-entries")

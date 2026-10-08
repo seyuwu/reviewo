@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { fetchMyDotaProfile } from "../../dota/api/dota-api";
@@ -21,6 +21,7 @@ import {
   fetchDotaTournamentManagedEntries,
   joinDotaTournamentEntry,
   leaveDotaTournamentEntry,
+  recordDotaTournamentSponsorClick,
   setDotaTournamentEntryJoinMode,
   withdrawDotaTeamFromTournament
 } from "../api/dota-tournaments-api";
@@ -42,7 +43,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
   async function refreshTournament() {
     setRefreshingBracket(true);
     try {
-      const updated = await fetchDotaTournament(slug);
+      const updated = await fetchDotaTournament(slug, authSession?.accessToken);
       setTournament(updated);
       if (canReviewChats && authSession?.accessToken && updated.automaticBracket) {
         setManagedBracket(await fetchTournamentPlan(slug, authSession.accessToken).catch(() => null));
@@ -74,6 +75,42 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
   const [failed, setFailed] = useState(false);
   const [canReviewChats, setCanReviewChats] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [sponsorPendingId, setSponsorPendingId] = useState<string | null>(null);
+  const [sponsorClickError, setSponsorClickError] = useState(false);
+  const sponsorGateDialogRef = useRef<HTMLDialogElement>(null);
+  const sponsorGateRequired = Boolean(
+    tournament?.sponsors.length &&
+      !tournament.sponsorGateCompleted &&
+      !tournament.bracketGeneratedAt &&
+      ["REGISTRATION_OPEN", "REGISTRATION_CLOSED"].includes(tournament.status)
+  );
+
+  useEffect(() => {
+    const dialog = sponsorGateDialogRef.current;
+    if (!dialog) return;
+    if (sponsorGateRequired && !dialog.open) dialog.showModal();
+    else if (!sponsorGateRequired && dialog.open) dialog.close();
+  }, [sponsorGateRequired]);
+
+  async function handleSponsorClick(sponsorId: string) {
+    if (sponsorPendingId) return;
+    if (!authSession?.accessToken) {
+      setSponsorClickError(true);
+      return;
+    }
+    setSponsorPendingId(sponsorId);
+    setSponsorClickError(false);
+    try {
+      const result = await recordDotaTournamentSponsorClick(slug, sponsorId, authSession.accessToken);
+      if (result.sponsorGateCompleted) {
+        setTournament((current) => current ? { ...current, sponsorGateCompleted: true } : current);
+      }
+    } catch {
+      setSponsorClickError(true);
+    } finally {
+      setSponsorPendingId(null);
+    }
+  }
 
   useEffect(() => {
     setCanReviewChats(false);
@@ -97,7 +134,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
 
   useEffect(() => {
     let active = true;
-    void fetchDotaTournament(slug)
+    void fetchDotaTournament(slug, authSession?.accessToken)
       .then((item) => {
         if (active) setTournament(item);
       })
@@ -110,7 +147,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
     return () => {
       active = false;
     };
-  }, [slug]);
+  }, [authSession?.accessToken, slug]);
 
   useEffect(() => {
     if (!authSession?.accessToken) {
@@ -424,6 +461,58 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
     : entriesByStatus;
   return (
     <section className={styles.page}>
+      <dialog
+        aria-labelledby="tournament-sponsor-gate-title"
+        className={styles.sponsorGateDialog}
+        onCancel={(event) => event.preventDefault()}
+        ref={sponsorGateDialogRef}
+      >
+        <div className={styles.sponsorGateContent}>
+          <p className={styles.eyebrow}>{t("dota.tournaments.sponsorGateEyebrow")}</p>
+          <h2 id="tournament-sponsor-gate-title">{t("dota.tournaments.sponsorGateTitle")}</h2>
+          <p className={styles.sponsorGateLead}>{t("dota.tournaments.sponsorGateLead")}</p>
+          <div className={styles.sponsorGateList}>
+            {tournament.sponsors.map((sponsor) => (
+              <a
+                className={styles.sponsorGateCard}
+                href={sponsor.url}
+                key={sponsor.id}
+                rel="noopener noreferrer"
+                target="_blank"
+                aria-disabled={Boolean(sponsorPendingId)}
+                onClick={(event) => {
+                  if (sponsorPendingId) {
+                    event.preventDefault();
+                    return;
+                  }
+                  void handleSponsorClick(sponsor.id);
+                }}
+              >
+                {sponsor.logoUrl ? (
+                  <img alt="" className={styles.sponsorLogo} loading="lazy" src={sponsor.logoUrl} />
+                ) : null}
+                <span className={styles.sponsorCardText}>
+                  <strong>{sponsor.name}</strong>
+                  <span>{sponsorPendingId === sponsor.id
+                    ? t("dota.tournaments.sponsorGateSaving")
+                    : t("dota.tournaments.sponsorGateVisit")}</span>
+                </span>
+                <span className={styles.sponsorOpenIcon} aria-hidden="true">↗</span>
+              </a>
+            ))}
+          </div>
+          {sponsorClickError ? (
+            <p className={styles.sponsorGateError} role="alert">
+              {t("dota.tournaments.sponsorGateError")}
+            </p>
+          ) : null}
+          <p className={styles.sponsorGateStatus} role="status">
+            {t(sponsorPendingId
+              ? "dota.tournaments.sponsorGateSaving"
+              : "dota.tournaments.sponsorGatePending")}
+          </p>
+        </div>
+      </dialog>
       <TournamentBackLink href="/games/tournaments">
         {t("dota.tournaments.backToTournaments")}
       </TournamentBackLink>
@@ -464,6 +553,8 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
         ) : canCreateSquad ? (
           <button
             className={`button-primary ${styles.teamSignupPrimary}`}
+            disabled={sponsorGateRequired}
+            title={sponsorGateRequired ? t("dota.tournaments.sponsorGateButtonHint") : undefined}
             onClick={() => {
               setCreateSquadOpen(true);
               document.getElementById("registered-teams")?.scrollIntoView({ behavior: "smooth" });
@@ -551,8 +642,10 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                 {canCreateSquad ? (
                   <button
                     className="button-secondary"
-                    disabled={!!ownEntry}
-                    title={ownEntry ? t("dota.team.createTeamDisabled") : undefined}
+                    disabled={!!ownEntry || sponsorGateRequired}
+                    title={ownEntry
+                      ? t("dota.team.createTeamDisabled")
+                      : sponsorGateRequired ? t("dota.tournaments.sponsorGateButtonHint") : undefined}
                     onClick={() => setCreateSquadOpen((open) => !open)}
                     type="button"
                   >
@@ -881,9 +974,12 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                                     disabled={
                                       busyEntryId !== null ||
                                       !!ownEntry ||
+                                      sponsorGateRequired ||
                                       availableRoles(entry.members, myProfile.roles).length === 0
                                     }
-                                    title={ownEntry ? t("dota.tournaments.room.alreadyMember") : undefined}
+                                    title={ownEntry
+                                      ? t("dota.tournaments.room.alreadyMember")
+                                      : sponsorGateRequired ? t("dota.tournaments.sponsorGateButtonHint") : undefined}
                                     onClick={() =>
                                       void handleJoin(
                                         entry.id,

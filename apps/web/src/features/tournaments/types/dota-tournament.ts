@@ -26,11 +26,19 @@ export interface DotaTournamentSummary {
   registeredTeams: number;
   registrationClosesAt: string | null;
   rulesUrl: string | null;
+  sponsors: DotaTournamentSponsor[];
   serverRegion: string;
   slug: string;
   startsAt: string | null;
   status: DotaTournamentStatus;
   title: string;
+}
+
+export interface DotaTournamentSponsor {
+  id: string;
+  name: string;
+  url: string;
+  logoUrl: string | null;
 }
 
 export interface DotaTournamentEntryMember {
@@ -50,6 +58,7 @@ export interface DotaTournamentEntry {
 }
 
 export interface DotaTournament extends DotaTournamentSummary {
+  sponsorGateCompleted?: boolean;
   planning?: boolean;
   bracket?: {
     size: number;
