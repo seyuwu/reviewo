@@ -40,8 +40,19 @@ const HeaderNotifications = dynamic(
 
 const HeaderRostersMenu = dynamic(
   () => import("./header-rosters-menu").then((mod) => mod.HeaderRostersMenu),
-  { loading: () => null, ssr: false }
+  { loading: () => <HeaderRostersMenuPlaceholder />, ssr: false }
 );
+
+function HeaderRostersMenuPlaceholder() {
+  const t = useTranslation();
+
+  return (
+    <span aria-hidden="true" className="app-chrome-nav-link app-chrome-nav-profile-slot">
+      <span className="app-chrome-nav-icon" />
+      <span>{t("web.nav.rosters")}</span>
+    </span>
+  );
+}
 
 interface AppChromeProps {
   children: ReactNode;
@@ -151,7 +162,11 @@ export function AppChrome({ children }: AppChromeProps) {
             )}
 
             <div className="app-chrome-tools">
-              {isGamesMode ? <div className="app-chrome-widget-slot"><HeaderRostersMenu /></div> : null}
+              {isGamesMode ? (
+                <div className="app-chrome-widget-slot app-chrome-widget-slot--rosters">
+                  <HeaderRostersMenu />
+                </div>
+              ) : null}
               <div className="app-chrome-widget-slot"><HeaderNotifications /></div>
               {isGamesMode ? null : <HeaderStatusIndicators />}
               <LocaleSwitcher />

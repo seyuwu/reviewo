@@ -1643,6 +1643,14 @@ button:disabled {
   width: 2.65rem;
 }
 
+.app-chrome-widget-slot--rosters {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  width: auto;
+}
+
 .app-activity-nav {
   align-items: center;
   display: inline-flex;
