@@ -794,6 +794,7 @@ export const ruMessages: MessageDictionary = {
   "games.search.stackAsTeam": "Команда: {name}",
   "games.search.stackAsParty": "Пати: {name}",
   "games.search.emptyTitle": "Сейчас никто не ищет пати",
+  "games.search.loadingTitle": "Загружаем поиск…",
   "games.search.emptyTitlePlayers": "Сейчас никто не ищет пати в соло",
   "games.search.emptyTitleParties": "Сейчас никто не набирает состав",
   "games.search.emptyLead":

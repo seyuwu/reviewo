@@ -8,6 +8,7 @@ import {
   isDotaMatchMode
 } from "@reviewo/shared";
 import Link from "next/link";
+import { OpiniaIcon } from "../../../components/opinia-icon";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -412,6 +413,25 @@ function mergeOutgoingInvites(
 
 let cachedSearchResults: { userKey: string; results: DotaLfgHit[]; fetchedAt: number } | null = null;
 const SEARCH_CACHE_TTL_MS = 60_000;
+
+function DelayedSearchLoadingStatus() {
+  const t = useTranslation();
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setVisible(true), 250);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  return (
+    <span
+      className={`${styles.feedLoadingTitle}${visible ? ` ${styles.feedLoadingVisible}` : ""}`}
+      role="status"
+    >
+      {t("games.search.loadingTitle")}
+    </span>
+  );
+}
 
 export function GamesSearchView() {
   const t = useTranslation();
@@ -1679,6 +1699,21 @@ export function GamesSearchView() {
     !isAuthSessionLoaded ||
     myDotaProfile.isLoading ||
     (searchLive && cinematicMode === "checking");
+  const showLoadingFeed = !hasLoadedOnce;
+  const feedEmptyTitle = t(
+    feedMode === "players"
+      ? "games.search.emptyTitlePlayers"
+      : feedMode === "parties"
+        ? "games.search.emptyTitleParties"
+        : "games.search.emptyTitle"
+  );
+  const feedEmptyLead = t(
+    feedMode === "players"
+      ? "games.search.emptyLeadPlayers"
+      : feedMode === "parties"
+        ? "games.search.emptyLeadParties"
+        : "games.search.emptyLead"
+  );
 
   if (!searchLive && !isLaunchStatusLoading) {
     return <GamesSearchWaitlistView />;
@@ -1936,49 +1971,58 @@ export function GamesSearchView() {
               </div>
             ) : null}
 
-            {!hasLoadedOnce || isPageLoading ? (
-              <div aria-busy="true" className={`${styles.empty} ${styles.loadingFeed}`}>
-                <span className="sr-only" role="status">{t("common.loadingEllipsis")}</span>
-                <div aria-hidden="true" className={styles.loadingResults}>
-                  {[0, 1, 2].map((item) => <div className={styles.loadingResult} key={item} />)}
-                </div>
-              </div>
-            ) : visiblePlayers.length === 0 ? (
-              <div className={styles.empty}>
+            {showLoadingFeed || visiblePlayers.length === 0 ? (
+              <div
+                aria-busy={showLoadingFeed}
+                className={styles.empty}
+                data-search-feed-state={showLoadingFeed ? "loading" : "empty"}
+              >
                 <div className={styles.emptyIcon} aria-hidden="true">
-                  ⌕
+                  <OpiniaIcon className={styles.feedSearchIcon ?? ""} name="search" />
                 </div>
-                <h2 className={styles.emptyTitle}>
-                  {feedMode === "players"
-                    ? t("games.search.emptyTitlePlayers")
-                    : feedMode === "parties"
-                      ? t("games.search.emptyTitleParties")
-                      : t("games.search.emptyTitle")}
-                </h2>
-                <p className={styles.emptyLead}>
-                  {feedMode === "players"
-                    ? t("games.search.emptyLeadPlayers")
-                    : feedMode === "parties"
-                      ? t("games.search.emptyLeadParties")
-                      : t("games.search.emptyLead")}
-                </p>
-                {!isLooking ? (
-                  <button
-                    className={`button-primary ${styles.emptyCta}`}
-                    disabled={lookingBusy}
-                    onClick={() => void handleIntentAction("join")}
-                    type="button"
+                <div
+                  className={`${styles.feedCopy}${showLoadingFeed ? "" : ` ${styles.feedLoadedCopy}`}`}
+                  key={showLoadingFeed ? "loading" : "ready"}
+                >
+                  <h2 className={styles.emptyTitle}>
+                    <span
+                      aria-hidden={showLoadingFeed ? true : undefined}
+                      className={showLoadingFeed ? styles.feedLoadingSizer : undefined}
+                    >
+                      {feedEmptyTitle}
+                    </span>
+                    {showLoadingFeed ? <DelayedSearchLoadingStatus /> : null}
+                  </h2>
+                  <p
+                    aria-hidden={showLoadingFeed ? true : undefined}
+                    className={`${styles.emptyLead}${showLoadingFeed ? ` ${styles.feedLoadingSizer}` : ""}`}
                   >
-                    {lookingBusy
-                      ? t("games.search.toggleLookingBusy")
-                      : t("games.search.startLooking")}
-                  </button>
-                ) : (
-                  <p className={styles.waitingInviteText}>{t("games.search.invitesWaiting")}</p>
-                )}
+                    {feedEmptyLead}
+                  </p>
+                  <div className={styles.feedAction}>
+                    {showLoadingFeed ? (
+                      <span aria-hidden="true" className={`button-primary ${styles.emptyCta} ${styles.feedLoadingSizer}`}>
+                        {t("games.search.startLooking")}
+                      </span>
+                    ) : !isLooking ? (
+                      <button
+                        className={`button-primary ${styles.emptyCta}`}
+                        disabled={lookingBusy || isPageLoading}
+                        onClick={() => void handleIntentAction("join")}
+                        type="button"
+                      >
+                        {lookingBusy
+                          ? t("games.search.toggleLookingBusy")
+                          : t("games.search.startLooking")}
+                      </button>
+                    ) : (
+                      <p className={styles.waitingInviteText}>{t("games.search.invitesWaiting")}</p>
+                    )}
+                  </div>
+                </div>
               </div>
             ) : (
-              <ul className={styles.list}>
+              <ul className={styles.list} data-search-feed-state="results">
                 {visiblePlayers.map((player) => {
                   const isRecruitParty = Boolean(player.partySlug && player.partyName);
                   const claimedRoles = new Set(player.claimedRoles ?? []);

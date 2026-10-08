@@ -789,6 +789,7 @@ export const enMessages = {
   "games.search.stackAsTeam": "Team: {name}",
   "games.search.stackAsParty": "Party: {name}",
   "games.search.emptyTitle": "Nobody is looking for a party right now",
+  "games.search.loadingTitle": "Loading player search…",
   "games.search.emptyTitlePlayers": "Nobody is looking solo right now",
   "games.search.emptyTitleParties": "No parties are recruiting right now",
   "games.search.emptyLead":
