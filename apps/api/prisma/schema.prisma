@@ -1294,6 +1294,7 @@ model DotaTournamentEntry {
   tournamentId          String                     @map("tournament_id") @db.Uuid
   teamPartyId           String?                    @map("team_party_id") @db.Uuid
   teamNameSnapshot      String                     @map("team_name_snapshot") @db.VarChar(80)
+  description           String                     @default("") @db.VarChar(1000)
   teamSlugSnapshot      String                     @map("team_slug_snapshot") @db.VarChar(120)
   joinMode              GamePartyJoinMode          @default(CONFIRM) @map("join_mode")
   status                DotaTournamentEntryStatus @default(REGISTERED)

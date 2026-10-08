@@ -81,6 +81,7 @@ export class DotaTournamentRoomsService implements OnModuleInit, OnModuleDestroy
     return {
       entryId: entry.id,
       name: entry.teamNameSnapshot,
+      description: entry.description,
       joinMode: entry.joinMode,
       status: entry.status,
       phase: state.phase,
@@ -97,6 +98,7 @@ export class DotaTournamentRoomsService implements OnModuleInit, OnModuleDestroy
       })),
       isMember,
       isCaptain: isMember && (entry.createdByUserId ?? entry.teamParty?.ownerUserId) === user?.id,
+      canEditDescription: isMember && (entry.createdByUserId ?? entry.teamParty?.ownerUserId) === user?.id,
       canReadChat,
       canWriteChat: canReadChat,
       canJoin: rosterRecruitingAllowed && state.phase === "TOURNAMENT" && !currentEntry &&
@@ -131,6 +133,23 @@ export class DotaTournamentRoomsService implements OnModuleInit, OnModuleDestroy
         phase: state.phase, expiresAt: state.expiresAt?.toISOString() ?? null
       }];
     });
+  }
+
+  async updateDescription(slug: string, entryId: string, user: AuthenticatedUser, text: string) {
+    if (text.length > 1000)
+      this.error(AppErrorCode.ValidationError, "Team description must not exceed 1000 characters", HttpStatus.BAD_REQUEST);
+    const description = text.trim();
+    const initial = await this.entry(slug, entryId);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"dota-tournament:" + initial.tournamentId}))`;
+      const entry = await this.entry(slug, entryId, tx);
+      if (!this.accessible(entry, user.id) ||
+        (entry.createdByUserId ?? entry.teamParty?.ownerUserId) !== user.id)
+        this.error(AppErrorCode.Forbidden, "Only the current team captain can edit its description", HttpStatus.FORBIDDEN);
+      await tx.dotaTournamentEntry.update({ where: { id: entry.id }, data: { description } });
+    });
+    this.events.changed(entryId);
+    return { description };
   }
 
   async requireReader(slug: string, entryId: string, user: AuthenticatedUser) {

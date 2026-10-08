@@ -13,6 +13,10 @@ export function fetchTournamentRoom(slug: string, entryId: string, token?: strin
 export function fetchMyTournamentRooms(token: string) {
   return apiRequest<MyTournamentRoom[]>("/dota/tournaments/rooms/me", { headers: headers(token), cache: "no-store" });
 }
+export function updateTournamentRoomDescription(slug: string, entryId: string, token: string, description: string) {
+  return apiRequest<{ description: string }>(path(slug, entryId) + "/description",
+    { headers: headers(token), method: "PATCH", body: { description } });
+}
 export function fetchTournamentRoomMessages(slug: string, entryId: string, token: string, before?: string) {
   return apiRequest<TournamentRoomMessages>(path(slug, entryId) + "/messages" +
     (before ? "?before=" + encodeURIComponent(before) : ""), { headers: headers(token), cache: "no-store" });

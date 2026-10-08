@@ -8,6 +8,12 @@ export class TournamentRoomMessageDto {
   message!: string;
 }
 
+export class TournamentRoomDescriptionDto {
+  @IsString()
+  @MaxLength(1000)
+  description!: string;
+}
+
 export class TournamentRoomMessagesQueryDto {
   @IsOptional()
   @IsUUID()

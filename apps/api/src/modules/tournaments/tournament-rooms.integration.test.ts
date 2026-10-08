@@ -103,6 +103,45 @@ describe("Tournament team rooms (isolated local PostgreSQL)", { skip: !connectio
     if (prisma) await prisma.$disconnect();
   });
 
+  it("persists a public team description and limits edits to its captain", async () => {
+    assert.equal((await rooms.get(slug, entryA, users[0]!)).description, "");
+    assert.equal((await rooms.get(slug, entryA, users[0]!)).canEditDescription, true);
+    await service.joinEntry(slug, entryA, { positionRole: "2" }, users[2]!);
+    for (const user of [users[1]!, users[2]!, users[3]!, users[6]!, users[7]!]) {
+      assert.equal((await rooms.get(slug, entryA, user)).canEditDescription, false);
+      await assert.rejects(rooms.updateDescription(slug, entryA, user, "Unauthorized"), rejectsStatus(403));
+    }
+    const result = await rooms.updateDescription(slug, entryA, users[0]!, "  Play evenings\nLooking for support  ");
+    assert.equal(result.description, "Play evenings\nLooking for support");
+    const outsider = await rooms.get(slug, entryA, users[3]!);
+    assert.equal(outsider.canReadChat, false);
+    assert.equal(outsider.description, result.description);
+    assert.equal((await rooms.get(slug, entryB, users[1]!)).description, "");
+    await assert.rejects(rooms.updateDescription(parallelSlug, entryA, users[0]!, "Wrong tournament"), rejectsStatus(404));
+    await assert.rejects(rooms.updateDescription(slug, entryA, users[0]!, "a".repeat(1001)), rejectsStatus(400));
+    await rooms.updateDescription(slug, entryA, users[0]!, "a".repeat(1000));
+    assert.equal((await rooms.get(slug, entryA)).description.length, 1000);
+    await rooms.updateDescription(slug, entryA, users[0]!, "   ");
+    assert.equal((await rooms.get(slug, entryA)).description, "");
+  });
+
+  it("transfers description permissions with captaincy and freezes closed rooms", async () => {
+    await service.joinEntry(slug, entryA, { positionRole: "2" }, users[2]!);
+    await rooms.updateDescription(slug, entryA, users[0]!, "Original description");
+    await service.leaveEntry(slug, entryA, users[0]!);
+    await assert.rejects(rooms.updateDescription(slug, entryA, users[0]!, "Former captain"), rejectsStatus(403));
+    assert.equal((await rooms.get(slug, entryA, users[2]!)).canEditDescription, true);
+    await rooms.updateDescription(slug, entryA, users[2]!, "New captain");
+    await prisma.dotaTournament.update({ where: { id: tournamentIds[0]! }, data: { status: "IN_PROGRESS" } });
+    await rooms.updateDescription(slug, entryA, users[2]!, "Still playing");
+    await prisma.dotaTournament.update({ where: { id: tournamentIds[0]! }, data: {
+      status: "COMPLETED", finishedAt: new Date(Date.now() - TOURNAMENT_AFTERPARTY_MS - 1000)
+    } });
+    assert.equal((await rooms.get(slug, entryA, users[2]!)).canEditDescription, false);
+    await assert.rejects(rooms.updateDescription(slug, entryA, users[2]!, "Expired"), rejectsStatus(403));
+    assert.equal((await rooms.get(slug, entryA)).description, "Still playing");
+  });
+
   it("restricts match chat to participants and staff and enforces a shared mention cooldown", async () => {
     const chat = new TournamentMatchChatService(prisma as unknown as PrismaService, new TournamentRoomEvents());
     const match = await prisma.dotaTournamentMatch.create({ data: {

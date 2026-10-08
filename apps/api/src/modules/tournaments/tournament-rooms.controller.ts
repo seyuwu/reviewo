@@ -1,10 +1,10 @@
-import { Body, Controller, Delete, Get, Header, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Header, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../common/interfaces/authenticated-request.js";
 import { ApiRateLimiterService, type RequestLike } from "../../common/rate-limiting/api-rate-limiter.service.js";
 import { createSocialWriteRateLimitRules } from "../../common/rate-limiting/write-rate-limit-rules.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
-import { TournamentRoomMessageDto, TournamentRoomMessagesQueryDto, TournamentRoomVoiceDto } from "./dto/tournament-room.dto.js";
+import { TournamentRoomDescriptionDto, TournamentRoomMessageDto, TournamentRoomMessagesQueryDto, TournamentRoomVoiceDto } from "./dto/tournament-room.dto.js";
 import { DotaTournamentRoomsService } from "./tournament-rooms.service.js";
 import { TournamentTelegramLinkedGuard } from "./tournament-telegram-linked.guard.js";
 
@@ -22,6 +22,15 @@ export class DotaTournamentRoomsController {
   get(@Param("slug") slug: string, @Param("entryId", ParseUUIDPipe) entryId: string,
     @CurrentUser() user: AuthenticatedUser) {
     return this.rooms.get(slug, entryId, user);
+  }
+
+  @Patch(":slug/entries/:entryId/description")
+  @Header("Cache-Control", "private, no-store")
+  async description(@Param("slug") slug: string, @Param("entryId", ParseUUIDPipe) entryId: string,
+    @Body() input: TournamentRoomDescriptionDto, @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestLike) {
+    await this.limiter.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    return this.rooms.updateDescription(slug, entryId, user, input.description);
   }
 
   @Get(":slug/entries/:entryId/messages")

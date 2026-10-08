@@ -20,7 +20,8 @@ import {
 } from "../api/dota-tournaments-api";
 import {
   ensureTournamentRoomVoice, fetchTournamentRoom, fetchTournamentRoomMessages,
-  leaveTournamentAfterparty, removeTournamentRoomMember, sendTournamentRoomMessage, tournamentRoomUrl
+  leaveTournamentAfterparty, removeTournamentRoomMember, sendTournamentRoomMessage, tournamentRoomUrl,
+  updateTournamentRoomDescription
 } from "../api/tournament-rooms-api";
 import type { DotaTournamentManagedEntry } from "../types/dota-tournament";
 import type { TournamentRoom, TournamentRoomMessage } from "../types/tournament-room";
@@ -40,6 +41,11 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
   const [messages, setMessages] = useState<TournamentRoomMessage[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [text, setText] = useState("");
+  const [descriptionDraft, setDescriptionDraft] = useState("");
+  const [descriptionEditing, setDescriptionEditing] = useState(false);
+  const [descriptionBusy, setDescriptionBusy] = useState(false);
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
+  const [descriptionSaved, setDescriptionSaved] = useState(false);
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -92,7 +98,7 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
         if (cause instanceof ApiError && [401, 403, 404].includes(cause.status)) {
           setMessages([]);
           setManaged(null);
-          setRoom((previous) => previous ? { ...previous, isMember: false, canReadChat: false, canWriteChat: false, canLeave: false } : null);
+          setRoom((previous) => previous ? { ...previous, isMember: false, canReadChat: false, canWriteChat: false, canLeave: false, canEditDescription: false } : null);
         }
         setError(t("dota.tournaments.room.actionError"));
       } finally { if (alive.current && epoch === requestEpoch.current) setLoading(false); }
@@ -108,9 +114,15 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
     reloadInFlight.current = null;
     roomRef.current = null;
     loadedOlder.current = false;
+    stickToBottom.current = true;
     setRoom(null);
     setCursor(null);
     setText("");
+    setDescriptionDraft("");
+    setDescriptionEditing(false);
+    setDescriptionBusy(false);
+    setDescriptionError(null);
+    setDescriptionSaved(false);
     setFeedback(null);
     setBusy(false);
     setMessages([]);
@@ -178,7 +190,7 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
   const lastMessageId = messages.at(-1)?.id;
   useEffect(() => {
     if (stickToBottom.current && logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [lastMessageId]);
+  }, [lastMessageId, loading, room?.canReadChat]);
 
   async function action(work: () => Promise<unknown>, success?: string) {
     if (busy) return;
@@ -259,6 +271,34 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
     await action(async () => {
       await navigator.clipboard.writeText(window.location.origin + tournamentRoomUrl(slug, entryId));
     }, t("dota.tournaments.inviteCopied"));
+  }
+
+  function editDescription() {
+    setDescriptionDraft(room?.description ?? "");
+    setDescriptionError(null);
+    setDescriptionSaved(false);
+    setDescriptionEditing(true);
+  }
+
+  async function saveDescription(event: FormEvent) {
+    event.preventDefault();
+    if (!token || !room?.canEditDescription || descriptionBusy) return;
+    const epoch = requestEpoch.current;
+    setDescriptionBusy(true);
+    setDescriptionError(null);
+    setDescriptionSaved(false);
+    try {
+      const result = await updateTournamentRoomDescription(slug, entryId, token, descriptionDraft);
+      if (!alive.current || epoch !== requestEpoch.current) return;
+      setRoom((previous) => previous ? { ...previous, description: result.description } : null);
+      setDescriptionEditing(false);
+      setDescriptionSaved(true);
+    } catch {
+      if (alive.current && epoch === requestEpoch.current)
+        setDescriptionError(t("dota.tournaments.room.descriptionError"));
+    } finally {
+      if (alive.current && epoch === requestEpoch.current) setDescriptionBusy(false);
+    }
   }
 
   const own = room?.members.find((member) => member.userId === authSession?.userId);
@@ -344,6 +384,35 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
             <button className="button-secondary" disabled={busy} onClick={() => void action(() => room.phase === "AFTERPARTY" ? leaveTournamentAfterparty(slug, entryId, token!) : leaveDotaTournamentEntry(slug, entryId, token!))}>{t("dota.tournaments.room.leave")}</button>
           </div> : null}
         </aside>
+        <div className={styles.content}>
+          <section className={`${styles.panel} ${styles.descriptionPanel}`} aria-labelledby="tournament-team-description-title">
+            <div className={styles.descriptionTop}>
+              <h2 id="tournament-team-description-title">{t("dota.tournaments.room.descriptionTitle")}</h2>
+              {room.canEditDescription && !descriptionEditing ? <button type="button" className="button-secondary" onClick={editDescription}>
+                {t(room.description ? "dota.tournaments.room.descriptionEdit" : "dota.tournaments.room.descriptionAdd")}
+              </button> : null}
+            </div>
+            {room.canEditDescription && descriptionEditing ? <form className={styles.descriptionForm} onSubmit={(event) => void saveDescription(event)}>
+              <textarea aria-labelledby="tournament-team-description-title" rows={4} maxLength={1000}
+                placeholder={t("dota.tournaments.room.descriptionPlaceholder")} value={descriptionDraft}
+                disabled={descriptionBusy} onChange={(event) => { setDescriptionDraft(event.target.value); setDescriptionError(null); }} />
+              <div className={styles.descriptionControls}>
+                <span className={styles.hint}>{descriptionDraft.length} / 1000</span>
+                <div className={styles.actions}>
+                  <button type="button" className="button-secondary" disabled={descriptionBusy} onClick={() => { setDescriptionEditing(false); setDescriptionError(null); }}>
+                    {t("dota.tournaments.room.descriptionCancel")}
+                  </button>
+                  <button className="button-primary" disabled={descriptionBusy || descriptionDraft.trim() === (room.description ?? "")}>
+                    {t(descriptionBusy ? "dota.tournaments.room.descriptionSaving" : "dota.tournaments.room.descriptionSave")}
+                  </button>
+                </div>
+              </div>
+            </form> : <p className={room.description ? styles.descriptionText : styles.hint}>
+              {room.description || t(room.canEditDescription ? "dota.tournaments.room.descriptionPlaceholder" : "dota.tournaments.room.descriptionEmpty")}
+            </p>}
+            {descriptionError ? <p className={styles.descriptionError} role="alert">{descriptionError}</p> : null}
+            {descriptionSaved ? <p className={styles.descriptionSaved} role="status">{t("dota.tournaments.room.descriptionSaved")}</p> : null}
+          </section>
         <section className={styles.chatPanel}>
           <div className={styles.chatTop}><h2>{t("dota.tournaments.room.chat")}</h2><span>{t(room.canReadChat && !room.isMember ? "dota.tournaments.room.staffWrite" : "dota.tournaments.room.chatPrivate")}</span></div>
           {room.canReadChat ? <>
@@ -370,6 +439,7 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
             </form> : null}
           </> : <div className={styles.chatEmpty}><span aria-hidden="true">💬</span><h3>{t("dota.tournaments.room.chatLocked")}</h3><p>{t(room.phase === "CLOSED" ? "dota.tournaments.room.closedHint" : "dota.tournaments.room.chatLockedHint")}</p></div>}
         </section>
+        </div>
       </div>
     </section>
   );

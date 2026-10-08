@@ -3,6 +3,7 @@ import type { DotaTournamentEntryMember, DotaTournamentStatus } from "./dota-tou
 export interface TournamentRoom {
   entryId: string;
   name: string;
+  description: string;
   status: string;
   joinMode: "OPEN" | "CONFIRM";
   phase: "TOURNAMENT" | "AFTERPARTY" | "CLOSED";
@@ -12,6 +13,7 @@ export interface TournamentRoom {
   members: Array<DotaTournamentEntryMember & { userId: string | null; hasLeft: boolean }>;
   isMember: boolean;
   isCaptain: boolean;
+  canEditDescription: boolean;
   canReadChat: boolean;
   canWriteChat: boolean;
   canJoin: boolean;
