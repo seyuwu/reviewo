@@ -1,11 +1,10 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
-import { TelegramBrowserLoginButton } from "../../auth/components/telegram-browser-login-button";
 import { buildDotaBotProfileUrl } from "../../../lib/config/dota-bot";
 import { useTranslation } from "../../i18n/locale-provider";
 import {
@@ -42,7 +41,8 @@ export function TournamentTelegramButton() {
 export function TournamentTelegramOnboarding({ children }: { children: ReactNode }) {
   const t = useTranslation();
   const pathname = usePathname();
-  const { authSession, isAuthSessionLoaded, storeAuthSession } = useAuthSession();
+  const router = useRouter();
+  const { authSession, isAuthSessionLoaded } = useAuthSession();
   const generation = useRef(0);
   const statusGeneration = useRef(0);
   const activeStatusUserId = useRef<string | null | undefined>(undefined);
@@ -56,7 +56,6 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
   const [error, setError] = useState<OnboardingError | null>(null);
   const [connectionIssue, setConnectionIssue] = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
-  const [isTelegramLoginPending, setIsTelegramLoginPending] = useState(false);
   const isTournamentRoute = pathname === "/games/tournaments" || pathname.startsWith("/games/tournaments/");
 
   useEffect(() => {
@@ -122,6 +121,12 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
   }, [accountState, authSession, isAuthSessionLoaded, isTournamentRoute, verifiedUserId]);
 
   useEffect(() => {
+    if (isTournamentRoute && isAuthSessionLoaded && !authSession) {
+      router.replace("/dota/create?intent=search", { scroll: false });
+    }
+  }, [authSession, isAuthSessionLoaded, isTournamentRoute, router]);
+
+  useEffect(() => {
     if (!isTournamentRoute || !authSession || accountState !== "needs-start") return;
     let cancelled = false;
     let timer: number | null = null;
@@ -172,7 +177,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
 
   async function startLink() {
     if (!authSession) {
-      window.location.assign(`/profile?next=${encodeURIComponent("/games/tournaments")}`);
+      router.replace("/dota/create?intent=search", { scroll: false });
       return;
     }
     if (isPreparing || challenge) return;
@@ -262,13 +267,13 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
     setAccountState("loading");
   }
 
-  function handleTelegramLoginSuccess(auth: Parameters<typeof storeAuthSession>[0]) {
-    storeAuthSession(auth);
-  }
-
   const busy = isPreparing || Boolean(challenge);
 
   if (!isTournamentRoute) return children;
+
+  if (isAuthSessionLoaded && !authSession) {
+    return <TournamentPageSkeleton detail={pathname !== "/games/tournaments"} />;
+  }
 
   if (
     !isAuthSessionLoaded ||
@@ -286,16 +291,10 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
     <main className={styles.gate}>
       <div className={styles.content}>
         <div className={styles.logo}><TelegramIcon /></div>
-        <h2 id="tournament-telegram-title">
-          {accountState === "guest" || !isAuthSessionLoaded
-            ? t("dota.tournaments.telegram.loginTitle")
-            : t("dota.tournaments.telegram.title")}
-        </h2>
+        <h2 id="tournament-telegram-title">{t("dota.tournaments.telegram.title")}</h2>
         <p id="tournament-telegram-description">
-          {accountState === "guest" || !isAuthSessionLoaded
-            ? t("dota.tournaments.telegram.loginDescription")
-            : accountState === "needs-start"
-              ? t("dota.tournaments.telegram.startRequired")
+          {accountState === "needs-start"
+            ? t("dota.tournaments.telegram.startRequired")
             : t("dota.tournaments.telegram.description")}
         </p>
 
@@ -317,14 +316,6 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
         {accountState === "error" && !challenge ? (
           <div className={styles.actions}>
             <button className={styles.joinButton} type="button" onClick={retryStatus}>{t("dota.tournaments.telegram.retry")}</button>
-          </div>
-        ) : accountState === "guest" ? (
-          <div className={styles.actions}>
-            <TelegramBrowserLoginButton
-              disabled={isTelegramLoginPending}
-              onAuthSuccess={handleTelegramLoginSuccess}
-              onBusyChange={setIsTelegramLoginPending}
-            />
           </div>
         ) : accountState === "needs-start" ? (
           <div className={styles.actions}>

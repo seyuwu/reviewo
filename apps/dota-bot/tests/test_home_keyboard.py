@@ -16,7 +16,7 @@ class HomeKeyboardTests(unittest.TestCase):
     def test_unregistered_home_can_open_account_and_tournaments(self) -> None:
         keyboard = home_keyboard(False, False)
 
-        self.assertEqual(len(keyboard.inline_keyboard), 4)
+        self.assertEqual(len(keyboard.inline_keyboard), 3)
         self.assertEqual(keyboard.inline_keyboard[1][0].callback_data, "panel:account")
         self.assertEqual(keyboard.inline_keyboard[2][0].text, "🏆 Турниры")
         self.assertEqual(
@@ -24,12 +24,11 @@ class HomeKeyboardTests(unittest.TestCase):
             "https://games.opinia.ru/games/tournaments",
         )
 
-    def test_website_login_uses_configured_local_site_without_telegram_web(self) -> None:
+    def test_home_does_not_duplicate_website_login_button(self) -> None:
         for registered in (True, False):
             keyboard = home_keyboard(registered, False, site_url="http://127.0.0.1:3003/")
-            button = next(item for row in keyboard.inline_keyboard for item in row if item.text == "🌐 Войти через сайт")
-            self.assertEqual(button.url, "http://127.0.0.1:3003/telegram/connect?from=bot")
-            self.assertIsNone(button.callback_data)
+            buttons = [item for row in keyboard.inline_keyboard for item in row]
+            self.assertNotIn("🌐 Войти через сайт", [item.text for item in buttons])
 
     def test_account_and_onboarding_website_buttons_stay_on_local_site(self) -> None:
         url = "http://127.0.0.1:3003"

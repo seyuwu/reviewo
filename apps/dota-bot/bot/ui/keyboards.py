@@ -22,7 +22,6 @@ def home_keyboard(
     if tournaments_url == "https://dota.opinia.ru":
         tournaments_url = "https://games.opinia.ru"
     rows.append([button_url("🏆 Турниры", f"{tournaments_url}/games/tournaments")])
-    rows.append([button_url("🌐 Войти через сайт", f"{site_url.rstrip('/')}/telegram/connect?from=bot")])
     if can_share:
         rows.append([button("🔗 Пригласить друзей", "invite:friends")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
