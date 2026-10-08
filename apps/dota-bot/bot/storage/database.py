@@ -84,6 +84,7 @@ class BotStorage:
             );
             CREATE TABLE IF NOT EXISTS bot_users (
               telegram_user_id INTEGER PRIMARY KEY,
+              username TEXT,
               first_seen_at TEXT NOT NULL,
               last_seen_at TEXT NOT NULL,
               announcements_enabled INTEGER NOT NULL DEFAULT 1,
@@ -219,6 +220,11 @@ class BotStorage:
             self.connection.execute(
                 "ALTER TABLE bot_users ADD COLUMN last_party_notification_at TEXT"
             )
+        if "username" not in user_columns:
+            self.connection.execute("ALTER TABLE bot_users ADD COLUMN username TEXT")
+        self.connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bot_users_username ON bot_users(username COLLATE NOCASE)"
+        )
         # Older installations already know users through their panel/session rows.
         # Backfill them so the first announcement reaches existing bot users too.
         self.connection.execute(
@@ -851,6 +857,47 @@ class BotStorage:
         ).fetchone()
         return row is not None and row["blocked_at"] is None
 
+    def update_bot_user_username(self, telegram_user_id: int, username: str | None) -> None:
+        normalized = self._telegram_username(username)
+        with self.lock:
+            connection = self._connection()
+            if normalized:
+                # Telegram usernames can change hands. Keep each current handle attached
+                # to only the most recently observed Telegram account.
+                connection.execute(
+                    "UPDATE bot_users SET username = NULL WHERE username = ? COLLATE NOCASE AND telegram_user_id <> ?",
+                    (normalized, telegram_user_id),
+                )
+            connection.execute(
+                "UPDATE bot_users SET username = ? WHERE telegram_user_id = ?",
+                (normalized, telegram_user_id),
+            )
+            connection.commit()
+
+    def find_bot_user(self, identifier: str) -> dict | None:
+        """Find a known bot user by numeric Telegram ID or exact @username."""
+        value = identifier.strip()
+        if value.isdecimal() and 1 <= len(value) <= 20:
+            telegram_user_id = int(value)
+            if telegram_user_id < 1 or telegram_user_id > 9_223_372_036_854_775_807:
+                return None
+            sql = "SELECT telegram_user_id, username, blocked_at FROM bot_users WHERE telegram_user_id = ?"
+            parameters: tuple = (telegram_user_id,)
+        else:
+            username = value.removeprefix("@").strip()
+            if self._telegram_username(username) is None:
+                return None
+            sql = "SELECT telegram_user_id, username, blocked_at FROM bot_users WHERE username = ? COLLATE NOCASE ORDER BY last_seen_at DESC LIMIT 1"
+            parameters = (username,)
+        row = self._connection().execute(sql, parameters).fetchone()
+        if row is None:
+            return None
+        return {
+            "telegram_user_id": int(row["telegram_user_id"]),
+            "username": row["username"],
+            "blocked": row["blocked_at"] is not None,
+        }
+
     def mark_bot_user_blocked(self, telegram_user_id: int) -> None:
         with self.lock:
             self._connection().execute(
@@ -876,6 +923,7 @@ class BotStorage:
         self, admin_user_id: int, text: str,
         delete_after_seconds: int = DEFAULT_BROADCAST_TTL_SECONDS,
         *, photo_file_id: str | None = None, entities: list[dict] | None = None,
+        target_telegram_user_id: int | None = None,
     ) -> tuple[int, int]:
         validate_broadcast_duration(delete_after_seconds)
         validate_broadcast_content(text, photo_file_id)
@@ -887,9 +935,15 @@ class BotStorage:
                 (admin_user_id, text, timestamp(), delete_after_seconds, photo_file_id, entities_json),
             )
             campaign_id = int(cursor.lastrowid)
-            recipients = connection.execute(
-                "SELECT telegram_user_id FROM bot_users WHERE blocked_at IS NULL"
-            ).fetchall()
+            if target_telegram_user_id is None:
+                recipients = connection.execute(
+                    "SELECT telegram_user_id FROM bot_users WHERE blocked_at IS NULL"
+                ).fetchall()
+            else:
+                recipients = connection.execute(
+                    "SELECT telegram_user_id FROM bot_users WHERE telegram_user_id = ? AND blocked_at IS NULL",
+                    (target_telegram_user_id,),
+                ).fetchall()
             connection.executemany(
                 "INSERT INTO broadcast_recipients (campaign_id, telegram_user_id) VALUES (?, ?)",
                 [(campaign_id, int(row["telegram_user_id"])) for row in recipients],

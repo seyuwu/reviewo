@@ -261,7 +261,6 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
 
   function handleTelegramLoginSuccess(auth: Parameters<typeof storeAuthSession>[0]) {
     storeAuthSession(auth);
-    window.location.assign(SESSION_BOT_URL);
   }
 
   const busy = isPreparing || Boolean(challenge);

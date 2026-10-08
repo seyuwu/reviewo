@@ -24,6 +24,7 @@ local request = cjson.decode(raw)
 if request.telegramUserId ~= ARGV[1] or request.userId ~= ARGV[2] then return 'conflict' end
 local ttl = redis.call('TTL', KEYS[1])
 if ttl <= 0 then return 'expired' end
+request.approved = true
 redis.call('SET', KEYS[1], cjson.encode(request), 'EX', ttl)
 return 'approved'`;
 const pollScript = `
@@ -31,7 +32,7 @@ local raw = redis.call('GET', KEYS[1])
 if not raw then return {'expired'} end
 local request = cjson.decode(raw)
 if request.pollHash ~= ARGV[1] then return {'expired'} end
-if not request.userId then return {'pending'} end
+if request.approved ~= true then return {'pending'} end
 redis.call('DEL', KEYS[1])
 return {'approved', request.userId}`;
 

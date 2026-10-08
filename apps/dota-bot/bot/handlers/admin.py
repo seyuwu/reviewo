@@ -37,6 +37,7 @@ _broadcast_send_locks: dict[int, asyncio.Lock] = {}
 
 
 class BroadcastDraft(StatesGroup):
+    selecting_recipient = State()
     composing = State()
     choosing_photo = State()
     choosing_duration = State()
@@ -150,13 +151,16 @@ async def show_admin_panel(
 def _preview_text(
     text: str, storage: BotStorage, ttl_seconds: int, has_photo: bool = False,
     *, preview_body: str | None = None, page: int = 0, page_count: int = 1,
+    recipients_count: int | None = None, recipient_label: str | None = None,
 ) -> str:
-    recipients = storage.bot_user_stats()["subscribers"]
+    recipients = recipients_count if recipients_count is not None else storage.bot_user_stats()["subscribers"]
     page_label = f"Страница {page + 1} из {page_count}\n" if page_count > 1 else ""
+    target_label = f"Получатель: <b>{escape(recipient_label)}</b>\n" if recipient_label else ""
     return (
         f"<b>Предпросмотр рассылки</b>\n\n"
         f"Формат: {'фото с подписью' if has_photo and text else 'фото' if has_photo else 'текст'} · "
         f"получателей: <b>{recipients}</b>\n"
+        f"{target_label}"
         f"Символов: <b>{len(text)}</b> · удаление через <b>{format_broadcast_duration(ttl_seconds)}</b>\n"
         f"{page_label}\n"
         f"{preview_body if preview_body is not None else escape(text) or 'Без подписи'}\n\n"
@@ -238,11 +242,26 @@ async def show_broadcast_preview(bot, api, settings, storage, state, user_id, ch
             "«Сохранить и включить» применит сообщение для будущих регистраций."
         )
     else:
-        preview_text = _preview_text(text, storage, ttl_seconds, bool(photo_file_id), preview_body=preview_body, page=page, page_count=len(pages))
+        direct = data.get("broadcast_target") == "user"
+        recipient_id = data.get("broadcast_user_id") if direct else None
+        recipient_username = data.get("broadcast_username") if direct else None
+        recipient_label = (
+            f"@{recipient_username} · ID {recipient_id}"
+            if recipient_username else str(recipient_id) if direct and recipient_id else None
+        )
+        preview_text = _preview_text(
+            text, storage, ttl_seconds, bool(photo_file_id), preview_body=preview_body,
+            page=page, page_count=len(pages), recipients_count=1 if direct else None,
+            recipient_label=recipient_label,
+        )
+        if direct:
+            preview_text = preview_text.replace("Предпросмотр рассылки", "Предпросмотр сообщения игроку", 1)
     await edit_panel_content(
         bot, storage, api, settings, user_id, "admin:broadcast:preview",
         preview_text,
-        admin_preview_keyboard(bool(photo_file_id), page, len(pages), registration=True) if registration else admin_preview_keyboard(bool(photo_file_id), page, len(pages)), chat_id,
+        admin_preview_keyboard(bool(photo_file_id), page, len(pages), registration=True)
+        if registration else admin_preview_keyboard(bool(photo_file_id), page, len(pages), direct=data.get("broadcast_target") == "user"),
+        chat_id,
         media_photo=photo_file_id,
     )
 
@@ -338,8 +357,21 @@ async def admin_action(
             await state.clear()
         await show_registration_notice_settings(callback.bot, api, settings, storage, state, callback.from_user.id, chat_id)
         return
+    if action == "broadcast:user":
+        await state.clear()
+        await state.set_state(BroadcastDraft.selecting_recipient)
+        await edit_panel_content(
+            callback.bot, storage, api, settings, callback.from_user.id,
+            "admin:broadcast:recipient",
+            "<b>Кому написать?</b>\n\n"
+            "Отправь точный Telegram ID или @username пользователя, который уже запускал FDP.\n"
+            "ID можно узнать командой /id в боте. Если человек не находится по @username, попроси его нажать /start или отправить /id.",
+            admin_compose_keyboard(), chat_id,
+        )
+        return
     if action == "broadcast:new":
         await state.clear()
+        await state.update_data(broadcast_target="all")
         await state.set_state(BroadcastDraft.composing)
         await edit_panel_content(
             callback.bot,
@@ -361,7 +393,11 @@ async def admin_action(
             return
         data = await state.get_data()
         await state.set_state(BroadcastDraft.composing)
-        title = "Изменить сообщение после регистрации" if data.get("broadcast_target") == "registration" else "Изменить рассылку"
+        title = (
+            "Изменить сообщение после регистрации" if data.get("broadcast_target") == "registration"
+            else "Изменить личное сообщение" if data.get("broadcast_target") == "user"
+            else "Изменить рассылку"
+        )
         await edit_panel_content(
             callback.bot,
             storage,
@@ -450,23 +486,52 @@ async def admin_action(
     if action == "broadcast:send":
         lock = _broadcast_send_locks.setdefault(callback.from_user.id, asyncio.Lock())
         async with lock:
-            if (await state.get_data()).get("broadcast_target") == "registration":
+            data = await state.get_data()
+            target = data.get("broadcast_target")
+            if target == "registration":
                 return
             text = await _get_draft_text(settings, state, callback.from_user.id)
             ttl_seconds = await _get_draft_duration(state)
             if text is None or ttl_seconds is None or await state.get_state() != BroadcastDraft.preview.state:
                 return
-            photo_file_id = (await state.get_data()).get("broadcast_photo_file_id")
-            entities = (await state.get_data()).get("broadcast_entities")
-            if photo_file_id or entities:
-                campaign_id, recipient_count = storage.create_broadcast(
-                    callback.from_user.id, text, ttl_seconds,
-                    **({"photo_file_id": photo_file_id} if photo_file_id else {}),
-                    **({"entities": entities} if entities else {}),
-                )
+            target_user_id = data.get("broadcast_user_id") if target == "user" else None
+            if target == "user" and (
+                not isinstance(target_user_id, int) or not storage.can_receive_broadcast(target_user_id)
+            ):
+                await state.clear()
+                unavailable_notice = "Пользователь сейчас недоступен для сообщений от бота."
+                campaign_id = None
+                recipient_count = 0
             else:
-                campaign_id, recipient_count = storage.create_broadcast(callback.from_user.id, text, ttl_seconds)
-            await state.clear()
+                photo_file_id = data.get("broadcast_photo_file_id")
+                entities = data.get("broadcast_entities")
+                options = {}
+                if photo_file_id:
+                    options["photo_file_id"] = photo_file_id
+                if entities:
+                    options["entities"] = entities
+                if target_user_id is not None:
+                    options["target_telegram_user_id"] = target_user_id
+                campaign_id, recipient_count = storage.create_broadcast(
+                    callback.from_user.id, text, ttl_seconds, **options
+                )
+                unavailable_notice = None
+                await state.clear()
+        if unavailable_notice:
+            await show_admin_panel(
+                callback.bot, api, settings, storage, callback.from_user.id, chat_id,
+                unavailable_notice,
+            )
+            return
+        if target_user_id is not None:
+            target_name = (
+                f"@{data['broadcast_username']} · ID {target_user_id}"
+                if data.get("broadcast_username") else str(target_user_id)
+            )
+            notice = f"Личное сообщение #{campaign_id} поставлено в очередь для игрока {target_name}. "
+        else:
+            notice = f"Рассылка #{campaign_id} поставлена в очередь для {recipient_count} пользователей. "
+        notice += f"Удаление через {format_broadcast_duration(ttl_seconds)} после доставки."
         await show_admin_panel(
             callback.bot,
             api,
@@ -474,8 +539,7 @@ async def admin_action(
             storage,
             callback.from_user.id,
             chat_id,
-            f"Рассылка #{campaign_id} поставлена в очередь для {recipient_count} пользователей. "
-            f"Удаление через {format_broadcast_duration(ttl_seconds)} после доставки.",
+            notice,
         )
 
 
@@ -518,6 +582,51 @@ async def delete_broadcast_notification(
         return
     storage.remove_temporary_message(message.chat.id, message.message_id)
     await callback.answer("Сообщение удалено")
+
+
+@router.message(BroadcastDraft.selecting_recipient, F.text & ~F.text.startswith("/"))
+async def select_broadcast_recipient(
+    message: Message,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    if message.chat.type != "private" or message.from_user is None or not is_admin(settings, message.from_user.id):
+        await state.clear()
+        return
+    recipient = storage.find_bot_user(message.text or "")
+    if recipient is None:
+        await edit_panel_content(
+            message.bot, storage, api, settings, message.from_user.id,
+            "admin:broadcast:recipient",
+            "Не нашёл пользователя, который запускал бота. Проверь ID или @username и попробуй ещё раз.",
+            admin_compose_keyboard(), message.chat.id,
+        )
+        return
+    if recipient["blocked"]:
+        await edit_panel_content(
+            message.bot, storage, api, settings, message.from_user.id,
+            "admin:broadcast:recipient",
+            "Этот пользователь заблокировал бота, поэтому Telegram не доставит ему сообщение. Укажи другого пользователя.",
+            admin_compose_keyboard(), message.chat.id,
+        )
+        return
+    await state.update_data(
+        broadcast_target="user",
+        broadcast_user_id=recipient["telegram_user_id"],
+        broadcast_username=recipient["username"],
+    )
+    await state.set_state(BroadcastDraft.composing)
+    label = f"@{recipient['username']} · ID {recipient['telegram_user_id']}" if recipient["username"] else str(recipient["telegram_user_id"])
+    await edit_panel_content(
+        message.bot, storage, api, settings, message.from_user.id,
+        "admin:broadcast:compose",
+        f"<b>Сообщение игроку {escape(label)}</b>\n\n"
+        "Отправь текст или одну картинку с подписью. Можно использовать форматирование Telegram. "
+        "Перед отправкой бот покажет предпросмотр и запросит подтверждение.",
+        admin_compose_keyboard(), message.chat.id,
+    )
 
 
 @router.callback_query(F.data.in_({"news:enable", "news:disable"}))

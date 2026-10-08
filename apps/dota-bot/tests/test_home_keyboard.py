@@ -13,10 +13,11 @@ class HomeKeyboardTests(unittest.TestCase):
         self.assertEqual(tournament_button.url, "https://dota.example/games/tournaments")
         self.assertIsNone(tournament_button.callback_data)
 
-    def test_unregistered_home_can_open_tournaments_without_account_button(self) -> None:
+    def test_unregistered_home_can_open_account_and_tournaments(self) -> None:
         keyboard = home_keyboard(False, False)
 
-        self.assertEqual(len(keyboard.inline_keyboard), 2)
+        self.assertEqual(len(keyboard.inline_keyboard), 3)
+        self.assertEqual(keyboard.inline_keyboard[1][0].callback_data, "panel:account")
         self.assertEqual(keyboard.inline_keyboard[-1][0].text, "🏆 Турниры")
         self.assertEqual(
             keyboard.inline_keyboard[-1][0].url,

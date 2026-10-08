@@ -113,7 +113,7 @@ export function TelegramLoginView() {
             </Link>
           </>
         ) : (
-          <p>Входим в Opinia и открываем страницу пати…</p>
+          <p>Входим в аккаунт FDP…</p>
         )}
       </section>
     </main>

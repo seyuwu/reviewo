@@ -86,6 +86,30 @@ class BroadcastStorageTests(unittest.TestCase):
         self.storage.mark_broadcast_recipient(campaign, 7, "sent", sent_message=(7, 101))
         self.assertEqual(self.storage.next_broadcast_recipient()["telegram_user_id"], 8)
 
+    def test_personal_broadcast_targets_only_selected_user(self):
+        for user_id in (7, 8, 9):
+            self.storage.record_bot_user(user_id)
+        self.storage.mark_bot_user_blocked(9)
+
+        campaign, recipient_count = self.storage.create_broadcast(
+            7, "personal", 600, target_telegram_user_id=8
+        )
+
+        self.assertEqual(recipient_count, 1)
+        recipient = self.storage.next_broadcast_recipient()
+        self.assertEqual(recipient["campaign_id"], campaign)
+        self.assertEqual(recipient["telegram_user_id"], 8)
+
+    def test_usernames_are_searchable_case_insensitively(self):
+        self.storage.record_bot_user(8)
+        self.storage.update_bot_user_username(8, "Player_One")
+
+        self.assertEqual(self.storage.find_bot_user("@player_one"), {
+            "telegram_user_id": 8,
+            "username": "Player_One",
+            "blocked": False,
+        })
+
     def test_deletion_deadlines_are_per_delivery_and_survive_restart(self):
         for user_id in (7, 8):
             self.storage.record_bot_user(user_id)
@@ -208,6 +232,27 @@ class BroadcastFlowTests(unittest.IsolatedAsyncioTestCase):
             await self.state.update_data(broadcast_ttl_seconds=600)
             await asyncio.gather(*(admin_action(self.callback, self.state, None, self.settings, self.storage) for _ in range(2)))
             self.assertEqual(calls, [(7, "test", 600)])
+
+    async def test_personal_message_confirmation_queues_only_selected_user(self):
+        self.storage.can_receive_broadcast = unittest.mock.Mock(return_value=True)
+        self.storage.create_broadcast = unittest.mock.Mock(return_value=(4, 1))
+        await self.state.set_state(BroadcastDraft.preview)
+        await self.state.update_data(
+            broadcast_text="private message",
+            broadcast_ttl_seconds=600,
+            broadcast_target="user",
+            broadcast_user_id=42,
+            broadcast_username="player",
+        )
+
+        with patch("bot.handlers.admin.acknowledge_callback"), patch(
+            "bot.handlers.admin.show_admin_panel", new_callable=AsyncMock
+        ):
+            await admin_action(self.callback, self.state, None, self.settings, self.storage)
+
+        self.storage.create_broadcast.assert_called_once_with(
+            7, "private message", 600, target_telegram_user_id=42
+        )
 
     async def test_non_admin_cannot_send_and_test_uses_selected_duration(self):
         self.callback.from_user.id = 8

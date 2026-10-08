@@ -17,8 +17,7 @@ def home_keyboard(
     second_label = "👥 Моя пати" if open_party else "🧭 Собрать пати"
     second_action = "panel:party" if open_party else "search:recruit"
     rows = [[button(first_label, first_action), button(second_label, second_action)]]
-    if registered:
-        rows.append([button("👤 Аккаунт", "panel:account")])
+    rows.append([button("👤 Аккаунт", "panel:account")])
     tournaments_url = site_url.rstrip("/")
     if tournaments_url == "https://dota.opinia.ru":
         tournaments_url = "https://games.opinia.ru"
@@ -41,6 +40,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [button("✉️ Создать рассылку", "admin:broadcast:new")],
+            [button("👤 Написать игроку", "admin:broadcast:user")],
             [button("👋 Сообщение после регистрации", "admin:registration")],
             [button("🔄 Обновить статистику", "admin:refresh")],
         ]
@@ -56,7 +56,7 @@ def admin_compose_keyboard(back_to_preview: bool = False) -> InlineKeyboardMarku
 
 
 def admin_preview_keyboard(has_photo: bool = False, page: int = 0, page_count: int = 1,
-                           *, registration: bool = False) -> InlineKeyboardMarkup:
+                           *, registration: bool = False, direct: bool = False) -> InlineKeyboardMarkup:
     rows = []
     navigation = []
     if page > 0:
@@ -66,7 +66,7 @@ def admin_preview_keyboard(has_photo: bool = False, page: int = 0, page_count: i
     if navigation:
         rows.append(navigation)
     rows.extend([
-        [button("💾 Сохранить и включить" if registration else "📨 Отправить всем",
+        [button("💾 Сохранить и включить" if registration else "📨 Написать игроку" if direct else "📨 Отправить всем",
                 "admin:registration:save" if registration else "admin:broadcast:send")],
         [button("🧪 Отправить тест себе", "admin:broadcast:test")],
         [button("✏️ Изменить текст", "admin:broadcast:edit")],
@@ -368,11 +368,20 @@ def account_keyboard(
     profile_exists: bool = True,
     has_party: bool = False,
     has_invites: bool = False,
+    profile_url: str | None = None,
 ) -> InlineKeyboardMarkup:
+    if linked:
+        account_button = (
+            button_url("🔗 Аккаунт FDP", profile_url)
+            if profile_url
+            else button("🔗 Аккаунт FDP", "account:open")
+        )
+    else:
+        account_button = button("🔑 Уже есть аккаунт? Войти", "account:help")
     rows = [
         [
             button("👤 Профиль", "panel:profile"),
-            button("🔗 Аккаунт Opinia" if linked else "🔑 Уже есть аккаунт? Войти", "account:open" if linked else "account:help"),
+            account_button,
         ]
     ]
     if has_party or has_invites:

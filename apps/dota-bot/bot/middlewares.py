@@ -18,11 +18,11 @@ class DeletePrivateMessagesMiddleware(BaseMiddleware):
             if (
                 event.from_user is not None
                 and command_name != "/start"
+                and command_name != "/id"
                 and storage is not None
             ):
                 storage.record_bot_user(event.from_user.id)
             if command_name == "/start":
-                # Keep /start visible until the handler has delivered the replacement panel.
                 api = data.get("api")
                 if event.from_user is not None and api is not None:
                     try:
@@ -34,6 +34,7 @@ class DeletePrivateMessagesMiddleware(BaseMiddleware):
                             "Could not record Telegram bot start for user=%s",
                             event.from_user.id,
                         )
+                # Keep /start visible until the handler has delivered the replacement panel.
                 return await handler(event, data)
             try:
                 await event.delete()
@@ -74,6 +75,11 @@ class TelegramUsernameSyncMiddleware(BaseMiddleware):
         user = getattr(event, "from_user", None)
         storage = data.get("storage")
         api = data.get("api")
+        if (
+            user is not None and message is not None and message.chat.type == "private"
+            and storage is not None
+        ):
+            storage.update_bot_user_username(user.id, user.username)
         if (
             user is None or message is None or message.chat.type != "private"
             or storage is None or api is None or storage.get_session(user.id) is None

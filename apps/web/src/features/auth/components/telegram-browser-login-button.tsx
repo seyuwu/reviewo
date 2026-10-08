@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 
 import { useTranslation } from "../../i18n/locale-provider";
 import {
@@ -30,6 +30,7 @@ export function TelegramBrowserLoginButton({
   const [errorKey, setErrorKey] = useState<TelegramLoginErrorKey | null>(null);
   const [connectionIssue, setConnectionIssue] = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
+  const [showManualHelp, setShowManualHelp] = useState(false);
   const generation = useRef(0);
   const pollTimer = useRef<number | null>(null);
   const popup = useRef<Window | null>(null);
@@ -54,6 +55,7 @@ export function TelegramBrowserLoginButton({
     setErrorKey(null);
     setConnectionIssue(false);
     setPopupBlocked(false);
+    setShowManualHelp(false);
     setIsPreparing(true);
     onBusyChange(true);
 
@@ -97,8 +99,10 @@ export function TelegramBrowserLoginButton({
       if (result.status === "approved") {
         clearPollTimer();
         setAttempt(null);
+        popup.current?.close();
         popup.current = null;
         onBusyChange(false);
+        window.focus();
         onAuthSuccessRef.current(result.auth);
         return;
       }
@@ -165,12 +169,38 @@ export function TelegramBrowserLoginButton({
             href={attempt.botUrl}
             rel="noreferrer"
             target="_blank"
+            onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+              const existingPopup = popup.current;
+              if (existingPopup && !existingPopup.closed) {
+                event.preventDefault();
+                existingPopup.location.replace(attempt.botUrl);
+                existingPopup.focus();
+                return;
+              }
+
+              const openedPopup = window.open(attempt.botUrl, "_blank");
+              if (openedPopup) {
+                event.preventDefault();
+                openedPopup.opener = null;
+                popup.current = openedPopup;
+                setPopupBlocked(false);
+              }
+            }}
           >
             {t("auth.telegram.openBot")}
           </a>
           <p className="telegram-browser-login__status">
             {connectionIssue ? t("auth.telegram.connectionIssue") : t("auth.telegram.waiting")}
           </p>
+          <button
+            type="button"
+            className="telegram-browser-login__cancel"
+            aria-expanded={showManualHelp}
+            onClick={() => setShowManualHelp((visible) => !visible)}
+          >
+            {t("auth.telegram.manualHelpButton")}
+          </button>
+          {showManualHelp ? <p>{t("auth.telegram.manualHelp")}</p> : null}
           {popupBlocked ? (
             <p className="telegram-browser-login__status">{t("auth.telegram.popupBlocked")}</p>
           ) : null}

@@ -37,10 +37,12 @@ export function useAuthSession() {
     syncAuthSession();
     window.addEventListener("reviewo:web-auth-changed", syncAuthSession);
     window.addEventListener("message", onBridgeMessage);
+    window.addEventListener("focus", syncAuthSession);
 
     return () => {
       window.removeEventListener("reviewo:web-auth-changed", syncAuthSession);
       window.removeEventListener("message", onBridgeMessage);
+      window.removeEventListener("focus", syncAuthSession);
     };
   }, []);
 

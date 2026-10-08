@@ -563,11 +563,24 @@ async def render_screen(
     party_data: dict | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
     session = storage.get_session(telegram_user_id)
+    if screen == "account" and not session:
+        try:
+            auth = await api.login_telegram_bot_session(telegram_user_id)
+            storage.save_session(
+                telegram_user_id,
+                auth["accessToken"],
+                auth["refreshToken"],
+                clear_recovery_url=True,
+            )
+            session = storage.get_session(telegram_user_id)
+        except ApiError:
+            # Unlinked Telegram users still see the normal account/linking screen.
+            pass
     if not session:
         if screen == "account":
             return (
                 "<b>Аккаунт</b>\n\n"
-                "Создайте Dota-профиль или войдите в существующий аккаунт Opinia.\n\n"
+                "Создайте Dota-профиль или войдите в существующий аккаунт FDP.\n\n"
                 "Удалили окно бота? Отправьте /start — бот пришлёт новое. Удалённое сообщение восстановить нельзя.",
                 account_keyboard(False, False, False),
             )
@@ -677,10 +690,20 @@ async def render_screen(
         return profile_text(profile), profile_keyboard()
 
     if screen == "account":
+        profile_url = None
+        if session:
+            try:
+                ticket = await api.create_web_access_ticket(telegram_user_id)
+                profile_url = (
+                    f"{settings.site_url.rstrip('/')}/telegram/access?"
+                    f"ticket={quote(ticket, safe='')}&next={quote('/profile', safe='')}"
+                )
+            except ApiError:
+                logger.warning("Could not create a profile link for Telegram user %s", telegram_user_id)
         if not profile:
             text = (
                 "<b>Аккаунт</b>\n\n"
-                "Создайте Dota-профиль или привяжите аккаунт Opinia.\n\n"
+                "Создайте Dota-профиль или привяжите аккаунт FDP.\n\n"
                 "Удалили окно бота? Отправьте /start — бот пришлёт новое. Удалённое сообщение восстановить нельзя."
             )
         else:
@@ -688,7 +711,7 @@ async def render_screen(
                 "<b>Аккаунт</b>\n\n"
                 f"Игрок: <b>{escape_text(profile.get('title') or 'Игрок')}</b> · "
                 f"{escape_text(profile.get('mmr') or '—')} MMR\n"
-                f"Opinia: {'привязан к Telegram' if session else 'не привязан'}\n\n"
+                f"FDP: {'привязан к Telegram' if session else 'не привязан'}\n\n"
                 "Удалили окно бота? Отправьте /start — бот пришлёт новое. Удалённое сообщение восстановить нельзя."
             )
         invites = [item for item in my_parties.get("invites", []) if item.get("status") == "PENDING"]
@@ -700,6 +723,7 @@ async def render_screen(
                 bool(profile),
                 bool(my_parties.get("party") or my_parties.get("parties")),
                 bool(invites),
+                profile_url=profile_url,
             ),
         )
 

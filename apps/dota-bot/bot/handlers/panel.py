@@ -1,6 +1,6 @@
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -11,6 +11,19 @@ from ..services.panel import begin_panel_transition, edit_panel
 from ..storage.database import BotStorage
 
 router = Router(name="panel")
+
+
+@router.message(Command("id"))
+async def show_telegram_id(message: Message, storage: BotStorage) -> None:
+    if message.chat.type != "private" or message.from_user is None:
+        return
+    storage.record_bot_user(message.from_user.id)
+    storage.update_bot_user_username(message.from_user.id, message.from_user.username)
+    await message.answer(
+        f"Твой Telegram ID: <code>{message.from_user.id}</code>\n"
+        "Можешь отправить его администратору, чтобы он написал тебе через бота.",
+        parse_mode="HTML",
+    )
 
 
 @router.message(CommandStart())
