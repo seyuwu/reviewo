@@ -16,7 +16,10 @@ def home_keyboard(
     open_party = has_party or is_recruiting
     second_label = "👥 Моя пати" if open_party else "🧭 Собрать пати"
     second_action = "panel:party" if open_party else "search:recruit"
-    rows = [[button(first_label, first_action), button(second_label, second_action)]]
+    rows = []
+    if not registered:
+        rows.append([button("🚀 Зарегистрироваться", "register:start")])
+    rows.append([button(first_label, first_action), button(second_label, second_action)])
     rows.append([button("👤 Аккаунт", "panel:account")])
     tournaments_url = site_url.rstrip("/")
     if tournaments_url == "https://dota.opinia.ru":
@@ -337,14 +340,16 @@ def registration_dota_id_keyboard(has_current_id: bool = False) -> InlineKeyboar
     )
 
 
-def registration_name_keyboard(allow_cancel: bool = True) -> InlineKeyboardMarkup:
+def registration_name_keyboard(allow_cancel: bool = True, *, use_telegram_name: bool = True) -> InlineKeyboardMarkup:
     rows = []
+    if use_telegram_name:
+        rows.append([button("👤 Использовать имя Telegram", "register:name:telegram")])
     if allow_cancel:
         rows.append([button("✖️ Отменить", "register:cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def registration_roles_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
+def registration_roles_keyboard(selected: list[str], *, editing: bool = False) -> InlineKeyboardMarkup:
     rows = []
     names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
     roles = ("1", "2", "3", "4", "5")
@@ -356,7 +361,7 @@ def registration_roles_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
         rows.append(row)
     rows.extend(
         [
-            [button("Продолжить", "register:complete")],
+            [button("Сохранить профиль" if editing else "Создать профиль", "register:complete")],
             [button("✖️ Отменить", "register:cancel")],
         ]
     )

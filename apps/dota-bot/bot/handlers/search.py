@@ -25,7 +25,6 @@ from ..services.temporary_notifications import send_temporary_notification
 from ..storage.database import BotStorage
 from ..ui.keyboards import (
     back_keyboard,
-    onboarding_keyboard,
     solo_search_confirmation_keyboard,
 )
 
@@ -162,20 +161,9 @@ async def start_selected_action(
     if not storage.get_session(telegram_user_id):
         storage.set_choices(telegram_user_id, "pending_onboarding_action", [{"action": action}])
         await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
-        action_text = "искать вам подходящую пати" if action == "looking" else "собрать пати и подобрать игроков"
-        await edit_panel_content(
-            bot,
-            storage,
-            api,
-            settings,
-            telegram_user_id,
-            "onboarding:auth",
-            "<b>Осталось немного — давайте создадим аккаунт</b>\n\n"
-            f"Аккаунт нужен, чтобы {action_text}. Создание профиля займёт всего несколько шагов.\n\n"
-            "Если аккаунт Opinia уже есть, напишите <code>/login</code> для входа.",
-            onboarding_keyboard(settings.site_url),
-            chat_id,
-        )
+        from .registration import start_profile_registration
+
+        await start_profile_registration(bot, state, api, settings, storage, telegram_user_id, chat_id)
         return
 
     try:

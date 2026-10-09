@@ -585,9 +585,11 @@ async def render_screen(
                 account_keyboard(False, False, False, site_url=settings.site_url),
             )
         return (
-            "<b>Поиск пати Dota 2 · FDP</b>\n"
-            'Официальный канал: <a href="https://t.me/FDPcommunity">@FDPcommunity</a>\n\n'
-            "Найдите команду для игры или соберите свою пати. Выберите, с чего начать:",
+            "<b>Добро пожаловать в FDP 💜</b>\n\n"
+            "Находите пати по MMR и позициям, собирайте игроков и участвуйте в турнирах Dota 2.\n\n"
+            "Нажмите «Зарегистрироваться»: выберите имя, укажите MMR и позиции — профиль готов. "
+            "Dota ID можно добавить позже.\n\n"
+            'Наш канал: <a href="https://t.me/FDPcommunity">@FDPcommunity</a>',
             home_keyboard(False, False, site_url=settings.site_url, can_share=True),
         )
 
@@ -612,7 +614,9 @@ async def render_screen(
     if screen == "home":
         if not profile:
             return (
-                "<b>Аккаунт привязан</b>\n\nОткройте «Аккаунт» и создайте Dota-профиль, чтобы начать поиск.",
+                "<b>Аккаунт привязан 💜</b>\n\n"
+                "Нажмите «Зарегистрироваться», чтобы создать Dota-профиль: имя, MMR и позиции. "
+                "После этого можно искать пати и участвовать в турнирах. Dota ID добавите позже.",
                 home_keyboard(False, False, site_url=settings.site_url, can_share=True),
             )
         name = escape_text(profile.get("title", "Игрок"))

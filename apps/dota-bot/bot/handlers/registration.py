@@ -77,24 +77,26 @@ async def start_profile_registration(
         )
     await state.update_data(**data)
     registration_heading = (
-        "Осталось немного — давайте создадим аккаунт"
+        "Создадим профиль FDP"
         if not storage.get_session(telegram_user_id)
-        else "Осталось немного — создадим Dota-профиль"
+        else "Создадим Dota-профиль"
     )
     if invite_role in POSITION_NAMES:
         text = (
             f"<b>{registration_heading}</b>\n\n"
-            f"Регистрация · 1/4. Вы выбрали роль <b>{POSITION_NAMES[invite_role]}</b>. "
+            f"Регистрация · 1/3. Вы выбрали роль <b>{POSITION_NAMES[invite_role]}</b>. "
             "После регистрации бот вернёт вас в пати на эту позицию.\n\n"
-            "Как вас называть?\n\n"
-            "Уже есть аккаунт Opinia? Напишите /login для входа."
+            "Как вас называть? Используйте имя Telegram кнопкой ниже или напишите свой игровой ник.\n\n"
+            "Dota ID можно добавить позже в профиле.\n"
+            "Уже есть аккаунт FDP? Напишите /login для входа."
         )
     else:
         text = (
             f"<b>{registration_heading}</b>\n\n"
-            "Регистрация Dota-профиля · 1/4.\n\n"
-            "Как вас называть?\n\n"
-            "Уже есть аккаунт Opinia? Напишите /login для входа."
+            "Регистрация Dota-профиля · 1/3.\n\n"
+            "Как вас называть? Используйте имя Telegram кнопкой ниже или напишите свой игровой ник.\n\n"
+            "Дальше — MMR и позиции. Dota ID можно добавить позже в профиле.\n"
+            "Уже есть аккаунт FDP? Напишите /login для входа."
         )
     await edit_panel_content(
         bot,
@@ -536,21 +538,42 @@ async def receive_display_name(
             settings,
             message.from_user.id,
             "register:name",
-            f"<b>{'Изменение профиля' if editing else 'Создание Dota-профиля'} · 1/4</b>\n\nИмя должно быть длиной от 1 до 80 символов. Напишите другое имя.",
-            registration_name_keyboard(),
+            f"<b>{'Изменение профиля · 1/4' if editing else 'Создание Dota-профиля · 1/3'}</b>\n\nИмя должно быть длиной от 1 до 80 символов. Напишите другое имя.",
+            registration_name_keyboard(use_telegram_name=not editing),
             message.chat.id,
         )
         return
     await state.update_data(display_name=value)
-    await state.set_state(GuestProfileWizard.dota_id)
-    await show_registration_dota_id_panel(
+    await show_registration_mmr_panel(
         message.bot,
+        state,
         storage,
         api,
         settings,
         message.from_user.id,
         message.chat.id,
-        await state.get_data(),
+    )
+
+
+@router.callback_query(F.data == "register:name:telegram")
+async def use_telegram_display_name(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    acknowledge_callback(callback)
+    if callback.message is None or await state.get_state() != GuestProfileWizard.display_name.state:
+        return
+    if (await state.get_data()).get("editing_profile"):
+        return
+    name = callback.from_user.full_name.strip()[:80]
+    if not name:
+        return
+    await state.update_data(display_name=name)
+    await show_registration_mmr_panel(
+        callback.bot, state, storage, api, settings, callback.from_user.id, callback.message.chat.id
     )
 
 
@@ -591,7 +614,7 @@ async def show_registration_dota_id_panel(
     )
 
 
-async def continue_registration_after_dota_id(
+async def show_registration_mmr_panel(
     bot,
     state: FSMContext,
     storage: BotStorage,
@@ -604,10 +627,9 @@ async def continue_registration_after_dota_id(
     editing = bool(data.get("editing_profile"))
     await state.set_state(GuestProfileWizard.mmr)
     text = (
-        f"<b>{'Изменение профиля' if editing else 'Регистрация Dota-профиля'} · 3/4</b>\n\n"
+        f"<b>{'Изменение профиля · 3/4' if editing else 'Регистрация Dota-профиля · 2/3'}</b>\n\n"
         f"Имя: <b>{escape(str(data.get('display_name') or 'Игрок'))}</b>\n"
-        f"Dota ID: <b>{escape(str(data.get('dota_account_id') or 'не указан'))}</b>\n\n"
-        "Укажите MMR числом от 0 до 18000."
+        "\nУкажите MMR числом от 0 до 18000."
     )
     await edit_panel_content(
         bot,
@@ -645,7 +667,7 @@ async def receive_registration_dota_id(
         )
         return
     await state.update_data(dota_account_id=value)
-    await continue_registration_after_dota_id(
+    await show_registration_mmr_panel(
         message.bot, state, storage, api, settings, message.from_user.id, message.chat.id
     )
 
@@ -662,7 +684,7 @@ async def skip_registration_dota_id(
         acknowledge_callback(callback)
         return
     acknowledge_callback(callback, "Можно добавить Dota ID позже в профиле")
-    await continue_registration_after_dota_id(
+    await show_registration_mmr_panel(
         callback.bot,
         state,
         storage,
@@ -844,7 +866,7 @@ async def receive_mmr(
             settings,
             message.from_user.id,
             "register:mmr",
-            f"<b>{'Изменение профиля' if editing else 'Создание Dota-профиля'} · 3/4</b>\n\nНужен MMR числом от 0 до 18000. Напишите значение ещё раз.",
+            f"<b>{'Изменение профиля · 3/4' if editing else 'Создание Dota-профиля · 2/3'}</b>\n\nНужен MMR числом от 0 до 18000. Напишите значение ещё раз.",
             registration_step_keyboard(),
             message.chat.id,
         )
@@ -1068,7 +1090,8 @@ async def show_roles_panel(
 ) -> None:
     names = ", ".join(POSITION_NAMES[role] for role in selected) or "не выбраны"
     title = "Изменение профиля" if editing else "Создание Dota-профиля"
-    text = f"<b>{title} · 4/4</b>\n\nВыберите позиции кнопками ниже. Можно выбрать несколько."
+    progress = "4/4" if editing else "3/3"
+    text = f"<b>{title} · {progress}</b>\n\nВыберите позиции кнопками ниже. Можно выбрать несколько."
     text += f"\n\nВыбрано: <b>{escape(names)}</b>"
     if error:
         verb = "сохранить" if editing else "создать"
@@ -1081,6 +1104,6 @@ async def show_roles_panel(
         telegram_user_id,
         "register:roles",
         text,
-        registration_roles_keyboard(selected),
+        registration_roles_keyboard(selected, editing=editing),
         chat_id,
     )
