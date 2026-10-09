@@ -212,6 +212,7 @@ def party_keyboard(
     web_access_url: str | None = None,
 ) -> InlineKeyboardMarkup:
     occupants = party_slot_occupants(party)
+    members_by_role = {str(member.get("positionRole")): member for member in party.get("members", [])}
     searching_roles = searching_roles or set()
     roles = ("1", "2", "3", "4", "5")
     slots = [button(truncate(occupants.get(role, role), 12), f"party:slot:{role}") for role in roles]
@@ -226,7 +227,22 @@ def party_keyboard(
         )
         for role in roles
     ]
+    token = party.get("coordinationToken")
+    if party.get("coordinationAvailable"):
+        for index, role in enumerate(roles):
+            member = members_by_role.get(role)
+            if member:
+                ready = bool(member.get("readyAt"))
+                action = f"party:ready:{token}:{'off' if ready else 'on'}" if member.get("isSelf") and token else (f"party:status:{token}:{role}" if token else f"party:noop:{role}")
+                search_status[index] = button("✅" if ready else "❌", action)
     rows = [slots, search_status]
+    self_member = next((member for member in party.get("members", []) if member.get("isSelf")), None)
+    if token and self_member:
+        if not self_member.get("readyAt"):
+            rows.append([button("✅ Готов играть", f"party:ready:{token}:on")])
+        if self_member.get("telegramUsername") and not self_member.get("telegramContactPublic"):
+            share = not self_member.get("telegramContactShared")
+            rows.append([button("📨 Показать мой Telegram пати" if share else "🔒 Скрыть мой Telegram в пати", f"party:contact:{token}:{'on' if share else 'off'}")])
     available_roles = set(roles) - occupants.keys()
     if show_search and available_roles - searching_roles:
         rows.append([button("🔎 Искать на всех свободных", "party:search-all")])

@@ -23,6 +23,7 @@ from .temporary_notifications import send_temporary_notification
 from .search_timeout_notices import queue_solo_timeout, queue_recruit_timeout, search_reached_timeout
 from .start_links import bot_friend_invite_url
 from .registration_drafts import clear_registration_draft, registration_draft
+from .party_coordination import enrich_party
 from ..ui.formatters import party_text, profile_text
 from ..ui.keyboards import (
     account_keyboard,
@@ -755,6 +756,7 @@ async def render_screen(
         party = my_parties.get("party") or (parties[-1] if parties else None)
         if not party:
             return "Вы пока не состоите в пати.", home_keyboard(True, False, site_url=settings.site_url, can_share=True)
+        party = await enrich_party(api, storage, telegram_user_id, party)
         text = party_text(party)
         occupants = party_slot_occupants(party)
         available_roles = {role for role in ("1", "2", "3", "4", "5") if role not in occupants}
@@ -828,6 +830,8 @@ async def render_screen(
         selected_member = storage.get_choice(telegram_user_id, "selected_party_member", 0) or {}
         selected_user_id = selected_member.get("userId")
         party = my_parties.get("party") or ((my_parties.get("parties") or [None])[-1])
+        if party:
+            party = await enrich_party(api, storage, telegram_user_id, party)
         member = next(
             (item for item in (party or {}).get("members", []) if item.get("userId") == selected_user_id),
             None,
@@ -863,6 +867,10 @@ async def render_screen(
         else:
             text = f"<b>Профиль игрока</b>\n\nИгрок: <b>{name}</b>\nMMR: <b>{mmr}</b>"
         text += f"\nРоль в пати: <b>{role}</b>"
+        from ..ui.formatters import telegram_contact_text
+        contact = telegram_contact_text(member)
+        if contact:
+            text += "\n📱 Telegram: " + contact
         return text, party_member_keyboard(member, can_kick, settings.site_url, back_target)
 
     if screen == "invites":

@@ -22,6 +22,7 @@ from .services.auto_matcher import auto_match_loop
 from .services.broadcasts import broadcast_worker
 from .services.search_timeout_notices import search_timeout_notice_worker
 from .services.registration_notices import registration_notice_worker
+from .services.party_ready import party_ready_notice_worker
 from .services.referrals import referral_sync_worker
 from .services.log_safety import TelegramTokenRedactionFilter
 from .services.panel import (
@@ -67,6 +68,7 @@ async def main() -> None:
         asyncio.create_task(broadcast_worker(bot, storage)),
         asyncio.create_task(search_timeout_notice_worker(bot, storage)),
         asyncio.create_task(registration_notice_worker(bot, storage)),
+        asyncio.create_task(party_ready_notice_worker(bot, api, settings, storage)),
         asyncio.create_task(referral_sync_worker(api, storage)),
         asyncio.create_task(
             refresh_active_search_panels(

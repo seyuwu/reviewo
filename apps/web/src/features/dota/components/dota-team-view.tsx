@@ -3524,7 +3524,7 @@ export function DotaTeamView({ party: initialParty }: DotaTeamViewProps) {
 
         {party.isMember ? (
           <div className={styles.sideColumn}>
-          <aside className={styles.chatPanel} aria-label={t("dota.team.chatTitle")}>
+          <aside id="party-chat" className={styles.chatPanel} aria-label={t("dota.team.chatTitle")}>
             <div className={styles.chatHead}>
               <div className={styles.chatHeadTop}>
                 <h2>{t("dota.team.chatTitle")}</h2>

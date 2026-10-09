@@ -1,4 +1,13 @@
 from html import escape
+import re
+
+
+def telegram_contact_text(member: dict) -> str:
+    username = member.get("telegramUsername")
+    if not isinstance(username, str) or re.fullmatch(r"[A-Za-z0-9_]{1,32}", username) is None:
+        return ""
+    label = " · <i>только тебе</i>" if member.get("isSelf") and not member.get("telegramContactShared") and not member.get("telegramContactPublic") else ""
+    return f'<a href="https://t.me/{username}">@{escape(username)}</a>{label}'
 
 
 def profile_text(profile: dict) -> str:
@@ -29,11 +38,17 @@ def party_text(party: dict) -> str:
         dota_id = member.get("dotaAccountId") or "—"
         member_name = str(member.get("displayName") or "Игрок")[:40]
         lines.append(
-            f"• {escape(member_name)} · {escape(role)} · {escape(str(mmr))} MMR"
+            f"• <b>{escape(member_name)}</b> · {escape(role)} · {escape(str(mmr))} MMR"
             f" · Dota ID: {escape(str(dota_id))}"
         )
+        contact = telegram_contact_text(member)
+        if contact:
+            lines.append(f"  📱 {contact}")
     open_slots = int(party.get("openSlots") or 0)
     lines.extend(["", f"Состав: {party.get('memberCount', 0)}/{party.get('maxMembers', 5)} · свободно мест: {open_slots}"])
+    if party.get("coordinationAvailable"):
+        ready_count = sum(bool(member.get("readyAt")) for member in party.get("members", []))
+        lines.append(f"Готовы играть: <b>{ready_count}/{party.get('memberCount', 0)}</b>")
     return "\n".join(lines)
 
 

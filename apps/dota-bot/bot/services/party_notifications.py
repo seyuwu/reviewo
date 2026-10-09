@@ -6,6 +6,7 @@ from ..api.client import ApiError
 from ..storage.database import BotStorage
 from ..ui.keyboards import button_login, button_url
 from .temporary_notifications import send_temporary_notification
+from .party_ready import deliver_party_ready_notice
 
 
 async def deliver_join_hint(
@@ -19,6 +20,12 @@ async def deliver_join_hint(
     message_text: str = "Вы теперь в пати! Общайтесь в чате на сайте или переходите в Discord.",
     button_text: str = "Открыть пати на сайте",
 ) -> None:
+    if party_slug:
+        await deliver_party_ready_notice(
+            bot, api, storage, telegram_user_id, site_url, party_slug,
+            "🎮 <b>Пати найдена!</b>\n" + message_text,
+        )
+        return
     next_path = f"/dota/teams/{party_slug}"
     try:
         ticket = await api.create_web_access_ticket(telegram_user_id)
@@ -56,8 +63,8 @@ async def deliver_member_joined_notice(
     party_slug: str,
     message_text: str,
 ) -> None:
-    """Add the chat shortcut to the first two roster-join notices in each party."""
-    if party_slug and storage.party_chat_hint_count(telegram_user_id, party_slug) < 2:
+    """Keep coordination visible until the participant confirms readiness."""
+    if party_slug:
         await deliver_join_hint(
             bot,
             api,
@@ -73,7 +80,6 @@ async def deliver_member_joined_notice(
             button_text="💬 Открыть чат пати",
         )
         # A failed delivery must not consume one of the two reminders.
-        storage.record_party_chat_hint(telegram_user_id, party_slug)
         return
 
     await send_temporary_notification(

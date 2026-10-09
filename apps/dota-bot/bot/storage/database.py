@@ -1201,6 +1201,21 @@ class BotStorage:
         except (IndexError, TypeError, json.JSONDecodeError):
             return None
 
+
+    def party_ready_notices(self) -> list[dict]:
+        rows = self._connection().execute(
+            "SELECT telegram_user_id, items_json FROM callback_choices WHERE kind LIKE 'party_ready_notice:%' AND items_json <> '[]' ORDER BY updated_at LIMIT 500"
+        ).fetchall()
+        notices = []
+        for row in rows:
+            try:
+                items = json.loads(row["items_json"])
+                if isinstance(items, list) and items and isinstance(items[0], dict):
+                    notices.append({**items[0], "userId": row["telegram_user_id"]})
+            except (TypeError, json.JSONDecodeError):
+                continue
+        return notices
+
     def party_chat_hint_count(self, telegram_user_id: int, party_slug: str) -> int:
         state = self.get_choice(telegram_user_id, "party_chat_hints", 0) or {}
         return next(

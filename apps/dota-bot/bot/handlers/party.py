@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.fsm.context import FSMContext
 
 from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
@@ -16,10 +17,69 @@ from ..services.temporary_notifications import send_temporary_notification
 from ..ui.keyboards import back_keyboard, invite_keyboard
 from ..ui.formatters import notification_text
 from ..services.auto_matcher import remember_declined_target
+from ..services.party_ready import expire_ready_notice
+from ..services.party_coordination import own_member, read_coordination
 
 router = Router(name="party")
 logger = logging.getLogger(__name__)
 PARTY_INVITATION_MESSAGE_TTL_SECONDS = 3 * 60 * 60
+
+
+@router.callback_query(F.data.regexp(r"^party:status:[a-f0-9]{20}:[1-5]$"))
+async def view_party_readiness(callback: CallbackQuery, api: OpiniaApi, storage: BotStorage) -> None:
+    if callback.message is None or callback.message.chat.type != "private":
+        return
+    _, _, token, role = (callback.data or "").split(":")
+    context = storage.get_choice(callback.from_user.id, "party_coordination_token:" + token, 0)
+    if not isinstance(context, dict):
+        await callback.answer("Открой свою пати заново.", show_alert=True)
+        return
+    try:
+        coordination = await read_coordination(api, callback.from_user.id, context["partySlug"])
+        if coordination["id"] != context["partyId"] or own_member(coordination)["membershipId"] != context["membershipId"]:
+            raise ApiError("Состав изменился", 409)
+        member = next((item for item in coordination["members"] if str(item.get("positionRole")) == role), None)
+        text = "Место уже свободно." if member is None else str(member["displayName"])[:40] + (": готов играть ✅" if member.get("readyAt") else ": ещё не подтвердил готовность ❌")
+        await callback.answer(text, show_alert=True)
+    except ApiError:
+        await callback.answer("Не удалось проверить готовность. Открой пати заново.", show_alert=True)
+
+
+@router.callback_query(F.data.regexp(r"^party:(?:ready|contact):[a-f0-9]{20}:(?:on|off)$"))
+async def update_party_coordination(callback: CallbackQuery, api: OpiniaApi, settings: Settings, storage: BotStorage, state: FSMContext | None = None) -> None:
+    if callback.message is None or callback.message.chat.type != "private":
+        return
+    _, action, token, toggle = (callback.data or "").split(":")
+    context = storage.get_choice(callback.from_user.id, "party_coordination_token:" + token, 0)
+    if not isinstance(context, dict):
+        await callback.answer("Кнопка устарела. Открой свою пати заново.", show_alert=True)
+        return
+    acknowledge_callback(callback)
+    suffix = "ready" if action == "ready" else "telegram-contact"
+    body = {"membershipId": context["membershipId"], "ready" if action == "ready" else "visible": toggle == "on"}
+    try:
+        result = await api.user(callback.from_user.id, "POST" if action == "ready" else "PATCH",
+                                f"/social/parties/{quote(context['partySlug'], safe='')}/members/me/{suffix}", body)
+        if action == "ready":
+            self_member = next((member for member in result.get("members", []) if member.get("isSelf")), None)
+            if self_member is None or bool(self_member.get("readyAt")) != (toggle == "on"):
+                raise ApiError("Не удалось подтвердить готовность", 503)
+        if action == "ready" and toggle == "on":
+            expire_ready_notice(storage, callback.from_user.id, token)
+            panel = storage.get_panel(callback.from_user.id)
+            clicked_id = getattr(callback.message, "message_id", None)
+            if isinstance(clicked_id, int) and (panel is None or panel.message_id != clicked_id):
+                storage.add_temporary_message(callback.from_user.id, callback.message.chat.id, clicked_id, 1)
+        if state is not None:
+            await state.clear()
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+    except ApiError as error:
+        if error.status in {403, 404, 409}:
+            expire_ready_notice(storage, callback.from_user.id, token)
+            text = "Состав пати изменился. Открой свою пати заново."
+        else:
+            text = "Не получилось сохранить изменение. Попробуй нажать кнопку ещё раз."
+        await send_temporary_notification(callback.bot, storage, callback.from_user.id, callback.message.chat.id, text, 15)
 
 
 @router.callback_query(F.data.regexp(r"^invite:[^:]+:(?:accept|decline)$"))
@@ -111,6 +171,8 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
             # must not replace the user's current party panel with the home screen.
             screen = "party" if active else "home"
             await edit_panel(bot, storage, api, settings, telegram_user_id, screen)
+            if active and active.get("kind") == "PARTY" and active.get("memberCount", 0) > 1:
+                await deliver_join_hint(bot, api, storage, telegram_user_id, settings.site_url, active["slug"])
             return True
         if event_type == "site_party_match":
             activity = payload.get("activity")

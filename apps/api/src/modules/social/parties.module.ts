@@ -16,6 +16,7 @@ import { GamePartyGateway } from "./gateways/game-party.gateway.js";
 import { GamePartiesRepository } from "./repositories/game-parties.repository.js";
 import { DiscordVoiceService } from "./services/discord-voice.service.js";
 import { GamePartiesService } from "./services/game-parties.service.js";
+import { PartyCoordinationService } from "./services/party-coordination.service.js";
 import { PartyRealtimeService } from "./services/party-realtime.service.js";
 import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
 
@@ -47,6 +48,7 @@ import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
     GamePartiesService,
     GamePartyGateway,
     PartyRealtimeService,
+    PartyCoordinationService,
     {
       provide: PARTY_REALTIME_PUBLISHER,
       useExisting: PartyRealtimeService

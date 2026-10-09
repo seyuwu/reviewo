@@ -55,6 +55,8 @@ import { UpdatePartyMemberPositionDto } from "../dto/update-party-member-positio
 import { UpdatePartyMemberRoleDto } from "../dto/update-party-member-role.dto.js";
 import { GamePartyGateway } from "../gateways/game-party.gateway.js";
 import { GamePartiesService } from "../services/game-parties.service.js";
+import { PartyCoordinationService } from "../services/party-coordination.service.js";
+import { SetPartyReadyDto, SharePartyTelegramContactDto, type PartyCoordinationResponse } from "../dto/party-coordination.dto.js";
 
 @Controller("social/parties")
 export class PartiesController {
@@ -63,7 +65,8 @@ export class PartiesController {
     private readonly gamePartiesService: GamePartiesService,
     private readonly gamePartyGateway: GamePartyGateway,
     private readonly gamesLaunchService: GamesLaunchService,
-    private readonly telegramBotService: TelegramBotService
+    private readonly telegramBotService: TelegramBotService,
+    private readonly partyCoordinationService: PartyCoordinationService
   ) {}
 
   private async assertCommunityOpen(currentUser: AuthenticatedUser): Promise<void> {
@@ -355,6 +358,36 @@ export class PartiesController {
     return this.gamePartiesService.getPartyBySlug(slug, currentUser?.id);
   }
 
+
+  @Get(":slug/coordination")
+  @UseGuards(JwtAuthGuard)
+  getPartyCoordination(@Param("slug") slug: string, @CurrentUser() user: AuthenticatedUser): Promise<PartyCoordinationResponse> {
+    return this.partyCoordinationService.get(slug, user.id);
+  }
+
+  @Post(":slug/members/me/ready")
+  @UseGuards(JwtAuthGuard)
+  async setPartyReady(
+    @Param("slug") slug: string, @Body() input: SetPartyReadyDto,
+    @CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike
+  ): Promise<PartyCoordinationResponse> {
+    await this.apiRateLimiterService.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    const result = await this.partyCoordinationService.update(slug, user.id, input.membershipId, { ready: input.ready });
+    if (result.changed) this.gamePartyGateway.notifyTelegramPartyRosterUpdated(result.coordination.members.map((member) => member.userId), result.coordination.slug);
+    return result.coordination;
+  }
+
+  @Patch(":slug/members/me/telegram-contact")
+  @UseGuards(JwtAuthGuard)
+  async sharePartyTelegramContact(
+    @Param("slug") slug: string, @Body() input: SharePartyTelegramContactDto,
+    @CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike
+  ): Promise<PartyCoordinationResponse> {
+    await this.apiRateLimiterService.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    const result = await this.partyCoordinationService.update(slug, user.id, input.membershipId, { visible: input.visible });
+    if (result.changed) this.gamePartyGateway.notifyTelegramPartyRosterUpdated(result.coordination.members.map((member) => member.userId), result.coordination.slug);
+    return result.coordination;
+  }
   @Post(":slug/link-open")
   @UseGuards(OptionalJwtAuthGuard)
   async recordPartyLinkOpen(

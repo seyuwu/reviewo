@@ -1600,6 +1600,8 @@ model GamePartyMember {
   /// 20260715160000_party_member_position_role (Prisma cannot express partial uniques).
   positionRole String?             @map("position_role")
   joinedAt     DateTime            @default(now()) @map("joined_at") @db.Timestamptz(6)
+  readyAt      DateTime?           @map("ready_at") @db.Timestamptz(6)
+  telegramContactShared Boolean    @default(false) @map("telegram_contact_shared")
   party        GameParty           @relation(fields: [partyId], references: [id], onDelete: Cascade)
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
