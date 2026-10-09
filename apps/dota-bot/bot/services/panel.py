@@ -22,6 +22,7 @@ from ..storage.database import BotStorage
 from .temporary_notifications import send_temporary_notification
 from .search_timeout_notices import queue_solo_timeout, queue_recruit_timeout, search_reached_timeout
 from .start_links import bot_friend_invite_url
+from .registration_drafts import clear_registration_draft, registration_draft
 from ..ui.formatters import party_text, profile_text
 from ..ui.keyboards import (
     account_keyboard,
@@ -584,14 +585,19 @@ async def render_screen(
                 "Удалили окно бота? Отправьте /start — бот пришлёт новое. Удалённое сообщение восстановить нельзя.",
                 account_keyboard(False, False, False, site_url=settings.site_url),
             )
+        draft_pending = registration_draft(storage, telegram_user_id) is not None
+        signup_text = (
+            "Вы уже начали регистрацию — анкета сохранена. Нажмите «Продолжить регистрацию». "
+            if draft_pending else "Нажмите «Зарегистрироваться»: укажите MMR и позиции — профиль готов. "
+        )
         return (
             "<b>Добро пожаловать в FDP 💜</b>\n\n"
             "Находите пати по MMR и позициям, собирайте игроков и участвуйте в турнирах Dota 2.\n\n"
-            "Нажмите «Зарегистрироваться»: укажите MMR и позиции — профиль готов. "
+            f"{signup_text}"
             "Имя возьмём из Telegram, изменить его можно в «Аккаунте». "
             "Dota ID можно добавить позже.\n\n"
             'Наш канал: <a href="https://t.me/FDPcommunity">@FDPcommunity</a>',
-            home_keyboard(False, False, site_url=settings.site_url, can_share=True),
+            home_keyboard(False, False, site_url=settings.site_url, can_share=True, registration_pending=draft_pending),
         )
 
     async def fetch_profile() -> dict | None:
@@ -614,13 +620,22 @@ async def render_screen(
 
     if screen == "home":
         if not profile:
+            draft_pending = registration_draft(storage, telegram_user_id) is not None
+            signup_text = (
+                "Нажмите «Продолжить регистрацию» — ваша анкета сохранена. "
+                if draft_pending else "Нажмите «Зарегистрироваться», чтобы создать Dota-профиль: MMR и позиции. "
+            )
             return (
                 "<b>Аккаунт привязан 💜</b>\n\n"
-                "Нажмите «Зарегистрироваться», чтобы создать Dota-профиль: MMR и позиции. "
+                f"{signup_text}"
                 "Имя возьмём из Telegram, изменить его можно в «Аккаунте». "
                 "После этого можно искать пати и участвовать в турнирах. Dota ID добавите позже.",
-                home_keyboard(False, False, site_url=settings.site_url, can_share=True),
+                home_keyboard(False, False, site_url=settings.site_url, can_share=True, registration_pending=draft_pending),
             )
+        draft = registration_draft(storage, telegram_user_id)
+        link_pending = draft is not None and draft["step"] == "link"
+        if draft is not None and not link_pending:
+            clear_registration_draft(storage, telegram_user_id)
         name = escape_text(profile.get("title", "Игрок"))
         mmr = escape_text(profile.get("mmr") or "—")
         party = my_parties.get("party") or (my_parties.get("parties") or [None])[-1]
@@ -651,6 +666,7 @@ async def render_screen(
             is_looking,
             site_url=settings.site_url,
             can_share=True,
+            registration_pending=link_pending,
         )
 
     if screen == "looking":

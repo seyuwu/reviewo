@@ -16,11 +16,12 @@ class HomeKeyboardTests(unittest.TestCase):
     def test_unregistered_home_can_open_account_and_tournaments(self) -> None:
         keyboard = home_keyboard(False, False)
 
-        self.assertEqual(len(keyboard.inline_keyboard), 3)
-        self.assertEqual(keyboard.inline_keyboard[1][0].callback_data, "panel:account")
-        self.assertEqual(keyboard.inline_keyboard[2][0].text, "🏆 Турниры")
+        buttons = [button for row in keyboard.inline_keyboard for button in row]
+        self.assertTrue(any(button.callback_data == "register:start" for button in buttons))
+        self.assertTrue(any(button.callback_data == "panel:account" for button in buttons))
+        tournament = next(button for button in buttons if button.text == "🏆 Турниры")
         self.assertEqual(
-            keyboard.inline_keyboard[2][0].url,
+            tournament.url,
             "https://games.opinia.ru/games/tournaments",
         )
 

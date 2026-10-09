@@ -12,6 +12,7 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, dota_id_guide_photo, edit_panel, edit_panel_content
+from ..services.registration_drafts import clear_registration_draft, registration_draft, save_registration_draft
 from ..storage.database import BotStorage
 from ..ui.keyboards import (
     back_keyboard,
@@ -20,8 +21,8 @@ from ..ui.keyboards import (
     profile_edit_roles_keyboard,
     registration_dota_id_keyboard,
     registration_name_keyboard,
+    registration_mmr_keyboard,
     registration_roles_keyboard,
-    registration_step_keyboard,
 )
 
 router = Router(name="registration")
@@ -66,6 +67,11 @@ async def start_profile_registration(
     invite_role: str | None = None,
     telegram_name: str | None = None,
 ) -> None:
+    if await resume_registration_draft(
+        bot, state, api, settings, storage, telegram_user_id, chat_id,
+        invite_code=invite_code, invite_role=invite_role,
+    ):
+        return
     if not telegram_name:
         user = storage.find_bot_user(str(telegram_user_id))
         telegram_name = (user or {}).get("username")
@@ -88,6 +94,55 @@ async def start_profile_registration(
         )
     await state.update_data(**data)
     await show_registration_mmr_panel(bot, state, storage, api, settings, telegram_user_id, chat_id)
+
+
+async def resume_registration_draft(
+    bot, state, api, settings, storage, user_id, chat_id, *, invite_code=None, invite_role=None,
+) -> bool:
+    draft = registration_draft(storage, user_id)
+    if draft is None:
+        return False
+    # A linked account may have completed its profile on the website while the bot was closed.
+    if storage.get_session(user_id) and draft["step"] != "link":
+        try:
+            await api.user(user_id, "GET", "/dota/profiles/me")
+        except ApiError as error:
+            if error.status != 404:
+                await edit_panel_content(
+                    bot, storage, api, settings, user_id, "notice",
+                    "Не удалось проверить профиль. Анкета сохранена — попробуйте продолжить чуть позже.",
+                    back_keyboard(), chat_id,
+                )
+                return True
+        else:
+            clear_registration_draft(storage, user_id)
+            await state.clear()
+            await edit_panel(bot, storage, api, settings, user_id, "home", chat_id)
+            return True
+    data = {key: value for key, value in draft.items() if key != "step"}
+    if invite_code and invite_role in POSITION_NAMES:
+        data.update(party_invite_code=invite_code, party_invite_role=invite_role, required_role=invite_role)
+        data["roles"] = sorted(set(data.get("roles", [])) | {invite_role})
+    await state.clear()
+    await state.update_data(**data)
+    if data.get("pending_action") in {"looking", "recruit"}:
+        pending = storage.get_choice(user_id, "pending_onboarding_action", 0)
+        if not isinstance(pending, dict) or pending.get("action") not in {"looking", "recruit"}:
+            storage.set_choices(user_id, "pending_onboarding_action", [{"action": data["pending_action"]}])
+    if draft["step"] == "link":
+        await state.set_state(GuestProfileWizard.roles)
+        await edit_panel_content(
+            bot, storage, api, settings, user_id, "register:telegram-link-error",
+            "<b>Профиль уже создан.</b>\n\nОсталось подключить Telegram. Нажмите «Повторить подключение».",
+            telegram_link_retry_keyboard(), chat_id,
+        )
+    elif draft["step"] == "roles" and data.get("mmr") is not None:
+        await state.set_state(GuestProfileWizard.roles)
+        save_registration_draft(storage, user_id, data, "roles")
+        await show_roles_panel(bot, storage, api, settings, user_id, chat_id, data.get("roles", []))
+    else:
+        await show_registration_mmr_panel(bot, state, storage, api, settings, user_id, chat_id)
+    return True
 
 
 @router.callback_query(F.data == "profile:edit")
@@ -427,7 +482,7 @@ def telegram_link_retry_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-@router.callback_query(F.data == "register:start")
+@router.callback_query(F.data.in_({"register:start", "register:resume"}))
 async def begin_registration(
     callback: CallbackQuery,
     state: FSMContext,
@@ -626,6 +681,7 @@ async def show_registration_mmr_panel(
     data = await state.get_data()
     editing = bool(data.get("editing_profile"))
     await state.set_state(GuestProfileWizard.mmr)
+    save_registration_draft(storage, telegram_user_id, data, "mmr")
     text = (
         f"<b>{'Изменение профиля · 3/4' if editing else 'Регистрация Dota-профиля · 1/2'}</b>\n\n"
         f"Имя: <b>{escape(str(data.get('display_name') or 'Игрок'))}</b>\n"
@@ -644,7 +700,7 @@ async def show_registration_mmr_panel(
         telegram_user_id,
         "register:mmr",
         text,
-        registration_step_keyboard(),
+        registration_mmr_keyboard(),
         chat_id,
     )
 
@@ -872,18 +928,39 @@ async def receive_mmr(
             message.from_user.id,
             "register:mmr",
             f"<b>{'Изменение профиля · 3/4' if editing else 'Создание Dota-профиля · 1/2'}</b>\n\nНужен MMR числом от 0 до 18000. Напишите значение ещё раз.",
-            registration_step_keyboard(),
+            registration_mmr_keyboard(),
             message.chat.id,
         )
         return
+    await accept_registration_mmr(
+        message.bot, state, storage, api, settings, message.from_user.id, message.chat.id, value
+    )
+
+
+@router.callback_query(F.data == "register:mmr:unranked")
+async def choose_unranked_mmr(callback: CallbackQuery, state: FSMContext, api: OpiniaApi, settings: Settings, storage: BotStorage) -> None:
+    acknowledge_callback(callback)
+    if callback.message is None or callback.message.chat.type != "private":
+        return
+    if await state.get_state() != GuestProfileWizard.mmr.state:
+        return
+    await accept_registration_mmr(
+        callback.bot, state, storage, api, settings, callback.from_user.id, callback.message.chat.id, "0"
+    )
+
+
+async def accept_registration_mmr(bot, state, storage, api, settings, user_id, chat_id, value: str) -> None:
+    data = await state.get_data()
+    editing = bool(data.get("editing_profile"))
     required_role = data.get("required_role")
     roles = list(data.get("roles") or []) if editing else []
     if required_role in POSITION_NAMES:
         roles = [required_role]
     await state.update_data(mmr=value, roles=roles)
     await state.set_state(GuestProfileWizard.roles)
+    save_registration_draft(storage, user_id, await state.get_data(), "roles")
     await show_roles_panel(
-        message.bot, storage, api, settings, message.from_user.id, message.chat.id,
+        bot, storage, api, settings, user_id, chat_id,
         roles,
         editing=editing,
     )
@@ -907,6 +984,7 @@ async def toggle_registration_role(callback: CallbackQuery, state: FSMContext, s
         roles.append(role)
         roles.sort()
     await state.update_data(roles=roles)
+    save_registration_draft(storage, callback.from_user.id, await state.get_data(), "roles")
     if callback.message:
         await show_roles_panel(
             callback.bot, storage, api, settings, callback.from_user.id, callback.message.chat.id, roles,
@@ -923,6 +1001,7 @@ async def cancel_registration(
     storage: BotStorage,
 ) -> None:
     acknowledge_callback(callback, "Регистрация отменена")
+    clear_registration_draft(storage, callback.from_user.id)
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id if callback.message else None)
     data = await state.get_data()
     await state.clear()
@@ -948,6 +1027,8 @@ async def continue_after_profile_saved(
     data: dict,
     match_wakeup: asyncio.Event,
 ) -> None:
+    if not data.get("editing_profile"):
+        clear_registration_draft(storage, telegram_user_id)
     await state.clear()
     if data.get("editing_profile"):
         await edit_panel(bot, storage, api, settings, telegram_user_id, "profile", chat_id)
@@ -1006,7 +1087,8 @@ async def complete_registration(
     if not roles:
         await callback.answer("Выберите хотя бы одну позицию", show_alert=True)
         return
-    if not data.get("display_name") or not data.get("mmr"):
+    mmr = data.get("mmr")
+    if not data.get("display_name") or mmr is None or not str(mmr).isdigit() or not 0 <= int(mmr) <= 18000:
         await callback.answer("Начните регистрацию заново через /start", show_alert=True)
         await state.clear()
         return
@@ -1017,7 +1099,7 @@ async def complete_registration(
     try:
         profile = {
             "title": data["display_name"],
-            "mmr": data["mmr"],
+            "mmr": str(mmr),
             "roles": roles,
         }
         if data.get("dota_account_id"):
@@ -1037,6 +1119,7 @@ async def complete_registration(
                 created["refreshToken"],
                 created["recoveryUrl"],
             )
+            save_registration_draft(storage, callback.from_user.id, data, "link")
             telegram_link_pending = True
             await api.ensure_telegram_link(callback.from_user.id)
             telegram_link_pending = False
@@ -1097,6 +1180,9 @@ async def show_roles_panel(
     title = "Изменение профиля" if editing else "Создание Dota-профиля"
     progress = "4/4" if editing else "2/2"
     text = f"<b>{title} · {progress}</b>\n\nВыберите позиции кнопками ниже. Можно выбрать несколько."
+    draft = registration_draft(storage, telegram_user_id) if not editing else None
+    if draft is not None and draft.get("mmr") is not None:
+        text += f"\n\nMMR: <b>{escape(str(draft['mmr']))}</b>"
     text += f"\n\nВыбрано: <b>{escape(names)}</b>"
     if error:
         verb = "сохранить" if editing else "создать"

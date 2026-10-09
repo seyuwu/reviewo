@@ -237,8 +237,9 @@ class PersonalPartyRoleTests(unittest.IsolatedAsyncioTestCase):
                     data = await state.get_data()
                     self.assertEqual(data['party_invite_code'],'m6QvueE')
                     self.assertEqual(data['party_invite_role'],'2')
-                    self.assertEqual(await state.get_state(),GuestProfileWizard.display_name.state)
-                    self.assertEqual(panel.await_args.args[5],'register:name')
+                    self.assertEqual(data['display_name'],'Friend')
+                    self.assertEqual(await state.get_state(),GuestProfileWizard.mmr.state)
+                    self.assertEqual(panel.await_args.args[5],'register:mmr')
                     api.user.assert_not_awaited()
             finally:
                 await state_storage.close()

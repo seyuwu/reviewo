@@ -10,6 +10,7 @@ def home_keyboard(
     is_looking: bool = False,
     site_url: str = "https://dota.opinia.ru",
     can_share: bool = False,
+    registration_pending: bool = False,
 ) -> InlineKeyboardMarkup:
     first_label = "🔎 Ищу пати" if is_looking else "🎯 Ищу пати"
     first_action = "panel:looking" if is_looking else "search:looking"
@@ -17,8 +18,9 @@ def home_keyboard(
     second_label = "👥 Моя пати" if open_party else "🧭 Собрать пати"
     second_action = "panel:party" if open_party else "search:recruit"
     rows = []
-    if not registered:
-        rows.append([button("🚀 Зарегистрироваться", "register:start")])
+    if not registered or registration_pending:
+        rows.append([button("▶️ Продолжить регистрацию", "register:resume") if registration_pending
+                     else button("🚀 Зарегистрироваться", "register:start")])
     rows.append([button(first_label, first_action), button(second_label, second_action)])
     rows.append([button("👤 Аккаунт", "panel:account")])
     tournaments_url = site_url.rstrip("/")
@@ -331,6 +333,13 @@ def kick_confirmation_keyboard(user_id: str) -> InlineKeyboardMarkup:
 
 def registration_step_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[button("✖️ Отменить", "register:cancel")]])
+
+
+def registration_mmr_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [button("Нет рейтинга · 0 MMR", "register:mmr:unranked")],
+        [button("✖️ Отменить", "register:cancel")],
+    ])
 
 
 def registration_dota_id_keyboard(has_current_id: bool = False) -> InlineKeyboardMarkup:
