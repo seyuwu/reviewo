@@ -587,7 +587,8 @@ async def render_screen(
         return (
             "<b>Добро пожаловать в FDP 💜</b>\n\n"
             "Находите пати по MMR и позициям, собирайте игроков и участвуйте в турнирах Dota 2.\n\n"
-            "Нажмите «Зарегистрироваться»: выберите имя, укажите MMR и позиции — профиль готов. "
+            "Нажмите «Зарегистрироваться»: укажите MMR и позиции — профиль готов. "
+            "Имя возьмём из Telegram, изменить его можно в «Аккаунте». "
             "Dota ID можно добавить позже.\n\n"
             'Наш канал: <a href="https://t.me/FDPcommunity">@FDPcommunity</a>',
             home_keyboard(False, False, site_url=settings.site_url, can_share=True),
@@ -615,7 +616,8 @@ async def render_screen(
         if not profile:
             return (
                 "<b>Аккаунт привязан 💜</b>\n\n"
-                "Нажмите «Зарегистрироваться», чтобы создать Dota-профиль: имя, MMR и позиции. "
+                "Нажмите «Зарегистрироваться», чтобы создать Dota-профиль: MMR и позиции. "
+                "Имя возьмём из Telegram, изменить его можно в «Аккаунте». "
                 "После этого можно искать пати и участвовать в турнирах. Dota ID добавите позже.",
                 home_keyboard(False, False, site_url=settings.site_url, can_share=True),
             )

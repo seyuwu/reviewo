@@ -64,10 +64,21 @@ async def start_profile_registration(
     *,
     invite_code: str | None = None,
     invite_role: str | None = None,
+    telegram_name: str | None = None,
 ) -> None:
+    if not telegram_name:
+        user = storage.find_bot_user(str(telegram_user_id))
+        telegram_name = (user or {}).get("username")
+    if not telegram_name:
+        try:
+            chat = await bot.get_chat(telegram_user_id)
+            telegram_name = chat.username or " ".join(
+                part for part in (chat.first_name, chat.last_name) if part
+            )
+        except TelegramAPIError:
+            telegram_name = "Игрок"
     await state.clear()
-    await state.set_state(GuestProfileWizard.display_name)
-    data = {"roles": [], "dota_account_id": ""}
+    data = {"roles": [], "dota_account_id": "", "display_name": telegram_name.strip()[:80] or "Игрок"}
     if invite_code and invite_role in POSITION_NAMES:
         data.update(
             roles=[invite_role],
@@ -76,39 +87,7 @@ async def start_profile_registration(
             party_invite_role=invite_role,
         )
     await state.update_data(**data)
-    registration_heading = (
-        "Создадим профиль FDP"
-        if not storage.get_session(telegram_user_id)
-        else "Создадим Dota-профиль"
-    )
-    if invite_role in POSITION_NAMES:
-        text = (
-            f"<b>{registration_heading}</b>\n\n"
-            f"Регистрация · 1/3. Вы выбрали роль <b>{POSITION_NAMES[invite_role]}</b>. "
-            "После регистрации бот вернёт вас в пати на эту позицию.\n\n"
-            "Как вас называть? Используйте имя Telegram кнопкой ниже или напишите свой игровой ник.\n\n"
-            "Dota ID можно добавить позже в профиле.\n"
-            "Уже есть аккаунт FDP? Напишите /login для входа."
-        )
-    else:
-        text = (
-            f"<b>{registration_heading}</b>\n\n"
-            "Регистрация Dota-профиля · 1/3.\n\n"
-            "Как вас называть? Используйте имя Telegram кнопкой ниже или напишите свой игровой ник.\n\n"
-            "Дальше — MMR и позиции. Dota ID можно добавить позже в профиле.\n"
-            "Уже есть аккаунт FDP? Напишите /login для входа."
-        )
-    await edit_panel_content(
-        bot,
-        storage,
-        api,
-        settings,
-        telegram_user_id,
-        "register:name",
-        text,
-        registration_name_keyboard(),
-        chat_id,
-    )
+    await show_registration_mmr_panel(bot, state, storage, api, settings, telegram_user_id, chat_id)
 
 
 @router.callback_query(F.data == "profile:edit")
@@ -169,7 +148,20 @@ PROFILE_EDIT_FIELD_CALLBACKS = {
     "profile:edit:field:dota-id": ("dota_id", ProfileEditWizard.dota_id),
     "profile:edit:field:mmr": ("mmr", ProfileEditWizard.mmr),
     "profile:edit:field:roles": ("roles", ProfileEditWizard.roles),
+    "account:edit:field:name": ("display_name", ProfileEditWizard.display_name),
+    "account:edit:field:dota-id": ("dota_id", ProfileEditWizard.dota_id),
+    "account:edit:field:mmr": ("mmr", ProfileEditWizard.mmr),
+    "account:edit:field:roles": ("roles", ProfileEditWizard.roles),
 }
+
+
+async def profile_edit_destination(state: FSMContext) -> str:
+    data = await state.get_data()
+    return "account" if data.get("profile_edit_return_screen") == "account" else "profile"
+
+
+async def profile_field_keyboard(state: FSMContext) -> InlineKeyboardMarkup:
+    return profile_edit_field_keyboard(return_screen=await profile_edit_destination(state))
 
 
 @router.callback_query(F.data.in_(PROFILE_EDIT_FIELD_CALLBACKS))
@@ -190,6 +182,10 @@ async def choose_profile_edit_field(
     acknowledge_callback(callback)
 
     field, wizard_state = action
+    from_account = (callback.data or "").startswith("account:edit:")
+    if from_account:
+        await state.clear()
+        await state.update_data(profile_edit_return_screen="account")
     data = await state.get_data()
     profile = data.get("profile_snapshot")
     if not profile:
@@ -205,7 +201,7 @@ async def choose_profile_edit_field(
                 callback.from_user.id,
                 "profile:edit:error",
                 f"Не получилось открыть профиль: {escape(str(error))}",
-                back_keyboard("profile"),
+                back_keyboard(await profile_edit_destination(state)),
                 callback.message.chat.id,
             )
             return
@@ -222,7 +218,7 @@ async def choose_profile_edit_field(
         )
         await edit_panel_content(
             callback.bot, storage, api, settings, callback.from_user.id,
-            "profile:edit:name", text, profile_edit_field_keyboard(), callback.message.chat.id,
+            "profile:edit:name", text, await profile_field_keyboard(state), callback.message.chat.id,
         )
     elif field == "dota_id":
         current_id = str(profile.get("dotaAccountId") or "не указан")
@@ -234,7 +230,7 @@ async def choose_profile_edit_field(
         )
         await edit_panel_content(
             callback.bot, storage, api, settings, callback.from_user.id,
-            "profile:edit:dota-id", text, profile_edit_field_keyboard(),
+            "profile:edit:dota-id", text, await profile_field_keyboard(state),
             callback.message.chat.id, dota_id_guide_photo(),
         )
     elif field == "mmr":
@@ -246,7 +242,7 @@ async def choose_profile_edit_field(
         )
         await edit_panel_content(
             callback.bot, storage, api, settings, callback.from_user.id,
-            "profile:edit:mmr", text, profile_edit_field_keyboard(), callback.message.chat.id,
+            "profile:edit:mmr", text, await profile_field_keyboard(state), callback.message.chat.id,
         )
     else:
         roles = [str(role) for role in profile.get("roles", []) if str(role) in POSITION_NAMES]
@@ -258,7 +254,7 @@ async def choose_profile_edit_field(
             "<b>Изменить позиции</b>\n\n"
             "Выберите все позиции, на которых готовы играть.\n"
             f"Сейчас выбраны: <b>{escape(selected)}</b>",
-            profile_edit_roles_keyboard(roles), callback.message.chat.id,
+            profile_edit_roles_keyboard(roles, return_screen=await profile_edit_destination(state)), callback.message.chat.id,
         )
 
 
@@ -286,8 +282,9 @@ async def save_single_profile_field(
         )
         return False
 
+    return_screen = await profile_edit_destination(state)
     await state.clear()
-    await edit_panel(bot, storage, api, settings, telegram_user_id, "profile", chat_id)
+    await edit_panel(bot, storage, api, settings, telegram_user_id, return_screen, chat_id)
     return True
 
 
@@ -307,12 +304,12 @@ async def receive_profile_edit_name(
     if not value or len(value) > 80:
         await edit_panel_content(
             message.bot, storage, api, settings, message.from_user.id,
-            "profile:edit:name", text, profile_edit_field_keyboard(), message.chat.id,
+            "profile:edit:name", text, await profile_field_keyboard(state), message.chat.id,
         )
         return
     await save_single_profile_field(
         message.bot, state, api, settings, storage, message.from_user.id, message.chat.id,
-        {"title": value}, "profile:edit:name", text, profile_edit_field_keyboard(),
+        {"title": value}, "profile:edit:name", text, await profile_field_keyboard(state),
     )
 
 
@@ -332,14 +329,14 @@ async def receive_profile_edit_dota_id(
     if not re.fullmatch(r"\d{8,10}", value):
         await edit_panel_content(
             message.bot, storage, api, settings, message.from_user.id,
-            "profile:edit:dota-id", text, profile_edit_field_keyboard(),
+            "profile:edit:dota-id", text, await profile_field_keyboard(state),
             message.chat.id, dota_id_guide_photo(),
         )
         return
     await save_single_profile_field(
         message.bot, state, api, settings, storage, message.from_user.id, message.chat.id,
         {"dotaAccountId": value}, "profile:edit:dota-id", text,
-        profile_edit_field_keyboard(), dota_id_guide_photo(),
+        await profile_field_keyboard(state), dota_id_guide_photo(),
     )
 
 
@@ -356,12 +353,12 @@ async def receive_profile_edit_mmr(
     if not value.isdigit() or not 0 <= int(value) <= 18000:
         await edit_panel_content(
             message.bot, storage, api, settings, message.from_user.id,
-            "profile:edit:mmr", text, profile_edit_field_keyboard(), message.chat.id,
+            "profile:edit:mmr", text, await profile_field_keyboard(state), message.chat.id,
         )
         return
     await save_single_profile_field(
         message.bot, state, api, settings, storage, message.from_user.id, message.chat.id,
-        {"mmr": value}, "profile:edit:mmr", text, profile_edit_field_keyboard(),
+        {"mmr": value}, "profile:edit:mmr", text, await profile_field_keyboard(state),
     )
 
 
@@ -388,7 +385,7 @@ async def toggle_profile_edit_role(callback: CallbackQuery, state: FSMContext, s
             "<b>Изменить позиции</b>\n\n"
             "Выберите все позиции, на которых готовы играть.\n"
             f"Сейчас выбраны: <b>{escape(selected)}</b>",
-            profile_edit_roles_keyboard(roles), callback.message.chat.id,
+            profile_edit_roles_keyboard(roles, return_screen=await profile_edit_destination(state)), callback.message.chat.id,
         )
 
 
@@ -407,7 +404,7 @@ async def save_profile_edit_roles(callback: CallbackQuery, state: FSMContext, ap
             callback.bot, state, api, settings, storage, callback.from_user.id,
             callback.message.chat.id, {"roles": roles}, "profile:edit:roles",
             "<b>Изменить позиции</b>\n\nВыберите все позиции, на которых готовы играть.",
-            profile_edit_roles_keyboard(roles),
+            profile_edit_roles_keyboard(roles, return_screen=await profile_edit_destination(state)),
         )
 
 
@@ -415,9 +412,10 @@ async def save_profile_edit_roles(callback: CallbackQuery, state: FSMContext, ap
 async def cancel_profile_edit(callback: CallbackQuery, state: FSMContext, api: OpiniaApi, settings: Settings, storage: BotStorage) -> None:
     acknowledge_callback(callback)
     chat_id = callback.message.chat.id if callback.message else None
+    return_screen = await profile_edit_destination(state)
     await state.clear()
     await begin_panel_transition(callback.bot, storage, callback.from_user.id, chat_id)
-    await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "profile", chat_id)
+    await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, return_screen, chat_id)
 
 
 def telegram_link_retry_keyboard() -> InlineKeyboardMarkup:
@@ -449,6 +447,7 @@ async def begin_registration(
         storage,
         callback.from_user.id,
         callback.message.chat.id,
+        telegram_name=callback.from_user.username or callback.from_user.full_name,
     )
 
 
@@ -517,6 +516,7 @@ async def begin_onboarding_registration(
         storage,
         callback.from_user.id,
         callback.message.chat.id,
+        telegram_name=callback.from_user.username or callback.from_user.full_name,
     )
 
 
@@ -627,10 +627,15 @@ async def show_registration_mmr_panel(
     editing = bool(data.get("editing_profile"))
     await state.set_state(GuestProfileWizard.mmr)
     text = (
-        f"<b>{'Изменение профиля · 3/4' if editing else 'Регистрация Dota-профиля · 2/3'}</b>\n\n"
+        f"<b>{'Изменение профиля · 3/4' if editing else 'Регистрация Dota-профиля · 1/2'}</b>\n\n"
         f"Имя: <b>{escape(str(data.get('display_name') or 'Игрок'))}</b>\n"
         "\nУкажите MMR числом от 0 до 18000."
     )
+    if not editing:
+        text += "\nИмя взято из Telegram. Его и другие параметры можно изменить в «Аккаунте»."
+        if data.get("required_role") in POSITION_NAMES:
+            text += f"\nПосле регистрации вернём вас в пати на позицию «{POSITION_NAMES[data['required_role']]}»."
+        text += "\n\nУже есть аккаунт FDP? Напишите /login для входа."
     await edit_panel_content(
         bot,
         storage,
@@ -866,7 +871,7 @@ async def receive_mmr(
             settings,
             message.from_user.id,
             "register:mmr",
-            f"<b>{'Изменение профиля · 3/4' if editing else 'Создание Dota-профиля · 2/3'}</b>\n\nНужен MMR числом от 0 до 18000. Напишите значение ещё раз.",
+            f"<b>{'Изменение профиля · 3/4' if editing else 'Создание Dota-профиля · 1/2'}</b>\n\nНужен MMR числом от 0 до 18000. Напишите значение ещё раз.",
             registration_step_keyboard(),
             message.chat.id,
         )
@@ -1090,7 +1095,7 @@ async def show_roles_panel(
 ) -> None:
     names = ", ".join(POSITION_NAMES[role] for role in selected) or "не выбраны"
     title = "Изменение профиля" if editing else "Создание Dota-профиля"
-    progress = "4/4" if editing else "3/3"
+    progress = "4/4" if editing else "2/2"
     text = f"<b>{title} · {progress}</b>\n\nВыберите позиции кнопками ниже. Можно выбрать несколько."
     text += f"\n\nВыбрано: <b>{escape(names)}</b>"
     if error:

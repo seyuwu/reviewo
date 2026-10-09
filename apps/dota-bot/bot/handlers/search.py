@@ -55,6 +55,7 @@ async def start_looking(
         callback.message.chat.id,
         "looking",
         match_wakeup,
+        telegram_name=callback.from_user.username or callback.from_user.full_name,
     )
 
 
@@ -85,6 +86,7 @@ async def confirm_start_looking(
         "looking",
         match_wakeup,
         confirmation=confirmation,
+        telegram_name=callback.from_user.username or callback.from_user.full_name,
     )
 
 
@@ -143,6 +145,7 @@ async def begin_recruiting(
         callback.message.chat.id,
         "recruit",
         match_wakeup,
+        telegram_name=callback.from_user.username or callback.from_user.full_name,
     )
 
 
@@ -157,13 +160,17 @@ async def start_selected_action(
     action: str,
     match_wakeup: asyncio.Event,
     confirmation: dict | None = None,
+    *,
+    telegram_name: str | None = None,
 ) -> None:
     if not storage.get_session(telegram_user_id):
         storage.set_choices(telegram_user_id, "pending_onboarding_action", [{"action": action}])
         await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
         from .registration import start_profile_registration
 
-        await start_profile_registration(bot, state, api, settings, storage, telegram_user_id, chat_id)
+        await start_profile_registration(
+            bot, state, api, settings, storage, telegram_user_id, chat_id, telegram_name=telegram_name
+        )
         return
 
     try:
@@ -174,7 +181,9 @@ async def start_selected_action(
             await begin_panel_transition(bot, storage, telegram_user_id, chat_id)
             from .registration import start_profile_registration
 
-            await start_profile_registration(bot, state, api, settings, storage, telegram_user_id, chat_id)
+            await start_profile_registration(
+                bot, state, api, settings, storage, telegram_user_id, chat_id, telegram_name=telegram_name
+            )
             return
         await show_action_error(bot, api, settings, storage, telegram_user_id, chat_id, error)
         return

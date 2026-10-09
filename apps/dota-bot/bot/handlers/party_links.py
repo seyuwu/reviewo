@@ -264,6 +264,7 @@ async def start_invite_registration(callback, state: FSMContext, api, settings, 
         chat_id,
         invite_code=code,
         invite_role=role,
+        telegram_name=callback.from_user.username or callback.from_user.full_name,
     )
 
 

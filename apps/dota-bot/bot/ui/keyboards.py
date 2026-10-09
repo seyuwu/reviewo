@@ -162,7 +162,9 @@ def profile_edit_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def profile_edit_field_keyboard() -> InlineKeyboardMarkup:
+def profile_edit_field_keyboard(*, return_screen: str = "profile") -> InlineKeyboardMarkup:
+    if return_screen == "account":
+        return InlineKeyboardMarkup(inline_keyboard=[[button("← К аккаунту", "profile:edit:cancel")]])
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [button("← К параметрам", "profile:edit")],
@@ -171,7 +173,7 @@ def profile_edit_field_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def profile_edit_roles_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
+def profile_edit_roles_keyboard(selected: list[str], *, return_screen: str = "profile") -> InlineKeyboardMarkup:
     rows = []
     names = {"1": "Керри", "2": "Мид", "3": "Оффлейн", "4": "Саппорт", "5": "Хард-саппорт"}
     roles = ("1", "2", "3", "4", "5")
@@ -181,13 +183,14 @@ def profile_edit_roles_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
             marker = "✅ " if role in selected else ""
             row.append(button(f"{marker}{role} · {names[role]}", f"profile:edit:role:toggle:{role}"))
         rows.append(row)
-    rows.extend(
-        [
-            [button("💾 Сохранить позиции", "profile:edit:roles:save")],
+    rows.append([button("💾 Сохранить позиции", "profile:edit:roles:save")])
+    if return_screen == "account":
+        rows.append([button("← К аккаунту", "profile:edit:cancel")])
+    else:
+        rows.extend([
             [button("← К параметрам", "profile:edit")],
             [button("✖️ К профилю", "profile:edit:cancel")],
-        ]
-    )
+        ])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -391,6 +394,11 @@ def account_keyboard(
             account_button,
         ]
     ]
+    if linked and profile_exists:
+        rows.extend([
+            [button("✏️ Изменить имя", "account:edit:field:name"), button("🏅 Изменить MMR", "account:edit:field:mmr")],
+            [button("🎯 Изменить роли", "account:edit:field:roles"), button("🎮 Изменить Dota ID", "account:edit:field:dota-id")],
+        ])
     if has_party or has_invites:
         rows.append(
             [
