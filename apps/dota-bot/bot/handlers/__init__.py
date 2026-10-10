@@ -7,6 +7,7 @@ from .panel import router as panel_router
 from .party import router as party_router
 from .party_links import router as party_links_router
 from .party_slots import router as party_slots_router
+from .referral_sharing import router as referral_sharing_router
 from .registration import router as registration_router
 from .search import router as search_router
 
@@ -20,5 +21,6 @@ router.include_routers(
     party_router,
     party_slots_router,
     party_links_router,
+    referral_sharing_router,
     panel_router,
 )

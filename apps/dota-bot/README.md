@@ -38,12 +38,13 @@ markers persist in SQLite; delivery runs in the background. See
 [`fdp-registration-announcement.md`](../../docs/features/fdp-registration-announcement.md).
 
 The same settings include a **«Поделиться»** toggle (enabled by default). The
-welcome message's sharing button opens Telegram's normal recipient picker and
-prefills the requested plain-text invitation with the recipient's existing personal
-referral URL in place of “ссылка”. Inline mode and BotFather configuration are not
-required. The sharing URL contains the complete invitation as one encoded draft
-field, so native clients preserve the link's position without prepending a second
-copy. Only the personal referral URL carries attribution.
+welcome message's sharing button sends a separate plain-text invitation with the
+recipient's existing personal referral URL in place of “ссылка”. The user selects
+Telegram's **Forward** action on this message to choose multiple recipients. The
+invitation is deleted from the bot chat after 10 seconds, independently of the
+welcome message's configured deletion time. Repeated taps reuse the visible
+invitation. Inline mode and BotFather configuration are not required. Only the
+personal referral URL carries attribution; forwarded copies retain the same URL.
 Disabling sharing removes the button from future deliveries and pending notices.
 
 ## Account linking

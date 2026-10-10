@@ -14,9 +14,7 @@ async def send_registration_message(bot, user_id, notice, storage=None):
     entities = [MessageEntity.model_validate(value) for value in notice.get("entities", [])]
     kwargs = {}
     if storage is not None and notice.get("share_enabled") and storage.registration_notice_config()["share_enabled"]:
-        keyboard = await referral_share_keyboard(bot, storage, user_id)
-        if keyboard is not None:
-            kwargs["reply_markup"] = keyboard
+        kwargs["reply_markup"] = referral_share_keyboard()
     if notice.get("photo_file_id"):
         return await bot.send_photo(
             user_id, notice["photo_file_id"], caption=notice["text"] or None,
