@@ -237,30 +237,43 @@ def party_keyboard(
                 search_status[index] = button("✅" if ready else "❌", action)
     rows = [slots, search_status]
     self_member = next((member for member in party.get("members", []) if member.get("isSelf")), None)
+    primary_actions = []
     if token and self_member:
         if not self_member.get("readyAt"):
-            rows.append([button("✅ Готов играть", f"party:ready:{token}:on")])
-        if self_member.get("telegramUsername") and not self_member.get("telegramContactPublic"):
-            share = not self_member.get("telegramContactShared")
-            rows.append([button("📨 Показать мой Telegram пати" if share else "🔒 Скрыть мой Telegram в пати", f"party:contact:{token}:{'on' if share else 'off'}")])
-    available_roles = set(roles) - occupants.keys()
-    if show_search and available_roles - searching_roles:
-        rows.append([button("🔎 Искать на всех свободных", "party:search-all")])
+            primary_actions.append(button("✅ Готов играть", f"party:ready:{token}:on"))
     if site_url and party.get("slug"):
         if web_access_url:
-            rows.append([button_url("💬 Чат и Discord", web_access_url)])
+            primary_actions.append(button_url("💬 Чат и Discord", web_access_url))
         else:
             next_path = f"/dota/teams/{party['slug']}"
             login_url = f"{site_url.rstrip('/')}/telegram/access?next={quote(next_path, safe='')}"
-            rows.append([button_login("💬 Чат и Discord", login_url)])
-    rows.append([button("🔗 Пригласить по ссылке", "party:share")])
-    if party.get("canManageParty"):
+            primary_actions.append(button_login("💬 Чат и Discord", login_url))
+    if primary_actions:
+        rows.append(primary_actions)
+    recruiting_actions = []
+    available_roles = set(roles) - occupants.keys()
+    if show_search and available_roles - searching_roles:
+        recruiting_actions.append(button("🔎 Найти игроков", "party:search-all"))
+    recruiting_actions.append(button("🔗 Пригласить", "party:share"))
+    rows.append(recruiting_actions)
+    rows.append([button("⚙️ Настройки пати", "panel:party_settings"), button("← Назад", "panel:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def party_settings_keyboard(party: dict, searching_roles: set[str]) -> InlineKeyboardMarkup:
+    rows = []
+    token = party.get("coordinationToken")
+    self_member = next((member for member in party.get("members", []) if member.get("isSelf")), None)
+    if token and self_member and self_member.get("telegramUsername") and not self_member.get("telegramContactPublic"):
+        share = not self_member.get("telegramContactShared")
+        rows.append([button("📨 Показать мой Telegram пати" if share else "🔒 Скрыть мой Telegram в пати", f"party:contact:{token}:{'on' if share else 'off'}")])
+    if party.get("canManageParty") and searching_roles:
         rows.append([button("⏹ Остановить набор", "search:stop")])
     if party.get("isOwner"):
         rows.append([button("🗑 Удалить пати", "party:delete:confirm")])
     else:
         rows.append([button("🚪 Покинуть пати", "party:leave:confirm")])
-    rows.append([button("← Назад", "panel:home")])
+    rows.append([button("← К пати", "panel:party")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -305,7 +318,7 @@ def delete_party_confirmation_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [button("🗑 Да, удалить пати", "party:delete:execute")],
-            [button("← Отмена", "panel:party")],
+            [button("← Отмена", "panel:party_settings")],
         ]
     )
 
@@ -314,7 +327,7 @@ def leave_party_confirmation_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [button("🚪 Да, покинуть пати", "party:leave:execute")],
-            [button("← Отмена", "panel:party")],
+            [button("← Отмена", "panel:party_settings")],
         ]
     )
 

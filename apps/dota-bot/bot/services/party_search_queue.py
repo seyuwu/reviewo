@@ -179,27 +179,30 @@ class PartySearchQueue:
     def _make_search_markup(panel: OptimisticPartyPanel) -> InlineKeyboardMarkup:
         rows = []
         for row in panel.markup.inline_keyboard:
-            if any(button.callback_data == "party:search-all" for button in row):
-                continue
             updated_row = []
             for button in row:
                 data = button.callback_data or ""
+                if data == "party:search-all":
+                    continue
                 if data.startswith("party:toggle-search:"):
                     role = data.removeprefix("party:toggle-search:")
                     label = "Ищем…" if role in panel.searching_roles else "Искать"
                     updated_row.append(button.model_copy(update={"text": label}))
                 else:
                     updated_row.append(button)
-            rows.append(updated_row)
+            if updated_row:
+                rows.append(updated_row)
 
         if panel.available_roles - panel.searching_roles:
-            rows.insert(
-                min(2, len(rows)),
-                [InlineKeyboardButton(
-                    text="🔎 Искать на всех свободных",
-                    callback_data="party:search-all",
-                )],
+            search_button = InlineKeyboardButton(
+                text="🔎 Найти игроков",
+                callback_data="party:search-all",
             )
+            invitation_row = next((row for row in rows if any(button.callback_data == "party:share" for button in row)), None)
+            if invitation_row is not None:
+                invitation_row.insert(0, search_button)
+            else:
+                rows.insert(min(2, len(rows)), [search_button])
         return panel.markup.model_copy(update={"inline_keyboard": rows})
 
     async def close(self) -> None:

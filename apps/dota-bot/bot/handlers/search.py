@@ -566,14 +566,14 @@ async def stop_search(
 ) -> None:
     acknowledge_callback(callback)
     panel = storage.get_panel(callback.from_user.id)
-    if panel and panel.screen == "party":
+    if panel and panel.screen in {"party", "party_settings"}:
         message = callback.message
         await party_search_queue.enqueue(
             callback.from_user.id,
             message.chat.id if message else callback.from_user.id,
             "stop",
             message_id=message.message_id if message else None,
-            markup=getattr(message, "reply_markup", None) if message else None,
+            markup=getattr(message, "reply_markup", None) if message and panel.screen == "party" else None,
         )
         return
     search = storage.get_choice(callback.from_user.id, "auto_search", 0) or {}

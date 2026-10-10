@@ -33,6 +33,7 @@ from ..ui.keyboards import (
     looking_keyboard,
     kick_confirmation_keyboard,
     party_keyboard,
+    party_settings_keyboard,
     party_member_keyboard,
     party_slot_occupants,
     profile_keyboard,
@@ -115,7 +116,7 @@ async def edit_panel(
     if screen == "recruiting":
         screen = "party"
     party_data = None
-    if screen == "party":
+    if screen in {"party", "party_settings"}:
         try:
             party_data = await api.user(telegram_user_id, "GET", "/social/parties/me")
         except ApiError:
@@ -143,7 +144,7 @@ async def edit_panel(
             except OSError:
                 logger.exception("Could not load default bot panel image for user %s", telegram_user_id)
     party_card_key = None
-    if screen in {"party", "recruiting"}:
+    if screen in {"party", "party_settings", "recruiting"}:
         party = (party_data or {}).get("party") or ((party_data or {}).get("parties") or [None])[-1]
         if party and party.get("slug"):
             is_default_panel_photo = False
@@ -613,7 +614,7 @@ async def render_screen(
         except ApiError:
             return {"parties": [], "invites": []}
 
-    if screen == "party":
+    if screen in {"party", "party_settings"}:
         profile = None
         my_parties = party_data if party_data is not None else await fetch_parties()
     else:
@@ -751,7 +752,7 @@ async def render_screen(
             ),
         )
 
-    if screen == "party":
+    if screen in {"party", "party_settings"}:
         parties = my_parties.get("parties") or []
         party = my_parties.get("party") or (parties[-1] if parties else None)
         if not party:
@@ -761,6 +762,14 @@ async def render_screen(
         occupants = party_slot_occupants(party)
         available_roles = {role for role in ("1", "2", "3", "4", "5") if role not in occupants}
         searching_roles = set(map(str, party.get("recruitedRoles") or [])) & available_roles
+        if screen == "party_settings":
+            self_member = next((member for member in party.get("members", []) if member.get("isSelf")), None)
+            text = f"<b>Настройки пати · {escape_text(party.get('name') or 'Моя пати')}</b>"
+            if self_member and self_member.get("telegramUsername"):
+                shared = self_member.get("telegramContactPublic") or self_member.get("telegramContactShared")
+                text += "\n\nТвой Telegram виден участникам пати." if shared else "\n\nТвой Telegram виден только тебе. Можно показать его участникам этой пати."
+            text += "\n\nНабор игроков идёт." if searching_roles else "\n\nНабор игроков не запущен."
+            return text, party_settings_keyboard(party, searching_roles)
         storage.set_choices(
             telegram_user_id,
             "party_search_watch",
@@ -778,7 +787,7 @@ async def render_screen(
                 timer += f" · осталось {format_duration(remaining)}"
             text += f"\n\n🔎 <b>Ищем игроков:</b> {escape_text(roles_text)}{timer}"
         else:
-            text += "\n\nНабор не запущен. Нажмите «Поиск» под нужными позициями или «Искать на всех свободных»."
+            text += "\n\nДля набора нажмите «Искать» под свободной позицией или «Найти игроков» для поиска на всех свободных."
         profile = None
         if searching_roles:
             try:

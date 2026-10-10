@@ -72,7 +72,9 @@ async def update_party_coordination(callback: CallbackQuery, api: OpiniaApi, set
                 storage.add_temporary_message(callback.from_user.id, callback.message.chat.id, clicked_id, 1)
         if state is not None:
             await state.clear()
-        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+        panel = storage.get_panel(callback.from_user.id)
+        screen = "party_settings" if action == "contact" and panel and panel.screen == "party_settings" else "party"
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, screen)
     except ApiError as error:
         if error.status in {403, 404, 409}:
             expire_ready_notice(storage, callback.from_user.id, token)
