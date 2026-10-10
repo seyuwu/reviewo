@@ -6,7 +6,7 @@ from random import choice
 from urllib.parse import quote
 
 from aiogram import F, Router
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -15,7 +15,7 @@ from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..services.party_search_queue import PartySearchQueue
-from ..services.search_timeout_notices import queue_solo_stop
+from ..services.search_timeout_notices import NOTICE_DELETE_CALLBACK, queue_solo_stop
 from ..services.solo_search import (
     PartyChangedDuringConfirmation,
     PartyOwnerMustResolveMembers,
@@ -31,6 +31,30 @@ from ..ui.keyboards import (
 router = Router(name="search")
 logger = logging.getLogger(__name__)
 _party_search_tip_locks: dict[int, asyncio.Lock] = {}
+
+
+@router.callback_query(F.data == NOTICE_DELETE_CALLBACK)
+async def delete_search_notice(callback: CallbackQuery, storage: BotStorage) -> None:
+    message = callback.message
+    if (message is None or message.chat.type != "private"
+            or message.chat.id != callback.from_user.id):
+        acknowledge_callback(callback, "Эта кнопка доступна только получателю сообщения.")
+        return
+    if not storage.is_temporary_message(message.chat.id, message.message_id):
+        acknowledge_callback(callback, "Сообщение уже удалено.")
+        return
+    try:
+        await callback.bot.delete_message(message.chat.id, message.message_id)
+    except TelegramBadRequest as error:
+        if "message to delete not found" not in str(error).lower():
+            acknowledge_callback(callback, "Не получилось удалить сообщение. Попробуй ещё раз.")
+            return
+    except TelegramAPIError:
+        acknowledge_callback(callback, "Не получилось удалить сообщение. Попробуй ещё раз.")
+        return
+    # Retain the lifetime notice quota; remove only this message's deletion timer.
+    storage.remove_temporary_message(message.chat.id, message.message_id)
+    acknowledge_callback(callback, "Сообщение удалено.")
 
 
 @router.callback_query(F.data == "search:looking")

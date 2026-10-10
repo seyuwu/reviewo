@@ -11,7 +11,8 @@ from .temporary_notifications import send_temporary_notification
 
 logger = logging.getLogger(__name__)
 SEARCH_TIMEOUT_SECONDS = 30 * 60
-NOTICE_TTL_SECONDS = 20
+NOTICE_TTL_SECONDS = 2 * 60
+NOTICE_DELETE_CALLBACK = "search:notice:delete"
 
 
 def is_current_search(storage, telegram_user_id: int, search: dict) -> bool:
@@ -103,6 +104,7 @@ def timeout_notice_keyboard(username: str, referral_code: str | None = None) -> 
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📣 Канал FDP", url="https://t.me/FDPcommunity")],
         [InlineKeyboardButton(text="📋 Пригласить друзей · скопировать", copy_text=CopyTextButton(text=invitation))],
+        [InlineKeyboardButton(text="🗑 Удалить сообщение", callback_data=NOTICE_DELETE_CALLBACK)],
     ])
 
 
