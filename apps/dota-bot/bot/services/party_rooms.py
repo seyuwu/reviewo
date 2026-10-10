@@ -56,6 +56,7 @@ class PartyRooms:
         async with self.mutation_lock:
             await asyncio.sleep(max(0, self.next_operation - time.monotonic()))
             self.next_operation = time.monotonic() + .2
+            kwargs.setdefault("request_timeout", 15)
             return await getattr(self.bot, method)(*args, **kwargs)
 
     async def for_user(self, user_id, slug):
@@ -69,25 +70,25 @@ class PartyRooms:
             return None
 
     async def validate_group(self, chat_id, *, owner_id=None):
-        chat = await self.bot.get_chat(chat_id)
+        chat = await self.bot.get_chat(chat_id, request_timeout=15)
         if chat.type != "supergroup":
             raise ValueError("Нужна супергруппа. В настройках группы включи «Темы», затем выключи и добавь группу ещё раз.")
         if chat.username or chat.is_forum:
             raise ValueError("Группа должна быть приватной и без тем.")
         if getattr(chat, "has_visible_history", False):
             raise ValueError("В настройках группы поставь скрытую историю для новых участников.")
-        member = await self.bot.get_chat_member(chat_id, self.bot.id)
+        member = await self.bot.get_chat_member(chat_id, self.bot.id, request_timeout=15)
         if member.status != "administrator" or not all(getattr(member, right, False) for right in REQUIRED_RIGHTS):
             raise ValueError("Боту нужны права менять информацию, удалять сообщения, блокировать, приглашать и закреплять.")
-        admins = await self.bot.get_chat_administrators(chat_id, return_bots=True)
+        admins = await self.bot.get_chat_administrators(chat_id, return_bots=True, request_timeout=15)
         if any(admin.user.is_bot and admin.user.id != self.bot.id for admin in admins):
             raise ValueError("В этой группе уже есть другой бот. Для подключения оставь одного обслуживающего бота.")
         humans = [str(admin.user.id) for admin in admins if not admin.user.is_bot]
         if owner_id is not None:
-            owner = await self.bot.get_chat_member(chat_id, owner_id)
+            owner = await self.bot.get_chat_member(chat_id, owner_id, request_timeout=15)
             if owner.status != "creator":
                 raise ValueError("Подключить группу может её владелец.")
-            if await self.bot.get_chat_member_count(chat_id) != len(admins):
+            if await self.bot.get_chat_member_count(chat_id, request_timeout=15) != len(admins):
                 raise ValueError("Перед подключением оставь только администрацию и бота. История группы должна быть пустой.")
         return chat, humans
 
@@ -150,6 +151,7 @@ class PartyRooms:
             if not room:
                 self.storage.retry_room_event(event["id"], time.time() + 1)
                 return
+            admission_started = False
             try:
                 if event["kind"] == "review":
                     await self.report(room, "review", reason=value["reason"])
@@ -159,7 +161,7 @@ class PartyRooms:
                     if not allowed.get("allowed") or allowed.get("generation") != room["generation"]:
                         await self.mutate("decline_chat_join_request", int(room["chatId"]), int(value["userId"]))
                     else:
-                        member = await self.bot.get_chat_member(int(room["chatId"]), int(value["userId"]))
+                        member = await self.bot.get_chat_member(int(room["chatId"]), int(value["userId"]), request_timeout=15)
                         if member.status == "kicked":
                             # Only lift a bot-owned removal; a moderator's ban needs manual review.
                             if value["userId"] not in room["data"].get("botBannedIds", []):
@@ -167,6 +169,8 @@ class PartyRooms:
                                 self.storage.acknowledge_room_events([event["id"]])
                                 return
                             await self.mutate("unban_chat_member", int(room["chatId"]), int(value["userId"]), only_if_banned=True)
+                        await self.report(room, "admitting", userId=value["userId"])
+                        admission_started = True
                         await self.mutate("approve_chat_join_request", int(room["chatId"]), int(value["userId"]))
                         check = await self.request("POST", f"/{room['id']}/admission", {
                             "userId": value["userId"], "inviteLink": value["inviteLink"]})
@@ -176,6 +180,10 @@ class PartyRooms:
                             await self.mutate("restrict_chat_member", int(room["chatId"]), int(value["userId"]),
                                 permissions=permissions(True), use_independent_chat_permissions=True)
                             await self.report(room, "joined", userId=value["userId"])
+            except TelegramNetworkError:
+                if admission_started:
+                    await self.report(room, "review", reason="Telegram admission outcome uncertain; inspect participants")
+                raise
             finally:
                 await self.release(room)
         self.storage.acknowledge_room_events([event["id"]])
@@ -197,11 +205,11 @@ class PartyRooms:
         data = room["data"]
         targets = list(data.get("evictIds", []))
         if room["state"] == "CLOSING":
-            targets += [user for user in data.get("presentIds", []) + data.get("seenIds", []) if user not in data.get("staffIds", [])]
+            targets += [user for user in data.get("presentIds", []) + data.get("seenIds", []) + data.get("possibleIds", []) if user not in data.get("staffIds", [])]
         for user_id in dict.fromkeys(targets):
             if user_id in room["data"].get("cleanupDoneIds", []):
                 continue
-            member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id))
+            member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=15)
             owned_ban = member.status != "kicked"
             purged_before = int(time.time())
             if owned_ban:
@@ -211,7 +219,7 @@ class PartyRooms:
                     if member.status != "left":
                         raise
                     owned_ban = False
-                member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id))
+                member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=15)
             if member.status not in {"kicked", "left"}:
                 raise ValueError("Participant removal not confirmed")
             await self.report(room, "member-removed", userId=user_id, ownedBan=owned_ban, purgedBefore=purged_before)
@@ -299,8 +307,8 @@ class PartyRooms:
             for user_id in list(room["data"].get("botBannedIds", [])):
                 await self.mutate("unban_chat_member", chat_id, int(user_id), only_if_banned=True)
                 await self.report(room, "member-unbanned", userId=user_id)
-            admins = await self.bot.get_chat_administrators(chat_id, return_bots=True)
-            if await self.bot.get_chat_member_count(chat_id) != len(admins):
+            admins = await self.bot.get_chat_administrators(chat_id, return_bots=True, request_timeout=15)
+            if await self.bot.get_chat_member_count(chat_id, request_timeout=15) != len(admins):
                 raise ValueError("Untracked participants remain in the group")
             await self.mutate("set_chat_title", chat_id, room["title"])
             await self.report(room, "closed")

@@ -19,6 +19,7 @@ type RoomData = {
   cleanupUncertain?: boolean;
   purgedThrough?: Record<string, number>;
   cleanupDoneIds?: string[];
+  possibleIds?: string[];
 };
 function dataOf(room: TelegramPartyChatRoom): RoomData {
   return { staffIds: [], links: [], presentIds: [], seenIds: [], evictIds: [], roster: [], ...(room.data as object) } as RoomData;
@@ -158,7 +159,7 @@ export class TelegramPartyRoomsService {
       const data = dataOf(room);
       const party = await tx.gameParty.findUnique({ where: { id: room.partyId }, include: partyInclude });
       if (!party || party.kind !== "PARTY" || party.mergedIntoSlug) {
-        data.evictIds = unique([...data.evictIds, ...data.presentIds.filter(id => !data.staffIds.includes(id))]);
+        data.evictIds = unique([...data.evictIds, ...data.presentIds, ...(data.possibleIds ?? [])].filter(id => !data.staffIds.includes(id)));
         return tx.telegramPartyChatRoom.update({ where: { id: room.id }, data: {
           state: "CLOSING", generation: { increment: 1 }, data: json(data)
         } });
@@ -166,7 +167,7 @@ export class TelegramPartyRoomsService {
       const roster = this.roster(party);
       const removed = data.roster.some(old => !roster.some(member => member.membershipId === old.membershipId && member.telegramId === old.telegramId));
       const allowed = new Set(roster.map(member => member.telegramId).filter(Boolean));
-      data.evictIds = unique([...data.evictIds, ...data.presentIds.filter(id => !allowed.has(id) && !data.staffIds.includes(id))]);
+      data.evictIds = unique([...data.evictIds, ...data.presentIds, ...(data.possibleIds ?? [])].filter(id => !allowed.has(id) && !data.staffIds.includes(id)));
       data.cardDirty ||= JSON.stringify(roster) !== JSON.stringify(data.roster) || data.partyName !== party.name;
       data.roster = roster; data.partyName = party.name; data.partySlug = party.slug; data.expiresAt = party.expiresAt?.toISOString() ?? null;
       const abandoned = room.assignedAt && Date.now() - room.assignedAt.getTime() >= 10 * 60_000 && data.seenIds.length === 0;
@@ -226,6 +227,7 @@ export class TelegramPartyRoomsService {
         data.links = data.links.filter(link => !link.revoked);
       } else if (input.event === "member-removed" && input.userId) {
         data.presentIds = data.presentIds.filter(id => id !== input.userId);
+        data.possibleIds = (data.possibleIds ?? []).filter(id => id !== input.userId);
         data.evictIds = data.evictIds.filter(id => id !== input.userId);
         data.cleanupDoneIds = unique([...(data.cleanupDoneIds ?? []), input.userId]);
         if (input.ownedBan) {
@@ -236,8 +238,14 @@ export class TelegramPartyRoomsService {
             roomId, senderId: input.userId, deletedAt: null, sentAt: { lt: new Date(before * 1000) }
           }, data: { deletedAt: new Date() } });
         }
+      } else if (input.event === "admitting" && input.userId) {
+        const party = room.partyId ? await tx.gameParty.findUnique({ where: { id: room.partyId }, include: partyInclude }) : null;
+        if (room.state !== "ACTIVE" || !party || party.kind !== "PARTY" || party.mergedIntoSlug || !party.expiresAt || party.expiresAt <= new Date()
+          || !this.roster(party).some(member => member.telegramId === input.userId)) throw new ForbiddenException();
+        data.possibleIds = unique([...(data.possibleIds ?? []), input.userId]);
       } else if (input.event === "joined" && input.userId) {
         data.presentIds = unique([...data.presentIds, input.userId]); data.seenIds = unique([...data.seenIds, input.userId]);
+        data.possibleIds = (data.possibleIds ?? []).filter(id => id !== input.userId);
         data.cleanupDoneIds = (data.cleanupDoneIds ?? []).filter(id => id !== input.userId);
       } else if (input.event === "member-unbanned" && input.userId) {
         data.botBannedIds = (data.botBannedIds ?? []).filter(id => id !== input.userId);
@@ -245,7 +253,7 @@ export class TelegramPartyRoomsService {
         data.cardId = input.messageId; data.cardDirty = false;
       } else if (input.event === "review") { state = "REVIEW"; data.cleanupUncertain = true; data.error = input.reason ?? "Telegram operation could not be confirmed";
       } else if (input.event === "closed") {
-        if (room.state !== "CLOSING" || data.links.some(link => !link.revoked) || data.presentIds.some(id => !data.staffIds.includes(id))) throw new ConflictException("Group cleanup incomplete");
+        if (room.state !== "CLOSING" || data.links.some(link => !link.revoked) || [...data.presentIds, ...(data.possibleIds ?? [])].some(id => !data.staffIds.includes(id))) throw new ConflictException("Group cleanup incomplete");
         if (await tx.telegramPartyChatMessage.count({ where: { roomId, deletedAt: null } })) throw new ConflictException("Messages still pending deletion");
         if (data.cleanupUncertain) return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
           state: "REVIEW", data: json({ ...data, error: "Manual confirmation of complete history cleanup required" })
@@ -288,6 +296,7 @@ export class TelegramPartyRoomsService {
       if (data.staffIds.includes(userId) || userId === botId) return room;
       if (event === "joined") {
         data.presentIds = unique([...data.presentIds, userId]); data.seenIds = unique([...data.seenIds, userId]);
+        data.possibleIds = (data.possibleIds ?? []).filter(id => id !== userId);
         data.cleanupDoneIds = (data.cleanupDoneIds ?? []).filter(id => id !== userId);
         if (!data.roster.some(member => member.telegramId === userId) || room.state !== "ACTIVE") data.evictIds = unique([...data.evictIds, userId]);
       } else {
