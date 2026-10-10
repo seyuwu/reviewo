@@ -8,6 +8,9 @@ Enable `DOTA_BOT_PARTY_ROOMS_ENABLED=true` for the main bot. An empty pool has n
 effect on registration, search, account linking, or existing website chats.
 
 In `/admin → Группы пати`, the owner selects each new empty private supergroup.
+For bulk setup, use “Подключить несколько групп” and forward the supplied
+`/fdpchat` message to the groups using Telegram's multiple-recipient forward dialog.
+Only a configured FDP administrator who owns the group can connect it this way.
 The bot checks privacy, forum mode, its management rights, the owner's creator
 status, and that only administrators and the bot are present. Use hidden history
 for new members. Use only the bot's controlled invitations for players; owner and
@@ -49,6 +52,11 @@ batch, hence before a later getUpdates call can acknowledge it. It stores IDs,
 timestamps, membership changes and join requests, not message text or media.
 The local SQLite inbox is transferred idempotently into the shared API database.
 Bot-generated group messages are journaled from their API responses as well.
+Potential participants are persisted before an approval request is sent. A lost
+Telegram approval response quarantines the room instead of hiding that user from
+later cleanup. Confirmed ban-with-revocation acknowledgments account for known
+messages from that sender; conservative timestamp boundaries leave recent races
+for ordinary individual deletion.
 
 Messages are scheduled for deletion after 12 hours. This is a bot-managed timer,
 not Telegram's native auto-delete setting: deletion requires a working bot.
