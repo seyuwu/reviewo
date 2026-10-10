@@ -210,12 +210,13 @@ async def show_registration_notice_settings(bot, api, settings, storage, state, 
     )
     if has_content:
         text += f"Удаление: через <b>{format_broadcast_duration(config['ttl_seconds'])}</b> после доставки.\n"
+        text += f"Кнопка «Поделиться»: <b>{'включена' if config['share_enabled'] else 'отключена'}</b>.\n"
         text += "Сохранённое сообщение можно посмотреть, изменить или протестировать на себе."
     else:
         text += "Сообщение пока не настроено. Можно отправить текст или фото с подписью."
     await edit_panel_content(
         bot, storage, api, settings, user_id, "admin:registration", text,
-        admin_registration_notice_keyboard(has_content, config["enabled"]), chat_id,
+        admin_registration_notice_keyboard(has_content, config["enabled"], config["share_enabled"]), chat_id,
     )
 
 
@@ -315,6 +316,10 @@ async def admin_action(
     if action == "cancel":
         await state.clear()
         await show_admin_panel(callback.bot, api, settings, storage, callback.from_user.id, chat_id)
+        return
+    if action in {"registration:share:on", "registration:share:off"}:
+        storage.set_registration_sharing(action.endswith(":on"))
+        await show_registration_notice_settings(callback.bot, api, settings, storage, state, callback.from_user.id, chat_id)
         return
     if action in {"registration", "registration:disable", "registration:remove"}:
         if action == "registration:disable":
@@ -478,7 +483,14 @@ async def admin_action(
         photo_file_id = (await state.get_data()).get("broadcast_photo_file_id")
         entities = (await state.get_data()).get("broadcast_entities")
         if (await state.get_data()).get("broadcast_target") == "registration":
-            test_message = await send_registration_message(callback.bot, callback.from_user.id, {"text": text, "photo_file_id": photo_file_id, "entities": entities or []})
+            test_message = await send_registration_message(
+                callback.bot, callback.from_user.id,
+                {
+                    "text": text, "photo_file_id": photo_file_id, "entities": entities or [],
+                    "share_enabled": storage.registration_notice_config()["share_enabled"],
+                },
+                storage,
+            )
         else:
             test_message = await send_broadcast_message(callback.bot, callback.from_user.id, text, photo_file_id, entities)
         storage.add_temporary_message(callback.from_user.id, test_message.chat.id, test_message.message_id, ttl_seconds)

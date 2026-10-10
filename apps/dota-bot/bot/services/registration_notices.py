@@ -4,20 +4,26 @@ import logging
 from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import MessageEntity
 
+from .referral_sharing import referral_share_keyboard
 from .temporary_notifications import deliver_temporary_notification
 
 logger = logging.getLogger(__name__)
 
 
-async def send_registration_message(bot, user_id, notice):
+async def send_registration_message(bot, user_id, notice, storage=None):
     entities = [MessageEntity.model_validate(value) for value in notice.get("entities", [])]
+    kwargs = {}
+    if storage is not None and notice.get("share_enabled") and storage.registration_notice_config()["share_enabled"]:
+        keyboard = await referral_share_keyboard(bot, storage, user_id)
+        if keyboard is not None:
+            kwargs["reply_markup"] = keyboard
     if notice.get("photo_file_id"):
         return await bot.send_photo(
             user_id, notice["photo_file_id"], caption=notice["text"] or None,
-            caption_entities=entities, parse_mode=None,
+            caption_entities=entities, parse_mode=None, **kwargs,
         )
     return await bot.send_message(
-        user_id, notice["text"], entities=entities, parse_mode=None, disable_web_page_preview=True,
+        user_id, notice["text"], entities=entities, parse_mode=None, disable_web_page_preview=True, **kwargs,
     )
 
 
@@ -37,7 +43,7 @@ async def registration_notice_worker(bot, storage):
                 if not storage.can_receive_broadcast(user_id):
                     storage.finish_registration_notice(user_id, "skipped")
                     return None
-                return await send_registration_message(bot, user_id, notice)
+                return await send_registration_message(bot, user_id, notice, storage)
 
             try:
                 message = await deliver_temporary_notification(storage, user_id, notice["ttl_seconds"], send)

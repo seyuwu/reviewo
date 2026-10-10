@@ -87,10 +87,11 @@ def admin_preview_keyboard(has_photo: bool = False, page: int = 0, page_count: i
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def admin_registration_notice_keyboard(has_content: bool, enabled: bool) -> InlineKeyboardMarkup:
+def admin_registration_notice_keyboard(has_content: bool, enabled: bool, share_enabled: bool = False) -> InlineKeyboardMarkup:
     rows = [[button("✏️ Изменить сообщение" if has_content else "➕ Настроить сообщение", "admin:registration:edit")]]
     if has_content:
         rows.append([button("👁 Посмотреть и настроить", "admin:registration:preview")])
+        rows.append([button("📤 Выключить «Поделиться»" if share_enabled else "📤 Включить «Поделиться»", "admin:registration:share:off" if share_enabled else "admin:registration:share:on")])
     if enabled:
         rows.append([button("⏹ Отключить отправку", "admin:registration:disable")])
     if has_content:

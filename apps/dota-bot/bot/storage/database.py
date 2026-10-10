@@ -249,17 +249,22 @@ class BotStorage:
             CREATE TABLE IF NOT EXISTS registration_notice_config (
               id INTEGER PRIMARY KEY CHECK (id=1), enabled INTEGER NOT NULL DEFAULT 0,
               text TEXT NOT NULL DEFAULT '', photo_file_id TEXT,
-              entities_json TEXT NOT NULL DEFAULT '[]', ttl_seconds INTEGER NOT NULL DEFAULT 3600
+              entities_json TEXT NOT NULL DEFAULT '[]', ttl_seconds INTEGER NOT NULL DEFAULT 3600,
+              share_enabled INTEGER NOT NULL DEFAULT 1
             );
             CREATE TABLE IF NOT EXISTS registration_notice_deliveries (
               telegram_user_id INTEGER PRIMARY KEY, status TEXT NOT NULL,
               created_at TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', photo_file_id TEXT,
               entities_json TEXT NOT NULL DEFAULT '[]', ttl_seconds INTEGER NOT NULL DEFAULT 3600,
-              retry_at TEXT, sent_at TEXT
+              retry_at TEXT, sent_at TEXT, share_enabled INTEGER NOT NULL DEFAULT 1
             );
             CREATE INDEX IF NOT EXISTS idx_registration_notice_pending
               ON registration_notice_deliveries(status, retry_at, created_at);
         """)
+        for table in ("registration_notice_config", "registration_notice_deliveries"):
+            columns = {row["name"] for row in self.connection.execute(f"PRAGMA table_info({table})")}
+            if "share_enabled" not in columns:
+                self.connection.execute(f"ALTER TABLE {table} ADD COLUMN share_enabled INTEGER NOT NULL DEFAULT 1")
         first_install = self.connection.execute(
             "INSERT OR IGNORE INTO registration_notice_config(id) VALUES(1)"
         ).rowcount == 1
@@ -286,8 +291,19 @@ class BotStorage:
             "SELECT * FROM registration_notice_config WHERE id=1"
         ).fetchone())
         row["enabled"] = bool(row["enabled"])
+        row["share_enabled"] = bool(row["share_enabled"])
         row["entities"] = json.loads(row.pop("entities_json"))
         return row
+
+    def set_registration_sharing(self, enabled: bool) -> None:
+        with self.lock:
+            self._connection().execute(
+                "UPDATE registration_notice_config SET share_enabled=? WHERE id=1", (int(enabled),)
+            )
+            self._connection().execute(
+                "UPDATE registration_notice_deliveries SET share_enabled=? WHERE status='pending'", (int(enabled),)
+            )
+            self._connection().commit()
 
     def save_registration_notice(self, text: str, ttl_seconds: int, *,
                                  photo_file_id: str | None = None, entities=None) -> None:
@@ -322,12 +338,12 @@ class BotStorage:
         with self.lock:
             self._connection().execute("""
                 INSERT OR IGNORE INTO registration_notice_deliveries
-                  (telegram_user_id,status,created_at,text,photo_file_id,entities_json,ttl_seconds)
+                  (telegram_user_id,status,created_at,text,photo_file_id,entities_json,ttl_seconds,share_enabled)
                 SELECT ?,CASE WHEN enabled=1 THEN 'pending' ELSE 'skipped' END,?,
                   CASE WHEN enabled=1 THEN text ELSE '' END,
                   CASE WHEN enabled=1 THEN photo_file_id ELSE NULL END,
                   CASE WHEN enabled=1 THEN entities_json ELSE '[]' END,
-                  ttl_seconds FROM registration_notice_config WHERE id=1
+                  ttl_seconds,share_enabled FROM registration_notice_config WHERE id=1
             """, (telegram_user_id, timestamp()))
             self._connection().commit()
 

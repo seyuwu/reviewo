@@ -37,6 +37,15 @@ profile edits and repeated registration do not trigger it. Settings and delivery
 markers persist in SQLite; delivery runs in the background. See
 [`fdp-registration-announcement.md`](../../docs/features/fdp-registration-announcement.md).
 
+The same settings include a **«Поделиться»** toggle (enabled by default). The
+welcome message's sharing button opens Telegram's normal recipient picker and
+prefills the requested plain-text invitation with the recipient's existing personal
+referral URL in place of “ссылка”. Inline mode and BotFather configuration are not
+required. The sharing URL contains the complete invitation as one encoded draft
+field, so native clients preserve the link's position without prepending a second
+copy. Only the personal referral URL carries attribution.
+Disabling sharing removes the button from future deliveries and pending notices.
+
 ## Account linking
 
 An existing user opens **Profile → Account settings → Telegram bot → Link Telegram** on the website, then sends `/link CODE` to this bot within ten minutes. The bot never asks for website passwords. New users can create a guest profile in the bot; its recovery URL is encrypted in bot storage and can be shown from the account panel.
