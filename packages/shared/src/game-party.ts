@@ -3,7 +3,7 @@ export const DOTA_PARTY_VERTICAL = "dota" as const;
 /** Allowed MMR band for an automatic party recruit, matching the invite UI. */
 export const DOTA_PARTY_RECRUIT_MMR_SPREAD = 1500;
 /** Temporary stack/party lifetime */
-export const DOTA_TEMP_PARTY_TTL_HOURS = 3;
+export const DOTA_TEMP_PARTY_TTL_HOURS = 6;
 /** How much one “extend” adds */
 export const DOTA_TEMP_PARTY_EXTEND_HOURS = 3;
 /** Hard cap from createdAt so parties cannot live forever via extend */

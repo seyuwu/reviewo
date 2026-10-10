@@ -53,6 +53,13 @@ An existing user opens **Profile → Account settings → Telegram bot → Link 
 
 ## Runtime state
 
+Temporary Dota parties start with a **6-hour** lifetime, including parties formed
+automatically by solo matchmaking. The API and website share this setting; the bot
+uses the expiry returned by the API. The deployment migration extends still-active
+parties to at least six hours from creation, preserves longer existing extensions,
+and aligns linked voice deadlines and active merged-party links. Existing Discord
+invites for extended voices are refreshed when the voice is opened again.
+
 The bot uses long polling and has no inbound port. `/data/dota_bot.db` stores encrypted auth/recovery secrets, the editable panel message ID, UI selections, automatic-match exclusions, delivered notification IDs, and temporary message deletion deadlines. Solo matching checks the shared LFG list every 5 seconds or when an action wakes it, and joins a compatible `OPEN` party on a free profile role. Starting recruitment marks every unoccupied party role as open; role assignment is randomized among the seeker's matching profile roles. API-side party notifications use a durable PostgreSQL outbox with bounded exponential retries.
 
 The active solo-search panel offers **«Поиск по всем ролям»**. `PATCH /dota/profiles/lfg/roles` with `{ "allRoles": true }` expands only the current search to positions 1–5. It preserves profile roles, the search deadline, and analytics start events. Both web and bot matchers see this preference; the player receives one compatible free position rather than a roleless seat. An atomic active-solo check rejects stale taps after expiry, stopping, or joining a party. Starting a new search restores the profile's role preferences. Tournament squads and party recruitment are unaffected.
