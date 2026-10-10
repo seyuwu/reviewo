@@ -12,8 +12,8 @@ test("party invite TTL is 3 hours", () => {
   assert.equal(DOTA_PARTY_INVITE_TTL_HOURS, 3);
 });
 
-test("temp party TTL remains 3 hours", () => {
-  assert.equal(DOTA_TEMP_PARTY_TTL_HOURS, 3);
+test("temp party TTL is 6 hours", () => {
+  assert.equal(DOTA_TEMP_PARTY_TTL_HOURS, 6);
 });
 
 test("temp party extend and max lifetime stay aligned", () => {
