@@ -15,6 +15,7 @@ export interface EnvironmentVariables {
   TRUST_PROXY_HOPS: number;
   TELEGRAM_BOT_API_SECRET?: string;
   DOTA_BOT_TOKEN?: string;
+  DOTA_BOT_ADMIN_IDS?: string;
 }
 
 const DEFAULT_API_PORT = 3000;
@@ -67,7 +68,9 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     REPUTATION_ENGINE_ENABLED: reputationEngineEnabled,
     TRUST_PROXY_HOPS: trustProxyHops,
     ...(telegramBotApiSecret ? { TELEGRAM_BOT_API_SECRET: telegramBotApiSecret } : {}),
-    ...(dotaBotToken ? { DOTA_BOT_TOKEN: dotaBotToken } : {})
+    ...(dotaBotToken ? { DOTA_BOT_TOKEN: dotaBotToken } : {}),
+    ...(typeof config["DOTA_BOT_ADMIN_IDS"] === "string" && config["DOTA_BOT_ADMIN_IDS"].trim()
+      ? { DOTA_BOT_ADMIN_IDS: config["DOTA_BOT_ADMIN_IDS"].trim() } : {})
   };
 }
 

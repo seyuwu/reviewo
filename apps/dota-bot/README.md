@@ -27,6 +27,13 @@ The API migration `20261005020000_party_manual_rejoin` must be applied before ru
 
 The API migration is applied by the normal production API startup command. For development, run the repository database migration command before starting the bot.
 
+## Private Telegram party groups
+
+`/admin → Группы пати` manages a pool of existing private supergroups, their
+working limit and draining/removal. The bot approves party members by Telegram ID,
+rotates invitations on departure, and cleans temporary groups before reuse.
+See [setup and operating limits](../../docs/features/fdp-telegram-party-groups.md).
+
 ## First-registration announcement
 
 In `/admin`, **«Сообщение после регистрации»** configures an optional text or photo

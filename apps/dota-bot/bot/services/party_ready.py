@@ -40,6 +40,13 @@ async def open_chat_button(api, user_id, site_url, slug, token, *, force=False):
     cached = _links.get(key)
     if not force and cached and cached[1] > time.time():
         return cached[0]
+    pool = getattr(api, "party_rooms", None)
+    if pool and pool.enabled:
+        room = await pool.for_user(user_id, slug)
+        if room and room.get("inviteLink"):
+            item = button_url("💬 Открыть чат в Telegram", room["inviteLink"])
+            _links[key] = (item, time.time() + 8 * 60)
+            return item
     next_path = f"/dota/teams/{slug}#party-chat"
     try:
         ticket = await api.create_web_access_ticket(user_id)
@@ -51,6 +58,32 @@ async def open_chat_button(api, user_id, site_url, slug, token, *, force=False):
     # Login tickets remain short-lived and single-use. Never persist them in a notice.
     _links[key] = (item, time.time() + 8 * 60)
     return item
+
+
+async def keep_ready_room_link(bot, api, storage, user_id, token):
+    pool = getattr(api, "party_rooms", None)
+    notice = storage.get_choice(user_id, notice_key(token), 0)
+    if not pool or not pool.enabled or not isinstance(notice, dict) or not notice.get("messageId"):
+        return False
+    room = await pool.for_user(user_id, notice["partySlug"])
+    if not room or not room.get("inviteLink"):
+        return False
+    try:
+        await bot.edit_message_text("✅ <b>Готовность подтверждена.</b>\n\nОткрой чат пати в Telegram и поздоровайся с игроками.",
+            chat_id=notice["chatId"], message_id=notice["messageId"], parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[button_url("💬 Открыть чат в Telegram", room["inviteLink"])]]))
+    except TelegramAPIError:
+        return False
+    if notice.get("reminderMessageId"):
+        storage.add_temporary_message(user_id, notice["chatId"], notice["reminderMessageId"], 1)
+    storage.set_choices(user_id, notice_key(token), [])
+    _links.pop((user_id, token), None)
+    storage.set_choices(user_id, "party_room_ready_link:" + notice["partyId"], [{
+        "messageId": notice["messageId"], "url": room["inviteLink"], "chatId": notice["chatId"]
+    }])
+    expiry = datetime.fromisoformat(notice["expiresAt"])
+    storage.add_temporary_message(user_id, notice["chatId"], notice["messageId"], max(1, int((expiry - datetime.now(UTC)).total_seconds())))
+    return True
 
 
 async def ready_notice_markup(api, user_id, site_url, coordination, token, *, force_link=False):

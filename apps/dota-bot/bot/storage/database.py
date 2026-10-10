@@ -39,6 +39,19 @@ class BotStorage:
         Path(self.database_path).parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(self.database_path, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
+        self.connection.executescript("""
+          CREATE TABLE IF NOT EXISTS party_room_inbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, bot_id INTEGER NOT NULL,
+            event_key TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending', retry_at REAL NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL, UNIQUE(bot_id,event_key)
+          );
+          CREATE INDEX IF NOT EXISTS idx_party_room_inbox_jobs ON party_room_inbox(bot_id,status,retry_at,id);
+          CREATE TABLE IF NOT EXISTS party_room_cursor (
+            bot_id INTEGER PRIMARY KEY, update_id INTEGER NOT NULL DEFAULT 0,
+            observed_at REAL NOT NULL DEFAULT 0, rooms TEXT NOT NULL DEFAULT '[]'
+          );
+        """)
         self.connection.execute("PRAGMA journal_mode=WAL")
         self.connection.execute("PRAGMA foreign_keys=ON")
         self.connection.executescript(
@@ -385,6 +398,86 @@ class BotStorage:
                     UPDATE registration_notice_deliveries SET text='',photo_file_id=NULL,entities_json='[]'
                     WHERE telegram_user_id=? AND status=?
                 """, (telegram_user_id, status))
+            self._connection().commit()
+
+    def saved_party_rooms(self, bot_id: int) -> list[dict]:
+        row = self._connection().execute("SELECT rooms FROM party_room_cursor WHERE bot_id=?", (bot_id,)).fetchone()
+        return json.loads(row["rooms"]) if row else []
+
+    def room_last_observed_at(self, bot_id: int) -> float:
+        row = self._connection().execute("SELECT observed_at FROM party_room_cursor WHERE bot_id=?", (bot_id,)).fetchone()
+        return row["observed_at"] if row else 0
+
+    def journal_room_review(self, bot_id: int, chat_id: int, event_key: str, reason: str) -> None:
+        import time
+        with self.lock:
+            self._connection().execute("""INSERT OR IGNORE INTO party_room_inbox(bot_id,event_key,kind,payload,created_at)
+              VALUES(?,?,?,?,?)""", (bot_id, event_key, "review", json.dumps({"chatId": str(chat_id), "reason": reason}), time.time()))
+            self._connection().commit()
+
+    def save_party_rooms(self, bot_id: int, rooms: list[dict]) -> None:
+        with self.lock:
+            self._connection().execute("""INSERT INTO party_room_cursor(bot_id,rooms) VALUES(?,?)
+              ON CONFLICT(bot_id) DO UPDATE SET rooms=excluded.rooms""", (bot_id, json.dumps(rooms)))
+            self._connection().commit()
+
+    def journal_room_updates(self, bot_id: int, updates: list[tuple[int, list[dict]]]) -> None:
+        import time
+        now = time.time()
+        with self.lock:
+            connection = self._connection()
+            row = connection.execute("SELECT update_id,observed_at FROM party_room_cursor WHERE bot_id=?", (bot_id,)).fetchone()
+            last = row["update_id"] if row and now - row["observed_at"] < 7 * 86400 else 0
+            try:
+                for update_id, events in updates:
+                    if update_id <= last:
+                        continue
+                    for index, event in enumerate(events):
+                        connection.execute("""INSERT OR IGNORE INTO party_room_inbox(bot_id,event_key,kind,payload,created_at)
+                          VALUES(?,?,?,?,?)""", (bot_id, f"update:{update_id}:{index}", event["kind"], json.dumps(event["payload"]), now))
+                    last = max(last, update_id)
+                connection.execute("""INSERT INTO party_room_cursor(bot_id,update_id,observed_at) VALUES(?,?,?)
+                  ON CONFLICT(bot_id) DO UPDATE SET update_id=excluded.update_id,observed_at=excluded.observed_at""", (bot_id, last, now))
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+
+    def journal_room_message(self, bot_id: int, chat_id: int, message_id: int, sent_at: int) -> None:
+        import time
+        payload = {"chatId": str(chat_id), "messageId": message_id, "sentAt": sent_at, "service": False}
+        with self.lock:
+            self._connection().execute("""INSERT OR IGNORE INTO party_room_inbox(bot_id,event_key,kind,payload,created_at)
+              VALUES(?,?,?,?,?)""", (bot_id, f"out:{chat_id}:{message_id}", "message", json.dumps(payload), time.time()))
+            self._connection().commit()
+
+    def pending_room_events(self, bot_id: int, limit: int = 250) -> list[dict]:
+        import time
+        return [{**dict(row), "payload": json.loads(row["payload"])} for row in self._connection().execute(
+            "SELECT * FROM party_room_inbox WHERE bot_id=? AND status='pending' AND retry_at<=? ORDER BY id LIMIT ?",
+            (bot_id, time.time(), limit),
+        ).fetchall()]
+
+    def pending_room_messages(self, bot_id: int) -> list[dict]:
+        return [{**dict(row), "payload": json.loads(row["payload"])} for row in self._connection().execute(
+            "SELECT * FROM party_room_inbox WHERE bot_id=? AND status='pending' AND kind='message' ORDER BY id LIMIT 250",
+            (bot_id,),
+        ).fetchall()]
+
+    def acknowledge_room_events(self, event_ids: list[int]) -> None:
+        with self.lock:
+            self._connection().executemany("UPDATE party_room_inbox SET status='done' WHERE id=?", [(value,) for value in event_ids])
+            self._connection().commit()
+
+    def retry_room_event(self, event_id: int, retry_at: float) -> None:
+        with self.lock:
+            self._connection().execute("UPDATE party_room_inbox SET retry_at=? WHERE id=?", (retry_at, event_id))
+            self._connection().commit()
+
+    def prune_room_events(self) -> None:
+        import time
+        with self.lock:
+            self._connection().execute("DELETE FROM party_room_inbox WHERE status='done' AND created_at<?", (time.time() - 900,))
             self._connection().commit()
 
     def save_session(

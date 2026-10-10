@@ -15,6 +15,8 @@ class Settings:
     database_path: str
     telegram_proxy: str | None
     admin_ids: frozenset[int]
+    party_rooms_enabled: bool = False
+    room_worker_only: bool = False
 
 
 def load_settings() -> Settings:
@@ -43,6 +45,8 @@ def load_settings() -> Settings:
         or "/data/dota_bot.db",
         telegram_proxy=os.getenv("TELEGRAM_PROXY", "").strip() or None,
         admin_ids=parse_admin_ids(os.getenv("DOTA_BOT_ADMIN_IDS", "")),
+        party_rooms_enabled=os.getenv("DOTA_BOT_PARTY_ROOMS_ENABLED", "").strip().lower() in {"1", "true", "yes"},
+        room_worker_only=os.getenv("DOTA_BOT_ROOM_WORKER_ONLY", "").strip().lower() in {"1", "true", "yes"},
     )
 
 

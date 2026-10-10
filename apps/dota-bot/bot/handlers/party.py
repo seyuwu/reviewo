@@ -17,7 +17,7 @@ from ..services.temporary_notifications import send_temporary_notification
 from ..ui.keyboards import back_keyboard, invite_keyboard
 from ..ui.formatters import notification_text
 from ..services.auto_matcher import remember_declined_target
-from ..services.party_ready import expire_ready_notice
+from ..services.party_ready import expire_ready_notice, keep_ready_room_link
 from ..services.party_coordination import own_member, read_coordination
 
 router = Router(name="party")
@@ -65,10 +65,12 @@ async def update_party_coordination(callback: CallbackQuery, api: OpiniaApi, set
             if self_member is None or bool(self_member.get("readyAt")) != (toggle == "on"):
                 raise ApiError("Не удалось подтвердить готовность", 503)
         if action == "ready" and toggle == "on":
-            expire_ready_notice(storage, callback.from_user.id, token)
+            kept_chat = await keep_ready_room_link(callback.bot, api, storage, callback.from_user.id, token)
+            if not kept_chat:
+                expire_ready_notice(storage, callback.from_user.id, token)
             panel = storage.get_panel(callback.from_user.id)
             clicked_id = getattr(callback.message, "message_id", None)
-            if isinstance(clicked_id, int) and (panel is None or panel.message_id != clicked_id):
+            if not kept_chat and isinstance(clicked_id, int) and (panel is None or panel.message_id != clicked_id):
                 storage.add_temporary_message(callback.from_user.id, callback.message.chat.id, clicked_id, 1)
         if state is not None:
             await state.clear()

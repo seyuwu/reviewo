@@ -1216,6 +1216,59 @@ model GameParty {
   @@schema("social")
 }
 
+// Pool assignments outlive deleted parties so their Telegram groups can be cleaned.
+model TelegramPartyChatRoom {
+  id String @id @default(uuid()) @db.Uuid
+  chatId String @unique @map("chat_id") @db.VarChar(32)
+  botId String @map("bot_id") @db.VarChar(32)
+  title String @db.VarChar(128)
+  enabled Boolean @default(true)
+  removeWhenFree Boolean @default(false) @map("remove_when_free")
+  state String @default("FREE") @db.VarChar(24)
+  partyId String? @unique @map("party_id") @db.Uuid
+  generation Int @default(1)
+  data Json @default("{}")
+  leaseToken String? @map("lease_token") @db.Uuid
+  leaseUntil DateTime? @map("lease_until") @db.Timestamptz(6)
+  retryAt DateTime? @map("retry_at") @db.Timestamptz(6)
+  assignedAt DateTime? @map("assigned_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  messages TelegramPartyChatMessage[]
+  @@index([botId, state, retryAt])
+  @@map("telegram_party_chat_rooms")
+  @@schema("social")
+}
+
+model TelegramPartyChatPool {
+  id String @id @default("default") @db.VarChar(32)
+  capacity Int @default(10)
+  @@map("telegram_party_chat_pool")
+  @@schema("social")
+}
+
+model TelegramPartyChatWorker {
+  botId String @id @map("bot_id") @db.VarChar(32)
+  heartbeatAt DateTime @map("heartbeat_at") @db.Timestamptz(6)
+  @@map("telegram_party_chat_workers")
+  @@schema("social")
+}
+
+model TelegramPartyChatMessage {
+  roomId String @map("room_id") @db.Uuid
+  messageId Int @map("message_id")
+  sentAt DateTime @map("sent_at") @db.Timestamptz(6)
+  senderId String? @map("sender_id") @db.VarChar(32)
+  generation Int
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  room TelegramPartyChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  @@id([roomId, messageId])
+  @@index([roomId, deletedAt, sentAt])
+  @@index([roomId, senderId, deletedAt])
+  @@map("telegram_party_chat_messages")
+  @@schema("social")
+}
+
 model DotaTournament {
   id                    String               @id @default(uuid()) @db.Uuid
   slug                  String               @unique @db.VarChar(120)

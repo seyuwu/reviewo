@@ -10,6 +10,8 @@ import { UsersModule } from "../users/users.module.js";
 import { PartiesController } from "./controllers/parties.controller.js";
 import { AdminPartiesController } from "./controllers/admin-parties.controller.js";
 import { AdminPartiesService } from "./services/admin-parties.service.js";
+import { TelegramPartyRoomsController } from "./controllers/telegram-party-rooms.controller.js";
+import { TelegramPartyRoomsService } from "./services/telegram-party-rooms.service.js";
 import { FriendshipsModule } from "./friendships.module.js";
 import { TelegramBotModule } from "../telegram/telegram-bot.module.js";
 import { GamePartyGateway } from "./gateways/game-party.gateway.js";
@@ -21,7 +23,7 @@ import { PartyRealtimeService } from "./services/party-realtime.service.js";
 import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
 
 @Module({
-  controllers: [PartiesController, AdminPartiesController],
+  controllers: [PartiesController, AdminPartiesController, TelegramPartyRoomsController],
   exports: [
     GamePartiesService,
     GamePartyGateway,
@@ -49,6 +51,7 @@ import { PARTY_REALTIME_PUBLISHER } from "./party-realtime.types.js";
     GamePartyGateway,
     PartyRealtimeService,
     PartyCoordinationService,
+    TelegramPartyRoomsService,
     {
       provide: PARTY_REALTIME_PUBLISHER,
       useExisting: PartyRealtimeService

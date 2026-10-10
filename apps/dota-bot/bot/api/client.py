@@ -23,13 +23,34 @@ class OpiniaApi:
         self.storage = storage
         self.session: aiohttp.ClientSession | None = None
         self.refresh_locks: dict[int, asyncio.Lock] = {}
+        self.party_rooms = None
+        self.rooms_session: aiohttp.ClientSession | None = None
+
+    async def rooms_request(self, method: str, path: str, body: dict | None = None):
+        if self.rooms_session is None:
+            raise ApiError("Telegram group service unavailable")
+        try:
+            async with self.rooms_session.request(method,
+                self.settings.api_base_url + "/social/telegram-party-rooms" + path,
+                json=body, headers={"X-Telegram-Bot-Secret": self.settings.api_secret}) as response:
+                raw = await response.text()
+                data = json.loads(raw) if raw else None
+                if response.status >= 400:
+                    raise ApiError(extract_error_message(data) or "Group operation failed", response.status)
+                return data
+        except (aiohttp.ClientError, TimeoutError, json.JSONDecodeError) as error:
+            raise ApiError("Telegram group service unavailable") from error
 
     async def start(self) -> None:
         timeout = aiohttp.ClientTimeout(total=15, connect=5)
         connector = aiohttp.TCPConnector(ssl=True)
         self.session = aiohttp.ClientSession(timeout=timeout, connector=connector)
+        self.rooms_session = aiohttp.ClientSession(timeout=timeout, connector=aiohttp.TCPConnector(ssl=True, limit=4))
 
     async def close(self) -> None:
+        if self.rooms_session is not None:
+            await self.rooms_session.close()
+            self.rooms_session = None
         if self.session is not None:
             await self.session.close()
             self.session = None

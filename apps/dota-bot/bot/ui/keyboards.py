@@ -48,6 +48,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             [button("✉️ Создать рассылку", "admin:broadcast:new")],
             [button("👤 Написать игроку", "admin:broadcast:user")],
             [button("👋 Сообщение после регистрации", "admin:registration")],
+            [button("💬 Группы пати", "roomadmin:list:0")],
             [button("🔄 Обновить статистику", "admin:refresh")],
         ]
     )
@@ -242,7 +243,11 @@ def party_keyboard(
     if token and self_member:
         if not self_member.get("readyAt"):
             primary_actions.append(button("✅ Готов играть", f"party:ready:{token}:on"))
-    if site_url and party.get("slug"):
+    if party.get("telegramRoomUrl"):
+        primary_actions.append(button_url("💬 Чат пати в Telegram", party["telegramRoomUrl"]))
+    elif party.get("telegramRoomPending") and token:
+        primary_actions.append(button("💬 Подготовить чат пати", f"roomopen:{token}"))
+    elif site_url and party.get("slug"):
         if web_access_url:
             primary_actions.append(button_url("💬 Чат и Discord", web_access_url))
         else:
@@ -261,8 +266,10 @@ def party_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def party_settings_keyboard(party: dict, searching_roles: set[str]) -> InlineKeyboardMarkup:
+def party_settings_keyboard(party: dict, searching_roles: set[str], website_url: str | None = None) -> InlineKeyboardMarkup:
     rows = []
+    if website_url:
+        rows.append([button_url("🌐 Чат на сайте и Discord", website_url)])
     token = party.get("coordinationToken")
     self_member = next((member for member in party.get("members", []) if member.get("isSelf")), None)
     if token and self_member and self_member.get("telegramUsername") and not self_member.get("telegramContactPublic"):
