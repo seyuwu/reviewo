@@ -167,9 +167,23 @@ than 48 hours. Polling outages of 20 hours or longer conservatively mark groups
 for review, before Telegram's 24-hour update retention can lose metadata. Transport
 uncertainty, lost rights, changed group IDs/admin lists, old messages and incomplete
 cleanup also quarantine a group. Automated retries do not erase uncertainty.
+Read-only Telegram network failures and connection-establishment failures before
+a write was sent instead schedule automatic retries after 5–30 seconds. Confirmed
+configuration errors or rejected operations still stop allocations, but do not
+invent history uncertainty: after correcting the issue, successful retry cleanup
+can release the group. Existing history uncertainty always survives those retries.
 The owner may manually clear history for everyone, remove players, and explicitly
 confirm cleanup through the administrator UI. This is a human confirmation, not
 a claim that the bot inspected the entire history.
+
+The main bot stores each administrator's review alert message ID and sends only
+one alert per unresolved review, across restarts and repeated cleanup attempts.
+Alerts remain while cleanup is in progress. Once the room is released or removed,
+all tracked alerts for that room are queued for deletion in administrators' private
+chats. The delivery journal retains IDs before the sending coroutine resumes.
+Legacy alerts without saved IDs are registered on their review-button click and
+deleted if the review has already been resolved; Telegram cannot enumerate these
+older private messages for automatic recovery.
 
 ## Multiple bots and core-flow isolation
 

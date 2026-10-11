@@ -1,6 +1,7 @@
 from aiogram.client.session.middlewares.base import BaseRequestMiddleware
 from aiogram.types import Message
 import time
+from uuid import UUID
 
 
 def member_present(member):
@@ -66,4 +67,16 @@ class PartyRoomJournal(BaseRequestMiddleware):
                 self.rooms.wakeup.set()
         elif isinstance(result, Message) and result.chat.id in self.rooms.by_chat and result.message_id:
             self.rooms.storage.journal_room_message(bot.id, result.chat.id, result.message_id, int(result.date.timestamp()))
+        elif isinstance(result, Message) and result.chat.id in self.rooms.settings.admin_ids and result.reply_markup:
+            if (result.text or "").startswith("⚠️ Нужна проверка чата пати"):
+                for row in result.reply_markup.inline_keyboard:
+                    for button in row:
+                        if (button.callback_data or "").startswith("roomadmin:view:"):
+                            room_id = button.callback_data.split(":", 2)[2]
+                            try:
+                                UUID(room_id)
+                            except ValueError:
+                                continue
+                            # Persist the returned ID before the sender coroutine resumes.
+                            self.rooms.storage.track_room_admin_alert(result.chat.id, room_id, result.chat.id, result.message_id)
         return result

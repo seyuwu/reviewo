@@ -138,8 +138,13 @@ async def room_admin_action(callback: CallbackQuery, state: FSMContext, api, set
             await show_rooms(callback.bot, api, settings, storage, user_id, user_id, int(parts[2]) if len(parts) > 2 else 0)
         elif action == "view":
             await state.clear()
+            if callback.message and callback.message.chat.id == user_id and (callback.message.text or "").startswith("⚠️ Нужна проверка чата пати"):
+                # Older alerts did not retain message IDs; learn them from an admin's click.
+                storage.track_room_admin_alert(user_id, parts[2], user_id, callback.message.message_id)
             snapshot = await admin_snapshot(api, callback.bot, user_id)
             room = next((room for room in snapshot["rooms"] if room["id"] == parts[2]), None)
+            if not room or room["state"] not in {"REVIEW", "CLOSING"}:
+                api.party_rooms.resolve_admin_alerts(parts[2])
             if not room:
                 await show_rooms(callback.bot, api, settings, storage, user_id, user_id, notice="Группа уже удалена из списка.")
                 return
@@ -191,8 +196,11 @@ async def room_admin_action(callback: CallbackQuery, state: FSMContext, api, set
                     payload.update(action="confirm-clean", staffIds=staff)
                 finally:
                     await pool.release(room)
-            await api.rooms_request("POST", f"/admin/{parts[2]}", payload)
+            result = await api.rooms_request("POST", f"/admin/{parts[2]}", payload)
+            if isinstance(result, dict) and result.get("state") == "FREE":
+                api.party_rooms.resolve_admin_alerts(parts[2])
             await show_rooms(callback.bot, api, settings, storage, user_id, user_id, notice="Сохранено.")
+            api.party_rooms.sync_after = 0
             api.party_rooms.wakeup.set()
     except ValueError as error:
         await callback.message.answer(str(error))

@@ -1316,6 +1316,30 @@ class BotStorage:
         except (IndexError, TypeError, json.JSONDecodeError):
             return None
 
+    def track_room_admin_alert(self, user_id: int, room_id: str, chat_id: int, message_id: int) -> None:
+        if chat_id != user_id or message_id <= 0:
+            return
+        self.set_choices(user_id, f"party_room_alert_message:{room_id}:{message_id}",
+            [{"messageId": message_id}])
+
+    def room_admin_alert_sources(self) -> list[dict]:
+        rows = self._connection().execute("""SELECT telegram_user_id,kind,items_json FROM callback_choices
+          WHERE items_json <> '[]' AND (kind LIKE 'party_room_alert:%' OR kind LIKE 'party_room_alert_message:%')""").fetchall()
+        result = []
+        for row in rows:
+            try:
+                items = json.loads(row["items_json"])
+                if not isinstance(items, list) or not items or not isinstance(items[0], dict):
+                    continue
+                message_id = items[0].get("messageId")
+                result.append({"userId": row["telegram_user_id"], "kind": row["kind"],
+                    "roomId": row["kind"].split(":")[1],
+                    "reviewId": items[0].get("reviewId"),
+                    "messageId": message_id if isinstance(message_id, int) and message_id > 0 else None})
+            except (IndexError, TypeError, json.JSONDecodeError):
+                continue
+        return result
+
 
     def party_ready_notices(self) -> list[dict]:
         rows = self._connection().execute(
@@ -1452,6 +1476,8 @@ class BotStorage:
             if row and chat_id == row["telegram_user_id"]:
                 self._connection().execute("DELETE FROM callback_choices WHERE telegram_user_id=? AND kind LIKE ?",
                     (row["telegram_user_id"], f"party_notice_message:%:{message_id}"))
+                self._connection().execute("DELETE FROM callback_choices WHERE telegram_user_id=? AND kind LIKE ? AND items_json='[]'",
+                    (row["telegram_user_id"], f"party_room_alert_message:%:{message_id}"))
             self._connection().execute(
                 "DELETE FROM temporary_messages WHERE chat_id = ? AND message_id = ?",
                 (chat_id, message_id),

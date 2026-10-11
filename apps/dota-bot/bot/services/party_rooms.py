@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 REQUIRED_RIGHTS = ("can_change_info", "can_delete_messages", "can_restrict_members", "can_invite_users", "can_pin_messages")
 
 
+class RoomReadUnavailable(TelegramNetworkError):
+    """A failed read cannot make the group's history uncertain."""
+
+
+class RoomConfigurationError(ValueError):
+    """A confirmed configuration problem, without an uncertain Telegram write."""
+
+
 def permissions(enabled):
     return ChatPermissions(can_send_messages=enabled, can_send_audios=enabled, can_send_documents=enabled,
         can_send_photos=enabled, can_send_videos=enabled, can_send_video_notes=enabled, can_send_voice_notes=enabled,
@@ -44,6 +52,7 @@ class PartyRooms:
         self.discord_cooldowns = {}
         self.discord_chat_requests = {}
         self.alert_queue = {}
+        self.transient_attempts = {}
         self.private_after = {}
         self.registration_results = {}
         self.registration_after = {}
@@ -136,6 +145,13 @@ class PartyRooms:
                 return await self.bot(method, **kwargs)
             return await getattr(self.bot, method)(*args, **kwargs)
 
+    async def read(self, method, *args, **kwargs):
+        kwargs.setdefault("request_timeout", 15)
+        try:
+            return await getattr(self.bot, method)(*args, **kwargs)
+        except TelegramNetworkError as error:
+            raise RoomReadUnavailable(method=error.method, message="Telegram group read unavailable") from error
+
     async def for_user(self, user_id, slug):
         if not self.enabled:
             return None
@@ -155,25 +171,25 @@ class PartyRooms:
             return None
 
     async def validate_group(self, chat_id, *, owner_id=None):
-        chat = await self.bot.get_chat(chat_id, request_timeout=15)
+        chat = await self.read("get_chat", chat_id)
         if chat.type != "supergroup":
-            raise ValueError("Нужна супергруппа. В настройках группы включи «Темы», затем выключи и добавь группу ещё раз.")
+            raise RoomConfigurationError("Нужна супергруппа. В настройках группы включи «Темы», затем выключи и добавь группу ещё раз.")
         if chat.username or chat.is_forum:
-            raise ValueError("Группа должна быть приватной и без тем.")
+            raise RoomConfigurationError("Группа должна быть приватной и без тем.")
         if getattr(chat, "has_visible_history", False):
-            raise ValueError("В настройках группы поставь скрытую историю для новых участников.")
-        member = await self.bot.get_chat_member(chat_id, self.bot.id, request_timeout=15)
+            raise RoomConfigurationError("В настройках группы поставь скрытую историю для новых участников.")
+        member = await self.read("get_chat_member", chat_id, self.bot.id)
         if member.status != "administrator" or not all(getattr(member, right, False) for right in REQUIRED_RIGHTS):
-            raise ValueError("Боту нужны права менять информацию, удалять сообщения, блокировать, приглашать и закреплять.")
-        admins = await self.bot.get_chat_administrators(chat_id, return_bots=True, request_timeout=15)
+            raise RoomConfigurationError("Боту нужны права менять информацию, удалять сообщения, блокировать, приглашать и закреплять.")
+        admins = await self.read("get_chat_administrators", chat_id, return_bots=True)
         if any(admin.user.is_bot and admin.user.id != self.bot.id for admin in admins):
-            raise ValueError("В этой группе уже есть другой бот. Для подключения оставь одного обслуживающего бота.")
+            raise RoomConfigurationError("В этой группе уже есть другой бот. Для подключения оставь одного обслуживающего бота.")
         humans = [str(admin.user.id) for admin in admins if not admin.user.is_bot]
         if owner_id is not None:
-            owner = await self.bot.get_chat_member(chat_id, owner_id, request_timeout=15)
+            owner = await self.read("get_chat_member", chat_id, owner_id)
             if owner.status != "creator":
                 raise ValueError("Подключить группу может её владелец.")
-            if await self.bot.get_chat_member_count(chat_id, request_timeout=15) != len(admins):
+            if await self.read("get_chat_member_count", chat_id) != len(admins):
                 raise ValueError("Перед подключением оставь только администрацию и бота. История группы должна быть пустой.")
         return chat, humans
 
@@ -191,11 +207,22 @@ class PartyRooms:
         self.storage.save_party_rooms(self.bot.id, [{"id": room["id"], "chatId": room["chatId"], "botId": room["botId"]} for room in rows])
         notices = rows if getattr(self.settings, "room_worker_only", False) else await self.request("GET", "/notices")
         self.notice_rooms = {room["id"]: room for room in notices}
+        if not getattr(self.settings, "room_worker_only", False):
+            for source in self.storage.room_admin_alert_sources():
+                current = self.notice_rooms.get(source["roomId"])
+                new_review = (source["kind"].startswith("party_room_alert:") and source.get("reviewId") and current
+                    and current.get("data", {}).get("reviewId") and source["reviewId"] != current["data"]["reviewId"])
+                if not current or current["state"] not in {"REVIEW", "CLOSING"} or new_review:
+                    self.resolve_admin_alerts(source["roomId"])
+            for key in list(self.alert_queue):
+                if self.notice_rooms.get(key[1], {}).get("state") != "REVIEW":
+                    self.alert_queue.pop(key, None)
         for room in notices:
             old = previous.get(room["id"], {})
-            if not getattr(self.settings, "room_worker_only", False) and room["state"] == "REVIEW" and old.get("state") != "REVIEW":
+            if not getattr(self.settings, "room_worker_only", False) and room["state"] == "REVIEW":
                 for admin_id in self.settings.admin_ids:
-                    self.alert_queue[(admin_id, room["id"])] = room
+                    if not self.storage.get_choice(admin_id, "party_room_alert:" + room["id"], 0):
+                        self.alert_queue[(admin_id, room["id"])] = room
             if not getattr(self.settings, "room_worker_only", False) and room.get("partyId"):
                 roster = room["data"].get("roster", [])
                 previous_roster = old.get("data", {}).get("roster", [])
@@ -264,7 +291,7 @@ class PartyRooms:
                         await self.answer_join(room, value, False)
                     else:
                         if not value.get("queryId"):
-                            member = await self.bot.get_chat_member(int(room["chatId"]), int(value["userId"]), request_timeout=15)
+                            member = await self.read("get_chat_member", int(room["chatId"]), int(value["userId"]))
                             if member.status == "kicked":
                                 # Only lift a bot-owned removal; a moderator's ban needs manual review.
                                 eligible = await self.request("POST", f"/{room['id']}/eligible", {
@@ -327,7 +354,7 @@ class PartyRooms:
             await self.remove_member(room, user_id)
 
     async def remove_member(self, room, user_id):
-        member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=15)
+        member = await self.read("get_chat_member", int(room["chatId"]), int(user_id))
         owned_ban = member.status != "kicked"
         purged_before = int(time.time())
         if owned_ban:
@@ -337,7 +364,11 @@ class PartyRooms:
                 if member.status != "left":
                     raise
                 owned_ban = False
-            member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=15)
+            # Until ban ownership is persisted, preserve the conservative recovery path.
+            try:
+                member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=15)
+            except TelegramNetworkError as error:
+                raise ValueError("Participant removal verification interrupted before ownership was saved") from error
         if member.status not in {"kicked", "left"}:
             raise ValueError("Participant removal not confirmed")
         await self.report(room, "member-removed", userId=user_id, ownedBan=owned_ban, purgedBefore=purged_before)
@@ -429,7 +460,7 @@ class PartyRooms:
         if room["state"] != "ACTIVE" or time.time() - self.validated_at.get(room["id"], 0) >= 120:
             _, staff = await self.validate_group(chat_id)
             if set(staff) != set(room["data"].get("staffIds", [])):
-                raise ValueError("Administrator list changed; manual review required")
+                raise RoomConfigurationError("Administrator list changed; manual review required")
             self.validated_at[room["id"]] = time.time()
         if room["state"] in {"PREPARING", "ROTATING", "CLOSING"}:
             await self.mutate("set_chat_permissions", chat_id, permissions(False), use_independent_chat_permissions=True)
@@ -449,8 +480,8 @@ class PartyRooms:
                     continue
                 await self.mutate("unban_chat_member", chat_id, int(user_id), only_if_banned=True)
                 await self.report(room, "member-unbanned", userId=user_id)
-            admins = await self.bot.get_chat_administrators(chat_id, return_bots=True, request_timeout=15)
-            if await self.bot.get_chat_member_count(chat_id, request_timeout=15) != len(admins):
+            admins = await self.read("get_chat_administrators", chat_id, return_bots=True)
+            if await self.read("get_chat_member_count", chat_id) != len(admins):
                 raise ValueError("Untracked participants remain in the group")
             await self.mutate("set_chat_title", chat_id, room["title"])
             await self.report(room, "closed")
@@ -476,7 +507,11 @@ class PartyRooms:
                 self.sync_after = 0
                 self.wakeup.set()
             except Exception:
-                await self.mutate("revoke_chat_invite_link", chat_id, invite.invite_link)
+                try:
+                    await self.mutate("revoke_chat_invite_link", chat_id, invite.invite_link)
+                except Exception as error:
+                    # This new invitation is not in the API journal yet.
+                    raise ValueError("New invitation cleanup could not be confirmed") from error
                 raise
             # Publish access before the roster card and routine maintenance.
             return
@@ -585,12 +620,36 @@ class PartyRooms:
     async def send_admin_alert(self, user_id, room):
         key = "party_room_alert:" + room["id"]
         old = self.storage.get_choice(user_id, key, 0)
-        if isinstance(old, dict) and old.get("generation") == room["generation"]:
+        if isinstance(old, dict):
             return
+        # One alert for the whole unresolved review, including cleanup retries and restarts.
+        marker = {"generation": room["generation"], "reviewId": room["data"].get("reviewId"), "sendingAt": time.time()}
+        self.storage.set_choices(user_id, key, [marker])
         text = "⚠️ <b>Нужна проверка чата пати</b>\n\n" + escape(room["title"]) + "\nГруппа исключена из новых выдач до проверки."
-        await self.bot.send_message(user_id, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="Проверить группу", callback_data=f"roomadmin:view:{room['id']}")]]))
-        self.storage.set_choices(user_id, key, [{"generation": room["generation"]}])
+        try:
+            message = await self.bot.send_message(user_id, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="Проверить группу", callback_data=f"roomadmin:view:{room['id']}")]]))
+        except (TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter):
+            if self.storage.get_choice(user_id, key, 0) == marker:
+                self.storage.set_choices(user_id, key, [])
+            raise
+        except TelegramNetworkError as error:
+            if is_connection_setup_failure(error) and self.storage.get_choice(user_id, key, 0) == marker:
+                self.storage.set_choices(user_id, key, [])
+            raise
+        self.storage.track_room_admin_alert(user_id, room["id"], message.chat.id, message.message_id)
+        self.storage.set_choices(user_id, key, [{"generation": room["generation"], "reviewId": room["data"].get("reviewId"), "messageId": message.message_id}])
+
+    def resolve_admin_alerts(self, room_id):
+        for source in self.storage.room_admin_alert_sources():
+            if source["roomId"] != room_id:
+                continue
+            if source.get("messageId"):
+                self.storage.add_temporary_message(source["userId"], source["userId"], source["messageId"], 0)
+            self.storage.set_choices(source["userId"], source["kind"], [])
+        for key in list(self.alert_queue):
+            if key[1] == room_id:
+                self.alert_queue.pop(key, None)
 
     async def worker(self):
         if not self.enabled:
@@ -634,14 +693,25 @@ class PartyRooms:
                     if room:
                         try:
                             await self.operate(room)
+                            self.transient_attempts.pop(room["id"], None)
                         except TelegramRetryAfter as error:
                             await self.report(room, "retry", retrySeconds=error.retry_after + 1)
                         except ApiError as error:
                             if error.status != 409:
                                 logger.warning("Party group API operation failed; will retry")
-                        except TelegramNetworkError:
-                            # An ambiguous write must be inspected before group reuse.
-                            await self.report(room, "review", reason="Telegram transport outcome uncertain")
+                        except TelegramNetworkError as error:
+                            if isinstance(error, RoomReadUnavailable) or is_connection_setup_failure(error):
+                                attempt = min(4, self.transient_attempts.get(room["id"], 0) + 1)
+                                self.transient_attempts[room["id"]] = attempt
+                                await self.report(room, "retry", retrySeconds=min(30, 5 * 2 ** (attempt - 1)))
+                                logger.warning("Temporary Telegram group connection failure; automatic retry scheduled")
+                            else:
+                                # Only an ambiguous write requires manual inspection.
+                                await self.report(room, "review", reason="Telegram transport outcome uncertain")
+                        except RoomConfigurationError as error:
+                            await self.report(room, "review", reason=str(error)[:160], cleanupUncertain=False)
+                        except (TelegramBadRequest, TelegramForbiddenError):
+                            await self.report(room, "review", reason="Telegram rejected group operation; check permissions", cleanupUncertain=False)
                         except (TelegramAPIError, ValueError):
                             await self.report(room, "review", reason="Telegram group operation failed; check permissions and cleanup")
                         finally:
@@ -657,7 +727,10 @@ class PartyRooms:
                     try:
                         if eligible_alert:
                             user_id = eligible_alert[0]
-                            await self.send_admin_alert(user_id, self.alert_queue.pop(eligible_alert))
+                            alert = self.alert_queue[eligible_alert]
+                            await self.send_admin_alert(user_id, alert)
+                            if self.alert_queue.get(eligible_alert) is alert:
+                                self.alert_queue.pop(eligible_alert, None)
                         else:
                             user_id, party_id = eligible_hint
                             hint = self.hint_queue[eligible_hint]
@@ -666,9 +739,15 @@ class PartyRooms:
                                 self.hint_queue.pop(eligible_hint, None)
                     except TelegramForbiddenError:
                         self.storage.mark_bot_user_blocked(user_id)
+                        if eligible_alert:
+                            self.alert_queue.pop(eligible_alert, None)
+                            private_delay = 3600
                         if sending_hint:
                             self.hint_queue.pop(eligible_hint, None)
                     except TelegramBadRequest:
+                        if eligible_alert:
+                            self.alert_queue.pop(eligible_alert, None)
+                            private_delay = 60
                         if sending_hint:
                             self.hint_queue.pop(eligible_hint, None)
                         logger.info("Private chat availability notice could not be updated")

@@ -33,6 +33,7 @@ export class RoomReportDto extends RoomLeaseDto {
   @IsOptional() @Matches(/^https:\/\/t\.me\/\+[A-Za-z0-9_-]+$/) inviteLink?: string;
   @IsOptional() @Matches(/^\d{1,16}$/) userId?: string;
   @IsOptional() @IsBoolean() ownedBan?: boolean;
+  @IsOptional() @IsBoolean() cleanupUncertain?: boolean;
   @IsOptional() @IsInt() @Min(1) purgedBefore?: number;
   @IsOptional() @IsInt() @Min(1) messageId?: number;
   @IsOptional() @IsInt() @Min(0) cardJoinVersion?: number;

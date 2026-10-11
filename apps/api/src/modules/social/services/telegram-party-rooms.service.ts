@@ -22,7 +22,7 @@ type RoomData = {
   discordGuestVoice?: boolean; discordClickedMembershipIds?: string[];
   botBannedIds?: string[];
   presenceUpdates?: Record<string, { sentAt: number; updateId: number; status?: string; actorId?: string }>;
-  cleanupUncertain?: boolean;
+  cleanupUncertain?: boolean; reviewId?: string;
   purgedThrough?: Record<string, number>;
   cleanupDoneIds?: string[];
   possibleIds?: string[];
@@ -210,7 +210,7 @@ export class TelegramPartyRoomsService {
   }
 
   async notices() {
-    return this.prisma.telegramPartyChatRoom.findMany({ where: { OR: [{ partyId: { not: null } }, { state: "REVIEW" }] }, orderBy: { updatedAt: "asc" } });
+    return this.prisma.telegramPartyChatRoom.findMany({ where: { OR: [{ partyId: { not: null } }, { state: { in: ["REVIEW", "CLOSING"] } }] }, orderBy: { updatedAt: "asc" } });
   }
 
   async noticeMemberships(contexts: PartyNoticeContextDto[]) {
@@ -295,12 +295,18 @@ export class TelegramPartyRoomsService {
       } else if (input.event === "card-pinned" && input.messageId) {
         if (data.cardId !== input.messageId) throw new ConflictException("Party card changed");
         data.cardPendingPin = false;
-      } else if (input.event === "review") { state = "REVIEW"; data.cleanupUncertain = true; data.error = input.reason ?? "Telegram operation could not be confirmed";
+      } else if (input.event === "review") {
+        state = "REVIEW";
+        data.reviewId ??= randomUUID();
+        // Confirmed rejections/configuration errors do not lose history metadata.
+        // A later failure can never clear uncertainty recorded earlier.
+        data.cleanupUncertain = Boolean(data.cleanupUncertain || input.cleanupUncertain !== false);
+        data.error = input.reason ?? "Telegram operation could not be confirmed";
       } else if (input.event === "closed") {
         if (room.state !== "CLOSING" || data.links.some(link => !link.revoked) || [...data.presentIds, ...(data.possibleIds ?? [])].some(id => !data.staffIds.includes(id))) throw new ConflictException("Group cleanup incomplete");
         if (await tx.telegramPartyChatMessage.count({ where: { roomId, deletedAt: null } })) throw new ConflictException("Messages still pending deletion");
         if (data.cleanupUncertain) return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
-          state: "REVIEW", data: json({ ...data, error: "Manual confirmation of complete history cleanup required" })
+          state: "REVIEW", data: json({ ...data, reviewId: data.reviewId ?? randomUUID(), error: "Manual confirmation of complete history cleanup required" })
         } });
         if (room.removeWhenFree) return tx.telegramPartyChatRoom.delete({ where: { id: roomId } });
         await tx.telegramPartyChatMessage.deleteMany({ where: { roomId } });
@@ -385,6 +391,7 @@ export class TelegramPartyRoomsService {
         let changed = false;
         for (const item of items) {
           if (room.state === "ACTIVE" && room.assignedAt && item.sentAt * 1000 < room.assignedAt.getTime() - 1000) {
+            data.reviewId ??= randomUUID();
             data.cleanupUncertain = true; data.error = "Delayed history metadata arrived after group reuse"; changed = true;
           }
           if (item.userId && room.partyId && data.roster.some(member => member.telegramId === item.userId)) {
