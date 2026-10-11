@@ -15,6 +15,9 @@ type RoomData = {
   presentIds: string[]; seenIds: string[]; evictIds: string[]; roster: RosterMember[];
   partyName?: string; partySlug?: string; expiresAt?: string | null;
   cardId?: number; cardHash?: string; cardDirty?: boolean; error?: string;
+  cardJoinVersion?: number; cardPostedJoinVersion?: number; cardRefreshAfter?: number;
+  cardPendingPin?: boolean; cardObsoleteIds?: number[];
+  cardVisibilityInitialized?: boolean;
   botBannedIds?: string[];
   presenceUpdates?: Record<string, { sentAt: number; updateId: number; status?: string; actorId?: string }>;
   cleanupUncertain?: boolean;
@@ -171,6 +174,14 @@ export class TelegramPartyRoomsService {
       const allowed = new Set(roster.map(member => member.telegramId).filter(Boolean));
       data.evictIds = unique([...data.evictIds, ...data.presentIds, ...(data.possibleIds ?? [])].filter(id => !allowed.has(id) && !data.staffIds.includes(id)));
       data.cardDirty ||= JSON.stringify(roster) !== JSON.stringify(data.roster) || data.partyName !== party.name;
+      // Repair existing cards that were posted before players joined a hidden-history group.
+      if (!data.cardVisibilityInitialized) {
+        data.cardVisibilityInitialized = true;
+        if (data.cardId && data.presentIds.some(id => allowed.has(id))) {
+          data.cardJoinVersion = (data.cardJoinVersion ?? 0) + 1;
+          data.cardRefreshAfter = Date.now(); data.cardDirty = true;
+        }
+      }
       data.roster = roster; data.partyName = party.name; data.partySlug = party.slug; data.expiresAt = party.expiresAt?.toISOString() ?? null;
       const preparationTimedOut = room.state === "PREPARING" && room.assignedAt && Date.now() - room.assignedAt.getTime() >= 10 * 60_000;
       return tx.telegramPartyChatRoom.update({ where: { id: room.id }, data: {
@@ -255,7 +266,16 @@ export class TelegramPartyRoomsService {
       } else if (input.event === "member-unbanned" && input.userId) {
         data.botBannedIds = (data.botBannedIds ?? []).filter(id => id !== input.userId);
       } else if (input.event === "card" && input.messageId) {
-        data.cardId = input.messageId; data.cardDirty = false;
+        if (data.cardId !== input.messageId) {
+          if (data.cardId) data.cardObsoleteIds = [...new Set([...(data.cardObsoleteIds ?? []), data.cardId])];
+          data.cardPendingPin = true;
+        }
+        data.cardId = input.messageId;
+        data.cardPostedJoinVersion = Math.max(data.cardPostedJoinVersion ?? 0, input.cardJoinVersion ?? 0);
+        data.cardDirty = (data.cardJoinVersion ?? 0) > data.cardPostedJoinVersion;
+      } else if (input.event === "card-pinned" && input.messageId) {
+        if (data.cardId !== input.messageId) throw new ConflictException("Party card changed");
+        data.cardPendingPin = false;
       } else if (input.event === "review") { state = "REVIEW"; data.cleanupUncertain = true; data.error = input.reason ?? "Telegram operation could not be confirmed";
       } else if (input.event === "closed") {
         if (room.state !== "CLOSING" || data.links.some(link => !link.revoked) || [...data.presentIds, ...(data.possibleIds ?? [])].some(id => !data.staffIds.includes(id))) throw new ConflictException("Group cleanup incomplete");
@@ -320,7 +340,13 @@ export class TelegramPartyRoomsService {
         data.presentIds = unique([...data.presentIds, userId]); data.seenIds = unique([...data.seenIds, userId]);
         data.possibleIds = (data.possibleIds ?? []).filter(id => id !== userId);
         data.cleanupDoneIds = (data.cleanupDoneIds ?? []).filter(id => id !== userId);
-        if (!data.roster.some(member => member.telegramId === userId) || room.state !== "ACTIVE") data.evictIds = unique([...data.evictIds, userId]);
+        if (!data.roster.some(member => member.telegramId === userId) || room.state !== "ACTIVE") {
+          data.evictIds = unique([...data.evictIds, userId]);
+        } else if (wasPresent !== true) {
+          // Editing a message sent before this real Telegram join cannot make it visible.
+          data.cardJoinVersion = (data.cardJoinVersion ?? 0) + 1;
+          data.cardRefreshAfter = Date.now() + 2000; data.cardDirty = true;
+        }
       } else {
         data.presentIds = data.presentIds.filter(id => id !== userId);
         data.evictIds = data.evictIds.filter(id => id !== userId);
@@ -370,7 +396,11 @@ export class TelegramPartyRoomsService {
   async deleted(roomId: string, botId: string, generation: number, leaseToken: string, messageIds: number[]) {
     return this.locked(roomId, async (tx, room) => {
       this.assertLease(room, { botId, generation, leaseToken });
-      await tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: { leaseUntil: new Date(Date.now() + 90_000) } });
+      const data = dataOf(room);
+      data.cardObsoleteIds = (data.cardObsoleteIds ?? []).filter(id => !messageIds.includes(id));
+      await tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
+        leaseUntil: new Date(Date.now() + 90_000), data: json(data)
+      } });
       return tx.telegramPartyChatMessage.updateMany({ where: { roomId, messageId: { in: messageIds } }, data: { deletedAt: new Date() } });
     });
   }
@@ -384,8 +414,10 @@ export class TelegramPartyRoomsService {
       const party = await this.parties.getPartyBySlug(data.partySlug!, data.roster[0]?.userId);
       members = members.map(member => ({ ...member, dotaAccountId: party.members.find(player => player.userId === member.userId)?.dotaAccountId ?? null,
         mmr: party.members.find(player => player.userId === member.userId)?.mmr ?? null }));
-      return { name: party.name, members, discordUrl: party.discordInviteUrl, generation: room.generation };
-    } catch { return { name: data.partyName, members, discordUrl: null, generation: room.generation }; }
+      return { name: party.name, members, discordUrl: party.discordInviteUrl, generation: room.generation,
+        joinVersion: data.cardJoinVersion ?? 0, refreshAfter: data.cardRefreshAfter ?? 0 };
+    } catch { return { name: data.partyName, members, discordUrl: null, generation: room.generation,
+      joinVersion: data.cardJoinVersion ?? 0, refreshAfter: data.cardRefreshAfter ?? 0 }; }
   }
 
   async ready(roomId: string, botId: string, telegramId: string, ready: boolean, generation?: number) {

@@ -29,12 +29,13 @@ export class RoomLeaseDto extends RoomBotDto {
   @IsInt() @Min(1) generation!: number;
 }
 export class RoomReportDto extends RoomLeaseDto {
-  @IsIn(["prepared", "rotated", "link-revoked", "member-removed", "member-unbanned", "admitting", "joined", "card", "closed", "review", "retry"]) event!: string;
+  @IsIn(["prepared", "rotated", "link-revoked", "member-removed", "member-unbanned", "admitting", "joined", "card", "card-pinned", "closed", "review", "retry"]) event!: string;
   @IsOptional() @Matches(/^https:\/\/t\.me\/\+[A-Za-z0-9_-]+$/) inviteLink?: string;
   @IsOptional() @Matches(/^\d{1,16}$/) userId?: string;
   @IsOptional() @IsBoolean() ownedBan?: boolean;
   @IsOptional() @IsInt() @Min(1) purgedBefore?: number;
   @IsOptional() @IsInt() @Min(1) messageId?: number;
+  @IsOptional() @IsInt() @Min(0) cardJoinVersion?: number;
   @IsOptional() @IsInt() @Min(0) @Max(86400) retrySeconds?: number;
   @IsOptional() @IsString() @MaxLength(160) reason?: string;
 }

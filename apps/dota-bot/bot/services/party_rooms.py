@@ -363,10 +363,27 @@ class PartyRooms:
             await self.mutate("unban_chat_member", int(room["chatId"]), int(user_id), only_if_banned=True)
             await self.report(room, "member-unbanned", userId=user_id)
 
+    async def finish_card(self, room):
+        if room["data"].get("cardPendingPin") and room["data"].get("cardId"):
+            message_id = room["data"]["cardId"]
+            await self.mutate("pin_chat_message", int(room["chatId"]), message_id, disable_notification=True)
+            await self.report(room, "card-pinned", messageId=message_id)
+        obsolete = room["data"].get("cardObsoleteIds", [])[:100]
+        if obsolete:
+            if not await self.mutate("delete_messages", int(room["chatId"]), obsolete):
+                raise ValueError("Previous party card deletion not confirmed")
+            await self.request("POST", f"/{room['id']}/deleted", {**self.lease_body(room), "messageIds": obsolete})
+            room["data"]["cardObsoleteIds"] = [value for value in room["data"].get("cardObsoleteIds", []) if value not in obsolete]
+
     async def update_card(self, room):
+        await self.finish_card(room)
         card = await self.request("GET", f"/{room['id']}/card")
         if card.get("generation") != room["generation"]:
             raise ApiError("Party group changed", 409)
+        join_version = card.get("joinVersion", 0)
+        replace_card = join_version > room["data"].get("cardPostedJoinVersion", 0)
+        if replace_card and time.time() * 1000 < card.get("refreshAfter", 0):
+            return
         members = card.get("members", [])
         text = f"🎮 <b>{escape(str(card.get('name') or 'Пати FDP'))}</b>\n"
         text += f"Состав: <b>{len(members)}/5</b> · Готовы: <b>{sum(bool(member.get('ready')) for member in members)}/{len(members)}</b>\n\n"
@@ -383,7 +400,7 @@ class PartyRooms:
             row.append(InlineKeyboardButton(text="🔊 Discord", url=card["discordUrl"]))
         markup = InlineKeyboardMarkup(inline_keyboard=[row])
         message_id = room["data"].get("cardId")
-        if message_id:
+        if message_id and not replace_card:
             try:
                 await self.mutate("edit_message_text", text, chat_id=int(room["chatId"]), message_id=message_id,
                     parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -395,9 +412,10 @@ class PartyRooms:
                 reply_markup=markup, disable_web_page_preview=True)
             message_id = message.message_id
             # The session journal records this outbound message before returning.
-            await self.report(room, "card", messageId=message_id)
-            await self.mutate("pin_chat_message", int(room["chatId"]), message_id, disable_notification=True)
-        await self.report(room, "card", messageId=message_id)
+            await self.report(room, "card", messageId=message_id, cardJoinVersion=join_version)
+            await self.finish_card(room)
+            return
+        await self.report(room, "card", messageId=message_id, cardJoinVersion=join_version)
 
     async def operate(self, room):
         chat_id = int(room["chatId"])
@@ -467,7 +485,8 @@ class PartyRooms:
                 if deadline > datetime.now(UTC):
                     await self.mutate("edit_chat_invite_link", chat_id, link, expire_date=deadline, creates_join_request=True)
                     self.expiry_cache[(room["id"], link)] = expiry
-            if room["data"].get("cardDirty") or time.time() >= self.maintenance_after.get(room["id"], 0):
+            if (room["data"].get("cardDirty") or room["data"].get("cardPendingPin") or room["data"].get("cardObsoleteIds")
+                or time.time() >= self.maintenance_after.get(room["id"], 0)):
                 await self.update_card(room)
             await self.delete_batch(room)
             self.maintenance_after[room["id"]] = time.time() + 60
@@ -580,6 +599,7 @@ class PartyRooms:
                         self.storage.retry_room_event(event["id"], time.time() + 10)
                 jobs = [room for room in self.by_chat.values() if room.get("state") not in {"FREE", "REVIEW", None}
                     and (room["state"] != "ACTIVE" or room["data"].get("cardDirty") or room["data"].get("evictIds")
+                         or room["data"].get("cardPendingPin") or room["data"].get("cardObsoleteIds")
                          or any(member.get("telegramId") in room["data"].get("botBannedIds", [])
                                 for member in room["data"].get("roster", []))
                          or time.time() >= self.maintenance_after.get(room["id"], 0)

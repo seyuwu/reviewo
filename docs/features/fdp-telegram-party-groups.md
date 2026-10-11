@@ -51,6 +51,13 @@ not erase a newer ban. Ownership survives group reuse and manual cleanup
 confirmation. Every automatic unban rechecks current ownership on the API so a
 moderator's subsequent ban is preserved.
 
+Groups keep history hidden for newcomers. After a confirmed Telegram join, the
+worker sends a fresh roster card, pins it and deletes the preceding card. Editing
+the older card alone would leave it invisible to the newcomer. Consecutive joins
+are coalesced for two seconds, and persisted join versions prevent a concurrent
+join from being lost when a card send is acknowledged. Existing active groups
+receive one replacement card after this feature is first enabled.
+
 Stopping recruitment does not end the party or group. Party extensions update
 invitation expiry. Canonical merged or deleted parties enter cleanup. Mere expiry
 does not release the group before normal API cleanup has handled Discord occupancy
