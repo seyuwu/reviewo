@@ -62,4 +62,8 @@ export class RoomPresenceDto extends RoomBotDto {
   @Matches(/^\d{1,16}$/) userId!: string;
   @IsIn(["joined", "left"]) event!: string;
   @IsOptional() @Matches(/^\d{1,16}$/) actorId?: string;
+  @IsOptional() @IsIn(["creator", "administrator", "member", "restricted", "left", "kicked"]) status?: string;
+  @IsOptional() @IsBoolean() wasPresent?: boolean;
+  @IsOptional() @IsInt() @Min(1) sentAt?: number;
+  @IsOptional() @IsInt() @Min(0) updateId?: number;
 }

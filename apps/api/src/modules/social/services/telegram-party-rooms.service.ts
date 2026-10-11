@@ -16,6 +16,7 @@ type RoomData = {
   partyName?: string; partySlug?: string; expiresAt?: string | null;
   cardId?: number; cardHash?: string; cardDirty?: boolean; error?: string;
   botBannedIds?: string[];
+  presenceUpdates?: Record<string, { sentAt: number; updateId: number; status?: string; actorId?: string }>;
   cleanupUncertain?: boolean;
   purgedThrough?: Record<string, number>;
   cleanupDoneIds?: string[];
@@ -92,7 +93,8 @@ export class TelegramPartyRoomsService {
         return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
           state: "FREE", generation: { increment: 1 }, leaseToken: null, leaseUntil: null, retryAt: null,
           partyId: null, assignedAt: null,
-          data: json({ staffIds: unique(staffIds), links: [], presentIds: [], seenIds: [], evictIds: [], roster: [] })
+          data: json({ staffIds: unique(staffIds), links: [], presentIds: [], seenIds: [], evictIds: [], roster: [],
+            botBannedIds: dataOf(room).botBannedIds ?? [], presenceUpdates: dataOf(room).presenceUpdates ?? {} })
         } });
       }
       if (action === "retry") {
@@ -231,8 +233,11 @@ export class TelegramPartyRoomsService {
         data.evictIds = data.evictIds.filter(id => id !== input.userId);
         data.cleanupDoneIds = unique([...(data.cleanupDoneIds ?? []), input.userId]);
         if (input.ownedBan) {
-          data.botBannedIds = unique([...(data.botBannedIds ?? []), input.userId]);
           const before = input.purgedBefore ?? Math.floor(Date.now() / 1000);
+          const latest = data.presenceUpdates?.[input.userId];
+          if (!(latest?.status === "kicked" && latest.actorId && latest.actorId !== input.botId && latest.sentAt >= before)) {
+            data.botBannedIds = unique([...(data.botBannedIds ?? []), input.userId]);
+          }
           data.purgedThrough = { ...(data.purgedThrough ?? {}), [input.userId]: before };
           await tx.telegramPartyChatMessage.updateMany({ where: {
             roomId, senderId: input.userId, deletedAt: null, sentAt: { lt: new Date(before * 1000) }
@@ -263,7 +268,8 @@ export class TelegramPartyRoomsService {
         return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
           state: "FREE", partyId: null, assignedAt: null, generation: { increment: 1 }, retryAt: null,
           leaseToken: null, leaseUntil: null,
-          data: json({ staffIds: data.staffIds, links: [], presentIds: [], seenIds: [], evictIds: [], roster: [], botBannedIds: data.botBannedIds ?? [] })
+          data: json({ staffIds: data.staffIds, links: [], presentIds: [], seenIds: [], evictIds: [], roster: [],
+            botBannedIds: data.botBannedIds ?? [], presenceUpdates: data.presenceUpdates ?? {} })
         } });
       }
       return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
@@ -283,17 +289,33 @@ export class TelegramPartyRoomsService {
 
   async eligible(roomId: string, botId: string, telegramId: string, generation?: number) {
     const room = await this.reconcile(roomId); const data = dataOf(room);
-    return { allowed: room.botId === botId && room.generation === generation
+    const current = room.botId === botId && room.generation === generation;
+    return { botOwnedBan: current && Boolean(data.botBannedIds?.includes(telegramId)), allowed: current
       && ["PREPARING", "ACTIVE", "ROTATING"].includes(room.state) && Boolean(data.expiresAt && new Date(data.expiresAt) > new Date())
       && data.roster.some(member => member.telegramId === telegramId), generation: room.generation };
   }
 
-  async presence(botId: string, chatId: string, userId: string, event: string, actorId?: string) {
+  async presence(botId: string, chatId: string, userId: string, event: string, actorId?: string,
+    status?: string, sentAt?: number, updateId?: number, wasPresent?: boolean) {
     const found = await this.prisma.telegramPartyChatRoom.findUnique({ where: { chatId } });
     if (!found || found.botId !== botId) return;
     return this.locked(found.id, async (tx, room) => {
       const data = dataOf(room);
       if (data.staffIds.includes(userId) || userId === botId) return room;
+      if (sentAt !== undefined && updateId !== undefined) {
+        const previous = data.presenceUpdates?.[userId];
+        if (previous && (sentAt < previous.sentAt || sentAt === previous.sentAt && updateId <= previous.updateId)) return room;
+        data.presenceUpdates = { ...(data.presenceUpdates ?? {}), [userId]: { sentAt, updateId,
+          ...(status !== undefined ? { status } : {}), ...(actorId !== undefined ? { actorId } : {}) } };
+      }
+      // Telegram's actor is the authoritative source if the removal report was lost.
+      // A delayed leave event must not erase a newer service ban or a moderator ban.
+      if (status === "kicked" && actorId === botId) {
+        data.botBannedIds = unique([...(data.botBannedIds ?? []), userId]);
+      } else if (status === "left" || status === "kicked" && actorId && actorId !== botId
+        || status === undefined && actorId && actorId !== botId) {
+        data.botBannedIds = (data.botBannedIds ?? []).filter(id => id !== userId);
+      }
       if (event === "joined") {
         data.presentIds = unique([...data.presentIds, userId]); data.seenIds = unique([...data.seenIds, userId]);
         data.possibleIds = (data.possibleIds ?? []).filter(id => id !== userId);
@@ -302,10 +324,9 @@ export class TelegramPartyRoomsService {
       } else {
         data.presentIds = data.presentIds.filter(id => id !== userId);
         data.evictIds = data.evictIds.filter(id => id !== userId);
-        if (actorId && actorId !== botId) data.botBannedIds = (data.botBannedIds ?? []).filter(id => id !== userId);
       }
       return tx.telegramPartyChatRoom.update({ where: { id: room.id }, data: {
-        ...(event === "left" && room.state === "ACTIVE" ? { state: "ROTATING", generation: { increment: 1 } } : {}), data: json(data)
+        ...(event === "left" && wasPresent !== false && room.state === "ACTIVE" ? { state: "ROTATING", generation: { increment: 1 } } : {}), data: json(data)
       } });
     });
   }

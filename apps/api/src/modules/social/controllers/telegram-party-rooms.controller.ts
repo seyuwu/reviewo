@@ -43,7 +43,8 @@ export class TelegramPartyRoomsController {
   }
   @Post("presence")
   presence(@Body() input: RoomPresenceDto, @Headers("x-telegram-bot-secret") secret?: string) {
-    this.authorize(secret); return this.rooms.presence(input.botId, input.chatId, input.userId, input.event, input.actorId);
+    this.authorize(secret); return this.rooms.presence(input.botId, input.chatId, input.userId, input.event, input.actorId,
+      input.status, input.sentAt, input.updateId, input.wasPresent);
   }
   @Post(":id/claim")
   claim(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string, @Body() input: RoomBotDto, @Headers("x-telegram-bot-secret") secret?: string) {

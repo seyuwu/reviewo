@@ -43,11 +43,15 @@ class PartyRoomJournal(BaseRequestMiddleware):
                         **({"queryId": query_id, "sentAt": int(request.date.timestamp())} if query_id else {}),
                     }})
                 change = update.chat_member
-                if change and change.chat.id in self.rooms.by_chat and (member_present(change.old_chat_member) != member_present(change.new_chat_member) or change.new_chat_member.status == "kicked"):
+                if change and change.chat.id in self.rooms.by_chat and (member_present(change.old_chat_member) != member_present(change.new_chat_member)
+                    or change.new_chat_member.status == "kicked" or change.old_chat_member.status == "kicked"):
                     events.append({"kind": "presence", "payload": {
                         "chatId": str(change.chat.id), "userId": str(change.new_chat_member.user.id),
                         "event": "joined" if member_present(change.new_chat_member) else "left",
                         "actorId": str(change.from_user.id),
+                        "status": change.new_chat_member.status,
+                        "wasPresent": member_present(change.old_chat_member),
+                        "sentAt": int(change.date.timestamp()), "updateId": update.update_id,
                     }})
                 mine = update.my_chat_member
                 if mine and mine.chat.id in self.rooms.by_chat and (mine.new_chat_member.status != "administrator"

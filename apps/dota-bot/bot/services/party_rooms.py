@@ -233,6 +233,7 @@ class PartyRooms:
             return
         if event["kind"] == "presence":
             await self.request("POST", "/presence", value)
+            self.sync_after = 0
         elif event["kind"] in {"join", "join-query", "review"}:
             room = await self.request("POST", f"/{found['id']}/claim")
             if value.get("queryId"):
@@ -261,11 +262,14 @@ class PartyRooms:
                             member = await self.bot.get_chat_member(int(room["chatId"]), int(value["userId"]), request_timeout=15)
                             if member.status == "kicked":
                                 # Only lift a bot-owned removal; a moderator's ban needs manual review.
-                                if value["userId"] not in room["data"].get("botBannedIds", []):
+                                eligible = await self.request("POST", f"/{room['id']}/eligible", {
+                                    "userId": value["userId"], "generation": room["generation"], "inviteLink": ""})
+                                if not eligible.get("allowed") or not eligible.get("botOwnedBan"):
                                     await self.answer_join(room, value, False)
                                     self.storage.acknowledge_room_events([event["id"]])
                                     return
                                 await self.mutate("unban_chat_member", int(room["chatId"]), int(value["userId"]), only_if_banned=True)
+                                await self.report(room, "member-unbanned", userId=value["userId"])
                         await self.report(room, "admitting", userId=value["userId"])
                         admission_started = True
                         event["admissionStarted"] = True
@@ -273,7 +277,7 @@ class PartyRooms:
                         check = await self.request("POST", f"/{room['id']}/admission", {
                             "userId": value["userId"], "inviteLink": value["inviteLink"]})
                         if not check.get("allowed") or check.get("generation") != room["generation"]:
-                            await self.mutate("ban_chat_member", int(room["chatId"]), int(value["userId"]), revoke_messages=True)
+                            await self.remove_member(room, value["userId"])
                         else:
                             if not value.get("queryId"):
                                 await self.mutate("restrict_chat_member", int(room["chatId"]), int(value["userId"]),
@@ -315,20 +319,23 @@ class PartyRooms:
         for user_id in dict.fromkeys(targets):
             if user_id in room["data"].get("cleanupDoneIds", []):
                 continue
+            await self.remove_member(room, user_id)
+
+    async def remove_member(self, room, user_id):
+        member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=15)
+        owned_ban = member.status != "kicked"
+        purged_before = int(time.time())
+        if owned_ban:
+            try:
+                await self.mutate("ban_chat_member", int(room["chatId"]), int(user_id), revoke_messages=True)
+            except TelegramBadRequest:
+                if member.status != "left":
+                    raise
+                owned_ban = False
             member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=15)
-            owned_ban = member.status != "kicked"
-            purged_before = int(time.time())
-            if owned_ban:
-                try:
-                    await self.mutate("ban_chat_member", int(room["chatId"]), int(user_id), revoke_messages=True)
-                except TelegramBadRequest:
-                    if member.status != "left":
-                        raise
-                    owned_ban = False
-                member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=15)
-            if member.status not in {"kicked", "left"}:
-                raise ValueError("Participant removal not confirmed")
-            await self.report(room, "member-removed", userId=user_id, ownedBan=owned_ban, purgedBefore=purged_before)
+        if member.status not in {"kicked", "left"}:
+            raise ValueError("Participant removal not confirmed")
+        await self.report(room, "member-removed", userId=user_id, ownedBan=owned_ban, purgedBefore=purged_before)
 
     async def delete_batch(self, room):
         batch = await self.request("POST", f"/{room['id']}/deletions", self.lease_body(room))
@@ -351,7 +358,7 @@ class PartyRooms:
                 continue
             check = await self.request("POST", f"/{room['id']}/eligible", {
                 "userId": user_id, "generation": room["generation"], "inviteLink": ""})
-            if not check.get("allowed"):
+            if not check.get("allowed") or not check.get("botOwnedBan"):
                 continue
             await self.mutate("unban_chat_member", int(room["chatId"]), int(user_id), only_if_banned=True)
             await self.report(room, "member-unbanned", userId=user_id)
@@ -411,6 +418,10 @@ class PartyRooms:
             if await self.delete_batch(room):
                 return
             for user_id in list(room["data"].get("botBannedIds", [])):
+                check = await self.request("POST", f"/{room['id']}/eligible", {
+                    "userId": user_id, "generation": room["generation"], "inviteLink": ""})
+                if not check.get("botOwnedBan"):
+                    continue
                 await self.mutate("unban_chat_member", chat_id, int(user_id), only_if_banned=True)
                 await self.report(room, "member-unbanned", userId=user_id)
             admins = await self.bot.get_chat_administrators(chat_id, return_bots=True, request_timeout=15)
@@ -569,6 +580,8 @@ class PartyRooms:
                         self.storage.retry_room_event(event["id"], time.time() + 10)
                 jobs = [room for room in self.by_chat.values() if room.get("state") not in {"FREE", "REVIEW", None}
                     and (room["state"] != "ACTIVE" or room["data"].get("cardDirty") or room["data"].get("evictIds")
+                         or any(member.get("telegramId") in room["data"].get("botBannedIds", [])
+                                for member in room["data"].get("roster", []))
                          or time.time() >= self.maintenance_after.get(room["id"], 0)
                          or any(self.expiry_cache.get((room["id"], link["url"])) != room["data"].get("expiresAt")
                                 for link in room["data"].get("links", []) if not link["revoked"]))]

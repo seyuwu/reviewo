@@ -44,6 +44,13 @@ can return while still an FDP party member. Confirmed bot-owned bans can be lift
 for eligible members; moderator removals must not be overridden. Private party
 panels and tracked invitation notices are refreshed on generation changes.
 
+Ban ownership is also recovered from Telegram membership updates using the actor
+ID, even if the removal succeeded but its API report was interrupted. Updates are
+ordered per player by Telegram timestamp and update ID; delayed leave events do
+not erase a newer ban. Ownership survives group reuse and manual cleanup
+confirmation. Every automatic unban rechecks current ownership on the API so a
+moderator's subsequent ban is preserved.
+
 Stopping recruitment does not end the party or group. Party extensions update
 invitation expiry. Canonical merged or deleted parties enter cleanup. Mere expiry
 does not release the group before normal API cleanup has handled Discord occupancy
