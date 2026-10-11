@@ -1,3 +1,4 @@
+from datetime import datetime
 from urllib.parse import quote
 
 from aiogram.types import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup, LoginUrl
@@ -270,6 +271,9 @@ def party_settings_keyboard(party: dict, searching_roles: set[str], website_url:
     rows = []
     if website_url:
         rows.append([button_url("🌐 Чат на сайте и Discord", website_url)])
+    if party.get("kind") == "PARTY" and party.get("canExtendParty") and party.get("id") and party.get("expiresAt"):
+        expiry = int(datetime.fromisoformat(party["expiresAt"].replace("Z", "+00:00")).timestamp())
+        rows.append([button("⏱ Продлить пати · +3 часа", f"party:extend:{party['id']}:{expiry}")])
     token = party.get("coordinationToken")
     self_member = next((member for member in party.get("members", []) if member.get("isSelf")), None)
     if token and self_member and self_member.get("telegramUsername") and not self_member.get("telegramContactPublic"):

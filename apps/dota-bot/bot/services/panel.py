@@ -772,6 +772,14 @@ async def render_screen(
         if screen == "party_settings":
             self_member = next((member for member in party.get("members", []) if member.get("isSelf")), None)
             text = f"<b>Настройки пати · {escape_text(party.get('name') or 'Моя пати')}</b>"
+            if party.get("kind") == "PARTY":
+                remaining = remaining_seconds(party.get("expiresAt"))
+                if remaining is not None:
+                    text += f"\n\n⏱ До окончания пати: <b>{format_duration(remaining)}</b>."
+                if party.get("canExtendParty"):
+                    text += "\nПродление добавит 3 часа, максимум — 12 часов от создания пати."
+                elif party.get("canManageParty"):
+                    text += "\nДостигнут предел продления пати."
             if self_member and self_member.get("telegramUsername"):
                 shared = self_member.get("telegramContactPublic") or self_member.get("telegramContactShared")
                 text += "\n\nТвой Telegram виден участникам пати." if shared else "\n\nТвой Telegram виден только тебе. Можно показать его участникам этой пати."

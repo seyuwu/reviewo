@@ -1,3 +1,4 @@
+from datetime import datetime
 from html import escape
 from urllib.parse import quote
 
@@ -9,6 +10,7 @@ from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..services.party_search_queue import PartySearchQueue
+from ..services.temporary_notifications import send_temporary_notification
 from ..storage.database import BotStorage
 from .search import show_error
 from ..ui.keyboards import delete_party_confirmation_keyboard, leave_party_confirmation_keyboard
@@ -22,6 +24,45 @@ def current_party(response: dict) -> dict | None:
 
 def return_screen() -> str:
     return "party"
+
+
+@router.callback_query(F.data.startswith("party:extend:"))
+async def extend_party(
+    callback: CallbackQuery,
+    api: OpiniaApi,
+    settings: Settings,
+    storage: BotStorage,
+) -> None:
+    if callback.message is None or callback.message.chat.type != "private":
+        return
+    party_id, separator, expected_expiry = (callback.data or "").removeprefix("party:extend:").rpartition(":")
+    if not separator or not expected_expiry.isdecimal():
+        await callback.answer("Кнопка устарела. Открой настройки пати заново.", show_alert=True)
+        return
+    acknowledge_callback(callback)
+    try:
+        party = current_party(await api.user(callback.from_user.id, "GET", "/social/parties/me"))
+        if not party or party.get("id") != party_id:
+            text = "Эта кнопка устарела. Открой настройки своей пати заново."
+        elif party.get("expiresAt") and int(datetime.fromisoformat(party["expiresAt"].replace("Z", "+00:00")).timestamp()) != int(expected_expiry):
+            text = "Время пати уже изменилось. Настройки обновлены."
+        elif party.get("kind") != "PARTY" or not party.get("canExtendParty"):
+            text = ("Пати уже достигла предела продления." if party.get("canManageParty")
+                    else "Продлить пати может капитан или офицер.")
+        else:
+            await api.user(callback.from_user.id, "POST",
+                           f"/social/parties/{quote(str(party['slug']), safe='')}/extend")
+            text = "Пати продлена. Новое время показано в настройках."
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party_settings")
+    except ApiError as error:
+        text = {
+            403: "Продлить пати может капитан или офицер.",
+            404: "Пати больше не существует.",
+            409: "Время пати уже изменилось. Открой настройки заново.",
+            400: "Пати уже достигла предела продления.",
+        }.get(error.status, "Не удалось продлить пати. Попробуй ещё раз.")
+    await send_temporary_notification(callback.bot, storage, callback.from_user.id,
+                                      callback.message.chat.id, text, 10)
 
 
 @router.callback_query(F.data.startswith("party:noop:"))

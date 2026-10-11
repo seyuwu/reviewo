@@ -45,6 +45,12 @@ does not release the group before normal API cleanup has handled Discord occupan
 and possible lifetime extension. A reservation nobody used is released after
 10 minutes. Existing website chat/Discord access is retained as a fallback.
 
+New temporary parties last 3 hours. Captains and officers can use
+“Настройки пати → Продлить пати · +3 часа” to add 3 hours, up to the existing
+12-hour maximum from creation. The settings show the remaining lifetime.
+Existing parties retain their saved expiry; changing the default does not end
+their sessions early.
+
 ## Durability and cleanup limits
 
 The bot session journals incoming group metadata before returning a long-poll
