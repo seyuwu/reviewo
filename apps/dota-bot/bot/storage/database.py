@@ -464,6 +464,12 @@ class BotStorage:
             (bot_id,),
         ).fetchall()]
 
+    def pending_room_join_queries(self, bot_id: int) -> list[dict]:
+        return [{**dict(row), "payload": json.loads(row["payload"])} for row in self._connection().execute(
+            "SELECT * FROM party_room_inbox WHERE bot_id=? AND status='pending' AND kind='join-query' ORDER BY id LIMIT 100",
+            (bot_id,),
+        ).fetchall()]
+
     def acknowledge_room_events(self, event_ids: list[int]) -> None:
         with self.lock:
             self._connection().executemany("UPDATE party_room_inbox SET status='done' WHERE id=?", [(value,) for value in event_ids])

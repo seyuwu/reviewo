@@ -105,6 +105,7 @@ async def main() -> None:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        await party_rooms.close_join_queries()
         storage.close()
         await api.close()
         await bot.session.close()

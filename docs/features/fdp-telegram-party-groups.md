@@ -61,6 +61,28 @@ party in a rolling five-minute window, across all senders and bot instances.
 Expired, removed or rejoined memberships invalidate queued pings. Notifications
 expire after at most five minutes; native group links are refreshed on rotation.
 
+## Native guard pilot
+
+In BotFather's Bot Settings, enable Guard Mode. Confirm that
+`getMe.supports_join_request_queries` is true. In one connected supergroup,
+open Manage group → Administrators → FDP → Process join requests and save.
+Confirm `getChat.guard_bot.id` equals the managing bot ID. Keep the bot-created
+invite links' approval setting enabled. These Telegram settings are separate
+from ordinary administrator rights and cannot be replaced by granting all rights.
+
+Queries with `query_id` are durably journaled and dispatched immediately, with
+three concurrent handlers and serialized work per group. They use the same
+authoritative admission checks, operation lease and possible-member tracking as
+ordinary requests. The processing budget is eight seconds; Telegram requires
+an answer within ten seconds. Failed checks decline admission. Ordinary requests
+keep using the existing worker. Ambiguous or interrupted approvals require room
+review, and successful admissions are checked again against the current roster.
+
+Verify on one group that a party member can enter, a nonmember is rejected, and
+the installed Telegram client opens the chat after approval. Direct approval is
+supported by the API; automatic navigation must be confirmed on actual clients
+before enabling the mode in every group. A Mini App is not needed for this pilot.
+
 ## Durability and cleanup limits
 
 The bot session journals incoming group metadata before returning a long-poll

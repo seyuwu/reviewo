@@ -9,6 +9,7 @@ from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramNet
 from aiogram.types import ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..api.client import ApiError
+from .join_request_query import AnswerChatJoinRequestQuery
 
 logger = logging.getLogger(__name__)
 REQUIRED_RIGHTS = ("can_change_info", "can_delete_messages", "can_restrict_members", "can_invite_users", "can_pin_messages")
@@ -43,6 +44,76 @@ class PartyRooms:
         self.registration_results = {}
         self.registration_after = {}
         self.sync_lock = asyncio.Lock()
+        self.join_query_tasks = {}
+        self.join_query_releases = set()
+        self.join_query_slots = asyncio.Semaphore(3)
+
+    def dispatch_join_queries(self):
+        for event in self.storage.pending_room_join_queries(self.bot.id):
+            if event["id"] not in self.join_query_tasks:
+                task = asyncio.create_task(self.handle_join_query(event))
+                self.join_query_tasks[event["id"]] = task
+                task.add_done_callback(lambda done, event_id=event["id"]: self.join_query_tasks.pop(event_id, None))
+
+    async def answer_join(self, room, value, allowed):
+        if value.get("queryId"):
+            confirmed = await self.bot(AnswerChatJoinRequestQuery(chat_join_request_query_id=value["queryId"],
+                                      result="approve" if allowed else "decline"), request_timeout=2)
+            if not confirmed:
+                raise ValueError("Join decision was not acknowledged")
+            value["queryAnswered"] = True
+        else:
+            await self.mutate("approve_chat_join_request" if allowed else "decline_chat_join_request",
+                              int(room["chatId"]), int(value["userId"]))
+
+    async def handle_join_query(self, event):
+        value = event["payload"]
+        remaining = value["sentAt"] + 8 - time.time()
+        if remaining <= 0:
+            self.storage.acknowledge_room_events([event["id"]])
+            return
+        cancelled = False
+        try:
+            async with asyncio.timeout(remaining):
+                async with self.join_query_slots:
+                    if not self.enabled or int(value["chatId"]) not in self.by_chat:
+                        await self.answer_join(None, value, False)
+                    else:
+                        async with self.room_locks.setdefault(int(value["chatId"]), asyncio.Lock()):
+                            await self.process_event(event)
+        except asyncio.CancelledError:
+            cancelled = True
+            if event.get("admissionStarted"):
+                self.storage.journal_room_review(self.bot.id, int(value["chatId"]), "query-uncertain:" + value["queryId"],
+                    "Native admission interrupted; inspect participants")
+            raise
+        except Exception:
+            if event.get("admissionStarted"):
+                self.storage.journal_room_review(self.bot.id, int(value["chatId"]), "query-uncertain:" + value["queryId"],
+                    "Native admission outcome uncertain; inspect participants")
+                self.wakeup.set()
+            logger.warning("Native group admission could not finish; approval will not be repeated")
+        finally:
+            if not cancelled:
+                if not value.get("queryAnswered") and time.time() < value["sentAt"] + 9:
+                    try:
+                        async with asyncio.timeout(max(.1, value["sentAt"] + 9.7 - time.time())):
+                            await self.answer_join(None, value, False)
+                    except (TelegramAPIError, TimeoutError):
+                        pass
+                self.storage.acknowledge_room_events([event["id"]])
+
+    async def close_join_queries(self):
+        tasks = list(self.join_query_tasks.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        releases = list(self.join_query_releases)
+        if releases:
+            done, pending = await asyncio.wait(releases, timeout=2)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*releases, return_exceptions=True)
 
     async def request(self, method, path, body=None):
         if method == "GET":
@@ -146,9 +217,18 @@ class PartyRooms:
             return
         if event["kind"] == "presence":
             await self.request("POST", "/presence", value)
-        elif event["kind"] in {"join", "review"}:
+        elif event["kind"] in {"join", "join-query", "review"}:
             room = await self.request("POST", f"/{found['id']}/claim")
+            if value.get("queryId"):
+                for _ in range(12):
+                    if room:
+                        break
+                    await asyncio.sleep(.2)
+                    room = await self.request("POST", f"/{found['id']}/claim")
             if not room:
+                if value.get("queryId"):
+                    await self.answer_join(None, value, False)
+                    return
                 self.storage.retry_room_event(event["id"], time.time() + 1)
                 return
             admission_started = False
@@ -159,33 +239,43 @@ class PartyRooms:
                     allowed = await self.request("POST", f"/{room['id']}/admission", {
                         "userId": value["userId"], "inviteLink": value["inviteLink"]})
                     if not allowed.get("allowed") or allowed.get("generation") != room["generation"]:
-                        await self.mutate("decline_chat_join_request", int(room["chatId"]), int(value["userId"]))
+                        await self.answer_join(room, value, False)
                     else:
-                        member = await self.bot.get_chat_member(int(room["chatId"]), int(value["userId"]), request_timeout=15)
-                        if member.status == "kicked":
-                            # Only lift a bot-owned removal; a moderator's ban needs manual review.
-                            if value["userId"] not in room["data"].get("botBannedIds", []):
-                                await self.mutate("decline_chat_join_request", int(room["chatId"]), int(value["userId"]))
-                                self.storage.acknowledge_room_events([event["id"]])
-                                return
-                            await self.mutate("unban_chat_member", int(room["chatId"]), int(value["userId"]), only_if_banned=True)
+                        if not value.get("queryId"):
+                            member = await self.bot.get_chat_member(int(room["chatId"]), int(value["userId"]), request_timeout=15)
+                            if member.status == "kicked":
+                                # Only lift a bot-owned removal; a moderator's ban needs manual review.
+                                if value["userId"] not in room["data"].get("botBannedIds", []):
+                                    await self.answer_join(room, value, False)
+                                    self.storage.acknowledge_room_events([event["id"]])
+                                    return
+                                await self.mutate("unban_chat_member", int(room["chatId"]), int(value["userId"]), only_if_banned=True)
                         await self.report(room, "admitting", userId=value["userId"])
                         admission_started = True
-                        await self.mutate("approve_chat_join_request", int(room["chatId"]), int(value["userId"]))
+                        event["admissionStarted"] = True
+                        await self.answer_join(room, value, True)
                         check = await self.request("POST", f"/{room['id']}/admission", {
                             "userId": value["userId"], "inviteLink": value["inviteLink"]})
                         if not check.get("allowed") or check.get("generation") != room["generation"]:
                             await self.mutate("ban_chat_member", int(room["chatId"]), int(value["userId"]), revoke_messages=True)
                         else:
-                            await self.mutate("restrict_chat_member", int(room["chatId"]), int(value["userId"]),
-                                permissions=permissions(True), use_independent_chat_permissions=True)
+                            if not value.get("queryId"):
+                                await self.mutate("restrict_chat_member", int(room["chatId"]), int(value["userId"]),
+                                    permissions=permissions(True), use_independent_chat_permissions=True)
+                            # Guard approval uses the active group's default
+                            # permissions and never lifts a moderator restriction.
                             await self.report(room, "joined", userId=value["userId"])
             except TelegramNetworkError:
                 if admission_started:
                     await self.report(room, "review", reason="Telegram admission outcome uncertain; inspect participants")
                 raise
             finally:
-                await self.release(room)
+                if value.get("queryId"):
+                    task = asyncio.create_task(self.release(room))
+                    self.join_query_releases.add(task)
+                    task.add_done_callback(self.join_query_releases.discard)
+                else:
+                    await self.release(room)
         self.storage.acknowledge_room_events([event["id"]])
 
     async def revoke(self, room):
@@ -429,12 +519,13 @@ class PartyRooms:
         cursor = 0
         while True:
             try:
+                self.dispatch_join_queries()
                 if time.time() >= self.sync_after:
                     await self.sync()
                     self.sync_after = time.time() + 5
                 await self.flush_messages()
                 for event in self.storage.pending_room_events(self.bot.id, 10):
-                    if event["kind"] == "message":
+                    if event["kind"] in {"message", "join-query"}:
                         continue
                     try:
                         await self.process_event(event)

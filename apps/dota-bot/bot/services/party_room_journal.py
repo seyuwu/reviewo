@@ -35,10 +35,12 @@ class PartyRoomJournal(BaseRequestMiddleware):
                     if message.migrate_to_chat_id or message.migrate_from_chat_id:
                         events.append({"kind": "review", "payload": {"chatId": str(message.chat.id), "reason": "Group ID changed; manual reconnection required"}})
                 request = update.chat_join_request
-                if request and request.chat.id in self.rooms.by_chat:
-                    events.append({"kind": "join", "payload": {
+                query_id = getattr(request, "query_id", None) if request else None
+                if request and (query_id or request.chat.id in self.rooms.by_chat):
+                    events.append({"kind": "join-query" if query_id else "join", "payload": {
                         "chatId": str(request.chat.id), "userId": str(request.from_user.id),
                         "inviteLink": request.invite_link.invite_link if request.invite_link else "",
+                        **({"queryId": query_id, "sentAt": int(request.date.timestamp())} if query_id else {}),
                     }})
                 change = update.chat_member
                 if change and change.chat.id in self.rooms.by_chat and (member_present(change.old_chat_member) != member_present(change.new_chat_member) or change.new_chat_member.status == "kicked"):
@@ -53,6 +55,9 @@ class PartyRoomJournal(BaseRequestMiddleware):
                     events.append({"kind": "review", "payload": {"chatId": str(mine.chat.id), "reason": "Bot administrator rights removed"}})
                 batches.append((update.update_id, events))
             self.rooms.storage.journal_room_updates(bot.id, batches)
+            # Native guard decisions have a ten-second deadline. Dispatch after
+            # durable journaling, without waiting behind background cleanup.
+            self.rooms.dispatch_join_queries()
             if any(events for _, events in batches):
                 self.rooms.wakeup.set()
         elif isinstance(result, Message) and result.chat.id in self.rooms.by_chat and result.message_id:
