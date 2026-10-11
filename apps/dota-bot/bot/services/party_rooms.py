@@ -503,8 +503,9 @@ class PartyRooms:
         if message_id:
             try:
                 await self.bot.edit_message_text(text, chat_id=user_id, message_id=message_id, parse_mode="HTML", reply_markup=markup)
-            except TelegramBadRequest:
-                message_id = None
+            except TelegramBadRequest as error:
+                if "not modified" not in str(error).lower():
+                    message_id = None
         if not message_id:
             self.storage.set_choices(user_id, key, [{"messageId": None, "url": fresh["inviteLink"], "generation": fresh["generation"]}])
             try:
@@ -623,11 +624,9 @@ class PartyRooms:
                         private_delay = error.retry_after + 1
                         self.next_hint = time.time() + private_delay
                     except TelegramNetworkError as error:
-                        retry_hint = is_connection_setup_failure(error)
-                        if sending_hint and not retry_hint:
-                            # An uncertain send may already be delivered. Keep
-                            # access in the main panel without duplicating notices.
-                            self.hint_queue.pop(eligible_hint, None)
+                        # A saved send marker prevents a second notification;
+                        # retrying still updates the user's main entry button.
+                        retry_hint = sending_hint or is_connection_setup_failure(error)
                         logger.warning("Could not deliver private chat availability notice")
                     except (ApiError, TelegramAPIError):
                         retry_hint = True
