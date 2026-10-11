@@ -25,6 +25,28 @@ logger = logging.getLogger(__name__)
 PARTY_INVITATION_MESSAGE_TTL_SECONDS = 3 * 60 * 60
 
 
+@router.callback_query(F.data.regexp(r"^party:ping:[a-f0-9]{20}$"))
+async def ping_party_member(callback: CallbackQuery, api: OpiniaApi, storage: BotStorage) -> None:
+    if callback.message is None or callback.message.chat.type != "private":
+        return
+    token = (callback.data or "").rsplit(":", 1)[-1]
+    context = storage.get_choice(callback.from_user.id, "party_ping_token:" + token, 0)
+    if not isinstance(context, dict):
+        await callback.answer("Открой карточку игрока заново.", show_alert=True)
+        return
+    acknowledge_callback(callback)
+    try:
+        await api.user(callback.from_user.id, "POST",
+            f"/social/parties/{quote(context['partySlug'], safe='')}/chat-pings",
+            {**{field: context[field] for field in ("partyId", "membershipId", "targetMembershipId")},
+             "telegramUserId": str(callback.from_user.id)}, bot_secret=True)
+        text = "🔔 Позвал игрока — бот отправит ему уведомление с кнопкой чата."
+    except ApiError as error:
+        text = str(error) if error.status in {400, 403, 409, 429} else "Не удалось позвать игрока. Попробуй ещё раз."
+    await send_temporary_notification(callback.bot, storage, callback.from_user.id,
+                                      callback.message.chat.id, text, 5)
+
+
 @router.callback_query(F.data.regexp(r"^party:status:[a-f0-9]{20}:[1-5]$"))
 async def view_party_readiness(callback: CallbackQuery, api: OpiniaApi, storage: BotStorage) -> None:
     if callback.message is None or callback.message.chat.type != "private":
@@ -151,6 +173,9 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
     invite = payload.get("invite") or {}
     invite_id = invite.get("id")
     try:
+        if event_type == "party_chat_ping":
+            from ..services.party_chat_pings import deliver_party_chat_ping
+            return await deliver_party_chat_ping(bot, api, settings, storage, row)
         if event_type == "tournament_match_mention":
             title = escape(str(payload.get("tournamentTitle") or "Турнир"))
             author = escape(str(payload.get("author") or "Участник матча"))

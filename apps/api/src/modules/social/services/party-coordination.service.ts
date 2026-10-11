@@ -15,10 +15,11 @@ const partyInclude = {
       user: {
         select: {
           displayName: true,
+          status: true,
           telegramContactVisible: true,
           authIdentities: {
             where: { provider: "telegram" },
-            select: { telegramUsername: true },
+            select: { telegramUsername: true, providerUserId: true },
             take: 1
           }
         }
@@ -88,6 +89,7 @@ export class PartyCoordinationService {
           membershipId: member.id, userId: member.userId, displayName: member.user.displayName,
           positionRole: member.positionRole, isSelf: member.userId === viewer,
           readyAt: member.readyAt?.toISOString() ?? null,
+          canReceiveChatPing: member.user.status === "active" && /^\d{1,20}$/.test(member.user.authIdentities[0]?.providerUserId ?? ""),
           telegramUsername: canSeeContact && username && /^[A-Za-z0-9_]{1,32}$/.test(username) ? username : null,
           telegramContactShared: member.telegramContactShared,
           telegramContactPublic: member.user.telegramContactVisible

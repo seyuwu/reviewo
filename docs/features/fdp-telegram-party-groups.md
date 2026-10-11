@@ -51,6 +51,16 @@ New temporary parties last 3 hours. Captains and officers can use
 Existing parties retain their saved expiry; changing the default does not end
 their sessions early.
 
+Clicking an occupied party slot opens the player card. “Позвать в чат” queues a
+private FDP notification with the sender name and a current chat button. It is
+available only for another Telegram-linked member of the same temporary party.
+Sender and target membership IDs, current Telegram bindings, active account and
+party lifetime are checked before enqueueing and delivery. A shared recipient
+membership lock and the notification journal enforce one ping per recipient per
+party in a rolling five-minute window, across all senders and bot instances.
+Expired, removed or rejoined memberships invalidate queued pings. Notifications
+expire after at most five minutes; native group links are refreshed on rotation.
+
 ## Durability and cleanup limits
 
 The bot session journals incoming group metadata before returning a long-poll

@@ -353,8 +353,10 @@ def party_slot_occupants(party: dict) -> dict[str, str]:
     return occupants
 
 
-def party_member_keyboard(member: dict, can_kick: bool, site_url: str, back_target: str = "party") -> InlineKeyboardMarkup:
+def party_member_keyboard(member: dict, can_kick: bool, site_url: str, back_target: str = "party", *, ping_token: str | None = None) -> InlineKeyboardMarkup:
     rows = []
+    if ping_token:
+        rows.append([button("🔔 Позвать в чат", f"party:ping:{ping_token}")])
     if member.get("dotaSlug"):
         rows.append([button_url("🌐 Открыть профиль на сайте", f"{site_url}/dota/{member['dotaSlug']}")])
     if can_kick:

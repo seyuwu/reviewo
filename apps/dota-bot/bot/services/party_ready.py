@@ -35,9 +35,9 @@ def expire_ready_notice(storage, user_id, token):
     _links.pop((user_id, token), None)
 
 
-async def open_chat_button(api, user_id, site_url, slug, token, *, force=False):
+async def open_chat_button(api, user_id, site_url, slug, token, *, force=False, cache=True):
     key = (user_id, token)
-    cached = _links.get(key)
+    cached = _links.get(key) if cache else None
     if not force and cached and cached[1] > time.time():
         return cached[0]
     pool = getattr(api, "party_rooms", None)
@@ -45,7 +45,8 @@ async def open_chat_button(api, user_id, site_url, slug, token, *, force=False):
         room = await pool.for_user(user_id, slug)
         if room and room.get("inviteLink"):
             item = button_url("💬 Открыть чат в Telegram", room["inviteLink"])
-            _links[key] = (item, time.time() + 8 * 60)
+            if cache:
+                _links[key] = (item, time.time() + 8 * 60)
             return item
     next_path = f"/dota/teams/{slug}#party-chat"
     try:
@@ -56,7 +57,8 @@ async def open_chat_button(api, user_id, site_url, slug, token, *, force=False):
         url = f"{site_url.rstrip('/')}/telegram/access?next={quote(next_path, safe='')}"
         item = button_login("💬 Открыть чат пати", url)
     # Login tickets remain short-lived and single-use. Never persist them in a notice.
-    _links[key] = (item, time.time() + 8 * 60)
+    if cache:
+        _links[key] = (item, time.time() + 8 * 60)
     return item
 
 

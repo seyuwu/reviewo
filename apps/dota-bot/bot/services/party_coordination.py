@@ -47,6 +47,25 @@ async def enrich_party(api, storage, user_id, party):
     return result
 
 
+def party_ping_context(storage, user_id, party, target):
+    sender = own_member(party)
+    if (party.get("kind") != "PARTY" or not sender or target.get("isSelf")
+            or not target.get("canReceiveChatPing") or not sender.get("membershipId")
+            or not target.get("membershipId")):
+        return None
+    context = {
+        "partyId": party["id"], "partySlug": party["slug"],
+        "membershipId": sender["membershipId"], "targetMembershipId": target["membershipId"],
+    }
+    key = "party_ping:" + party["id"] + ":" + target["userId"]
+    saved = storage.get_choice(user_id, key, 0)
+    token = saved.get("token") if isinstance(saved, dict) and all(saved.get(k) == v for k, v in context.items()) else None
+    context["token"] = token or secrets.token_hex(10)
+    storage.set_choices(user_id, key, [context])
+    storage.set_choices(user_id, "party_ping_token:" + context["token"], [context])
+    return context
+
+
 def notice_deadline(coordination):
     deadline = datetime.now(UTC) + timedelta(hours=24)
     if coordination.get("expiresAt"):

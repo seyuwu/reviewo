@@ -28,6 +28,7 @@ export interface PartyCoordinationResponse {
     displayName: string;
     positionRole: string | null;
     isSelf: boolean;
+    canReceiveChatPing?: boolean;
     readyAt: string | null;
     telegramUsername: string | null;
     telegramContactShared: boolean;

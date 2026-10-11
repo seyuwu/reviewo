@@ -23,7 +23,7 @@ from .temporary_notifications import send_temporary_notification
 from .search_timeout_notices import queue_solo_timeout, queue_recruit_timeout, search_reached_timeout
 from .start_links import bot_friend_invite_url
 from .registration_drafts import clear_registration_draft, registration_draft
-from .party_coordination import enrich_party
+from .party_coordination import enrich_party, party_ping_context
 from ..ui.formatters import party_text, profile_text
 from ..ui.keyboards import (
     account_keyboard,
@@ -902,7 +902,11 @@ async def render_screen(
         contact = telegram_contact_text(member)
         if contact:
             text += "\n📱 Telegram: " + contact
-        return text, party_member_keyboard(member, can_kick, settings.site_url, back_target)
+        ping = party_ping_context(storage, telegram_user_id, party, member)
+        if ping:
+            text += "\n\n🔔 Можно позвать игрока в чат. Повторный вызов — через 5 минут."
+        return text, party_member_keyboard(member, can_kick, settings.site_url, back_target,
+                                          ping_token=ping["token"] if ping else None)
 
     if screen == "invites":
         incoming = [item for item in my_parties.get("invites", []) if item.get("status") == "PENDING"]

@@ -358,17 +358,27 @@ class PartyRooms:
         old = self.storage.get_choice(user_id, key, 0)
         ready_key = "party_room_ready_link:" + party_id
         ready_link = self.storage.get_choice(user_id, ready_key, 0)
+        ping_key = "party_room_ping_link:" + party_id
+        ping_link = self.storage.get_choice(user_id, ping_key, 0)
         if not fresh or not fresh.get("inviteLink") or fresh.get("partyId") != party_id:
-            for saved in (old, ready_link):
+            for saved in (old, ready_link, ping_link):
                 if isinstance(saved, dict) and saved.get("messageId"):
                     self.storage.add_temporary_message(user_id, user_id, saved["messageId"], 1)
             self.storage.set_choices(user_id, key, [])
             self.storage.set_choices(user_id, ready_key, [])
+            self.storage.set_choices(user_id, ping_key, [])
             await self.refresh_private_controls(user_id, party_id)
             return
-        if isinstance(old, dict) and old.get("url") == fresh["inviteLink"]:
+        if isinstance(old, dict) and old.get("url") == fresh["inviteLink"] and (not isinstance(ping_link, dict) or ping_link.get("url") == fresh["inviteLink"]):
             return
         markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="💬 Открыть чат пати", url=fresh["inviteLink"])]])
+        if isinstance(ping_link, dict) and ping_link.get("url") != fresh["inviteLink"]:
+            try:
+                await self.bot.edit_message_reply_markup(chat_id=user_id, message_id=ping_link["messageId"], reply_markup=markup)
+                ping_link["url"] = fresh["inviteLink"]
+                self.storage.set_choices(user_id, ping_key, [ping_link])
+            except TelegramBadRequest:
+                self.storage.set_choices(user_id, ping_key, [])
         if isinstance(ready_link, dict) and ready_link.get("url") != fresh["inviteLink"]:
             try:
                 await self.bot.edit_message_reply_markup(chat_id=user_id, message_id=ready_link["messageId"], reply_markup=markup)

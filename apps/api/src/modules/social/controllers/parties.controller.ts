@@ -6,6 +6,7 @@ import {
   Headers,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -56,6 +57,8 @@ import { UpdatePartyMemberRoleDto } from "../dto/update-party-member-role.dto.js
 import { GamePartyGateway } from "../gateways/game-party.gateway.js";
 import { GamePartiesService } from "../services/game-parties.service.js";
 import { PartyCoordinationService } from "../services/party-coordination.service.js";
+import { PartyChatPingsService } from "../services/party-chat-pings.service.js";
+import { PartyChatPingDto, type PartyChatPingDelivery } from "../dto/party-chat-ping.dto.js";
 import { SetPartyReadyDto, SharePartyTelegramContactDto, type PartyCoordinationResponse } from "../dto/party-coordination.dto.js";
 
 @Controller("social/parties")
@@ -66,7 +69,8 @@ export class PartiesController {
     private readonly gamePartyGateway: GamePartyGateway,
     private readonly gamesLaunchService: GamesLaunchService,
     private readonly telegramBotService: TelegramBotService,
-    private readonly partyCoordinationService: PartyCoordinationService
+    private readonly partyCoordinationService: PartyCoordinationService,
+    private readonly partyChatPingsService: PartyChatPingsService
   ) {}
 
   private async assertCommunityOpen(currentUser: AuthenticatedUser): Promise<void> {
@@ -375,6 +379,29 @@ export class PartiesController {
     const result = await this.partyCoordinationService.update(slug, user.id, input.membershipId, { ready: input.ready });
     if (result.changed) this.gamePartyGateway.notifyTelegramPartyRosterUpdated(result.coordination.members.map((member) => member.userId), result.coordination.slug);
     return result.coordination;
+  }
+
+  @Post(":slug/chat-pings")
+  @UseGuards(JwtAuthGuard)
+  async pingPartyMember(
+    @Param("slug") slug: string, @Body() input: PartyChatPingDto,
+    @CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike,
+    @Headers("x-telegram-bot-secret") secret?: string
+  ): Promise<{ queued: true }> {
+    this.telegramBotService.assertBotSecret(secret);
+    await this.apiRateLimiterService.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    return this.partyChatPingsService.create(slug, user.id, input);
+  }
+
+  @Get(":slug/chat-pings/:id")
+  @UseGuards(JwtAuthGuard)
+  async getPartyChatPingDelivery(
+    @Param("slug") slug: string, @Param("id", ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Headers("x-telegram-bot-secret") secret?: string
+  ): Promise<PartyChatPingDelivery | null> {
+    this.telegramBotService.assertBotSecret(secret);
+    return this.partyChatPingsService.delivery(slug, id, user.id);
   }
 
   @Patch(":slug/members/me/telegram-contact")
