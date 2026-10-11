@@ -2387,14 +2387,22 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    try {
-      await this.discordVoiceService.ensureVoiceChannelAcl(channelId);
-    } catch (error) {
-      this.logger.warn(
-        `Failed to ensure Discord voice ACL for ${channelId}: ${
-          error instanceof Error ? error.message : "unknown"
-        }`
-      );
+    const telegramClicks = party.kind === "PARTY"
+      ? await this.gamePartiesRepository.telegramDiscordClicks(party.id) : null;
+    const telegramVoiceLimit = telegramClicks === null ? null
+      : Math.max(1, responseParty.members.filter(member => telegramClicks.includes(member.id)).length);
+    if (telegramVoiceLimit !== null) {
+      await this.discordVoiceService.configureTelegramPartyVoice(channelId, telegramVoiceLimit);
+    } else {
+      try {
+        await this.discordVoiceService.ensureVoiceChannelAcl(channelId);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to ensure Discord voice ACL for ${channelId}: ${
+            error instanceof Error ? error.message : "unknown"
+          }`
+        );
+      }
     }
 
     if (!shareInviteUrl) {
@@ -2439,35 +2447,36 @@ export class GamePartiesService implements OnModuleInit, OnModuleDestroy {
     let movedToVoice = false;
 
     if (intent === "join") {
-      const discordUserId = await this.authService.getDiscordUserId(currentUser.id);
+      if (telegramVoiceLimit === null) {
+        const discordUserId = await this.authService.getDiscordUserId(currentUser.id);
 
-      if (!discordUserId) {
-        throw createAppException({
-          code: AppErrorCode.DiscordNotLinked,
-          message: "Link your Discord account to join party voice",
-          statusCode: HttpStatus.FORBIDDEN
-        });
+        if (!discordUserId) {
+          throw createAppException({
+            code: AppErrorCode.DiscordNotLinked,
+            message: "Link your Discord account to join party voice",
+            statusCode: HttpStatus.FORBIDDEN
+          });
+        }
+
+        // Member overwrite is required when @everyone is denied CONNECT.
+        try {
+          await this.discordVoiceService.grantMemberVoiceAccess(channelId, discordUserId);
+        } catch (grantError) {
+          this.logger.error(
+            `Discord grant voice access failed for ${discordUserId} on ${channelId}: ${
+              grantError instanceof Error ? grantError.message : "unknown"
+            }`
+          );
+          throw createAppException({
+            code: AppErrorCode.ServiceUnavailable,
+            message:
+              "Could not grant Discord voice access. Raise the bot role above members and ensure Manage Channels.",
+            statusCode: HttpStatus.SERVICE_UNAVAILABLE
+          });
+        }
+
+        movedToVoice = await this.discordVoiceService.tryMoveMemberToVoice(channelId, discordUserId);
       }
-
-      // Member overwrite is required now that @everyone is denied CONNECT.
-      // Bot role must sit above target members (Manage Channels + hierarchy).
-      try {
-        await this.discordVoiceService.grantMemberVoiceAccess(channelId, discordUserId);
-      } catch (grantError) {
-        this.logger.error(
-          `Discord grant voice access failed for ${discordUserId} on ${channelId}: ${
-            grantError instanceof Error ? grantError.message : "unknown"
-          }`
-        );
-        throw createAppException({
-          code: AppErrorCode.ServiceUnavailable,
-          message:
-            "Could not grant Discord voice access. Raise the bot role above members and ensure Manage Channels.",
-          statusCode: HttpStatus.SERVICE_UNAVAILABLE
-        });
-      }
-
-      movedToVoice = await this.discordVoiceService.tryMoveMemberToVoice(channelId, discordUserId);
 
       try {
         inviteUrl = await this.discordVoiceService.createJoinInvite(channelId);

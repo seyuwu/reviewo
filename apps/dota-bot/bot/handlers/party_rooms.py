@@ -2,10 +2,14 @@ from collections import Counter
 from html import escape
 import secrets
 import time
+import logging
 from urllib.parse import urlencode
+from uuid import UUID
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, CommandStart
+from aiogram.filters.command import CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (CallbackQuery, ChatAdministratorRights, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -15,16 +19,43 @@ from ..api.client import ApiError
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import edit_panel, edit_panel_content
 from ..services.party_coordination import own_member, read_coordination
+from ..services.party_discord import SendPartyDiscordMessage, EditPartyDiscordMessage
 from ..services.temporary_notifications import send_temporary_notification
 from ..ui.keyboards import button
 
 router = Router(name="party-rooms")
+logger = logging.getLogger(__name__)
 STATES = {"FREE": "Свободна", "PREPARING": "Подготовка", "ACTIVE": "Занята", "ROTATING": "Смена приглашения", "CLOSING": "Очистка", "REVIEW": "Требует проверки"}
 
 
 class RoomSettings(StatesGroup):
     choosing_group = State()
     capacity = State()
+
+
+@router.message(CommandStart(deep_link=True), F.text.regexp(r"^/start(?:@\w+)?\s+manage_[a-f0-9]{32}$"))
+async def open_party_management(message: Message, command: CommandObject, state: FSMContext, api, settings, storage):
+    if message.chat.type != "private" or message.from_user is None:
+        return
+    user_id = message.from_user.id
+    party_id = str(UUID((command.args or "").removeprefix("manage_")))
+    storage.record_bot_user(user_id, display_name=message.from_user.full_name, username=message.from_user.username)
+    try:
+        if storage.get_session(user_id) is None:
+            auth = await api.login_telegram_bot_session(user_id)
+            storage.save_session(user_id, auth["accessToken"], auth["refreshToken"], clear_recovery_url=True)
+        response = await api.user(user_id, "GET", "/social/parties/me")
+        party = response.get("party") or ((response.get("parties") or [None])[-1])
+        if not party or party.get("id") != party_id or party.get("kind") != "PARTY" or not party.get("isMember"):
+            await message.answer("Эта пати завершилась или ты больше в ней не состоишь. Открой свою пати в меню FDP.")
+            return
+        await state.clear()
+        storage.set_choices(user_id, "pending_onboarding_action", [])
+        storage.set_choices(user_id, "pending_solo_search", [])
+        await edit_panel(message.bot, storage, api, settings, user_id, "party", message.chat.id,
+                         force_new_message=storage.get_panel(user_id) is not None)
+    except ApiError:
+        await message.answer("Не получилось открыть пати. Попробуй ещё раз или открой /start.")
 
 
 def authorized(event, settings):
@@ -243,6 +274,59 @@ async def group_ready(callback: CallbackQuery, api, settings, storage):
         await callback.answer("Состав изменился. Открой текущую карточку пати.", show_alert=True)
 
 
+@router.callback_query(F.data.regexp(r"^roomdiscord:[a-f0-9-]{36}:\d+$"))
+async def group_discord(callback: CallbackQuery, api, settings, storage):
+    if callback.message is None or callback.message.chat.type != "supergroup":
+        await callback.answer("Открой Discord из текущего чата пати.", show_alert=True)
+        return
+    _, room_id, generation = callback.data.split(":")
+    pool = api.party_rooms
+    room = pool.by_chat.get(callback.message.chat.id)
+    if not room or room["id"] != room_id:
+        await callback.answer("Кнопка устарела.", show_alert=True)
+        return
+    if not any(str(member.get("telegramId")) == str(callback.from_user.id) for member in room.get("data", {}).get("roster", [])):
+        await callback.answer("Discord доступен участникам этой пати.", show_alert=True)
+        return
+    key = (callback.from_user.id, room_id)
+    if pool.discord_cooldowns.get(key, 0) > time.time():
+        await callback.answer("Подожди немного — уже готовим Discord.")
+        return
+    requests = [stamp for stamp in pool.discord_chat_requests.get(callback.message.chat.id, []) if stamp > time.time() - 60]
+    if len(requests) >= 5:
+        await callback.answer("Discord сейчас занят. Попробуй через минуту.", show_alert=True)
+        return
+    pool.discord_chat_requests[callback.message.chat.id] = requests + [time.time()]
+    pool.discord_cooldowns[key] = time.time() + 10
+    acknowledge_callback(callback, "Готовлю Discord…")
+    ephemeral_id = None
+    try:
+        status = await pool.mutate(SendPartyDiscordMessage(chat_id=callback.message.chat.id,
+            text="🔊 Готовлю войс Discord…", ephemeral_message_parameters={
+                "receiver_user_id": callback.from_user.id, "callback_query_id": callback.id}))
+        ephemeral_id = status.model_dump().get("ephemeral_message_id")
+    except TelegramAPIError:
+        logger.warning("Could not show private Discord preparation status")
+    try:
+        voice = await pool.request("POST", f"/{room_id}/discord", {
+            "userId": str(callback.from_user.id), "generation": int(generation)})
+        text = f"🔊 <b>{escape(voice['name'])}</b>\nЛимит войса: <b>{voice['limit']} чел.</b>\nПривязывать Discord к FDP не нужно."
+        markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔊 Перейти в Discord", url=voice["inviteUrl"])]])
+    except ApiError:
+        text = "Не получилось подготовить Discord. Проверь, что пати ещё активна, и попробуй кнопку снова."
+        markup = None
+    try:
+        if ephemeral_id:
+            await pool.mutate(EditPartyDiscordMessage(chat_id=callback.message.chat.id, receiver_user_id=callback.from_user.id,
+                ephemeral_message_id=ephemeral_id, text=text, reply_markup=markup))
+        else:
+            await pool.mutate(SendPartyDiscordMessage(chat_id=callback.message.chat.id, text=text, reply_markup=markup,
+                ephemeral_message_parameters={"receiver_user_id": callback.from_user.id}))
+    except TelegramAPIError:
+        pool.discord_cooldowns[key] = time.time() + 2
+        logger.warning("Could not deliver private Discord invitation; click can be retried")
+
+
 @router.callback_query(F.data.regexp(r"^roomopen:[a-f0-9]{20}$"))
 async def open_party_group(callback: CallbackQuery, api, settings, storage):
     if callback.message is None or callback.message.chat.type != "private" or callback.message.chat.id != callback.from_user.id:
@@ -349,6 +433,7 @@ def create_room_worker_router():
         else:
             await callback.answer("Нет доступа", show_alert=True)
     worker.callback_query.register(group_ready, F.data.regexp(r"^roomready:[a-f0-9-]{36}:\d+$"))
+    worker.callback_query.register(group_discord, F.data.regexp(r"^roomdiscord:[a-f0-9-]{36}:\d+$"))
     worker.message.register(register_selected_room, F.chat_shared)
     worker.message.register(change_room_capacity, RoomSettings.capacity, F.text)
     worker.message.register(connect_group_command, Command("fdpchat"))

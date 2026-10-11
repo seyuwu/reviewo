@@ -32,6 +32,14 @@ const MAX_CHAT_PAGE_SIZE = 100;
 export class GamePartiesRepository {
   constructor(private readonly prismaService: PrismaService) {}
 
+  async telegramDiscordClicks(partyId: string): Promise<string[] | null> {
+    const room = await this.prismaService.telegramPartyChatRoom.findUnique({ where: { partyId }, select: { data: true } });
+    const data = room?.data;
+    if (!data || typeof data !== "object" || Array.isArray(data) || data["discordGuestVoice"] !== true) return null;
+    const clicks = data["discordClickedMembershipIds"];
+    return Array.isArray(clicks) ? clicks.filter((value): value is string => typeof value === "string") : [];
+  }
+
   async listPartyChatArchives(input: { before?: string; limit?: number }, now: Date) {
     const limit = Math.min(Math.max(input.limit ?? 25, 1), 50);
     const active = { expiresAt: { gt: now } };

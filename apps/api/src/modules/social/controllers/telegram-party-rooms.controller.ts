@@ -2,7 +2,7 @@ import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Query } fro
 import { TelegramBotService } from "../../telegram/telegram-bot.service.js";
 import { TelegramPartyRoomsService } from "../services/telegram-party-rooms.service.js";
 import { PoolCapacityDto, RegisterRoomDto, ReserveRoomDto, RoomAdminActionDto, RoomAdminDto, RoomAdmissionDto,
-  RoomBotDto, RoomDeletedDto, RoomLeaseDto, RoomMessagesDto, RoomPresenceDto, RoomReportDto } from "../dto/telegram-party-rooms.dto.js";
+  RoomBotDto, RoomDeletedDto, RoomDiscordDto, RoomLeaseDto, RoomMessagesDto, RoomPresenceDto, RoomReportDto } from "../dto/telegram-party-rooms.dto.js";
 
 @Controller("social/telegram-party-rooms")
 export class TelegramPartyRoomsController {
@@ -81,5 +81,10 @@ export class TelegramPartyRoomsController {
   @Post(":id/deleted")
   deleted(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string, @Body() input: RoomDeletedDto, @Headers("x-telegram-bot-secret") secret?: string) {
     this.authorize(secret); return this.rooms.deleted(id, input.botId, input.generation, input.leaseToken, input.messageIds);
+  }
+  @Post(":id/discord")
+  discord(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string, @Body() input: RoomDiscordDto,
+    @Headers("x-telegram-bot-secret") secret?: string) {
+    this.authorize(secret); return this.rooms.openDiscord(id, input.botId, input.userId, input.generation);
   }
 }

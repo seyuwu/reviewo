@@ -7,6 +7,7 @@ import type { EnvironmentVariables } from "../../../config/environment.validatio
 import { PrismaService } from "../../../database/prisma.service.js";
 import { GamePartiesService } from "./game-parties.service.js";
 import { PartyCoordinationService } from "./party-coordination.service.js";
+import { DiscordVoiceService } from "./discord-voice.service.js";
 import type { RegisterRoomDto, RoomReportDto, RoomMessagesDto } from "../dto/telegram-party-rooms.dto.js";
 
 type RosterMember = { membershipId: string; userId: string; telegramId: string | null; name: string; role: string | null; ready: boolean };
@@ -18,6 +19,7 @@ type RoomData = {
   cardJoinVersion?: number; cardPostedJoinVersion?: number; cardRefreshAfter?: number;
   cardPendingPin?: boolean; cardObsoleteIds?: number[];
   cardVisibilityInitialized?: boolean;
+  discordGuestVoice?: boolean; discordClickedMembershipIds?: string[];
   botBannedIds?: string[];
   presenceUpdates?: Record<string, { sentAt: number; updateId: number; status?: string; actorId?: string }>;
   cleanupUncertain?: boolean;
@@ -35,8 +37,10 @@ const partyInclude = { members: { include: { user: { select: { id: true, display
 
 @Injectable()
 export class TelegramPartyRoomsService {
+  private readonly discordJoins = new Map<string, Promise<{ inviteUrl: string; limit: number; name: string }>>();
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService<EnvironmentVariables, true>,
-    private readonly parties: GamePartiesService, private readonly coordination: PartyCoordinationService) {}
+    private readonly parties: GamePartiesService, private readonly coordination: PartyCoordinationService,
+    private readonly discord: DiscordVoiceService) {}
 
   assertAdmin(adminId: string) {
     const allowed = new Set((this.config.get("DOTA_BOT_ADMIN_IDS", { infer: true }) ?? "").split(",").map(id => id.trim()));
@@ -183,6 +187,7 @@ export class TelegramPartyRoomsService {
         }
       }
       data.roster = roster; data.partyName = party.name; data.partySlug = party.slug; data.expiresAt = party.expiresAt?.toISOString() ?? null;
+      data.discordClickedMembershipIds = (data.discordClickedMembershipIds ?? []).filter(id => roster.some(member => member.membershipId === id));
       const preparationTimedOut = room.state === "PREPARING" && room.assignedAt && Date.now() - room.assignedAt.getTime() >= 10 * 60_000;
       return tx.telegramPartyChatRoom.update({ where: { id: room.id }, data: {
         ...(preparationTimedOut ? { state: "CLOSING", generation: { increment: 1 } }
@@ -415,9 +420,49 @@ export class TelegramPartyRoomsService {
       members = members.map(member => ({ ...member, dotaAccountId: party.members.find(player => player.userId === member.userId)?.dotaAccountId ?? null,
         mmr: party.members.find(player => player.userId === member.userId)?.mmr ?? null }));
       return { name: party.name, members, discordUrl: party.discordInviteUrl, generation: room.generation,
-        joinVersion: data.cardJoinVersion ?? 0, refreshAfter: data.cardRefreshAfter ?? 0 };
+        joinVersion: data.cardJoinVersion ?? 0, refreshAfter: data.cardRefreshAfter ?? 0,
+        discordAvailable: this.discord.isConfigured() };
     } catch { return { name: data.partyName, members, discordUrl: null, generation: room.generation,
-      joinVersion: data.cardJoinVersion ?? 0, refreshAfter: data.cardRefreshAfter ?? 0 }; }
+      joinVersion: data.cardJoinVersion ?? 0, refreshAfter: data.cardRefreshAfter ?? 0,
+      discordAvailable: this.discord.isConfigured() }; }
+  }
+
+  async openDiscord(roomId: string, botId: string, telegramId: string, generation: number) {
+    const previous = this.discordJoins.get(roomId) ?? Promise.resolve();
+    const operation = previous.catch(() => undefined).then(() => this.prepareDiscord(roomId, botId, telegramId, generation));
+    this.discordJoins.set(roomId, operation);
+    try { return await operation; }
+    finally { if (this.discordJoins.get(roomId) === operation) this.discordJoins.delete(roomId); }
+  }
+
+  private async prepareDiscord(roomId: string, botId: string, telegramId: string, generation: number) {
+    if (!this.discord.isConfigured()) throw new ConflictException("Discord is not configured");
+    await this.reconcile(roomId);
+    const context = await this.locked(roomId, async (tx, room) => {
+      const data = dataOf(room);
+      const member = data.roster.find(member => member.telegramId === telegramId);
+      if (room.botId !== botId || room.generation !== generation || room.state !== "ACTIVE" || !member
+        || (!data.presentIds.includes(telegramId) && !data.staffIds.includes(telegramId))
+        || !data.expiresAt || new Date(data.expiresAt) <= new Date()) throw new ForbiddenException();
+      data.discordGuestVoice = true;
+      data.discordClickedMembershipIds = unique([...(data.discordClickedMembershipIds ?? []), member.membershipId]);
+      const user = await tx.user.findUniqueOrThrow({ where: { id: member.userId }, select: {
+        id: true, avatarUrl: true, displayName: true, email: true, role: true, status: true, username: true
+      } });
+      if (user.status !== "active" || !data.partySlug) throw new ForbiddenException();
+      await tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: { data: json(data) } });
+      return { member, user, slug: data.partySlug, name: data.partyName ?? "Пати FDP" };
+    });
+    // Slow Discord calls happen outside row locks and the Telegram room operation lease.
+    const result = await this.parties.ensureDiscordVoice(context.slug, context.user, "join");
+    const current = await this.reconcile(roomId); const data = dataOf(current);
+    if (current.botId !== botId || current.generation !== generation || current.state !== "ACTIVE"
+      || !data.expiresAt || new Date(data.expiresAt) <= new Date()
+      || !data.roster.some(member => member.membershipId === context.member.membershipId && member.telegramId === telegramId)) {
+      throw new ConflictException("Party membership changed");
+    }
+    return { inviteUrl: result.voice.inviteUrl,
+      limit: Math.max(1, data.discordClickedMembershipIds?.length ?? 1), name: context.name };
   }
 
   async ready(roomId: string, botId: string, telegramId: string, ready: boolean, generation?: number) {

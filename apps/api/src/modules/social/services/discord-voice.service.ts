@@ -119,6 +119,18 @@ export class DiscordVoiceService {
     });
   }
 
+  async configureTelegramPartyVoice(channelId: string, limit: number): Promise<void> {
+    const token = this.requireBotToken();
+    const guildId = this.requireGuildId();
+    // This opt-in mode uses native Discord invites without account linking.
+    await this.request("PATCH", `/channels/${channelId}`, token, {
+      user_limit: Math.max(1, Math.min(5, Math.floor(limit)))
+    });
+    await this.request("PUT", `/channels/${channelId}/permissions/${guildId}`, token, {
+      allow: (PERM_VIEW_CHANNEL | PERM_CONNECT | PERM_SPEAK).toString(), deny: "0", type: OVERWRITE_ROLE
+    });
+  }
+
   /** Grant one Discord user CONNECT on the party voice channel. */
   async grantMemberVoiceAccess(channelId: string, discordUserId: string): Promise<void> {
     const token = this.requireBotToken();

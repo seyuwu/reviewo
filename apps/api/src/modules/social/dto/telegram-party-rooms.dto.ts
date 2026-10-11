@@ -45,6 +45,10 @@ export class RoomAdmissionDto extends RoomBotDto {
   @IsOptional() @IsBoolean() ready?: boolean;
   @IsOptional() @IsInt() @Min(1) generation?: number;
 }
+export class RoomDiscordDto extends RoomBotDto {
+  @Matches(/^\d{1,16}$/) userId!: string;
+  @IsInt() @Min(1) generation!: number;
+}
 export class RoomMessageDto {
   @Matches(/^-100\d{5,16}$/) chatId!: string;
   @IsInt() @Min(1) messageId!: number;

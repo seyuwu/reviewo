@@ -58,6 +58,25 @@ are coalesced for two seconds, and persisted join versions prevent a concurrent
 join from being lost when a card send is acknowledged. Existing active groups
 receive one replacement card after this feature is first enabled.
 
+The shared card also has “Управлять пати”, opening the main FDP bot directly at
+the current player's party panel. The `manage_<party UUID>` link is navigation
+only: the bot rechecks current membership and never joins a party from that link.
+Helper workers use `DOTA_BOT_MAIN_USERNAME` (default `FDPdotabot`) for this action.
+
+“Discord” records one click per current party membership and prepares native
+Discord voice on demand. Each additional distinct player increases the voice
+channel limit, up to five; repeated clicks do not add seats. The invitation is
+shown privately inside the Telegram group and opens the party's voice channel.
+This explicitly selected guest mode requires no Discord/FDP account binding:
+other guild members may connect if seats are free. It is a channel capacity
+limit, not identity-based admission. Other parties and teams keep their existing
+Discord access policy until guest mode is selected for their Telegram party room.
+Slow voice preparation runs outside database row locks and Telegram room leases.
+It also uses its own two-connection HTTP session so native Telegram admission
+queries retain the room service's four-connection session and ten-second budget.
+Discord replies share the existing background Telegram mutation budget; each
+group can prepare five private invitations per minute to protect chat capacity.
+
 Stopping recruitment does not end the party or group. Party extensions update
 invitation expiry. Canonical merged or deleted parties enter cleanup. Mere expiry
 does not release the group before normal API cleanup has handled Discord occupancy

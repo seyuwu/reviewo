@@ -4,6 +4,7 @@ from html import escape
 import logging
 import time
 from urllib.parse import urlencode
+from uuid import UUID
 
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramNetworkError, TelegramRetryAfter
 from aiogram.types import ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
@@ -40,6 +41,8 @@ class PartyRooms:
         self.next_hint = 0.0
         self.notice_rooms = {}
         self.ready_cooldowns = {}
+        self.discord_cooldowns = {}
+        self.discord_chat_requests = {}
         self.alert_queue = {}
         self.private_after = {}
         self.registration_results = {}
@@ -129,6 +132,8 @@ class PartyRooms:
             await asyncio.sleep(max(0, self.next_operation - time.monotonic()))
             self.next_operation = time.monotonic() + .2
             kwargs.setdefault("request_timeout", 15)
+            if not isinstance(method, str):
+                return await self.bot(method, **kwargs)
             return await getattr(self.bot, method)(*args, **kwargs)
 
     async def for_user(self, user_id, slug):
@@ -396,9 +401,11 @@ class PartyRooms:
             text += "\nDota ID: " + escape(str(member.get("dotaAccountId") or "не указан")) + "\n"
         text += "\nПоздоровайтесь и договоритесь об игре.\nЧат временный: после завершения пати переписка удаляется."
         row = [InlineKeyboardButton(text="✅ Готов играть", callback_data=f"roomready:{room['id']}:{room['generation']}")]
-        if card.get("discordUrl"):
-            row.append(InlineKeyboardButton(text="🔊 Discord", url=card["discordUrl"]))
-        markup = InlineKeyboardMarkup(inline_keyboard=[row])
+        actions = [InlineKeyboardButton(text="⚙️ Управлять пати",
+            url=f"https://t.me/{getattr(self.settings, 'main_bot_username', 'FDPdotabot')}?start=manage_{UUID(room['partyId']).hex}")]
+        if card.get("discordAvailable"):
+            actions.append(InlineKeyboardButton(text="🔊 Discord", callback_data=f"roomdiscord:{room['id']}:{room['generation']}"))
+        markup = InlineKeyboardMarkup(inline_keyboard=[row, actions])
         message_id = room["data"].get("cardId")
         if message_id and not replace_card:
             try:

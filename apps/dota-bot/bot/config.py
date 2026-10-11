@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import os
+import re
 from urllib.parse import urlparse
 
 from cryptography.fernet import Fernet
@@ -17,9 +18,13 @@ class Settings:
     admin_ids: frozenset[int]
     party_rooms_enabled: bool = False
     room_worker_only: bool = False
+    main_bot_username: str = "FDPdotabot"
 
 
 def load_settings() -> Settings:
+    main_bot_username = os.getenv("DOTA_BOT_MAIN_USERNAME", "FDPdotabot").strip().lstrip("@")
+    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", main_bot_username):
+        raise RuntimeError("DOTA_BOT_MAIN_USERNAME must be a Telegram bot username")
     api_base_url = required_env("DOTA_BOT_API_BASE_URL").rstrip("/")
     site_url = os.getenv("DOTA_BOT_SITE_URL", "https://dota.opinia.ru").strip().rstrip("/")
     parsed_api = urlparse(api_base_url)
@@ -47,6 +52,7 @@ def load_settings() -> Settings:
         admin_ids=parse_admin_ids(os.getenv("DOTA_BOT_ADMIN_IDS", "")),
         party_rooms_enabled=os.getenv("DOTA_BOT_PARTY_ROOMS_ENABLED", "").strip().lower() in {"1", "true", "yes"},
         room_worker_only=os.getenv("DOTA_BOT_ROOM_WORKER_ONLY", "").strip().lower() in {"1", "true", "yes"},
+        main_bot_username=main_bot_username,
     )
 
 
