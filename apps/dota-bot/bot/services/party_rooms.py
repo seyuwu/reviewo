@@ -506,7 +506,13 @@ class PartyRooms:
             except TelegramBadRequest:
                 message_id = None
         if not message_id:
-            message = await self.bot.send_message(user_id, text, parse_mode="HTML", reply_markup=markup)
+            self.storage.set_choices(user_id, key, [{"messageId": None, "url": fresh["inviteLink"], "generation": fresh["generation"]}])
+            try:
+                message = await self.bot.send_message(user_id, text, parse_mode="HTML", reply_markup=markup)
+            except TelegramNetworkError as error:
+                if is_connection_setup_failure(error):
+                    self.storage.set_choices(user_id, key, [])
+                raise
             message_id = message.message_id
         self.storage.set_choices(user_id, key, [{"messageId": message_id, "url": fresh["inviteLink"], "generation": fresh["generation"]}])
         expiry = datetime.fromisoformat(room["data"]["expiresAt"].replace("Z", "+00:00"))
