@@ -135,6 +135,10 @@ class PartyRooms:
             return None
         try:
             result = await self.request("POST", "/reserve", {"userId": str(user_id), "slug": slug})
+            if result:
+                cached = self.notice_rooms.get(result["id"], {})
+                if cached.get("state") != result["state"] or cached.get("generation") != result["generation"]:
+                    self.sync_after = 0
             self.wakeup.set()
             return result
         except ApiError:
@@ -411,8 +415,6 @@ class PartyRooms:
             await self.mutate("set_chat_title", chat_id, ("FDP · " + room["data"].get("partyName", "Пати"))[:128])
         if room["state"] in {"PREPARING", "ROTATING"}:
             await self.restore_eligible_members(room)
-            if not room["data"].get("cardId") or room["data"].get("cardDirty"):
-                await self.update_card(room)
             expiry = datetime.fromisoformat(room["data"]["expiresAt"].replace("Z", "+00:00"))
             if expiry <= datetime.now(UTC):
                 await self.report(room, "retry", retrySeconds=30)
@@ -422,9 +424,14 @@ class PartyRooms:
             try:
                 await self.mutate("set_chat_permissions", chat_id, permissions(True), use_independent_chat_permissions=True)
                 await self.report(room, "prepared" if room["state"] == "PREPARING" else "rotated", inviteLink=invite.invite_link)
+                self.expiry_cache[(room["id"], invite.invite_link)] = room["data"]["expiresAt"]
+                self.sync_after = 0
+                self.wakeup.set()
             except Exception:
                 await self.mutate("revoke_chat_invite_link", chat_id, invite.invite_link)
                 raise
+            # Publish access before the roster card and routine maintenance.
+            return
         if room["state"] == "ACTIVE":
             # During an active party ordinary chat permissions are open; admission is checked before joining.
             if room["data"].get("evictIds"):
@@ -521,8 +528,8 @@ class PartyRooms:
             try:
                 self.dispatch_join_queries()
                 if time.time() >= self.sync_after:
-                    await self.sync()
                     self.sync_after = time.time() + 5
+                    await self.sync()
                 await self.flush_messages()
                 for event in self.storage.pending_room_events(self.bot.id, 10):
                     if event["kind"] in {"message", "join-query"}:
@@ -544,6 +551,8 @@ class PartyRooms:
                          or any(self.expiry_cache.get((room["id"], link["url"])) != room["data"].get("expiresAt")
                                 for link in room["data"].get("links", []) if not link["revoked"]))]
                 if jobs:
+                    urgent = [room for room in jobs if room["state"] != "ACTIVE" or room["data"].get("evictIds")]
+                    jobs = urgent or jobs
                     candidate = jobs[cursor % len(jobs)]
                     cursor += 1
                     room = await self.request("POST", f"/{candidate['id']}/claim")

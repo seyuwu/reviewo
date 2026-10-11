@@ -14,6 +14,8 @@ from aiogram.types import (CallbackQuery, ChatAdministratorRights, InlineKeyboar
 from ..api.client import ApiError
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import edit_panel, edit_panel_content
+from ..services.party_coordination import own_member, read_coordination
+from ..services.temporary_notifications import send_temporary_notification
 from ..ui.keyboards import button
 
 router = Router(name="party-rooms")
@@ -250,9 +252,36 @@ async def open_party_group(callback: CallbackQuery, api, settings, storage):
     if not isinstance(context, dict):
         await callback.answer("Открой свою пати заново.", show_alert=True)
         return
+    if not api.party_rooms or not api.party_rooms.enabled:
+        await callback.answer("Telegram-чат сейчас недоступен. Попробуй позже.", show_alert=True)
+        return
     acknowledge_callback(callback, "Подготавливаем чат…")
-    await api.party_rooms.for_user(callback.from_user.id, context["partySlug"])
-    await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+    try:
+        coordination = await read_coordination(api, callback.from_user.id, context["partySlug"])
+        member = own_member(coordination)
+        if coordination["id"] != context["partyId"] or not member or member["membershipId"] != context["membershipId"]:
+            raise ApiError("Состав пати изменился", 409)
+        room = await api.party_rooms.request("POST", "/reserve", {"userId": str(callback.from_user.id), "slug": context["partySlug"]})
+        api.party_rooms.sync_after = 0
+        api.party_rooms.wakeup.set()
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "party")
+        if room and room.get("inviteLink"):
+            text = "Чат готов — нажми «Чат пати в Telegram» в окне пати."
+        elif room and room["state"] in {"PREPARING", "ROTATING"}:
+            text = "Готовлю чат в Telegram. Кнопка перехода появится в окне пати после подготовки."
+        else:
+            text = "Telegram-чат пока недоступен. Попробуй открыть его чуть позже."
+    except ApiError as error:
+        text = ("Не удалось подтвердить связь Telegram с этой пати. Открой «Аккаунт» и проверь привязку."
+                if error.status == 403 else "Не удалось открыть Telegram-чат. Открой пати заново и попробуй ещё раз.")
+    await send_temporary_notification(callback.bot, storage, callback.from_user.id,
+                                      callback.message.chat.id, text, 10)
+
+
+@router.callback_query(F.data == "roomopen:unavailable")
+async def unavailable_party_group(callback: CallbackQuery):
+    if callback.message is not None and callback.message.chat.type == "private":
+        await callback.answer("Не удалось проверить состав пати. Открой её заново.", show_alert=True)
 
 
 @router.message(F.chat.type.in_({"group", "supergroup"}))

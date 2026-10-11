@@ -121,12 +121,12 @@ export class TelegramPartyRoomsService {
     });
     if (!identity) throw new ForbiddenException("Link Telegram to FDP first");
     const canonical = await this.parties.getPartyBySlug(slug, identity.userId);
-    if (!canonical.isMember || canonical.kind !== "PARTY" || canonical.members.length < 2 || canonical.mergedIntoSlug) return null;
+    if (!canonical.isMember || canonical.kind !== "PARTY" || canonical.mergedIntoSlug) return null;
     return this.prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT "id" FROM "social"."telegram_party_chat_pool" WHERE "id"='default' FOR UPDATE`;
       const party = await tx.gameParty.findUnique({ where: { id: canonical.id }, include: partyInclude });
       if (!party || party.kind !== "PARTY" || party.mergedIntoSlug || !party.expiresAt || party.expiresAt <= new Date()
-        || !party.members.some(member => member.userId === identity.userId && member.user.status === "active") || party.members.length < 2) return null;
+        || !party.members.some(member => member.userId === identity.userId && member.user.status === "active")) return null;
       const existing = await tx.telegramPartyChatRoom.findUnique({ where: { partyId: party.id } });
       if (existing) return this.publicRoom(existing);
       const pool = await tx.telegramPartyChatPool.findUniqueOrThrow({ where: { id: "default" } });

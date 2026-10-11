@@ -759,7 +759,8 @@ async def render_screen(
             return "Вы пока не состоите в пати.", home_keyboard(True, False, site_url=settings.site_url, can_share=True)
         party = await enrich_party(api, storage, telegram_user_id, party)
         pool = getattr(api, "party_rooms", None)
-        if pool and pool.enabled and party.get("kind") == "PARTY" and len(party.get("members", [])) >= 2:
+        if pool and pool.enabled and party.get("kind") == "PARTY":
+            party["telegramRoomEnabled"] = True
             room = await pool.for_user(telegram_user_id, party["slug"])
             if room:
                 party["telegramRoomUrl"] = room.get("inviteLink")
@@ -817,7 +818,7 @@ async def render_screen(
             except ApiError:
                 pass
         web_access_url = None
-        if settings.site_url and party.get("slug") and not party.get("telegramRoomUrl"):
+        if settings.site_url and party.get("slug") and not party.get("telegramRoomEnabled"):
             try:
                 cached_ticket = storage.get_choice(telegram_user_id, "web_access_ticket", 0) or {}
                 if (

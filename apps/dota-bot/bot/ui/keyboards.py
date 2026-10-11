@@ -246,8 +246,9 @@ def party_keyboard(
             primary_actions.append(button("✅ Готов играть", f"party:ready:{token}:on"))
     if party.get("telegramRoomUrl"):
         primary_actions.append(button_url("💬 Чат пати в Telegram", party["telegramRoomUrl"]))
-    elif party.get("telegramRoomPending") and token:
-        primary_actions.append(button("💬 Подготовить чат пати", f"roomopen:{token}"))
+    elif party.get("telegramRoomEnabled"):
+        label = "💬 Чат готовится…" if party.get("telegramRoomPending") else "💬 Чат пати в Telegram"
+        primary_actions.append(button(label, f"roomopen:{token}" if token else "roomopen:unavailable"))
     elif site_url and party.get("slug"):
         if web_access_url:
             primary_actions.append(button_url("💬 Чат и Discord", web_access_url))

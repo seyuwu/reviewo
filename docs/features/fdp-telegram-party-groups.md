@@ -25,7 +25,12 @@ after cleanup; it never deletes the Telegram group itself.
 
 ## Access and lifetime
 
-Only active temporary FDP parties with at least two members obtain a group.
+Active temporary FDP parties reserve a group as soon as their bot party panel is
+shown after creation, including a party with just its captain.
+The primary party chat button stays inside Telegram when the pool is enabled.
+While a group is being prepared, it shows that state. Capacity or service failures never
+silently redirect this button to the website. Website chat and Discord remain
+available through the explicit party settings link.
 Allocation is serialized by a PostgreSQL pool row lock and a unique party ID.
 Groups are assigned only to workers whose Telegram polling heartbeat is recent.
 The bot receives each join request and validates the current Telegram identity,
@@ -43,7 +48,10 @@ Stopping recruitment does not end the party or group. Party extensions update
 invitation expiry. Canonical merged or deleted parties enter cleanup. Mere expiry
 does not release the group before normal API cleanup has handled Discord occupancy
 and possible lifetime extension. A reservation nobody used is released after
-10 minutes. Existing website chat/Discord access is retained as a fallback.
+10 minutes. Fresh reservations wake synchronization immediately and preparation
+takes priority over ordinary card refreshes. The invite becomes available before
+the roster card is posted. Existing website chat/Discord access remains explicit
+in party settings.
 
 New temporary parties last 3 hours. Captains and officers can use
 “Настройки пати → Продлить пати · +3 часа” to add 3 hours, up to the existing
