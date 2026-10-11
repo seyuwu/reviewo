@@ -6,12 +6,13 @@ import time
 from urllib.parse import urlencode
 from uuid import UUID
 
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramNetworkError, TelegramRetryAfter
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramNetworkError, TelegramRetryAfter, TelegramServerError
 from aiogram.types import ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..api.client import ApiError
 from .join_request_query import AnswerChatJoinRequestQuery
 from .telegram_session import is_connection_setup_failure
+from .party_room_review import review_code_for_reason, review_details
 
 logger = logging.getLogger(__name__)
 REQUIRED_RIGHTS = ("can_change_info", "can_delete_messages", "can_restrict_members", "can_invite_users", "can_pin_messages")
@@ -21,7 +22,13 @@ class RoomReadUnavailable(TelegramNetworkError):
     """A failed read cannot make the group's history uncertain."""
 
 
-class RoomConfigurationError(ValueError):
+class RoomReviewError(ValueError):
+    def __init__(self, message, code="unknown"):
+        super().__init__(message)
+        self.code = code
+
+
+class RoomConfigurationError(RoomReviewError):
     """A confirmed configuration problem, without an uncertain Telegram write."""
 
 
@@ -53,6 +60,7 @@ class PartyRooms:
         self.discord_chat_requests = {}
         self.alert_queue = {}
         self.transient_attempts = {}
+        self.operation_after = {}
         self.private_after = {}
         self.registration_results = {}
         self.registration_after = {}
@@ -149,7 +157,7 @@ class PartyRooms:
         kwargs.setdefault("request_timeout", 15)
         try:
             return await getattr(self.bot, method)(*args, **kwargs)
-        except TelegramNetworkError as error:
+        except (TelegramNetworkError, TelegramServerError) as error:
             raise RoomReadUnavailable(method=error.method, message="Telegram group read unavailable") from error
 
     async def for_user(self, user_id, slug):
@@ -173,17 +181,20 @@ class PartyRooms:
     async def validate_group(self, chat_id, *, owner_id=None):
         chat = await self.read("get_chat", chat_id)
         if chat.type != "supergroup":
-            raise RoomConfigurationError("Нужна супергруппа. В настройках группы включи «Темы», затем выключи и добавь группу ещё раз.")
+            raise RoomConfigurationError("Нужна супергруппа. В настройках группы включи «Темы», затем выключи и добавь группу ещё раз.", "private_group")
         if chat.username or chat.is_forum:
-            raise RoomConfigurationError("Группа должна быть приватной и без тем.")
+            raise RoomConfigurationError("Группа должна быть приватной и без тем.", "private_group")
         if getattr(chat, "has_visible_history", False):
-            raise RoomConfigurationError("В настройках группы поставь скрытую историю для новых участников.")
+            raise RoomConfigurationError("В настройках группы поставь скрытую историю для новых участников.", "visible_history")
         member = await self.read("get_chat_member", chat_id, self.bot.id)
-        if member.status != "administrator" or not all(getattr(member, right, False) for right in REQUIRED_RIGHTS):
-            raise RoomConfigurationError("Боту нужны права менять информацию, удалять сообщения, блокировать, приглашать и закреплять.")
+        if member.status != "administrator":
+            raise RoomConfigurationError("FDP должен быть администратором группы.", "bot_admin")
+        missing = next((right for right in REQUIRED_RIGHTS if not getattr(member, right, False)), None)
+        if missing:
+            raise RoomConfigurationError("Боту нужны права менять информацию, удалять сообщения, блокировать, приглашать и закреплять.", "right_" + missing.removeprefix("can_"))
         admins = await self.read("get_chat_administrators", chat_id, return_bots=True)
         if any(admin.user.is_bot and admin.user.id != self.bot.id for admin in admins):
-            raise RoomConfigurationError("В этой группе уже есть другой бот. Для подключения оставь одного обслуживающего бота.")
+            raise RoomConfigurationError("В этой группе уже есть другой бот. Для подключения оставь одного обслуживающего бота.", "admins_changed")
         humans = [str(admin.user.id) for admin in admins if not admin.user.is_bot]
         if owner_id is not None:
             owner = await self.read("get_chat_member", chat_id, owner_id)
@@ -245,8 +256,12 @@ class PartyRooms:
         return updated
 
     async def release(self, room):
+        if not room.get("leaseToken"):
+            return
         try:
             await self.request("POST", f"/{room['id']}/release", self.lease_body(room))
+            room["leaseUntil"] = None
+            room["leaseToken"] = None
         except ApiError:
             logger.warning("Could not release Telegram group operation lease")
 
@@ -262,6 +277,9 @@ class PartyRooms:
         found = self.by_chat.get(int(value["chatId"]))
         if not found:
             self.storage.acknowledge_room_events([event["id"]])
+            return
+        if event["kind"] == "invite":
+            await self.recover_invite(event, found)
             return
         if event["kind"] == "presence":
             await self.request("POST", "/presence", value)
@@ -283,7 +301,7 @@ class PartyRooms:
             admission_started = False
             try:
                 if event["kind"] == "review":
-                    await self.report(room, "review", reason=value["reason"])
+                    await self.report(room, "review", reason=value["reason"], errorCode=review_code_for_reason(value["reason"]))
                 else:
                     allowed = await self.request("POST", f"/{room['id']}/admission", {
                         "userId": value["userId"], "inviteLink": value["inviteLink"]})
@@ -319,7 +337,7 @@ class PartyRooms:
                             await self.report(room, "joined", userId=value["userId"])
             except TelegramNetworkError:
                 if admission_started:
-                    await self.report(room, "review", reason="Telegram admission outcome uncertain; inspect participants")
+                    await self.report(room, "review", reason="Telegram admission outcome uncertain; inspect participants", errorCode="admission_uncertain")
                 raise
             finally:
                 if value.get("queryId"):
@@ -330,8 +348,41 @@ class PartyRooms:
                     await self.release(room)
         self.storage.acknowledge_room_events([event["id"]])
 
-    async def revoke(self, room):
-        for link in room["data"].get("links", []):
+    async def recover_invite(self, event, found):
+        invite_link = self.storage.room_invite_link(event["payload"])
+        snapshot = await self.request("GET", f"/{found['id']}/status")
+        data = snapshot["data"]
+        tracked = (data.get("pendingInvite") or {}).get("url") == invite_link or any(link["url"] == invite_link for link in data.get("links", []))
+        if tracked:
+            self.storage.acknowledge_room_events([event["id"]])
+            self.by_chat[int(snapshot["chatId"])] = snapshot
+            self.sync_after = 0
+            return
+        room = await self.request("POST", f"/{found['id']}/claim")
+        if not room:
+            self.storage.retry_room_event(event["id"], time.time() + 2)
+            return
+        try:
+            data = room["data"]
+            tracked = (data.get("pendingInvite") or {}).get("url") == invite_link or any(link["url"] == invite_link for link in data.get("links", []))
+            if tracked:
+                pass
+            elif room["generation"] == event["payload"]["generation"] and room["state"] in {"PREPARING", "ROTATING"} and not data.get("pendingInvite") and not any(not link["revoked"] for link in data.get("links", [])):
+                await self.report(room, "invite-created", inviteLink=invite_link)
+            else:
+                await self.report(room, "review", inviteLink=invite_link, reason="Untracked invitation recovered after interrupted preparation", errorCode="invitation_uncertain")
+            self.storage.acknowledge_room_events([event["id"]])
+            self.sync_after = 0
+        finally:
+            await self.release(room)
+            self.by_chat[int(room["chatId"])] = room
+
+    async def revoke(self, room, *, preserve_pending=False):
+        links = list(room["data"].get("links", []))
+        pending = room["data"].get("pendingInvite")
+        if pending and not preserve_pending:
+            links.append({"url": pending["url"], "revoked": False})
+        for link in links:
             if link["revoked"]:
                 continue
             try:
@@ -368,9 +419,9 @@ class PartyRooms:
             try:
                 member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=15)
             except TelegramNetworkError as error:
-                raise ValueError("Participant removal verification interrupted before ownership was saved") from error
+                raise RoomReviewError("Participant removal verification interrupted before ownership was saved", "participant_removal") from error
         if member.status not in {"kicked", "left"}:
-            raise ValueError("Participant removal not confirmed")
+            raise RoomReviewError("Participant removal not confirmed", "participant_removal")
         await self.report(room, "member-removed", userId=user_id, ownedBan=owned_ban, purgedBefore=purged_before)
 
     async def delete_batch(self, room):
@@ -378,11 +429,11 @@ class PartyRooms:
         if not batch:
             return False
         if any((datetime.now(UTC) - datetime.fromisoformat(item["sentAt"].replace("Z", "+00:00"))).total_seconds() >= 48 * 3600 for item in batch):
-            raise ValueError("Messages older than Telegram deletion limit need manual cleanup")
+            raise RoomReviewError("Messages older than Telegram deletion limit need manual cleanup", "old_messages")
         ids = [item["messageId"] for item in batch]
         success = await self.mutate("delete_messages", int(room["chatId"]), ids)
         if not success:
-            raise ValueError("Message deletion not confirmed")
+            raise RoomReviewError("Message deletion not confirmed", "cleanup_unconfirmed")
         await self.request("POST", f"/{room['id']}/deleted", {**self.lease_body(room), "messageIds": ids})
         return True
 
@@ -407,7 +458,7 @@ class PartyRooms:
         obsolete = room["data"].get("cardObsoleteIds", [])[:100]
         if obsolete:
             if not await self.mutate("delete_messages", int(room["chatId"]), obsolete):
-                raise ValueError("Previous party card deletion not confirmed")
+                raise RoomReviewError("Previous party card deletion not confirmed", "cleanup_unconfirmed")
             await self.request("POST", f"/{room['id']}/deleted", {**self.lease_body(room), "messageIds": obsolete})
             room["data"]["cardObsoleteIds"] = [value for value in room["data"].get("cardObsoleteIds", []) if value not in obsolete]
 
@@ -460,11 +511,13 @@ class PartyRooms:
         if room["state"] != "ACTIVE" or time.time() - self.validated_at.get(room["id"], 0) >= 120:
             _, staff = await self.validate_group(chat_id)
             if set(staff) != set(room["data"].get("staffIds", [])):
-                raise RoomConfigurationError("Administrator list changed; manual review required")
+                raise RoomConfigurationError("Administrator list changed; manual review required", "admins_changed")
             self.validated_at[room["id"]] = time.time()
         if room["state"] in {"PREPARING", "ROTATING", "CLOSING"}:
             await self.mutate("set_chat_permissions", chat_id, permissions(False), use_independent_chat_permissions=True)
-            await self.revoke(room)
+            pending = room["data"].get("pendingInvite")
+            preserve_pending = room["state"] in {"PREPARING", "ROTATING"} and pending and pending["generation"] == room["generation"]
+            await self.revoke(room, preserve_pending=bool(preserve_pending))
             while await self.flush_messages():
                 pass
             await self.remove_members(room)
@@ -482,7 +535,7 @@ class PartyRooms:
                 await self.report(room, "member-unbanned", userId=user_id)
             admins = await self.read("get_chat_administrators", chat_id, return_bots=True)
             if await self.read("get_chat_member_count", chat_id) != len(admins):
-                raise ValueError("Untracked participants remain in the group")
+                raise RoomReviewError("Untracked participants remain in the group", "unknown_participants")
             await self.mutate("set_chat_title", chat_id, room["title"])
             await self.report(room, "closed")
             return
@@ -498,21 +551,34 @@ class PartyRooms:
             if expiry <= datetime.now(UTC):
                 await self.report(room, "retry", retrySeconds=30)
                 return
-            invite = await self.mutate("create_chat_invite_link", chat_id, creates_join_request=True,
-                expire_date=expiry, name=f"FDP {room['generation']}")
+            pending = room["data"].get("pendingInvite")
+            if pending:
+                invite_link = pending["url"]
+                await self.mutate("edit_chat_invite_link", chat_id, invite_link, expire_date=expiry, creates_join_request=True)
+            else:
+                invite = await self.mutate("create_chat_invite_link", chat_id, creates_join_request=True,
+                    expire_date=expiry, name=f"FDP {room['generation']}")
+                invite_link = invite.invite_link
+                event_id = self.storage.journal_room_invite(self.bot.id, chat_id, room["generation"], invite_link)
+                await self.report(room, "invite-created", inviteLink=invite_link)
+                self.storage.acknowledge_room_events([event_id])
+            await self.mutate("set_chat_permissions", chat_id, permissions(True), use_independent_chat_permissions=True)
             try:
-                await self.mutate("set_chat_permissions", chat_id, permissions(True), use_independent_chat_permissions=True)
-                await self.report(room, "prepared" if room["state"] == "PREPARING" else "rotated", inviteLink=invite.invite_link)
-                self.expiry_cache[(room["id"], invite.invite_link)] = room["data"]["expiresAt"]
-                self.sync_after = 0
-                self.wakeup.set()
-            except Exception:
-                try:
-                    await self.mutate("revoke_chat_invite_link", chat_id, invite.invite_link)
-                except Exception as error:
-                    # This new invitation is not in the API journal yet.
-                    raise ValueError("New invitation cleanup could not be confirmed") from error
-                raise
+                await self.report(room, "prepared" if room["state"] == "PREPARING" else "rotated", inviteLink=invite_link)
+            except ApiError:
+                # A lost publication response does not prove the transaction failed.
+                # The pending receipt also lets the next worker resume safely.
+                snapshot = await self.request("GET", f"/{room['id']}/status")
+                if snapshot["generation"] != room["generation"] or snapshot["state"] != "ACTIVE" or not any(
+                    link["url"] == invite_link and not link["revoked"] for link in snapshot["data"].get("links", [])):
+                    raise ApiError("Invitation publication awaits reconciliation", 409)
+                lease_token, lease_until = room["leaseToken"], room["leaseUntil"]
+                room.update(snapshot)
+                # Readback must never take ownership of another worker's newer lease.
+                room["leaseToken"], room["leaseUntil"] = lease_token, lease_until
+            self.expiry_cache[(room["id"], invite_link)] = room["data"]["expiresAt"]
+            self.sync_after = 0
+            self.wakeup.set()
             # Publish access before the roster card and routine maintenance.
             return
         if room["state"] == "ACTIVE":
@@ -625,7 +691,10 @@ class PartyRooms:
         # One alert for the whole unresolved review, including cleanup retries and restarts.
         marker = {"generation": room["generation"], "reviewId": room["data"].get("reviewId"), "sendingAt": time.time()}
         self.storage.set_choices(user_id, key, [marker])
-        text = "⚠️ <b>Нужна проверка чата пати</b>\n\n" + escape(room["title"]) + "\nГруппа исключена из новых выдач до проверки."
+        details = review_details(room)
+        text = ("⚠️ <b>Нужна проверка чата пати</b>\n\n" + escape(room["title"])
+            + "\n<b>" + escape(details["reason"]) + "</b>\n" + escape(details["action"])
+            + "\n\nГруппа исключена из новых выдач до проверки.")
         try:
             message = await self.bot.send_message(user_id, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="Проверить группу", callback_data=f"roomadmin:view:{room['id']}")]]))
@@ -651,10 +720,20 @@ class PartyRooms:
             if key[1] == room_id:
                 self.alert_queue.pop(key, None)
 
+    def operation_ready(self, room):
+        if time.time() < self.operation_after.get(room["id"], 0):
+            return False
+        now = datetime.now(UTC)
+        for field in ("retryAt", "leaseUntil"):
+            if room.get(field) and datetime.fromisoformat(room[field].replace("Z", "+00:00")) > now:
+                return False
+        return True
+
     async def worker(self):
         if not self.enabled:
             return
-        cursor = 0
+        cursors = {"urgent": 0, "routine": 0}
+        urgent_streak = 0
         while True:
             try:
                 self.dispatch_join_queries()
@@ -676,7 +755,9 @@ class PartyRooms:
                             self.storage.retry_room_event(event["id"], time.time() + 30)
                     except (ApiError, TelegramAPIError):
                         self.storage.retry_room_event(event["id"], time.time() + 10)
-                jobs = [room for room in self.by_chat.values() if room.get("state") not in {"FREE", "REVIEW", None}
+                unresolved_invites = self.storage.unresolved_room_invite_chats(self.bot.id)
+                jobs = [room for room in self.by_chat.values() if int(room["chatId"]) not in unresolved_invites
+                    and room.get("state") not in {"FREE", "REVIEW", None} and self.operation_ready(room)
                     and (room["state"] != "ACTIVE" or room["data"].get("cardDirty") or room["data"].get("evictIds")
                          or room["data"].get("cardPendingPin") or room["data"].get("cardObsoleteIds")
                          or any(member.get("telegramId") in room["data"].get("botBannedIds", [])
@@ -686,9 +767,12 @@ class PartyRooms:
                                 for link in room["data"].get("links", []) if not link["revoked"]))]
                 if jobs:
                     urgent = [room for room in jobs if room["state"] != "ACTIVE" or room["data"].get("evictIds")]
-                    jobs = urgent or jobs
-                    candidate = jobs[cursor % len(jobs)]
-                    cursor += 1
+                    routine = [room for room in jobs if room["state"] == "ACTIVE" and not room["data"].get("evictIds")]
+                    lane = "urgent" if urgent and (not routine or urgent_streak < 3) else "routine"
+                    jobs = urgent if lane == "urgent" else routine
+                    candidate = jobs[cursors[lane] % len(jobs)]
+                    cursors[lane] += 1
+                    urgent_streak = urgent_streak + 1 if lane == "urgent" else 0
                     room = await self.request("POST", f"/{candidate['id']}/claim")
                     if room:
                         try:
@@ -697,6 +781,7 @@ class PartyRooms:
                         except TelegramRetryAfter as error:
                             await self.report(room, "retry", retrySeconds=error.retry_after + 1)
                         except ApiError as error:
+                            self.operation_after[room["id"]] = time.time() + 5
                             if error.status != 409:
                                 logger.warning("Party group API operation failed; will retry")
                         except TelegramNetworkError as error:
@@ -707,17 +792,23 @@ class PartyRooms:
                                 logger.warning("Temporary Telegram group connection failure; automatic retry scheduled")
                             else:
                                 # Only an ambiguous write requires manual inspection.
-                                await self.report(room, "review", reason="Telegram transport outcome uncertain")
+                                await self.report(room, "review", reason="Telegram transport outcome uncertain", errorCode="transport_uncertain")
                         except RoomConfigurationError as error:
-                            await self.report(room, "review", reason=str(error)[:160], cleanupUncertain=False)
-                        except (TelegramBadRequest, TelegramForbiddenError):
-                            await self.report(room, "review", reason="Telegram rejected group operation; check permissions", cleanupUncertain=False)
+                            await self.report(room, "review", reason=str(error)[:160], errorCode=error.code, cleanupUncertain=False)
+                        except (TelegramBadRequest, TelegramForbiddenError) as error:
+                            code = "rights" if isinstance(error, TelegramForbiddenError) or any(part in str(error).lower() for part in ("not enough rights", "chat_admin_required")) else "telegram_rejected"
+                            await self.report(room, "review", reason="Telegram rejected group operation; check permissions", errorCode=code, cleanupUncertain=False)
+                        except RoomReviewError as error:
+                            await self.report(room, "review", reason=str(error)[:160], errorCode=error.code)
                         except (TelegramAPIError, ValueError):
-                            await self.report(room, "review", reason="Telegram group operation failed; check permissions and cleanup")
+                            await self.report(room, "review", reason="Telegram group operation failed; check permissions and cleanup", errorCode="unknown")
                         finally:
                             await self.release(room)
+                        self.by_chat[int(room["chatId"])] = room
                         if room.get("state") != candidate.get("state") or room.get("generation") != candidate.get("generation"):
                             self.sync_after = 0
+                    else:
+                        self.operation_after[candidate["id"]] = time.time() + 2
                 eligible_alert = next((key for key in self.alert_queue if self.private_after.get(key[0], 0) <= time.time()), None)
                 eligible_hint = next((key for key in self.hint_queue if self.private_after.get(key[0], 0) <= time.time()), None)
                 if not getattr(self.settings, "room_worker_only", False) and time.time() >= self.next_hint and (eligible_alert or eligible_hint):

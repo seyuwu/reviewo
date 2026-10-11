@@ -55,6 +55,10 @@ export class TelegramPartyRoomsController {
   claim(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string, @Body() input: RoomBotDto, @Headers("x-telegram-bot-secret") secret?: string) {
     this.authorize(secret); return this.rooms.claim(id, input.botId);
   }
+  @Get(":id/status")
+  status(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string, @Query() input: RoomBotDto, @Headers("x-telegram-bot-secret") secret?: string) {
+    this.authorize(secret); return this.rooms.status(id, input.botId);
+  }
   @Post(":id/release")
   release(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string, @Body() input: RoomLeaseDto, @Headers("x-telegram-bot-secret") secret?: string) {
     this.authorize(secret); return this.rooms.release(id, input.botId, input.leaseToken);

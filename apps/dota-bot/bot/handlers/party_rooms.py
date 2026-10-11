@@ -20,6 +20,7 @@ from ..services.callbacks import acknowledge_callback
 from ..services.panel import edit_panel, edit_panel_content
 from ..services.party_coordination import own_member, read_coordination
 from ..services.party_discord import SendPartyDiscordMessage, EditPartyDiscordMessage
+from ..services.party_room_review import review_details
 from ..services.temporary_notifications import send_temporary_notification
 from ..ui.keyboards import button
 
@@ -152,7 +153,10 @@ async def room_admin_action(callback: CallbackQuery, state: FSMContext, api, set
             if room["removeWhenFree"]:
                 text += "\nУдаление из списка после завершения пати."
             if room.get("error"):
-                text += "\n\nТребуется проверить права, участников и очистку группы."
+                details = review_details(room)
+                text += "\n\n<b>" + escape(details["reason"]) + "</b>\n" + escape(details["action"])
+                if details["manualRequired"]:
+                    text += "\n\nРучную очистку подтверждает владелец группы."
             rows = []
             if room.get("inviteLink"):
                 rows.append([InlineKeyboardButton(text="💬 Открыть группу", url=room["inviteLink"])])
@@ -162,7 +166,7 @@ async def room_admin_action(callback: CallbackQuery, state: FSMContext, api, set
             rows.append([button("⏸ Исключить из выдачи" if room["enabled"] else "▶️ Включить выдачу", f"roomadmin:do:{room['id']}:{toggle}")])
             rows.append([button("🗑 Удалить из списка", f"roomadmin:confirm:{room['id']}:remove")])
             if room["state"] == "REVIEW":
-                rows.append([button("Повторить очистку", f"roomadmin:confirm:{room['id']}:retry")])
+                rows.append([button(review_details(room)["retryLabel"], f"roomadmin:confirm:{room['id']}:retry")])
                 rows.append([button("Подтвердить ручную очистку", f"roomadmin:confirm:{room['id']}:manual")])
             rows.append([button("← Все группы", "roomadmin:list:0")])
             await edit_panel_content(callback.bot, storage, api, settings, user_id, "admin:rooms:group", text, InlineKeyboardMarkup(inline_keyboard=rows), user_id)

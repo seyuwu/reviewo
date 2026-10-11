@@ -13,9 +13,10 @@ import type { RegisterRoomDto, RoomReportDto, RoomMessagesDto, PartyNoticeContex
 type RosterMember = { membershipId: string; userId: string; telegramId: string | null; name: string; role: string | null; ready: boolean };
 type RoomData = {
   staffIds: string[]; links: Array<{ url: string; revoked: boolean }>;
+  pendingInvite?: { url: string; generation: number };
   presentIds: string[]; seenIds: string[]; evictIds: string[]; roster: RosterMember[];
   partyName?: string; partySlug?: string; expiresAt?: string | null;
-  cardId?: number; cardHash?: string; cardDirty?: boolean; error?: string;
+  cardId?: number; cardHash?: string; cardDirty?: boolean; error?: string; errorCode?: string;
   cardJoinVersion?: number; cardPostedJoinVersion?: number; cardRefreshAfter?: number;
   cardPendingPin?: boolean; cardObsoleteIds?: number[];
   cardVisibilityInitialized?: boolean;
@@ -66,6 +67,7 @@ export class TelegramPartyRoomsService {
       id: room.id, chatId: room.chatId, botId: room.botId, title: room.title, state: room.state,
       enabled: room.enabled, removeWhenFree: room.removeWhenFree, generation: room.generation,
       partyId: room.partyId, partyName: dataOf(room).partyName ?? null, error: dataOf(room).error ?? null,
+      errorCode: dataOf(room).errorCode ?? null, cleanupUncertain: Boolean(dataOf(room).cleanupUncertain),
       inviteLink: room.state === "ACTIVE" ? dataOf(room).links.find(link => !link.revoked)?.url ?? null : null
     })) };
   }
@@ -95,7 +97,7 @@ export class TelegramPartyRoomsService {
       if (action === "remove" && room.state === "FREE") return tx.telegramPartyChatRoom.delete({ where: { id: roomId } });
       if (action === "confirm-clean") {
         if (room.state !== "REVIEW" || !staffIds?.includes(adminId)) throw new ConflictException("Owner must confirm manual cleanup");
-        if (dataOf(room).links.some(link => !link.revoked) || dataOf(room).presentIds.some(id => !dataOf(room).staffIds.includes(id))) throw new ConflictException("Revoke invitations and remove players first");
+        if (dataOf(room).pendingInvite || dataOf(room).links.some(link => !link.revoked) || dataOf(room).presentIds.some(id => !dataOf(room).staffIds.includes(id))) throw new ConflictException("Revoke invitations and remove players first");
         await tx.telegramPartyChatMessage.deleteMany({ where: { roomId } });
         return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
           state: "FREE", generation: { increment: 1 }, leaseToken: null, leaseUntil: null, retryAt: null,
@@ -246,15 +248,34 @@ export class TelegramPartyRoomsService {
     await this.prisma.telegramPartyChatRoom.updateMany({ where: { id: roomId, botId, leaseToken }, data: { leaseToken: null, leaseUntil: null } });
   }
 
+  async status(roomId: string, botId: string) {
+    const room = await this.prisma.telegramPartyChatRoom.findUnique({ where: { id: roomId } });
+    if (!room) throw new NotFoundException("Group not registered");
+    if (room.botId !== botId) throw new ForbiddenException("Group belongs to another bot");
+    return room;
+  }
+
   async report(roomId: string, input: RoomReportDto) {
     return this.locked(roomId, async (tx, room) => {
       this.assertLease(room, input); const data = dataOf(room);
       let state = room.state;
-      if (input.event === "prepared" || input.event === "rotated") {
+      if (input.event === "invite-created") {
+        if (!input.inviteLink || !["PREPARING", "ROTATING"].includes(room.state)
+          || data.links.some(link => !link.revoked)
+          || (data.pendingInvite && (data.pendingInvite.url !== input.inviteLink || data.pendingInvite.generation !== room.generation))) {
+          throw new ConflictException("Group invitation preparation changed");
+        }
+        data.pendingInvite = { url: input.inviteLink, generation: room.generation };
+      } else if (input.event === "prepared" || input.event === "rotated") {
+        // An identical retry after a lost response must not replace/revoke the published link.
+        if (room.state === "ACTIVE" && input.inviteLink && data.links.some(link => !link.revoked && link.url === input.inviteLink)) return room;
         if (!input.inviteLink || data.links.some(link => !link.revoked) || data.evictIds.length
+          || (data.pendingInvite && (data.pendingInvite.url !== input.inviteLink || data.pendingInvite.generation !== room.generation))
           || !["PREPARING", "ROTATING"].includes(room.state)) throw new ConflictException("Group preparation incomplete");
-        data.links.push({ url: input.inviteLink, revoked: false }); delete data.error; state = "ACTIVE";
+        data.links.push({ url: input.inviteLink, revoked: false });
+        delete data.pendingInvite; delete data.error; delete data.errorCode; state = "ACTIVE";
       } else if (input.event === "link-revoked") {
+        if (data.pendingInvite?.url === input.inviteLink) delete data.pendingInvite;
         for (const link of data.links) if (link.url === input.inviteLink) link.revoked = true;
         data.links = data.links.filter(link => !link.revoked);
       } else if (input.event === "member-removed" && input.userId) {
@@ -302,11 +323,16 @@ export class TelegramPartyRoomsService {
         // A later failure can never clear uncertainty recorded earlier.
         data.cleanupUncertain = Boolean(data.cleanupUncertain || input.cleanupUncertain !== false);
         data.error = input.reason ?? "Telegram operation could not be confirmed";
+        data.errorCode = input.errorCode ?? "unknown";
+        // Recovery may discover a returned invitation before its API receipt was stored.
+        if (input.inviteLink && data.pendingInvite?.url !== input.inviteLink && !data.links.some(link => link.url === input.inviteLink)) {
+          data.links.push({ url: input.inviteLink, revoked: false });
+        }
       } else if (input.event === "closed") {
-        if (room.state !== "CLOSING" || data.links.some(link => !link.revoked) || [...data.presentIds, ...(data.possibleIds ?? [])].some(id => !data.staffIds.includes(id))) throw new ConflictException("Group cleanup incomplete");
+        if (room.state !== "CLOSING" || data.pendingInvite || data.links.some(link => !link.revoked) || [...data.presentIds, ...(data.possibleIds ?? [])].some(id => !data.staffIds.includes(id))) throw new ConflictException("Group cleanup incomplete");
         if (await tx.telegramPartyChatMessage.count({ where: { roomId, deletedAt: null } })) throw new ConflictException("Messages still pending deletion");
         if (data.cleanupUncertain) return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
-          state: "REVIEW", data: json({ ...data, reviewId: data.reviewId ?? randomUUID(), error: "Manual confirmation of complete history cleanup required" })
+          state: "REVIEW", data: json({ ...data, reviewId: data.reviewId ?? randomUUID(), error: "Manual confirmation of complete history cleanup required", errorCode: "manual_history" })
         } });
         if (room.removeWhenFree) return tx.telegramPartyChatRoom.delete({ where: { id: roomId } });
         await tx.telegramPartyChatMessage.deleteMany({ where: { roomId } });
@@ -392,6 +418,7 @@ export class TelegramPartyRoomsService {
         for (const item of items) {
           if (room.state === "ACTIVE" && room.assignedAt && item.sentAt * 1000 < room.assignedAt.getTime() - 1000) {
             data.reviewId ??= randomUUID();
+            data.errorCode = "delayed_history";
             data.cleanupUncertain = true; data.error = "Delayed history metadata arrived after group reuse"; changed = true;
           }
           if (item.userId && room.partyId && data.roster.some(member => member.telegramId === item.userId)) {

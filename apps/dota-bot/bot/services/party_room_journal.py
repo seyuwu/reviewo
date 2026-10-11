@@ -1,5 +1,5 @@
 from aiogram.client.session.middlewares.base import BaseRequestMiddleware
-from aiogram.types import Message
+from aiogram.types import ChatInviteLink, Message
 import time
 from uuid import UUID
 
@@ -65,6 +65,11 @@ class PartyRoomJournal(BaseRequestMiddleware):
             self.rooms.dispatch_join_queries()
             if any(events for _, events in batches):
                 self.rooms.wakeup.set()
+        elif method.__api_method__ == "createChatInviteLink" and isinstance(result, ChatInviteLink):
+            chat_id = int(method.chat_id)
+            name = getattr(method, "name", None) or ""
+            if chat_id in self.rooms.by_chat and name.startswith("FDP ") and name[4:].isdigit():
+                self.rooms.storage.journal_room_invite(bot.id, chat_id, int(name[4:]), result.invite_link)
         elif isinstance(result, Message) and result.chat.id in self.rooms.by_chat and result.message_id:
             self.rooms.storage.journal_room_message(bot.id, result.chat.id, result.message_id, int(result.date.timestamp()))
         elif isinstance(result, Message) and result.chat.id in self.rooms.settings.admin_ids and result.reply_markup:

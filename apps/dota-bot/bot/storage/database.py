@@ -451,6 +451,28 @@ class BotStorage:
               VALUES(?,?,?,?,?)""", (bot_id, f"out:{chat_id}:{message_id}", "message", json.dumps(payload), time.time()))
             self._connection().commit()
 
+    def journal_room_invite(self, bot_id: int, chat_id: int, generation: int, invite_link: str) -> int:
+        import hashlib
+        import time
+        key = f"invite:{chat_id}:{generation}:" + hashlib.sha256(invite_link.encode()).hexdigest()
+        # Invite URLs are credentials; only encrypted recovery data is stored locally.
+        payload = {"chatId": str(chat_id), "generation": generation,
+            "inviteCipher": self._encrypt(invite_link).decode("ascii")}
+        with self.lock:
+            connection = self._connection()
+            connection.execute("""INSERT OR IGNORE INTO party_room_inbox(bot_id,event_key,kind,payload,created_at)
+              VALUES(?,?,?,?,?)""", (bot_id, key, "invite", json.dumps(payload), time.time()))
+            row = connection.execute("SELECT id FROM party_room_inbox WHERE bot_id=? AND event_key=?", (bot_id, key)).fetchone()
+            connection.commit()
+            return row["id"]
+
+    def room_invite_link(self, payload: dict) -> str:
+        return self._decrypt(payload["inviteCipher"].encode("ascii"))
+
+    def unresolved_room_invite_chats(self, bot_id: int) -> set[int]:
+        rows = self._connection().execute("SELECT payload FROM party_room_inbox WHERE bot_id=? AND kind='invite' AND status='pending'", (bot_id,)).fetchall()
+        return {int(json.loads(row["payload"])["chatId"]) for row in rows}
+
     def pending_room_events(self, bot_id: int, limit: int = 250) -> list[dict]:
         import time
         return [{**dict(row), "payload": json.loads(row["payload"])} for row in self._connection().execute(

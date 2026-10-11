@@ -185,6 +185,36 @@ Legacy alerts without saved IDs are registered on their review-button click and
 deleted if the review has already been resolved; Telegram cannot enumerate these
 older private messages for automatic recovery.
 
+### Invitation publication recovery
+
+Returned bot-created invitations are journaled before the sender resumes; recovery
+URLs are encrypted with the bot storage key. The worker stores a fenced pending
+invitation receipt in PostgreSQL before enabling writes and publishing access.
+Pending invitations never authorize admission. Publication moves that receipt to
+the active invitation list, and identical publication retries are idempotent.
+After a lost API response, the worker reads authoritative status without revoking
+the invitation. It retains its original lease token during readback.
+
+A restart resumes the pending invitation instead of creating another link. The
+local journal recovers a returned invitation whose API receipt was interrupted.
+Receipts from older generations that cannot be reconciled quarantine the group
+and retain the recovered link for revocation. All pending invitations must be
+revoked before automatic or manually confirmed release.
+
+### Review explanations and queue fairness
+
+Review notices and the group administrator panel show a safe reason and a concrete
+next action from structured error codes. Raw Telegram errors or invitation URLs
+are never rendered. Rights, unexpected participants, old messages, interrupted
+admission and uncertain history have separate explanations.
+
+Read-only Telegram server errors use the same automatic retry policy as read-only
+network errors. Server errors during writes retain the conservative review path.
+The worker excludes groups waiting for retry deadlines or another lease, backs
+off failed API claims, and uses separate round-robin cursors for urgent and routine
+work. When both queues are ready, routine maintenance gets at least one turn after
+three urgent operations. Background request limits remain unchanged.
+
 ## Multiple bots and core-flow isolation
 
 One bot owns each group, its invitations and its operation lease. PostgreSQL
