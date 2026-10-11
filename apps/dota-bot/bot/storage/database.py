@@ -1331,6 +1331,32 @@ class BotStorage:
                 continue
         return notices
 
+    def party_notice_sources(self) -> list[dict]:
+        rows = self._connection().execute("""SELECT telegram_user_id,kind,items_json FROM callback_choices
+          WHERE items_json <> '[]' AND (kind LIKE 'party_ready_notice:%' OR kind LIKE 'party_room_hint:%'
+            OR kind LIKE 'party_room_ready_link:%' OR kind LIKE 'party_room_ping_link:%'
+            OR kind LIKE 'party_notice_message:%')""").fetchall()
+        result = []
+        for row in rows:
+            try:
+                items = json.loads(row["items_json"])
+                if isinstance(items, list) and items and isinstance(items[0], dict):
+                    result.append({"userId": row["telegram_user_id"], "kind": row["kind"], "item": items[0]})
+            except (TypeError, json.JSONDecodeError):
+                continue
+        return result
+
+    def track_party_notice(self, user_id: int, party_id: str, membership_id: str | None, chat_id: int, message_id: int) -> None:
+        if chat_id != user_id or message_id <= 0:
+            return
+        key = f"party_notice_message:{party_id}:{message_id}"
+        # A Telegram message retains its original membership binding, including after rejoining.
+        with self.lock:
+            self._connection().execute("INSERT OR IGNORE INTO callback_choices VALUES (?, ?, ?, ?)",
+                (user_id, key, json.dumps([{"partyId": party_id, "membershipId": membership_id,
+                    "chatId": chat_id, "messageId": message_id}]), timestamp()))
+            self._connection().commit()
+
     def party_chat_hint_count(self, telegram_user_id: int, party_slug: str) -> int:
         state = self.get_choice(telegram_user_id, "party_chat_hints", 0) or {}
         return next(
@@ -1394,6 +1420,10 @@ class BotStorage:
     ) -> None:
         delete_at = datetime.now(UTC) + timedelta(seconds=ttl_seconds)
         with self.lock:
+            cancelled = self._connection().execute("SELECT 1 FROM callback_choices WHERE telegram_user_id=? AND kind LIKE ? AND items_json='[]' LIMIT 1",
+                (telegram_user_id, f"party_notice_message:%:{message_id}")).fetchone()
+            if cancelled:
+                delete_at = min(delete_at, datetime.now(UTC))
             self._connection().execute(
                 "INSERT OR REPLACE INTO temporary_messages VALUES (?, ?, ?, ?)",
                 (telegram_user_id, chat_id, message_id, delete_at.isoformat()),
@@ -1417,6 +1447,11 @@ class BotStorage:
 
     def remove_temporary_message(self, chat_id: int, message_id: int) -> None:
         with self.lock:
+            row = self._connection().execute("SELECT telegram_user_id FROM temporary_messages WHERE chat_id=? AND message_id=?",
+                (chat_id, message_id)).fetchone()
+            if row and chat_id == row["telegram_user_id"]:
+                self._connection().execute("DELETE FROM callback_choices WHERE telegram_user_id=? AND kind LIKE ?",
+                    (row["telegram_user_id"], f"party_notice_message:%:{message_id}"))
             self._connection().execute(
                 "DELETE FROM temporary_messages WHERE chat_id = ? AND message_id = ?",
                 (chat_id, message_id),

@@ -10,6 +10,8 @@ from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
 from ..services.party_search_queue import PartySearchQueue
+from ..services.party_notice_cleanup import expire_party_notices
+from ..services.party_coordination import read_coordination
 from ..services.temporary_notifications import send_temporary_notification
 from ..storage.database import BotStorage
 from .search import show_error
@@ -225,6 +227,7 @@ async def delete_party(
             "DELETE",
             f"/social/parties/{quote(str(party['slug']), safe='')}",
         )
+        expire_party_notices(storage, party["id"])
         storage.set_choices(callback.from_user.id, "auto_search", [])
         storage.clear_auto_match_exclusions(callback.from_user.id)
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
@@ -281,11 +284,13 @@ async def leave_party(
         if not party or party.get("isOwner"):
             await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
             return
+        context = storage.get_choice(callback.from_user.id, "party_coordination:" + party["id"], 0) or {}
         await api.user(
             callback.from_user.id,
             "DELETE",
             f"/social/parties/{quote(str(party['slug']), safe='')}/members/me",
         )
+        expire_party_notices(storage, party["id"], callback.from_user.id, context.get("membershipId"))
         storage.set_choices(callback.from_user.id, "auto_search", [])
         storage.clear_auto_match_exclusions(callback.from_user.id)
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "home")
@@ -331,7 +336,11 @@ async def kick_party_member(
             return
         slug = quote(str(party["slug"]), safe="")
         target = quote(user_id, safe="")
+        coordination = await read_coordination(api, callback.from_user.id, party["slug"])
+        member = next((member for member in coordination.get("members", []) if member.get("userId") == user_id), None)
         await api.user(callback.from_user.id, "DELETE", f"/social/parties/{slug}/members/{target}")
+        if member:
+            expire_party_notices(storage, party["id"], membership_id=member["membershipId"])
         storage.set_choices(callback.from_user.id, "selected_party_member", [])
         await edit_panel(
             callback.bot, storage, api, settings, callback.from_user.id,

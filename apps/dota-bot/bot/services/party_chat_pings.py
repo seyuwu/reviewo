@@ -42,9 +42,11 @@ async def deliver_party_chat_ping(bot, api, settings, storage, row):
         # A lost Telegram response can still mean delivery; do not send duplicates.
         return True
     ttl = max(1, int((expires_at - datetime.now(UTC)).total_seconds()))
+    storage.track_party_notice(user_id, delivery["partyId"], (row.get("payload") or {}).get("targetMembershipId"), message.chat.id, message.message_id)
     storage.add_temporary_message(user_id, message.chat.id, message.message_id, ttl)
     if getattr(api, "party_rooms", None) and api.party_rooms.enabled and open_button.url and open_button.url.startswith("https://t.me/"):
         storage.set_choices(user_id, "party_room_ping_link:" + delivery["partyId"], [{
             "messageId": message.message_id, "url": open_button.url, "chatId": message.chat.id,
+            "partyId": delivery["partyId"], "membershipId": (row.get("payload") or {}).get("targetMembershipId"),
         }])
     return True

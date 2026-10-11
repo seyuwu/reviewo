@@ -77,6 +77,15 @@ queries retain the room service's four-connection session and ten-second budget.
 Discord replies share the existing background Telegram mutation budget; each
 group can prepare five private invitations per minute to protect chat capacity.
 
+Private match-found notices, readiness reminders, chat-ready links and party
+pings are tracked by party ID and the recipient's current membership ID. Leaving,
+deleting or kicking through the bot queues the corresponding notices for deletion
+immediately. A batched membership check every five seconds also handles website
+actions, expiry, merges, unlinking Telegram and state changes missed during restart.
+Transient API errors preserve current messages; an old membership cannot keep
+notices alive after a player rejoins. New messages and existing saved notice
+pointers are both covered, including messages still being delivered during exit.
+
 Stopping recruitment does not end the party or group. Party extensions update
 invitation expiry. Canonical merged or deleted parties enter cleanup. Mere expiry
 does not release the group before normal API cleanup has handled Discord occupancy

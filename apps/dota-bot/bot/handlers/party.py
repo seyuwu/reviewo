@@ -19,6 +19,7 @@ from ..ui.formatters import notification_text
 from ..services.auto_matcher import remember_declined_target
 from ..services.party_ready import expire_ready_notice, keep_ready_room_link
 from ..services.party_coordination import own_member, read_coordination
+from ..services.party_notice_cleanup import expire_other_party_notices
 
 router = Router(name="party")
 logger = logging.getLogger(__name__)
@@ -195,6 +196,12 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
             return True
         if event_type == "party_updated":
             parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
+            live_parties = parties.get("parties") or []
+            if parties.get("party"):
+                live_parties = live_parties + [parties["party"]]
+            if parties.get("team"):
+                live_parties = live_parties + [parties["team"]]
+            expire_other_party_notices(storage, telegram_user_id, {party["id"] for party in live_parties})
             active = parties.get("party") or ((parties.get("parties") or [None])[-1])
             # Membership is authoritative: a delayed event for an old party
             # must not replace the user's current party panel with the home screen.

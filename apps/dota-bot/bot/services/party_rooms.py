@@ -502,6 +502,9 @@ class PartyRooms:
         fresh = await self.for_user(user_id, room["data"]["partySlug"])
         key = "party_room_hint:" + party_id
         old = self.storage.get_choice(user_id, key, 0)
+        member = next((member for member in room["data"].get("roster", []) if str(member.get("telegramId")) == str(user_id)), None)
+        binding = {"partyId": party_id, "membershipId": (fresh or {}).get("membershipId")
+                   or (member.get("membershipId") if member else None), "chatId": user_id}
         ready_key = "party_room_ready_link:" + party_id
         ready_link = self.storage.get_choice(user_id, ready_key, 0)
         ping_key = "party_room_ping_link:" + party_id
@@ -517,6 +520,11 @@ class PartyRooms:
             self.storage.set_choices(user_id, ping_key, [])
             await self.refresh_private_controls(user_id, party_id)
             return
+        if isinstance(old, dict) and old.get("membershipId") != binding["membershipId"]:
+            if old.get("messageId"):
+                self.storage.add_temporary_message(user_id, user_id, old["messageId"], 0)
+            self.storage.set_choices(user_id, key, [])
+            old = None
         if isinstance(old, dict) and old.get("url") == fresh["inviteLink"] and (not isinstance(ping_link, dict) or ping_link.get("url") == fresh["inviteLink"]):
             await self.refresh_private_controls(user_id, party_id)
             return
@@ -544,7 +552,7 @@ class PartyRooms:
                 if "not modified" not in str(error).lower():
                     message_id = None
         if not message_id:
-            self.storage.set_choices(user_id, key, [{"messageId": None, "url": fresh["inviteLink"], "generation": fresh["generation"]}])
+            self.storage.set_choices(user_id, key, [{**binding, "messageId": None, "url": fresh["inviteLink"], "generation": fresh["generation"]}])
             try:
                 message = await self.bot.send_message(user_id, text, parse_mode="HTML", reply_markup=markup)
             except TelegramNetworkError as error:
@@ -552,7 +560,12 @@ class PartyRooms:
                     self.storage.set_choices(user_id, key, [])
                 raise
             message_id = message.message_id
-        self.storage.set_choices(user_id, key, [{"messageId": message_id, "url": fresh["inviteLink"], "generation": fresh["generation"]}])
+        self.storage.track_party_notice(user_id, party_id, binding["membershipId"], user_id, message_id)
+        current = self.storage.get_choice(user_id, key, 0)
+        if not isinstance(current, dict) or current.get("membershipId") != binding["membershipId"]:
+            self.storage.add_temporary_message(user_id, user_id, message_id, 0)
+            return
+        self.storage.set_choices(user_id, key, [{**binding, "messageId": message_id, "url": fresh["inviteLink"], "generation": fresh["generation"]}])
         expiry = datetime.fromisoformat(room["data"]["expiresAt"].replace("Z", "+00:00"))
         self.storage.add_temporary_message(user_id, user_id, message_id, max(1, min(47 * 3600, int((expiry - datetime.now(UTC)).total_seconds()))))
         await self.refresh_private_controls(user_id, party_id)

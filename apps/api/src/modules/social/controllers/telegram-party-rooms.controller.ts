@@ -2,7 +2,8 @@ import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Query } fro
 import { TelegramBotService } from "../../telegram/telegram-bot.service.js";
 import { TelegramPartyRoomsService } from "../services/telegram-party-rooms.service.js";
 import { PoolCapacityDto, RegisterRoomDto, ReserveRoomDto, RoomAdminActionDto, RoomAdminDto, RoomAdmissionDto,
-  RoomBotDto, RoomDeletedDto, RoomDiscordDto, RoomLeaseDto, RoomMessagesDto, RoomPresenceDto, RoomReportDto } from "../dto/telegram-party-rooms.dto.js";
+  RoomBotDto, RoomDeletedDto, RoomDiscordDto, RoomLeaseDto, RoomMessagesDto, RoomPresenceDto, RoomReportDto,
+  PartyNoticeContextsDto } from "../dto/telegram-party-rooms.dto.js";
 
 @Controller("social/telegram-party-rooms")
 export class TelegramPartyRoomsController {
@@ -40,6 +41,10 @@ export class TelegramPartyRoomsController {
   @Get("notices")
   notices(@Query() input: RoomBotDto, @Headers("x-telegram-bot-secret") secret?: string) {
     this.authorize(secret); return this.rooms.notices();
+  }
+  @Post("notice-memberships")
+  noticeMemberships(@Body() input: PartyNoticeContextsDto, @Headers("x-telegram-bot-secret") secret?: string) {
+    this.authorize(secret); return this.rooms.noticeMemberships(input.contexts);
   }
   @Post("presence")
   presence(@Body() input: RoomPresenceDto, @Headers("x-telegram-bot-secret") secret?: string) {

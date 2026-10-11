@@ -83,12 +83,16 @@ async def keep_ready_room_link(bot, api, storage, user_id, token):
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[button_url("💬 Открыть чат в Telegram", room["inviteLink"])]]))
     except TelegramAPIError:
         return False
+    if not storage.get_choice(user_id, notice_key(token), 0):
+        storage.add_temporary_message(user_id, notice["chatId"], notice["messageId"], 0)
+        return False
     if notice.get("reminderMessageId"):
         storage.add_temporary_message(user_id, notice["chatId"], notice["reminderMessageId"], 1)
     storage.set_choices(user_id, notice_key(token), [])
     _links.pop((user_id, token), None)
     storage.set_choices(user_id, "party_room_ready_link:" + notice["partyId"], [{
-        "messageId": notice["messageId"], "url": room["inviteLink"], "chatId": notice["chatId"]
+        "messageId": notice["messageId"], "url": room["inviteLink"], "chatId": notice["chatId"],
+        "partyId": notice["partyId"], "membershipId": notice["membershipId"]
     }])
     expiry = datetime.fromisoformat(notice["expiresAt"])
     storage.add_temporary_message(user_id, notice["chatId"], notice["messageId"], max(1, int((expiry - datetime.now(UTC)).total_seconds())))
@@ -147,8 +151,9 @@ async def deliver_party_ready_notice(bot, api, storage, user_id, site_url, slug,
                 return
             text = ready_notice_text(coordination, heading, needs_confirmation=False)
             open_button = await open_chat_button(api, user_id, site_url, coordination["slug"], token, force=True)
-            await send_temporary_notification(bot, storage, user_id, user_id, text, 20, parse_mode="HTML",
+            message = await send_temporary_notification(bot, storage, user_id, user_id, text, 20, parse_mode="HTML",
                                              reply_markup=InlineKeyboardMarkup(inline_keyboard=[[open_button]]), disable_web_page_preview=True, protect_content=True)
+            storage.track_party_notice(user_id, coordination["id"], member["membershipId"], message.chat.id, message.message_id)
             storage.set_choices(user_id, seen_key, [{"roster": roster}])
             return
         text = ready_notice_text(coordination, heading)
@@ -185,6 +190,7 @@ async def deliver_party_ready_notice(bot, api, storage, user_id, site_url, slug,
             if is_connection_setup_failure(error):
                 storage.set_choices(user_id, notice_key(token), [])
             raise
+        storage.track_party_notice(user_id, coordination["id"], member["membershipId"], message.chat.id, message.message_id)
         if not storage.get_choice(user_id, notice_key(token), 0):
             storage.add_temporary_message(user_id, message.chat.id, message.message_id, 1)
             return
@@ -236,6 +242,7 @@ async def refresh_ready_notice(bot, api, settings, storage, notice):
             await bot.edit_message_reply_markup(chat_id=notice["chatId"], message_id=notice["messageId"], reply_markup=markup)
         message = await bot.send_message(user_id, "⏰ Пати ждёт твоего подтверждения. Нажми «Готов играть», если готов начинать.",
                                          reply_markup=markup, disable_web_page_preview=True, protect_content=True)
+        storage.track_party_notice(user_id, notice["partyId"], notice["membershipId"], message.chat.id, message.message_id)
         if not storage.get_choice(user_id, notice_key(token), 0):
             storage.add_temporary_message(user_id, message.chat.id, message.message_id, 1)
             return

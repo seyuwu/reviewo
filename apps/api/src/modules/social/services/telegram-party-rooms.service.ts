@@ -8,7 +8,7 @@ import { PrismaService } from "../../../database/prisma.service.js";
 import { GamePartiesService } from "./game-parties.service.js";
 import { PartyCoordinationService } from "./party-coordination.service.js";
 import { DiscordVoiceService } from "./discord-voice.service.js";
-import type { RegisterRoomDto, RoomReportDto, RoomMessagesDto } from "../dto/telegram-party-rooms.dto.js";
+import type { RegisterRoomDto, RoomReportDto, RoomMessagesDto, PartyNoticeContextDto } from "../dto/telegram-party-rooms.dto.js";
 
 type RosterMember = { membershipId: string; userId: string; telegramId: string | null; name: string; role: string | null; ready: boolean };
 type RoomData = {
@@ -137,7 +137,8 @@ export class TelegramPartyRoomsService {
       if (!party || party.kind !== "PARTY" || party.mergedIntoSlug || !party.expiresAt || party.expiresAt <= new Date()
         || !party.members.some(member => member.userId === identity.userId && member.user.status === "active")) return null;
       const existing = await tx.telegramPartyChatRoom.findUnique({ where: { partyId: party.id } });
-      if (existing) return this.publicRoom(existing);
+      const membershipId = party.members.find(member => member.userId === identity.userId)!.id;
+      if (existing) return { ...this.publicRoom(existing), membershipId };
       const pool = await tx.telegramPartyChatPool.findUniqueOrThrow({ where: { id: "default" } });
       const busy = await tx.telegramPartyChatRoom.count({ where: { state: { in: ["PREPARING", "ACTIVE", "ROTATING"] } } });
       if (busy >= pool.capacity) return null;
@@ -152,7 +153,7 @@ export class TelegramPartyRoomsService {
         state: "PREPARING", partyId: party.id, generation: { increment: 1 }, assignedAt: new Date(),
         retryAt: null, data: json(data)
       } });
-      return this.publicRoom(reserved);
+      return { ...this.publicRoom(reserved), membershipId };
     });
   }
 
@@ -210,6 +211,19 @@ export class TelegramPartyRoomsService {
 
   async notices() {
     return this.prisma.telegramPartyChatRoom.findMany({ where: { OR: [{ partyId: { not: null } }, { state: "REVIEW" }] }, orderBy: { updatedAt: "asc" } });
+  }
+
+  async noticeMemberships(contexts: PartyNoticeContextDto[]) {
+    const parties = await this.prisma.gameParty.findMany({ where: {
+      id: { in: unique(contexts.map(context => context.partyId)) }, mergedIntoSlug: null,
+      OR: [{ kind: "TEAM" }, { kind: "PARTY", expiresAt: { gt: new Date() } }]
+    }, include: partyInclude });
+    const current = new Map(parties.map(party => [party.id, party]));
+    return contexts.map(context => ({ ...context,
+      active: Boolean(current.get(context.partyId)?.members.some(member => member.user.status === "active"
+        && member.user.authIdentities.some(identity => identity.providerUserId === context.userId)
+        && (!context.membershipId || member.id === context.membershipId)))
+    }));
   }
 
   async claim(roomId: string, botId: string) {

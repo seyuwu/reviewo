@@ -49,6 +49,14 @@ export class RoomDiscordDto extends RoomBotDto {
   @Matches(/^\d{1,16}$/) userId!: string;
   @IsInt() @Min(1) generation!: number;
 }
+export class PartyNoticeContextDto {
+  @IsUUID("4") partyId!: string;
+  @Matches(/^\d{1,16}$/) userId!: string;
+  @IsOptional() @IsUUID("4") membershipId?: string;
+}
+export class PartyNoticeContextsDto extends RoomBotDto {
+  @IsArray() @ArrayMaxSize(500) @ValidateNested({ each: true }) @Type(() => PartyNoticeContextDto) contexts!: PartyNoticeContextDto[];
+}
 export class RoomMessageDto {
   @Matches(/^-100\d{5,16}$/) chatId!: string;
   @IsInt() @Min(1) messageId!: number;
