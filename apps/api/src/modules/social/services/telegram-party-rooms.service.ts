@@ -170,9 +170,9 @@ export class TelegramPartyRoomsService {
       data.evictIds = unique([...data.evictIds, ...data.presentIds, ...(data.possibleIds ?? [])].filter(id => !allowed.has(id) && !data.staffIds.includes(id)));
       data.cardDirty ||= JSON.stringify(roster) !== JSON.stringify(data.roster) || data.partyName !== party.name;
       data.roster = roster; data.partyName = party.name; data.partySlug = party.slug; data.expiresAt = party.expiresAt?.toISOString() ?? null;
-      const abandoned = room.assignedAt && Date.now() - room.assignedAt.getTime() >= 10 * 60_000 && data.seenIds.length === 0;
+      const preparationTimedOut = room.state === "PREPARING" && room.assignedAt && Date.now() - room.assignedAt.getTime() >= 10 * 60_000;
       return tx.telegramPartyChatRoom.update({ where: { id: room.id }, data: {
-        ...(abandoned ? { state: "CLOSING", generation: { increment: 1 } }
+        ...(preparationTimedOut ? { state: "CLOSING", generation: { increment: 1 } }
           : removed && room.state !== "ROTATING" ? { state: "ROTATING", generation: { increment: 1 } } : {}), data: json(data)
       } });
     });

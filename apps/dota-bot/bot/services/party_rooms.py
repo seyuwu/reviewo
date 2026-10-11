@@ -5,11 +5,12 @@ import logging
 import time
 from urllib.parse import urlencode
 
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramNetworkError, TelegramRetryAfter
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramNetworkError, TelegramRetryAfter
 from aiogram.types import ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..api.client import ApiError
 from .join_request_query import AnswerChatJoinRequestQuery
+from .telegram_session import is_connection_setup_failure
 
 logger = logging.getLogger(__name__)
 REQUIRED_RIGHTS = ("can_change_info", "can_delete_messages", "can_restrict_members", "can_invite_users", "can_pin_messages")
@@ -134,14 +135,18 @@ class PartyRooms:
         if not self.enabled:
             return None
         try:
-            result = await self.request("POST", "/reserve", {"userId": str(user_id), "slug": slug})
+            # Room service latency must not hold up the user's main bot panel.
+            async with asyncio.timeout(2):
+                result = await self.request("POST", "/reserve", {"userId": str(user_id), "slug": slug})
             if result:
                 cached = self.notice_rooms.get(result["id"], {})
                 if cached.get("state") != result["state"] or cached.get("generation") != result["generation"]:
                     self.sync_after = 0
             self.wakeup.set()
             return result
-        except ApiError:
+        except (ApiError, TimeoutError):
+            self.sync_after = 0
+            self.wakeup.set()
             return None
 
     async def validate_group(self, chat_id, *, owner_id=None):
@@ -186,8 +191,15 @@ class PartyRooms:
             if not getattr(self.settings, "room_worker_only", False) and room["state"] == "REVIEW" and old.get("state") != "REVIEW":
                 for admin_id in self.settings.admin_ids:
                     self.alert_queue[(admin_id, room["id"])] = room
-            if not getattr(self.settings, "room_worker_only", False) and room.get("partyId") and (old.get("generation") != room["generation"] or old.get("state") != room["state"]):
-                for member in room["data"].get("roster", []) + old.get("data", {}).get("roster", []):
+            if not getattr(self.settings, "room_worker_only", False) and room.get("partyId"):
+                roster = room["data"].get("roster", [])
+                previous_roster = old.get("data", {}).get("roster", [])
+                if old.get("generation") != room["generation"] or old.get("state") != room["state"]:
+                    targets = roster + previous_roster
+                else:
+                    previous_members = {(member.get("membershipId"), member.get("telegramId")) for member in previous_roster}
+                    targets = [member for member in roster if (member.get("membershipId"), member.get("telegramId")) not in previous_members]
+                for member in targets:
                     if member.get("telegramId"):
                         self.hint_queue[(int(member["telegramId"]), room["partyId"])] = room
 
@@ -457,6 +469,8 @@ class PartyRooms:
         ready_link = self.storage.get_choice(user_id, ready_key, 0)
         ping_key = "party_room_ping_link:" + party_id
         ping_link = self.storage.get_choice(user_id, ping_key, 0)
+        if fresh is None and room["state"] == "ACTIVE" and any(str(member.get("telegramId")) == str(user_id) for member in room["data"].get("roster", [])):
+            raise ApiError("Chat availability lookup failed; retry notification", 503)
         if not fresh or not fresh.get("inviteLink") or fresh.get("partyId") != party_id:
             for saved in (old, ready_link, ping_link):
                 if isinstance(saved, dict) and saved.get("messageId"):
@@ -467,6 +481,7 @@ class PartyRooms:
             await self.refresh_private_controls(user_id, party_id)
             return
         if isinstance(old, dict) and old.get("url") == fresh["inviteLink"] and (not isinstance(ping_link, dict) or ping_link.get("url") == fresh["inviteLink"]):
+            await self.refresh_private_controls(user_id, party_id)
             return
         markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="💬 Открыть чат пати", url=fresh["inviteLink"])]])
         if isinstance(ping_link, dict) and ping_link.get("url") != fresh["inviteLink"]:
@@ -483,7 +498,7 @@ class PartyRooms:
                 self.storage.set_choices(user_id, ready_key, [ready_link])
             except TelegramBadRequest:
                 self.storage.set_choices(user_id, ready_key, [])
-        text = "💬 <b>Чат пати в Telegram</b>\n\n" + escape(room["data"].get("partyName", "Пати")) + "\nОткрой чат, вступи и поздоровайся с игроками."
+        text = "✅ <b>Чат пати готов!</b>\n\n" + escape(room["data"].get("partyName", "Пати")) + "\nНажми кнопку ниже и заходи к команде."
         message_id = old.get("messageId") if isinstance(old, dict) else None
         if message_id:
             try:
@@ -576,17 +591,43 @@ class PartyRooms:
                 eligible_alert = next((key for key in self.alert_queue if self.private_after.get(key[0], 0) <= time.time()), None)
                 eligible_hint = next((key for key in self.hint_queue if self.private_after.get(key[0], 0) <= time.time()), None)
                 if not getattr(self.settings, "room_worker_only", False) and time.time() >= self.next_hint and (eligible_alert or eligible_hint):
+                    retry_hint = False
+                    sending_hint = not eligible_alert and bool(eligible_hint)
+                    private_delay = 1.1
                     try:
                         if eligible_alert:
                             user_id = eligible_alert[0]
                             await self.send_admin_alert(user_id, self.alert_queue.pop(eligible_alert))
                         else:
                             user_id, party_id = eligible_hint
-                            await self.refresh_hint(user_id, party_id, self.hint_queue.pop(eligible_hint))
+                            hint = self.hint_queue[eligible_hint]
+                            await self.refresh_hint(user_id, party_id, hint)
+                            if self.hint_queue.get(eligible_hint) is hint:
+                                self.hint_queue.pop(eligible_hint, None)
+                    except TelegramForbiddenError:
+                        self.storage.mark_bot_user_blocked(user_id)
+                        if sending_hint:
+                            self.hint_queue.pop(eligible_hint, None)
+                    except TelegramBadRequest:
+                        if sending_hint:
+                            self.hint_queue.pop(eligible_hint, None)
+                        logger.info("Private chat availability notice could not be updated")
+                    except TelegramRetryAfter as error:
+                        retry_hint = True
+                        private_delay = error.retry_after + 1
+                        self.next_hint = time.time() + private_delay
+                    except TelegramNetworkError as error:
+                        retry_hint = is_connection_setup_failure(error)
+                        if sending_hint and not retry_hint:
+                            # An uncertain send may already be delivered. Keep
+                            # access in the main panel without duplicating notices.
+                            self.hint_queue.pop(eligible_hint, None)
+                        logger.warning("Could not deliver private chat availability notice")
                     except (ApiError, TelegramAPIError):
+                        retry_hint = True
                         logger.warning("Could not refresh private Telegram group invitation")
-                    self.private_after[user_id] = time.time() + 1.1
-                    self.next_hint = time.time() + .5
+                    self.private_after[user_id] = time.time() + max(private_delay, 5 if retry_hint else 1.1)
+                    self.next_hint = max(self.next_hint, time.time() + .5)
                 for user_id in list(self.registration_results):
                     if time.time() >= self.registration_after.get(user_id, 0) and time.time() >= self.private_after.get(user_id, 0):
                         results = self.registration_results.pop(user_id)

@@ -809,6 +809,10 @@ async def render_screen(
             if remaining is not None:
                 timer += f" · осталось {format_duration(remaining)}"
             text += f"\n\n🔎 <b>Ищем игроков:</b> {escape_text(roles_text)}{timer}"
+            if party.get("telegramRoomPending"):
+                text += "\n💬 <b>Готовим чат…</b> обычно около 5 сек."
+        elif party.get("telegramRoomPending"):
+            text += "\n\n💬 <b>Готовим чат пати…</b>\nОбычно это занимает около 5 секунд. Пришлю кнопку, когда чат будет готов."
         else:
             text += "\n\nДля набора нажмите «Искать» под свободной позицией или «Найти игроков» для поиска на всех свободных."
         profile = None

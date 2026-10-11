@@ -244,7 +244,7 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
             if activity == "solo_group":
                 message_text = (
                     f"🎮 Пати нашлась! Вы в стаке «<b>{party_name}</b>» вместе с игроком, который искал на сайте FDP.\n"
-                    "Откройте сайт, чтобы посмотреть состав пати и перейти в чат или Discord."
+                    "Откройте чат пати, чтобы договориться об игре."
                 )
             else:
                 await deliver_member_joined_notice(

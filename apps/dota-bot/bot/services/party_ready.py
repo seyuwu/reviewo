@@ -53,7 +53,8 @@ async def open_chat_button(api, user_id, site_url, slug, token, *, force=False, 
             context = coordination_context(api.storage, user_id, coordination)
             if not context:
                 raise ApiError("Состав пати изменился", 409)
-            return button("💬 Открыть чат пати в Telegram", f"roomopen:{context['token']}")
+            label = "💬 Готовим чат · ~5 сек" if room and room["state"] in {"PREPARING", "ROTATING"} else "💬 Открыть чат пати в Telegram"
+            return button(label, f"roomopen:{context['token']}")
     next_path = f"/dota/teams/{slug}#party-chat"
     try:
         ticket = await api.create_web_access_ticket(user_id)

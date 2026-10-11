@@ -17,7 +17,7 @@ async def deliver_join_hint(
     site_url: str,
     party_slug: str,
     *,
-    message_text: str = "Вы теперь в пати! Общайтесь в чате на сайте или переходите в Discord.",
+    message_text: str = "Вы теперь в пати! Откройте чат, чтобы договориться об игре.",
     button_text: str = "Открыть пати на сайте",
 ) -> None:
     if party_slug:
@@ -74,8 +74,7 @@ async def deliver_member_joined_notice(
             party_slug,
             message_text=(
                 f"{message_text}\n\n"
-                "💬 Зайдите в чат пати, чтобы договориться об игре. "
-                "Нажмите кнопку ниже или «Чат и Discord» в основном окне пати."
+                "💬 Зайдите в чат пати, чтобы договориться об игре. Нажмите кнопку ниже."
             ),
             button_text="💬 Открыть чат пати",
         )

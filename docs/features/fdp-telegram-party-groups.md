@@ -47,11 +47,19 @@ panels and tracked invitation notices are refreshed on generation changes.
 Stopping recruitment does not end the party or group. Party extensions update
 invitation expiry. Canonical merged or deleted parties enter cleanup. Mere expiry
 does not release the group before normal API cleanup has handled Discord occupancy
-and possible lifetime extension. A reservation nobody used is released after
-10 minutes. Fresh reservations wake synchronization immediately and preparation
+and possible lifetime extension. Failed preparation times out after 10 minutes.
+A successfully prepared chat follows the party lifetime, including when players
+have not entered it yet. New assignments wake synchronization immediately and preparation
 takes priority over ordinary card refreshes. The invite becomes available before
 the roster card is posted. Existing website chat/Discord access remains explicit
 in party settings.
+
+The main party panel shows “Готовим чат” with an approximate five-second hint
+while preparation is pending. Every Telegram-linked member, including players
+combined by automatic solo search, gets “Чат пати готов!” with an entry button.
+The existing private notification queue retains its rate budget; preparation runs
+on the separate room-service session. A room lookup can hold a panel for at most
+two seconds, and transient failures are handled by the background worker.
 
 New temporary parties last 3 hours. Captains and officers can use
 “Настройки пати → Продлить пати · +3 часа” to add 3 hours, up to the existing
