@@ -2334,7 +2334,7 @@ export const enMessages = {
   "dota.tournaments.createSquadLead": "It exists only in this tournament and never appears in regular party search.",
   "dota.tournaments.createReserveSquad": "Create a reserve team",
   "dota.tournaments.telegram.button": "Open FDP in Telegram",
-  "dota.tournaments.telegram.title": "Start FDP in Telegram",
+  "dota.tournaments.telegram.title": "To take part in tournaments, start our FDP bot in Telegram",
   "dota.tournaments.telegram.description": "Use the bot to take part in tournaments and receive updates. Open FDP to connect it to your Opinia account.",
   "dota.tournaments.telegram.loginTitle": "Sign in with Telegram",
   "dota.tournaments.telegram.loginDescription": "Confirm your Telegram sign-in. FDP will open next and show your account’s main menu.",

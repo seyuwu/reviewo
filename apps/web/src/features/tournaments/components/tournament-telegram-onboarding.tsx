@@ -8,7 +8,7 @@ import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import { ApiError } from "../../../lib/api/api-error";
 import { fetchMyDotaProfile } from "../../dota/api/dota-api";
 import { buildDotaBotProfileUrl } from "../../../lib/config/dota-bot";
-import { useTranslation } from "../../i18n/locale-provider";
+import { useLocale, useTranslation } from "../../i18n/locale-provider";
 import {
   createTelegramTournamentBotLink,
   getTelegramTournamentBotStatus,
@@ -24,24 +24,26 @@ const POLL_INTERVAL_MS = 2500;
 
 type OnboardingError = "connect" | "conflict" | "expired" | "status";
 
-export function TournamentTelegramButton() {
+export function TournamentTelegramButton({ label, primary = false }: { label?: string; primary?: boolean } = {}) {
   const t = useTranslation();
   return (
     <a
-      className={styles.serverButton}
+      className={primary ? styles.joinButton : styles.serverButton}
       href={telegramAppUrl(SESSION_BOT_URL)}
       rel="noopener noreferrer"
       target="_blank"
     >
       <TelegramIcon />
-      {t("dota.tournaments.telegram.button")}
+      {label ?? t("dota.tournaments.telegram.button")}
       <span aria-hidden="true">↗</span>
     </a>
   );
 }
 
-export function TournamentTelegramOnboarding({ children, requireAccess = false }: { children: ReactNode; requireAccess?: boolean }) {
+export function TournamentTelegramOnboarding({ children, requireAccess = false, onDismiss }: { children: ReactNode; requireAccess?: boolean; onDismiss?: () => void }) {
   const t = useTranslation();
+  const { resolvedLocale } = useLocale();
+  const text = (ru: string, en: string) => resolvedLocale === "ru" ? ru : en;
   const pathname = usePathname();
   const router = useRouter();
   const { authSession, isAuthSessionLoaded } = useAuthSession();
@@ -300,7 +302,7 @@ export function TournamentTelegramOnboarding({ children, requireAccess = false }
   if (!isTournamentRoute || (isPreviewRoute && !requireAccess)) return children;
 
   if (isAuthSessionLoaded && (!authSession || accountState === "needs-profile")) {
-    return <TournamentPageSkeleton detail={pathname !== "/games/tournaments"} />;
+    return onDismiss ? null : <TournamentPageSkeleton detail={pathname !== "/games/tournaments"} />;
   }
 
   if (
@@ -308,20 +310,27 @@ export function TournamentTelegramOnboarding({ children, requireAccess = false }
     accountState === "loading" ||
     (authSession && verifiedUserId !== authSession.userId && accountState !== "error")
   ) {
-    return <TournamentPageSkeleton detail={pathname !== "/games/tournaments"} />;
+    return onDismiss ? <p className={styles.checking} role="status">{text("Проверяем Telegram…", "Checking Telegram…")}</p> : <TournamentPageSkeleton detail={pathname !== "/games/tournaments"} />;
   }
 
   if (isAuthSessionLoaded && authSession && accountState === "allowed" && verifiedUserId === authSession.userId) {
     return children;
   }
 
-  return (
-    <main className={styles.gate}>
-      <div className={styles.content}>
+  const content = (
+      <div className={onDismiss ? styles.modalContent : styles.content}>
         <div className={styles.logo}><TelegramIcon /></div>
-        <h2 id="tournament-telegram-title">{t("dota.tournaments.telegram.title")}</h2>
+        <h2 id="tournament-telegram-title">{onDismiss
+          ? accountState === "error" ? text("Не удалось проверить Telegram", "Could not check Telegram")
+            : t("dota.tournaments.telegram.title")
+          : t("dota.tournaments.telegram.title")}</h2>
         <p id="tournament-telegram-description">
-          {accountState === "needs-start"
+          {onDismiss ? accountState === "error"
+            ? text("Повтори проверку. Если Telegram уже привязан, продолжим участие без повторной привязки.", "Retry the check. If Telegram is already linked, you can continue without linking again.")
+            : accountState === "needs-start"
+            ? text("Аккаунт уже связан с Telegram. Запусти FDP-бота, чтобы получать уведомления турнира. Затем продолжим участие здесь.", "Your account is already linked to Telegram. Start the FDP bot to receive tournament notifications, then continue here.")
+            : text("Для участия в турнире нужно связать этот аккаунт с FDP-ботом. Подтверди привязку в Telegram и вернись сюда — продолжим выбранное действие.", "Tournament participation requires linking this account to the FDP bot. Confirm in Telegram and return here to continue.")
+            : accountState === "needs-start"
             ? t("dota.tournaments.telegram.startRequired")
             : t("dota.tournaments.telegram.description")}
         </p>
@@ -347,19 +356,38 @@ export function TournamentTelegramOnboarding({ children, requireAccess = false }
           </div>
         ) : accountState === "needs-start" ? (
           <div className={styles.actions}>
-            <TournamentTelegramButton />
+            {onDismiss ? <TournamentTelegramButton primary label={text("Запустить FDP в Telegram", "Start FDP in Telegram")} /> : <TournamentTelegramButton />}
             <p className={styles.status} aria-live="polite">{t("dota.tournaments.telegram.waitingForStart")}</p>
           </div>
         ) : !challenge ? (
           <div className={styles.actions}>
             <button className={styles.joinButton} type="button" disabled={busy} onClick={() => void startLink()}>
-              <TelegramIcon />{isPreparing ? t("dota.tournaments.telegram.preparing") : t("dota.tournaments.telegram.connect")}
+              <TelegramIcon />{isPreparing ? t("dota.tournaments.telegram.preparing") : onDismiss ? text("Привязать Telegram", "Link Telegram") : t("dota.tournaments.telegram.connect")}
             </button>
           </div>
         ) : null}
+        {onDismiss ? <button className={styles.dismissButton} type="button" onClick={onDismiss}>{text("Не сейчас", "Not now")}</button> : null}
       </div>
-    </main>
   );
+  return onDismiss ? <TelegramConnectionDialog onDismiss={onDismiss}>{content}</TelegramConnectionDialog> : <main className={styles.gate}>{content}</main>;
+}
+
+function TelegramConnectionDialog({ children, onDismiss }: { children: ReactNode; onDismiss: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    if (dialog && !dialog.open) dialog.showModal();
+    return () => {
+      if (dialog?.open) dialog.close();
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+  return <dialog ref={ref} className={styles.connectionDialog} aria-labelledby="tournament-telegram-title" aria-describedby="tournament-telegram-description"
+    onCancel={event => { event.preventDefault(); onDismiss(); }}>
+    {children}
+  </dialog>;
 }
 
 function validateBotLinkUrl(value: string, requestId: string): string {

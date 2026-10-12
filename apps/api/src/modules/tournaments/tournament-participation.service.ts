@@ -6,6 +6,7 @@ import { PrismaService } from "../../database/prisma.service.js";
 import { DotaProfileService } from "../dota/services/dota-profile.service.js";
 import { DotaTournamentsService } from "./tournaments.service.js";
 import type { StartTournamentSoloSearchDto, TournamentSoloTicket } from "./dto/tournament-participation.dto.js";
+import { TournamentRecruitmentService } from "./tournament-recruitment.service.js";
 
 const ACTIVE_ENTRIES = ["RECRUITING", "REGISTERED", "RESERVE"] as const;
 const ROLES = ["1", "2", "3", "4", "5"] as const;
@@ -20,7 +21,7 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
   private readonly jobs = new Map<string, Promise<void>>();
 
   constructor(private readonly prisma: PrismaService, private readonly profiles: DotaProfileService,
-    private readonly tournaments: DotaTournamentsService) {}
+    private readonly tournaments: DotaTournamentsService, private readonly recruitment?: TournamentRecruitmentService) {}
 
   onModuleInit() {
     this.timer = setInterval(() => { void this.scan(); }, 5000);
@@ -45,49 +46,55 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
 
   async state(slug: string, user: AuthenticatedUser) {
     const tournament = await this.tournament(slug);
-    const [profile, member, request, queue, click] = await Promise.all([
+    const [profile, member, request, queue, click, preference] = await Promise.all([
       this.profiles.getMyProfile(user).catch((error: unknown) => {
         if (error instanceof HttpException && error.getStatus() === 404) return null;
         throw error;
       }),
       this.prisma.dotaTournamentEntryMember.findFirst({ where: { tournamentId: tournament.id, userId: user.id,
         isActive: true, entry: { status: { in: [...ACTIVE_ENTRIES] } } }, include: {
-        entry: { include: { members: { where: { isActive: true }, orderBy: { positionRole: "asc" } } } }
+        entry: { include: { members: { where: { isActive: true }, orderBy: { positionRole: "asc" } }, teamParty: { select: { ownerUserId: true } } } }
       } }),
       this.prisma.dotaTournamentEntryRequest.findFirst({ where: { tournamentId: tournament.id, userId: user.id, status: "PENDING" }, include: { entry: true } }),
       this.prisma.dotaTournamentSoloSearch.findUnique({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } } }),
-      this.prisma.dotaTournamentSponsorClick.findUnique({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } }, select: { id: true } })
+      this.prisma.dotaTournamentSponsorClick.findUnique({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } }, select: { id: true } }),
+      this.prisma.dotaTournamentRecruitPreference.findUnique({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } } })
     ]);
     const roles = profile?.roles.filter(role => ROLES.includes(role as typeof ROLES[number])) ?? [];
     const open = this.tournaments.participationOpen(tournament);
     const state = member ? "JOINED" : !open ? "CLOSED" : !profile ? "NEEDS_PROFILE" : request ? "REQUESTED" : queue?.status === "WAITING" ? "WAITING" : "NONE";
-    const searchRoles = queue?.status === "WAITING" ? roles.filter(role => queue.roles.includes(role)) : roles;
+    const searchRoles = queue?.status === "WAITING" ? queue.roles.filter(role => ROLES.includes(role as typeof ROLES[number])) : roles;
     const suggestions = !member && !request && open && profile ? await this.suggestions(tournament, searchRoles, profile.mmr) : [];
-    return { tournament: { id: tournament.id, slug, title: tournament.title, status: tournament.status, startsAt: tournament.startsAt?.toISOString() ?? null },
-      state, roles, queueRoles: queue?.status === "WAITING" ? queue.roles : [],
+    return { tournament: { id: tournament.id, slug, title: tournament.title, status: tournament.status,
+      startsAt: tournament.startsAt?.toISOString() ?? null, registrationClosesAt: tournament.registrationClosesAt?.toISOString() ?? null,
+      description: tournament.description, format: tournament.format, gameMode: tournament.gameMode, rulesUrl: tournament.rulesUrl },
+      state, roles, profileMmr: profile?.mmr ?? null, queueRoles: queue?.status === "WAITING" ? queue.roles : [], queueMode: queue?.status === "WAITING" ? queue.mode : null,
       sponsorRequired: open && tournament.sponsors.length > 0 && !click,
       sponsors: tournament.sponsors.map(sponsor => ({ id: sponsor.id, name: sponsor.name, url: sponsor.url })),
       entry: member ? { id: member.entry.id, name: member.entry.teamNameSnapshot, status: member.entry.status,
+        isCaptain: (member.entry.createdByUserId ?? member.entry.teamParty?.ownerUserId) === user.id,
+        recruiting: open && member.entry.members.length < 5 && Boolean(preference?.enabled),
         joinMode: member.entry.joinMode, ownRole: member.positionRole,
         members: member.entry.members.map(player => ({ name: player.displayName, role: player.positionRole, mmr: player.mmr })) } : null,
       request: request ? { entryId: request.entryId, entryName: request.entry.teamNameSnapshot, role: request.positionRole } : null,
       suggestions };
   }
 
-  private async suggestions(tournament: DotaTournament, roles: string[], mmr: string | null) {
-    const entries = await this.prisma.dotaTournamentEntry.findMany({ where: { tournamentId: tournament.id, joinMode: "OPEN",
+  private async suggestions(tournament: DotaTournament, roles: string[], mmr: string | null, automatic = false) {
+    const entries = await this.prisma.dotaTournamentEntry.findMany({ where: { tournamentId: tournament.id, ...(automatic ? { joinMode: "OPEN" as const } : {}),
       status: { in: tournament.status === "REGISTRATION_CLOSED" ? ["RESERVE"] : [...ACTIVE_ENTRIES] } },
       include: { members: { where: { isActive: true }, select: { positionRole: true, mmr: true } } }, orderBy: { createdAt: "asc" } });
     const ownMmr = Number.parseInt(mmr ?? "", 10);
     return entries.flatMap(entry => {
       if (entry.members.length >= 5) return [];
-      const role = roles.find(candidate => !entry.members.some(member => member.positionRole === candidate));
+      const freeRoles = ROLES.filter(candidate => !entry.members.some(member => member.positionRole === candidate));
+      const role = roles.find(candidate => freeRoles.includes(candidate as typeof ROLES[number])) ?? (automatic ? undefined : freeRoles[0]);
       if (!role) return [];
       const mmrs = entry.members.map(member => member.mmr).filter((value): value is number => value !== null);
       const averageMmr = mmrs.length ? Math.round(mmrs.reduce((total, value) => total + value, 0) / mmrs.length) : null;
-      return [{ entryId: entry.id, name: entry.teamNameSnapshot, role, memberCount: entry.members.length, averageMmr,
+      return [{ entryId: entry.id, name: entry.teamNameSnapshot, status: entry.status, role, freeRoles: [...freeRoles], joinMode: entry.joinMode, memberCount: entry.members.length, averageMmr,
         distance: Number.isFinite(ownMmr) && averageMmr !== null ? Math.abs(ownMmr - averageMmr) : 0 }];
-    }).sort((a, b) => b.memberCount - a.memberCount || a.distance - b.distance).slice(0, 3)
+    }).sort((a, b) => b.memberCount - a.memberCount || a.distance - b.distance).slice(0, automatic ? 3 : 6)
       .map(({ distance: _distance, ...suggestion }) => suggestion);
   }
 
@@ -95,7 +102,8 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
     const tournament = await this.tournament(slug);
     const profile = await this.profiles.getMyProfile(user);
     const roles = input.roles ?? profile.roles;
-    if (!roles.length || roles.some(role => !profile.roles.includes(role))) throw new ConflictException("Choose positions from your Dota profile");
+    const mode = input.mode ?? "AUTO";
+    if (!roles.length || roles.some(role => !ROLES.includes(role as typeof ROLES[number]))) throw new ConflictException("Выбери позиции для турнира от 1 до 5.");
     await this.prisma.$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${tournament.id}`}))`;
       const current = await tx.dotaTournament.findUniqueOrThrow({ where: { id: tournament.id } });
@@ -104,12 +112,13 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
       if (member) return;
       if (await tx.dotaTournamentEntryRequest.findFirst({ where: { tournamentId: current.id, userId: user.id, status: "PENDING" } })) return;
       const old = await tx.dotaTournamentSoloSearch.findUnique({ where: { tournamentId_userId: { tournamentId: current.id, userId: user.id } } });
-      if (old?.status === "WAITING" && JSON.stringify(old.roles) === JSON.stringify(roles)) return;
+      if (old?.status === "WAITING" && old.mode === mode && JSON.stringify(old.roles) === JSON.stringify(roles)) return;
       await tx.dotaTournamentSoloSearch.upsert({ where: { tournamentId_userId: { tournamentId: current.id, userId: user.id } },
-        create: { tournamentId: current.id, userId: user.id, roles: [...new Set(roles)] },
-        update: { roles: [...new Set(roles)], status: "WAITING", assignedEntryId: null, generation: { increment: 1 }, createdAt: new Date() } });
+        create: { tournamentId: current.id, userId: user.id, roles: [...new Set(roles)], mode },
+        update: { roles: [...new Set(roles)], mode, status: "WAITING", assignedEntryId: null, generation: { increment: 1 }, createdAt: new Date() } });
     });
-    const work = this.process(tournament.id).catch(() => { this.logger.warn("Tournament solo matching will retry"); });
+    const work = (mode === "AUTO" ? this.process(tournament.id) : Promise.resolve()).catch(() => { this.logger.warn("Tournament solo matching will retry"); });
+    if (this.recruitment) void this.recruitment.announce(tournament.id).catch(() => this.logger.warn("Tournament recruitment announcements will retry"));
     // HTTP and bot callbacks never wait behind the full background matching pass.
     await Promise.race([work, new Promise<void>(resolve => { const timer = setTimeout(resolve, 1500); timer.unref(); })]);
     return this.state(slug, user);
@@ -134,7 +143,9 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
       const pending = await this.prisma.dotaTournamentSoloSearch.groupBy({ by: ["tournamentId"], where: { status: "WAITING" }, orderBy: { tournamentId: "asc" } });
       const count = Math.min(20, pending.length);
       for (let index = 0; index < count; index++) {
-        await this.process(pending[(this.scanCursor + index) % pending.length]!.tournamentId);
+        const id = pending[(this.scanCursor + index) % pending.length]!.tournamentId;
+        await this.process(id);
+        await this.recruitment?.announce(id);
       }
       this.scanCursor = pending.length ? (this.scanCursor + count) % pending.length : 0;
     } catch { this.logger.warn("Tournament solo matching scan will retry"); }
@@ -164,7 +175,7 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
       // Keep a bounded pass while selecting the oldest candidates for every role.
       // A long queue for one position must not hide a compatible player behind it.
       const batches = await Promise.all(ROLES.map(role => this.prisma.dotaTournamentSoloSearch.findMany({
-        where: { tournamentId, status: "WAITING", roles: { has: role } }, include: { user: true },
+        where: { tournamentId, status: "WAITING", mode: "AUTO", roles: { has: role } }, include: { user: true },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 8
       })));
       const rows = [...new Map(batches.flat().map(row => [row.id, row])).values()].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -178,8 +189,8 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
         const identity = row.user.role === "ADMIN" || await this.prisma.userAuthIdentity.findFirst({ where: { userId: row.userId, provider: "telegram" }, select: { id: true } });
         if (row.user.status !== "active" || !identity) { await this.cancelRow(row); continue; }
         try {
-          const profile = await this.profiles.getMyProfile(row.user);
-          const roles = row.roles.filter(role => profile.roles.includes(role));
+          await this.profiles.getMyProfile(row.user);
+          const roles = row.roles.filter(role => ROLES.includes(role as typeof ROLES[number]));
           if (roles.length) candidates.push({ row, user: row.user, roles });
           else await this.cancelRow(row);
         } catch (error) {
@@ -196,7 +207,7 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
         if (current.state !== "WAITING" || current.sponsorRequired) continue;
         const ticket: TournamentSoloTicket = { id: candidate.row.id, generation: candidate.row.generation, leaseToken };
         let joined = false;
-        for (const suggestion of current.suggestions) {
+        for (const suggestion of await this.suggestions(tournament, candidate.roles, current.profileMmr, true)) {
           const role = candidate.roles.find(value => value === suggestion.role);
           if (!role) continue;
           try {

@@ -5,8 +5,9 @@ import json
 import logging
 import re
 import time
+from datetime import datetime, timedelta, timezone
 from html import escape
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from uuid import UUID, uuid4
 
 from aiogram import Bot
@@ -103,8 +104,49 @@ def remember_participation(storage: BotStorage, user_id: int, context: dict, res
     return save_tournament_context(storage, user_id, tournament, **changes)
 
 
+def tournament_date_text(value) -> str:
+    if not value:
+        return "Дата будет объявлена"
+    try:
+        date = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if date.tzinfo is None:
+            date = date.replace(tzinfo=timezone.utc)
+        return date.astimezone(timezone(timedelta(hours=3))).strftime("%d.%m.%Y · %H:%M МСК")
+    except (TypeError, ValueError):
+        return "Дата будет объявлена"
+
+
+def tournament_overview_text(tournament: dict) -> str:
+    lines = [f"🏆 <b>{escape(str(tournament.get('title') or 'Турнир')[:120])}</b>", ""]
+    description = str(tournament.get("description") or "").strip()
+    if description:
+        lines += [escape(description[:220]), ""]
+    mode = {"CAPTAINS_DRAFT": "Captains Draft", "CAPTAINS_MODE": "Captains Mode", "ALL_PICK": "All Pick"}.get(tournament.get("gameMode"))
+    match_format = str(tournament.get("format") or "").strip()[:60].replace("5x5", "5×5").replace("5х5", "5×5")
+    if match_format or mode:
+        lines.append("🎮 <b>Формат:</b> " + escape(" · ".join(part for part in (match_format, mode) if part)))
+    if tournament.get("startsAt"):
+        lines.append("🗓 <b>Старт:</b> " + tournament_date_text(tournament["startsAt"]))
+    if tournament.get("status") == "REGISTRATION_OPEN" and tournament.get("registrationClosesAt"):
+        lines.append("⏳ <b>Регистрация до:</b> " + tournament_date_text(tournament["registrationClosesAt"]))
+    lines += ["", "👥 <b>Можно одному или с друзьями</b>",
+              "Найди команду или создай свою и добери игроков через FDP.",
+              "", "📋 Правила и условия участия — по кнопке ниже."]
+    return "\n".join(lines)
+
+
+def tournament_rules_button(tournament: dict, settings: Settings) -> InlineKeyboardButton:
+    rules_url = str(tournament.get("rulesUrl") or "").strip()
+    parsed = urlsplit(rules_url)
+    if parsed.scheme not in {"https", "http"} or not parsed.netloc:
+        rules_url = f"{settings.site_url.rstrip('/')}/games/tournaments/{quote(str(tournament.get('slug') or ''), safe='')}"
+    return InlineKeyboardButton(text="📋 Правила турнира", url=rules_url)
+
+
 def tournament_status_text(result: dict) -> str:
     tournament = result.get("tournament") or {}
+    if result.get("state") in {"NONE", "NEEDS_PROFILE"}:
+        return tournament_overview_text(tournament)
     lines = [f"🏆 <b>{escape(str(tournament.get('title') or 'Турнир')[:120])}</b>", ""]
     state = result.get("state")
     entry = result.get("entry") or {}
@@ -112,7 +154,9 @@ def tournament_status_text(result: dict) -> str:
         roles = [ROLE_NAMES[str(role)] for role in (result.get("queueRoles") or result.get("roles") or []) if str(role) in ROLE_NAMES]
         lines += ["⏳ <b>Ищем команду для турнира</b>",
                   "Позиции: " + (", ".join(roles) or "любая выбранная в профиле"),
-                  "Бот сообщит, когда команда будет найдена."]
+                  "Капитаны могут пригласить тебя. Можно выбрать состав и вступить или подать заявку."]
+        if result.get("queueMode") == "AUTO":
+            lines.append("Автоподбор включён — можем автоматически записать на выбранную позицию.")
     elif state == "REQUESTED":
         request = result.get("request") or {}
         lines += ["📨 <b>Заявка отправлена капитану</b>",
@@ -154,12 +198,18 @@ def tournament_status_keyboard(result: dict, context: dict, settings: Settings) 
             username = getattr(settings, "main_bot_username", "FDPdotabot")
             invitation = f"https://t.me/{username}?start=te_{entry_hex}"
             rows.append([InlineKeyboardButton(text="📋 Пригласить друзей", copy_text=CopyTextButton(text=invitation))])
+        entry = result.get("entry") or {}
+        if entry.get("isCaptain") and len(entry.get("members") or []) < 5:
+            rows.append([InlineKeyboardButton(text="Поиск игроков" if entry.get("recruiting") else "Ищем игроков", callback_data=tournament_callback("recruits" if entry.get("recruiting") else "recruit-start", event_hex))])
     elif result.get("state") in {"WAITING", "REQUESTED"}:
+        if result["state"] == "WAITING":
+            rows.append([InlineKeyboardButton(text="Команды со свободными местами", callback_data=tournament_callback("solo", event_hex))])
         rows.append([InlineKeyboardButton(text="Отменить подбор" if result["state"] == "WAITING" else "Отозвать заявку",
                                          callback_data=tournament_callback("cancel", event_hex))])
     elif result.get("state") != "CLOSED":
         rows.append([InlineKeyboardButton(text="🎮 Участвовать", callback_data=tournament_callback("signup", event_hex))])
-    rows += [[InlineKeyboardButton(text="🔄 Обновить статус", callback_data=tournament_callback("status", event_hex))],
+    rows += [[tournament_rules_button(result.get("tournament") or context, settings)],
+             [InlineKeyboardButton(text="🔄 Обновить статус", callback_data=tournament_callback("status", event_hex))],
              [InlineKeyboardButton(text="← Турниры", callback_data="tournaments:list")]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

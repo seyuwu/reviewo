@@ -268,13 +268,13 @@ describe("Tournament participation (isolated local PostgreSQL)", { skip: !connec
     assert.equal((await queueRow(users[0]!)).status, "WAITING");
   });
 
-  it("rejects a removed persisted profile role even when the fetched profile snapshot is stale", async () => {
+  it("keeps selected tournament positions independent from changed profile preferences", async () => {
     const entry = await createEntry(users[0]!, "1");
     const row = await seedQueue(users[1]!, ["2"]);
     const leaseToken = await claimLease();
     await setRoles(users[1]!, ["3"], false);
-    await assert.rejects(tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[1]!, ticket(row, leaseToken)), rejectsStatus(409));
-    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { tournamentId, userId: users[1]!.id } }), 0);
+    assert.equal((await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[1]!, ticket(row, leaseToken))).result, "JOINED");
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { tournamentId, userId: users[1]!.id, positionRole: "2" } }), 1);
   });
 
   for (const change of ["unlinked", "inactive"] as const) {

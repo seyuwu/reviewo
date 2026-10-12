@@ -45,6 +45,7 @@ model User {
   dotaTournamentRoomMessages DotaTournamentRoomMessage[]
   dotaTournamentSponsorClicks DotaTournamentSponsorClick[]
   dotaTournamentSoloSearches DotaTournamentSoloSearch[]
+  dotaTournamentRecruitPreferences DotaTournamentRecruitPreference[]
   gamePartyInvitesSent   GamePartyInvite[] @relation("GamePartyInviter")
   gamePartyInvitesReceived GamePartyInvite[] @relation("GamePartyInvitee")
   gamePartyChatMessages  GamePartyChatMessage[]
@@ -1303,6 +1304,7 @@ model DotaTournament {
   sponsors              DotaTournamentSponsor[]
   sponsorClicks         DotaTournamentSponsorClick[]
   soloSearches          DotaTournamentSoloSearch[]
+  recruitPreferences    DotaTournamentRecruitPreference[]
   soloMatchLeaseToken   String? @map("solo_match_lease_token") @db.Uuid
   soloMatchLeaseUntil   DateTime? @map("solo_match_lease_until") @db.Timestamptz(6)
 
@@ -1319,6 +1321,8 @@ model DotaTournamentSoloSearch {
   userId          String @map("user_id") @db.Uuid
   roles           String[]
   status          String @default("WAITING") @db.VarChar(16)
+  mode            String @default("AUTO") @db.VarChar(8)
+  recruitmentAnnouncedGeneration Int @default(0) @map("recruitment_announced_generation")
   generation      Int @default(1)
   assignedEntryId String? @map("assigned_entry_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -1328,7 +1332,24 @@ model DotaTournamentSoloSearch {
 
   @@unique([tournamentId, userId])
   @@index([status, tournamentId, createdAt])
+  @@index([tournamentId, status, mode, createdAt], map: "dota_tournament_solo_searches_mode_idx")
   @@map("dota_tournament_solo_searches")
+  @@schema("social")
+}
+
+model DotaTournamentRecruitPreference {
+  id                    String @id @default(uuid()) @db.Uuid
+  tournamentId          String @map("tournament_id") @db.Uuid
+  userId                String @map("user_id") @db.Uuid
+  enabled               Boolean @default(false)
+  nextNotificationAt    DateTime? @map("next_notification_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tournament            DotaTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user                  User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, enabled])
+  @@map("dota_tournament_recruit_preferences")
   @@schema("social")
 }
 

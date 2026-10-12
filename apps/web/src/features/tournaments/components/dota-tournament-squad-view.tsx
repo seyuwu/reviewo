@@ -27,6 +27,7 @@ import type { DotaTournamentManagedEntry } from "../types/dota-tournament";
 import type { TournamentRoom, TournamentRoomMessage } from "../types/tournament-room";
 import { formatDate } from "./dota-tournaments-view";
 import styles from "./dota-tournament-squad-view.module.css";
+import { TournamentRecruitment } from "./tournament-recruitment";
 
 const ROLES = ["1", "2", "3", "4", "5"] as const;
 
@@ -304,7 +305,7 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
   }
 
   const own = room?.members.find((member) => member.userId === authSession?.userId);
-  const available = ROLES.filter((candidate) => profile?.roles.includes(candidate) &&
+  const available = ROLES.filter((candidate) =>
     !room?.members.some((member) => member.positionRole === candidate && member.userId !== authSession?.userId));
   const selectedRole = available.includes(role as typeof ROLES[number]) ? role
     : available.includes(own?.positionRole as typeof ROLES[number]) ? own!.positionRole!
@@ -368,6 +369,7 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
               <button className="button-secondary" disabled={busy || selectedRole === own.positionRole}>{t("dota.team.renameSave")}</button>
             </form> : null}
           </section>
+          {room.isCaptain && room.phase === "TOURNAMENT" && token ? <TournamentRecruitment key={`${authSession?.userId}:${entryId}`} slug={slug} entryId={entryId} token={token} /> : null}
           {room.canJoin && !token ? <Link className="button-primary" href="/profile">{t("dota.tournaments.signInToJoin")}</Link> : room.canJoin && !profile && !profileLoading ? <Link className="button-primary" href="/dota/create">{t("dota.tournaments.createProfileToJoin")}</Link> : room.canJoin && profile && !room.pendingEntryId ? <form className={styles.panel} onSubmit={(event) => {
             event.preventDefault(); if (!selectedRole || !token) return;
             void action(async () => {

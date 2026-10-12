@@ -17,5 +17,9 @@
 .field select { padding: .7rem; color: #f3f0ff; background: #171925; border: 1px solid #453b67; border-radius: 10px; }
 .error { color: #ffc5cd; line-height: 1.45; }
 .hint { font-size: .9rem; color: #aeb3c4; line-height: 1.45; }
-.gate > main { min-height: 22rem; padding: 1.5rem .5rem; background: transparent; }
+.roleChoices { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.roleChoice, .roleSelected { background: #171925; border: 1px solid #453b67; border-radius: 8px; color: #d9dcef; cursor: pointer; font: inherit; font-size: .85rem; min-height: 44px; padding: 8px 12px; }
+.roleSelected { background: #403064; border-color: #b29be4; color: #fff; }
+.roleChoice:focus-visible, .roleSelected:focus-visible { outline: 3px solid #b59cff; outline-offset: 2px; }
+.roleChoice:disabled, .roleSelected:disabled { opacity: .65; cursor: wait; }
 @media(max-width:600px) { .panel { padding: 1rem; } .choices { grid-template-columns: 1fr; } .card { align-items: stretch; flex-direction: column; } .actions > * { flex: 1 1 auto; text-align: center; } }

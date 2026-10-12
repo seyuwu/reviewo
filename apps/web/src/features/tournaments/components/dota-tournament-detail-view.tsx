@@ -43,7 +43,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
     const url = new URL(window.location.href);
     if (open) url.searchParams.set("participate", "1"); else url.searchParams.delete("participate");
     if (entryId) url.searchParams.set("entry", entryId);
-    else if (!open) { url.searchParams.delete("entry"); url.searchParams.delete("supporter"); }
+    else if (!open) { url.searchParams.delete("entry"); url.searchParams.delete("supporter"); url.searchParams.delete("recruitInvite"); }
     window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
   }
   const { authSession } = useAuthSession();
@@ -746,7 +746,7 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
                                     }
                                   >
                                     <option value="">—</option>
-                                    {availableRoles(entry.members, myProfile.roles).map((role) => (
+                                    {availableRoles(entry.members).map((role) => (
                                       <option key={role} value={role}>
                                         {roleLabel(role, t)}
                                       </option>
@@ -829,12 +829,11 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
 }
 
 function availableRoles(
-  members: DotaTournament["entries"][number]["members"],
-  profileRoles: string[]
+  members: DotaTournament["entries"][number]["members"]
 ): string[] {
   const occupied = new Set(members.map((member) => member.positionRole).filter(Boolean));
   return ["1", "2", "3", "4", "5"].filter(
-    (role) => profileRoles.includes(role) && !occupied.has(role)
+    (role) => !occupied.has(role)
   );
 }
 

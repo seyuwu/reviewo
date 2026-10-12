@@ -2,7 +2,6 @@
 
 import logging
 import re
-from datetime import datetime
 from html import escape
 from urllib.parse import quote
 from uuid import UUID, uuid4
@@ -21,7 +20,7 @@ from ..services.tournament_participation import (
     PENDING_KEY, ROLE_NAMES, fresh_tournament_web_url,
     load_tournament_context, remember_participation, save_tournament_context,
     tournament_api_path, tournament_callback, tournament_status_keyboard,
-    tournament_status_text, uuid_hex,
+    tournament_status_text, tournament_date_text, tournament_overview_text, tournament_rules_button, uuid_hex,
 )
 from ..storage.database import BotStorage
 
@@ -71,13 +70,7 @@ async def _panel(bot, storage, api, settings, user_id, chat_id, screen, text, ro
 
 
 def _date_text(value) -> str:
-    if not value:
-        return "Дата будет объявлена"
-    try:
-        date = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        return date.strftime("%d.%m %H:%M") + (" UTC" if date.utcoffset() is not None and date.utcoffset().total_seconds() == 0 else "")
-    except ValueError:
-        return str(value)[:40]
+    return tournament_date_text(value)
 
 
 async def _events(api: OpiniaApi) -> list[dict]:
@@ -181,7 +174,7 @@ async def _show_status(bot, api, settings, storage, user_id, chat_id, context, r
 async def _show_modes(bot, api, settings, storage, user_id, chat_id, context) -> None:
     await _panel(bot, storage, api, settings, user_id, chat_id, "choose",
                  f"🏆 <b>{escape(context['title'])}</b>\n\nКак будете участвовать?",
-                 [[_button("Я один — подобрать команду", "solo", context["eventHex"])],
+                 [[_button("Найти команду для турнира", "solo", context["eventHex"])],
                   [_button("Мы с друзьями", "friends", context["eventHex"])]] + _back(context["eventHex"]))
 
 
@@ -228,8 +221,8 @@ async def _show_solo(bot, api, settings, storage, user_id, chat_id, context, res
     suggestions = [suggestion for suggestion in result.get("suggestions", [])
                    if str(suggestion.get("role")) in ROLE_NAMES and uuid_hex(suggestion.get("entryId"))][:3]
     choices = _save_action_choices(storage, user_id, [
-        {"kind": "join", "eventHex": context["eventHex"], "entryId": str(UUID(str(item["entryId"]))),
-         "role": str(item["role"])} for item in suggestions
+        {"kind": "pickteam", "eventHex": context["eventHex"], "entryId": str(UUID(str(item["entryId"]))),
+         "role": str(item["role"]), "name": item.get("name")} for item in suggestions
     ])
     lines = [f"🏆 <b>{escape(context['title'])}</b>", "", "<b>Подберём команду для турнира</b>"]
     rows = []
@@ -239,9 +232,12 @@ async def _show_solo(bot, api, settings, storage, user_id, chat_id, context, res
         mmr = item.get("averageMmr")
         lines.append(f"• {escape(name)} · {escape(str(item.get('memberCount', 0)))}/5 · {role}"
                      + (f" · {escape(str(mmr))} MMR" if mmr is not None else ""))
-        rows.append([_button(f"{name} · {role}", "join", choice["token"])])
-    lines += ["", "Выберите готовую команду или запустите подбор. Бот сообщит, когда найдётся состав."]
-    rows += [[_button("Подобрать автоматически", "queue", context["eventHex"])]] + _back(context["eventHex"])
+        label = "Подать заявку: " if item.get("joinMode") == "CONFIRM" else "Вступить: "
+        rows.append([_button(label + name, "pickteam", choice["token"])])
+    lines += ["", "Капитаны видят твой поиск и могут пригласить. Выбери состав: вступление может требовать заявки. Автоподбор включается отдельно."]
+    rows += [[_button("Изменить позиции поиска", "positions", context["eventHex"])],
+             [_button("Включить автоподбор", "queue", context["eventHex"])],
+             [_button("Остановить поиск команды", "cancel", context["eventHex"])]] + _back(context["eventHex"])
     await _panel(bot, storage, api, settings, user_id, chat_id, "solo", "\n".join(lines), rows)
 
 
@@ -278,7 +274,7 @@ async def _show_friends(bot, api, settings, storage, user_id, chat_id, context, 
     rows += _back(context["eventHex"])
     await _panel(bot, storage, api, settings, user_id, chat_id, "friends",
                  f"🏆 <b>{escape(context['title'])}</b>\n\n"
-                 f"Ваша позиция: <b>{ROLE_NAMES[role]}</b>. Можно выбрать другую.\n\n"
+                 f"Ваша позиция: <b>{ROLE_NAMES[role]}</b>. Для турнира можно выбрать любую — роли в профиле не изменятся.\n\n"
                  "Создадим команду для этого турнира и дадим ссылку для друзей. Название появится автоматически.", rows)
 
 
@@ -322,7 +318,7 @@ async def _run_intent(bot, state, api, settings, storage, user_id, chat_id, cont
         return
     action = pending.get("action")
     if action == "queue":
-        result = await api.user(user_id, "POST", tournament_api_path(context) + "/participation/solo", {})
+        result = await api.user(user_id, "POST", tournament_api_path(context) + "/participation/solo", {"mode": "AUTO", "roles": result.get("queueRoles") or result.get("roles") or []})
         await _show_status(bot, api, settings, storage, user_id, chat_id, context, result)
     elif action == "create":
         role = str(pending.get("role") or context.get("friendsRole") or (result.get("roles") or ["1"])[0])
@@ -349,10 +345,10 @@ async def _run_intent(bot, state, api, settings, storage, user_id, chat_id, cont
     elif action == "invite":
         await _show_invite_roles(bot, api, settings, storage, user_id, chat_id, context, pending)
     elif action == "solo":
-        if result.get("state") == "WAITING":
-            await _show_status(bot, api, settings, storage, user_id, chat_id, context, result)
-        else:
-            await _show_solo(bot, api, settings, storage, user_id, chat_id, context, result)
+        if result.get("state") != "WAITING":
+            result = await api.user(user_id, "POST", tournament_api_path(context) + "/participation/solo", {"mode": "BOARD"})
+            remember_participation(storage, user_id, context, result)
+        await _show_solo(bot, api, settings, storage, user_id, chat_id, context, result)
     else:
         await _show_modes(bot, api, settings, storage, user_id, chat_id, context)
     _clear_pending(storage, user_id, context["eventHex"])
@@ -369,11 +365,11 @@ async def _open_tournament(bot, api, settings, storage, user_id, chat_id, contex
     rows = []
     if event.get("status") == "REGISTRATION_OPEN" or (event.get("status") == "REGISTRATION_CLOSED" and not event.get("bracketGeneratedAt")):
         rows.append([_button("🎮 Участвовать", "signup", context["eventHex"])])
-    rows += [[InlineKeyboardButton(text="🌐 Страница турнира", url=f"{settings.site_url}/games/tournaments/{quote(context['slug'], safe='')}")],
+    rows += [[tournament_rules_button(event, settings)],
+             [InlineKeyboardButton(text="🌐 Страница турнира", url=f"{settings.site_url}/games/tournaments/{quote(context['slug'], safe='')}")],
              [InlineKeyboardButton(text="← Турниры", callback_data="tournaments:list")]]
     await _panel(bot, storage, api, settings, user_id, chat_id, "preview",
-                 f"🏆 <b>{escape(context['title'])}</b>\n\n{escape(_date_text(event.get('startsAt')))}\n"
-                 + escape(_STATUS_NAMES.get(event.get("status"), "Турнир")), rows)
+                 tournament_overview_text(event) + "\n\n" + escape(_STATUS_NAMES.get(event.get("status"), "Турнир")), rows)
 
 
 @router.callback_query(F.data.startswith("tr:"))
@@ -388,7 +384,7 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
     action, token = parts[1:3]
     user_id, chat_id = callback.from_user.id, callback.message.chat.id
     try:
-        choice = _action_choice(storage, user_id, token, action) if action in {"join", "team", "sponsor"} else None
+        choice = _action_choice(storage, user_id, token, action) if action in {"join", "team", "sponsor", "pickteam"} else None
         context = load_tournament_context(storage, user_id, choice["eventHex"] if choice else token)
     except ApiError as error:
         await callback.answer(str(error), show_alert=True)
@@ -403,9 +399,12 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
             _save_pending(storage, user_id, context, "choose",
                           telegramName=callback.from_user.username or callback.from_user.full_name)
             await _show_modes(callback.bot, api, settings, storage, user_id, chat_id, context)
-        elif action in {"solo", "friends", "queue", "create", "invite", "join", "team", "continue", "role"}:
+        elif action in {"solo", "friends", "queue", "create", "invite", "join", "team", "continue", "role", "pickteam"}:
             options = {"telegramName": callback.from_user.username or callback.from_user.full_name}
-            if action == "role":
+            if action == "pickteam":
+                options.update(entryId=choice["entryId"], teamName=choice.get("name"))
+                action = "invite"
+            elif action == "role":
                 if len(parts) != 4 or parts[3] not in ROLE_NAMES:
                     raise ApiError("Выберите позицию из списка.")
                 context = save_tournament_context(storage, user_id, {"id": context["eventId"], **context}, friendsRole=parts[3])

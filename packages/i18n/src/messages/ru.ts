@@ -2340,7 +2340,7 @@ export const ruMessages: MessageDictionary = {
   "dota.tournaments.createSquadLead": "Он существует только в этом турнире и не появится в обычном поиске пати.",
   "dota.tournaments.createReserveSquad": "Создать резервную команду",
   "dota.tournaments.telegram.button": "Открыть FDP в Telegram",
-  "dota.tournaments.telegram.title": "Запусти FDP в Telegram",
+  "dota.tournaments.telegram.title": "Для участия в турнирах запусти нашего бота FDP в телеграм",
   "dota.tournaments.telegram.description": "Бот поможет участвовать в турнирах и получать уведомления. Открой FDP, чтобы связать его с аккаунтом Opinia.",
   "dota.tournaments.telegram.loginTitle": "Войди через Telegram",
   "dota.tournaments.telegram.loginDescription": "Подтверди вход через Telegram. После этого откроется FDP, и бот покажет главное меню твоего аккаунта.",
