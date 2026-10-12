@@ -46,7 +46,7 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
 
   async state(slug: string, user: AuthenticatedUser) {
     const tournament = await this.tournament(slug);
-    const [profile, member, request, queue, click, preference] = await Promise.all([
+    const [profile, member, requests, queue, click, preference] = await Promise.all([
       this.profiles.getMyProfile(user).catch((error: unknown) => {
         if (error instanceof HttpException && error.getStatus() === 404) return null;
         throw error;
@@ -55,33 +55,39 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
         isActive: true, entry: { status: { in: [...ACTIVE_ENTRIES] } } }, include: {
         entry: { include: { members: { where: { isActive: true }, orderBy: { positionRole: "asc" } }, teamParty: { select: { ownerUserId: true } } } }
       } }),
-      this.prisma.dotaTournamentEntryRequest.findFirst({ where: { tournamentId: tournament.id, userId: user.id, status: "PENDING" }, include: { entry: true } }),
+      this.prisma.dotaTournamentEntryRequest.findMany({ where: { tournamentId: tournament.id, userId: user.id, status: "PENDING" },
+        include: { entry: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
       this.prisma.dotaTournamentSoloSearch.findUnique({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } } }),
       this.prisma.dotaTournamentSponsorClick.findUnique({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } }, select: { id: true } }),
       this.prisma.dotaTournamentRecruitPreference.findUnique({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } } })
     ]);
     const roles = profile?.roles.filter(role => ROLES.includes(role as typeof ROLES[number])) ?? [];
+    const request = requests[0];
     const open = this.tournaments.participationOpen(tournament);
     const state = member ? "JOINED" : !open ? "CLOSED" : !profile ? "NEEDS_PROFILE" : request ? "REQUESTED" : queue?.status === "WAITING" ? "WAITING" : "NONE";
     const searchRoles = queue?.status === "WAITING" ? queue.roles.filter(role => ROLES.includes(role as typeof ROLES[number])) : roles;
-    const suggestions = !member && !request && open && profile ? await this.suggestions(tournament, searchRoles, profile.mmr) : [];
+    const suggestions = !member && open && profile ? await this.suggestions(tournament, searchRoles, profile.mmr, false, requests.map(item => item.entryId)) : [];
     return { tournament: { id: tournament.id, slug, title: tournament.title, status: tournament.status,
       startsAt: tournament.startsAt?.toISOString() ?? null, registrationClosesAt: tournament.registrationClosesAt?.toISOString() ?? null,
       description: tournament.description, format: tournament.format, gameMode: tournament.gameMode, rulesUrl: tournament.rulesUrl },
       state, roles, profileMmr: profile?.mmr ?? null, queueRoles: queue?.status === "WAITING" ? queue.roles : [], queueMode: queue?.status === "WAITING" ? queue.mode : null,
       sponsorRequired: open && tournament.sponsors.length > 0 && !click,
       sponsors: tournament.sponsors.map(sponsor => ({ id: sponsor.id, name: sponsor.name, url: sponsor.url })),
-      entry: member ? { id: member.entry.id, name: member.entry.teamNameSnapshot, status: member.entry.status,
+      entry: member ? { id: member.entry.id, membershipId: member.id, name: member.entry.teamNameSnapshot, status: member.entry.status,
+        canLeave: (tournament.status === "REGISTRATION_OPEN" && (!tournament.registrationClosesAt || tournament.registrationClosesAt > new Date()))
+          || (member.entry.status === "RESERVE" && tournament.status === "REGISTRATION_CLOSED" && !tournament.bracketGeneratedAt),
         isCaptain: (member.entry.createdByUserId ?? member.entry.teamParty?.ownerUserId) === user.id,
         recruiting: open && member.entry.members.length < 5 && Boolean(preference?.enabled),
         joinMode: member.entry.joinMode, ownRole: member.positionRole,
         members: member.entry.members.map(player => ({ name: player.displayName, role: player.positionRole, mmr: player.mmr })) } : null,
       request: request ? { entryId: request.entryId, entryName: request.entry.teamNameSnapshot, role: request.positionRole } : null,
+      requests: requests.map(item => ({ id: item.id, entryId: item.entryId, entryName: item.entry.teamNameSnapshot, role: item.positionRole })),
       suggestions };
   }
 
-  private async suggestions(tournament: DotaTournament, roles: string[], mmr: string | null, automatic = false) {
-    const entries = await this.prisma.dotaTournamentEntry.findMany({ where: { tournamentId: tournament.id, ...(automatic ? { joinMode: "OPEN" as const } : {}),
+  private async suggestions(tournament: DotaTournament, roles: string[], mmr: string | null, automatic = false, excludeEntries: string[] = []) {
+    const entries = await this.prisma.dotaTournamentEntry.findMany({ where: { tournamentId: tournament.id,
+      ...(excludeEntries.length ? { id: { notIn: excludeEntries } } : {}), ...(automatic ? { joinMode: "OPEN" as const } : {}),
       status: { in: tournament.status === "REGISTRATION_CLOSED" ? ["RESERVE"] : [...ACTIVE_ENTRIES] } },
       include: { members: { where: { isActive: true }, select: { positionRole: true, mmr: true } } }, orderBy: { createdAt: "asc" } });
     const ownMmr = Number.parseInt(mmr ?? "", 10);
@@ -132,6 +138,18 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
         data: { status: "CANCELLED", generation: { increment: 1 } } });
       await tx.dotaTournamentEntryRequest.updateMany({ where: { tournamentId: tournament.id, userId: user.id, status: "PENDING" },
         data: { status: "WITHDRAWN" } });
+    });
+    return this.state(slug, user);
+  }
+
+  async cancelRequest(slug: string, requestId: string, user: AuthenticatedUser) {
+    const tournament = await this.tournament(slug);
+    await this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${tournament.id}`}))`;
+      const changed = await tx.dotaTournamentEntryRequest.updateMany({
+        where: { id: requestId, tournamentId: tournament.id, userId: user.id, status: "PENDING" }, data: { status: "WITHDRAWN" }
+      });
+      if (!changed.count) throw new ConflictException("Заявка уже обработана или отозвана. Обнови участие.");
     });
     return this.state(slug, user);
   }

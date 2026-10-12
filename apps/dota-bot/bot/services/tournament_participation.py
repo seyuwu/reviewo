@@ -143,6 +143,11 @@ def tournament_rules_button(tournament: dict, settings: Settings) -> InlineKeybo
     return InlineKeyboardButton(text="📋 Правила турнира", url=rules_url)
 
 
+def participation_requests(result: dict) -> list[dict]:
+    requests = result.get("requests")
+    return requests if isinstance(requests, list) else [result["request"]] if result.get("request") else []
+
+
 def tournament_status_text(result: dict) -> str:
     tournament = result.get("tournament") or {}
     if result.get("state") in {"NONE", "NEEDS_PROFILE"}:
@@ -158,11 +163,14 @@ def tournament_status_text(result: dict) -> str:
         if result.get("queueMode") == "AUTO":
             lines.append("Автоподбор включён — можем автоматически записать на выбранную позицию.")
     elif state == "REQUESTED":
-        request = result.get("request") or {}
-        lines += ["📨 <b>Заявка отправлена капитану</b>",
-                  escape(str(request.get("entryName") or "Команда")[:80]),
-                  "Позиция: " + escape(ROLE_NAMES.get(str(request.get("role")), "не выбрана")),
-                  "Дождитесь подтверждения капитана."]
+        requests = participation_requests(result)
+        lines += [f"📨 <b>Активные заявки: {len(requests)}</b>"]
+        for request in requests[:5]:
+            lines.append("• " + escape(str(request.get("entryName") or "Команда")[:45]) + " · "
+                         + ROLE_NAMES.get(str(request.get("role")), "позиция не выбрана"))
+        if len(requests) > 5:
+            lines.append(f"И ещё {len(requests) - 5} — в списке заявок.")
+        lines += ["", "Можно подать заявку в несколько команд. Вступишь в первую, которая примет; остальные заявки снимутся автоматически."]
     elif state == "JOINED":
         members = entry.get("members") or []
         lines += [f"<b>{escape(str(entry.get('name') or 'Моя команда')[:80])}</b>"]
@@ -193,7 +201,7 @@ def tournament_status_keyboard(result: dict, context: dict, settings: Settings) 
     rows = []
     if result.get("state") == "JOINED":
         entry_hex = uuid_hex((result.get("entry") or {}).get("id"))
-        rows.append([InlineKeyboardButton(text="🌐 Моя команда", callback_data=tournament_callback("web", event_hex))])
+        rows.append([InlineKeyboardButton(text="🌐 Открыть команду на сайте", callback_data=tournament_callback("web", event_hex))])
         if entry_hex:
             username = getattr(settings, "main_bot_username", "FDPdotabot")
             invitation = f"https://t.me/{username}?start=te_{entry_hex}"
@@ -201,10 +209,13 @@ def tournament_status_keyboard(result: dict, context: dict, settings: Settings) 
         entry = result.get("entry") or {}
         if entry.get("isCaptain") and len(entry.get("members") or []) < 5:
             rows.append([InlineKeyboardButton(text="Поиск игроков" if entry.get("recruiting") else "Ищем игроков", callback_data=tournament_callback("recruits" if entry.get("recruiting") else "recruit-start", event_hex))])
+        if entry.get("canLeave"):
+            rows.append([InlineKeyboardButton(text="🚪 Выйти из команды", callback_data=tournament_callback("leave", event_hex))])
     elif result.get("state") in {"WAITING", "REQUESTED"}:
-        if result["state"] == "WAITING":
-            rows.append([InlineKeyboardButton(text="Команды со свободными местами", callback_data=tournament_callback("solo", event_hex))])
-        rows.append([InlineKeyboardButton(text="Отменить подбор" if result["state"] == "WAITING" else "Отозвать заявку",
+        rows.append([InlineKeyboardButton(text="Команды со свободными местами", callback_data=tournament_callback("solo", event_hex))])
+        if result["state"] == "REQUESTED":
+            rows.append([InlineKeyboardButton(text="Мои заявки", callback_data=tournament_callback("applications", event_hex))])
+        rows.append([InlineKeyboardButton(text="Отменить подбор" if result["state"] == "WAITING" else "Отозвать все заявки",
                                          callback_data=tournament_callback("cancel", event_hex))])
     elif result.get("state") != "CLOSED":
         rows.append([InlineKeyboardButton(text="🎮 Участвовать", callback_data=tournament_callback("signup", event_hex))])
@@ -272,10 +283,12 @@ async def deliver_tournament_participation_notice(bot: Bot, api: OpiniaApi, sett
         headline = {"found": "Команда найдена", "accepted": "Вашу заявку приняли", "registered": "Состав собран"}[event]
         text = f"✅ <b>{headline}</b>\n\n" + tournament_status_text(result)
         markup = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="Открыть мою команду", callback_data=tournament_callback("web", event_hex))
+            InlineKeyboardButton(text="Открыть команду на сайте", callback_data=tournament_callback("web", event_hex))
         ]])
     try:
-        await bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+        message = await bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+        if event == "accepted":
+            storage.add_temporary_message(user_id, user_id, message.message_id, 120)
     except TelegramForbiddenError:
         storage.mark_bot_user_blocked(user_id)
     except TelegramAPIError:

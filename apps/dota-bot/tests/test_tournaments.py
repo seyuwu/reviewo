@@ -2,8 +2,10 @@
 
 import asyncio
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -186,7 +188,7 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.folder.cleanup()
 
     def message(self, text="", username="zero", user_id=USER_ID):
-        return SimpleNamespace(text=text, bot=self.bot, delete=AsyncMock(),
+        return SimpleNamespace(text=text, bot=self.bot, delete=AsyncMock(), message_id=20,
             chat=SimpleNamespace(type="private", id=user_id),
             from_user=User(id=user_id, is_bot=False, first_name="Zero", last_name="Player", username=username))
 
@@ -273,11 +275,12 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
     async def test_existing_zero_mmr_profile_gets_suggestions_without_signup(self):
         await self.action("solo")
         self.assertIn("0 MMR", self.bot.views[-1][0])
-        self.assertTrue(any(button.text == "Подобрать автоматически" for button in self.buttons()))
+        self.assertTrue(any(button.text == "Включить автоподбор" for button in self.buttons()))
+        self.assertTrue(any(button.text.startswith("Команда: ") for button in self.buttons()))
         self.api.public.assert_not_awaited()
         self.api.login_telegram_bot_session.assert_not_awaited()
         self.assertIsNone(await self.state.get_state())
-        self.assertFalse(any(call.args[1] == "POST" for call in self.api.user.await_args_list))
+        self.api.user.assert_any_await(USER_ID, "POST", API_ROOT + "/participation/solo", {"mode": "BOARD"})
 
     async def test_lost_local_session_recovers_existing_profile(self):
         self.storage.unlink(USER_ID)
@@ -398,7 +401,7 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         await self.restart()
         self.assertTrue(await tournaments.resume_pending_tournament(
             self.bot, self.state, self.api, self.settings, self.storage, USER_ID, USER_ID))
-        self.api.user.assert_any_await(USER_ID, "POST", API_ROOT + "/participation/solo", {})
+        self.api.user.assert_any_await(USER_ID, "POST", API_ROOT + "/participation/solo", {"mode": "AUTO", "roles": ["3", "5"]})
         self.assertIn("Ищем команду", self.bot.views[-1][0])
         self.assertFalse(any("/sponsors/" in call.args[2] for call in self.api.user.await_args_list))
 
@@ -420,7 +423,7 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
             participation.tournament_callback("a" * 40, self.context["eventHex"])
 
     async def test_status_cards_distinguish_waiting_request_registered_and_reserve(self):
-        for state, phrase in (("WAITING", "Ищем команду"), ("REQUESTED", "Заявка отправлена")):
+        for state, phrase in (("WAITING", "Ищем команду"), ("REQUESTED", "Активные заявки: 1")):
             self.api.state = state
             self.assertIn(phrase, participation.tournament_status_text(self.api.result()))
         self.api.state = "JOINED"
@@ -463,6 +466,9 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.deliver("accepted"))
         self.assertIn("Вашу заявку приняли", self.bot.sent_messages[-1][1])
         self.assertNotIn("Команда найдена", self.bot.sent_messages[-1][1])
+        self.assertTrue(self.storage.is_temporary_message(USER_ID, 21))
+        delete_at = self.storage._connection().execute("SELECT delete_at FROM temporary_messages WHERE chat_id=? AND message_id=?", (USER_ID, 21)).fetchone()[0]
+        self.assertAlmostEqual(datetime.fromisoformat(delete_at).timestamp() - time.time(), 120, delta=3)
         context = self.save_state("REQUESTED")
         self.api.state = "NONE"
         await self.poll(context)
@@ -474,6 +480,47 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Команда найдена", notice)
         self.assertIsNone(next((item for item in participation.monitored_tournament_contexts(self.storage)
                                if item[0] == USER_ID), None))
+
+    async def test_accepted_notice_is_deleted_after_opening_team_and_timer_is_removed(self):
+        self.save_state("JOINED")
+        self.assertTrue(await self.deliver("accepted"))
+        callback = self.callback(participation.tournament_callback("web", self.context["eventHex"]))
+        callback.message.message_id = 21
+        await tournaments.tournament_action(callback, self.state, self.api, self.settings, self.storage)
+        self.bot.delete_message.assert_any_await(USER_ID, 21)
+        self.assertFalse(self.storage.is_temporary_message(USER_ID, 21))
+        self.assertTrue(any(button.url for button in self.buttons()))
+
+    async def test_team_card_contains_description_players_and_position_actions(self):
+        result = {**self.api.result(), "requests": []}
+        entry = {"id": ENTRY_ID, "teamName": "Invalides", "description": "<Наш стак>", "status": "RECRUITING", "joinMode": "CONFIRM",
+                 "members": [{"displayName": "<Alice>", "positionRole": "3", "mmr": 1200, "dotaProfileSlug": "alice"}]}
+        self.api.user.return_value = {**EVENT, "entries": [entry]}
+        self.api.user.side_effect = None
+        await tournaments._show_invite_roles(self.bot, self.api, self.settings, self.storage, USER_ID, USER_ID,
+            self.context, {"entryId": ENTRY_ID}, result)
+        caption = self.bot.views[-1][0]
+        self.assertIn("Команда: Invalides", caption)
+        self.assertIn("&lt;Наш стак&gt;", caption)
+        self.assertIn("&lt;Alice&gt;", caption)
+        self.assertIn("1200 MMR", caption)
+        self.assertIn("/dota/alice", caption)
+        joins = [button for button in self.buttons() if (button.callback_data or "").startswith("tr:join:")]
+        self.assertEqual(len(joins), 4)
+        self.assertTrue(all(button.text.startswith("Подать заявку · ") for button in joins))
+        self.assertFalse(any("Оффлейн" in button.text for button in joins))
+
+    async def test_pending_applications_do_not_block_opening_other_team_card(self):
+        self.api.state = "REQUESTED"
+        self.api.suggestions[0]["entryId"] = OTHER_ENTRY_ID
+        await self.action("solo")
+        self.assertTrue(any(button.text.startswith("Команда: ") for button in self.buttons()))
+        self.assertTrue(any(button.text == "Мои заявки" for button in self.buttons()))
+        self.assertFalse(any(button.text == "Включить автоподбор" for button in self.buttons()))
+        self.assertFalse(any(call.args[1] == "POST" for call in self.api.user.await_args_list))
+        await self.press(self.callback_for("tr:pickteam:"))
+        self.assertIn("Игроки", self.bot.views[-1][0])
+        self.assertTrue(any((button.callback_data or "").startswith("tr:join:") for button in self.buttons()))
 
     async def test_request_withdrawal_and_cancel_race_do_not_emit_decline(self):
         self.save_state("REQUESTED")
@@ -495,7 +542,7 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.save_state("REQUESTED")
         self.api.state = "JOINED"
         transport = SimpleNamespace(send_message=AsyncMock(side_effect=[
-            TelegramAPIError(SendMessage(chat_id=USER_ID, text="test"), "Temporary failure"), None,
+            TelegramAPIError(SendMessage(chat_id=USER_ID, text="test"), "Temporary failure"), SimpleNamespace(message_id=21),
         ]))
         self.assertFalse(await self.deliver("accepted", transport))
         self.assertFalse(self.storage.has_delivered_notification("notice-accepted"))

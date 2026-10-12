@@ -310,7 +310,8 @@ export function TournamentTelegramOnboarding({ children, requireAccess = false, 
     accountState === "loading" ||
     (authSession && verifiedUserId !== authSession.userId && accountState !== "error")
   ) {
-    return onDismiss ? <p className={styles.checking} role="status">{text("Проверяем Telegram…", "Checking Telegram…")}</p> : <TournamentPageSkeleton detail={pathname !== "/games/tournaments"} />;
+    // Participation checks must not insert content into the page before opening the dialog.
+    return onDismiss ? <span className="sr-only" role="status">{text("Проверяем Telegram…", "Checking Telegram…")}</span> : <TournamentPageSkeleton detail={pathname !== "/games/tournaments"} />;
   }
 
   if (isAuthSessionLoaded && authSession && accountState === "allowed" && verifiedUserId === authSession.userId) {

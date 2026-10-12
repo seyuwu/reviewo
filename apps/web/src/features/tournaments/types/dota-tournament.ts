@@ -54,6 +54,7 @@ export interface DotaTournamentEntry {
   members: DotaTournamentEntryMember[];
   status: "RECRUITING" | "REGISTERED" | "RESERVE" | "WITHDRAWN" | "DISQUALIFIED";
   teamName: string;
+  description?: string;
   teamPartySlug: string | null;
 }
 

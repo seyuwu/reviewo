@@ -157,6 +157,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           positionRole: member.positionRole
         })),
         status: entry.status,
+        description: entry.description,
         teamName: entry.teamNameSnapshot,
         teamPartySlug: entry.teamParty?.slug ?? null
       }))
@@ -552,7 +553,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         const existingRequest = await tx.dotaTournamentEntryRequest.findUnique({
           where: { entryId_userId: { entryId, userId: currentUser.id } }
         });
-        if (existingRequest?.status === "PENDING") {
+        if (existingRequest?.status === "PENDING" && latest.joinMode === "CONFIRM" && !recruitmentInviteId) {
           result = "REQUESTED";
           await this.finishSoloQueue(tx, tournament.id, currentUser.id, null);
           return;
@@ -566,21 +567,6 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         });
 
         if (latest.joinMode === "CONFIRM" && !recruitmentInviteId) {
-          const otherPending = await tx.dotaTournamentEntryRequest.findFirst({
-            where: {
-              entryId: { not: entryId },
-              status: "PENDING",
-              tournamentId: tournament.id,
-              userId: currentUser.id
-            }
-          });
-          if (otherPending) {
-            throw createAppException({
-              code: AppErrorCode.Conflict,
-              message: "You already have a pending request to another team in this tournament",
-              statusCode: HttpStatus.CONFLICT
-            });
-          }
           await tx.dotaTournamentEntryRequest.upsert({
             create: {
               ...snapshot,
@@ -690,7 +676,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       await this.prismaService.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${entry.tournamentId}`}))`;
         const latestRequest = await tx.dotaTournamentEntryRequest.findFirst({
-          where: { entryId, id: requestId, status: "PENDING" }
+          where: { entryId, id: requestId, status: "PENDING", updatedAt: request.updatedAt }
         });
         if (!latestRequest) {
           throw createAppException({
@@ -755,6 +741,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           data: { status: "ACCEPTED" },
           where: { id: request.id }
         });
+        await this.finishSoloQueue(tx, entry.tournamentId, request.userId, entryId);
         await this.syncEntryRegistrationStatus(tx, entryId);
         await this.enqueueTournamentParticipation(tx, entry.tournamentId, entryId, [request.userId], "accepted", `${request.id}:${latestRequest.updatedAt.getTime()}`);
       });
@@ -826,7 +813,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${tournament.id}`}))`;
       const latestTournament = await tx.dotaTournament.findUnique({ where: { id: tournament.id } });
       const latestEntry = await tx.dotaTournamentEntry.findFirst({
-        where: { id: entryId, tournamentId: tournament.id }
+        where: { id: entryId, tournamentId: tournament.id },
+        include: { teamParty: { select: { ownerUserId: true } } }
       });
       const registrationOpen = latestTournament?.status === "REGISTRATION_OPEN" &&
         (!latestTournament.registrationClosesAt || latestTournament.registrationClosesAt > new Date());
@@ -858,7 +846,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         data: { isActive: false },
         where: { id: member.id }
       });
-      if (latestEntry.createdByUserId === currentUser.id) {
+      if ((latestEntry.createdByUserId ?? latestEntry.teamParty?.ownerUserId) === currentUser.id) {
         const nextCaptain = await tx.dotaTournamentEntryMember.findFirst({
           where: { entryId, isActive: true, userId: { not: null } },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }]
@@ -2871,6 +2859,13 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async finishSoloQueue(tx: Prisma.TransactionClient, tournamentId: string, userId: string, entryId: string | null) {
+    if (entryId) {
+      // The tournament lock and active-member unique index guarantee a single winner.
+      // Withdraw competing applications in the same transaction as enrollment.
+      await tx.dotaTournamentEntryRequest.updateMany({ where: {
+        tournamentId, userId, status: "PENDING", entryId: { not: entryId }
+      }, data: { status: "WITHDRAWN" } });
+    }
     const queued = await tx.dotaTournamentSoloSearch.findUnique({ where: { tournamentId_userId: { tournamentId, userId } } });
     const changed = await tx.dotaTournamentSoloSearch.updateMany({ where: { tournamentId, userId, status: "WAITING" },
       data: { status: entryId ? "MATCHED" : "CANCELLED", assignedEntryId: entryId } });

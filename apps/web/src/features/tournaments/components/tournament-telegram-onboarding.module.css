@@ -122,4 +122,3 @@
 }
 .dismissButton:hover { background: #252d40; color: #fff; }
 .dismissButton:focus-visible { outline: 3px solid #b4dfff; outline-offset: 2px; }
-.checking { color: #c1c7d9; font-size: 0.95rem; margin: 16px 0; }

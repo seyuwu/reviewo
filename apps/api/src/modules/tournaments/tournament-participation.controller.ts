@@ -41,4 +41,10 @@ export class TournamentParticipationController {
     await this.rateLimiter.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
     return this.participation.cancel(slug, user);
   }
+  @Post(":slug/participation/requests/:requestId/cancel")
+  async cancelRequest(@Param("slug") slug: string, @Param("requestId", new ParseUUIDPipe({ version: "4" })) requestId: string,
+    @CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike) {
+    await this.rateLimiter.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    return this.participation.cancelRequest(slug, requestId, user);
+  }
 }

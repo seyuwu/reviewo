@@ -11,6 +11,7 @@ export interface TournamentParticipationState {
   entry: { id: string; name: string; status: string; joinMode: "OPEN" | "CONFIRM"; ownRole: string | null; isCaptain: boolean; recruiting: boolean;
     members: Array<{ name: string; role: string | null; mmr: number | null }> } | null;
   request: { entryId: string; entryName: string; role: string } | null;
+  requests?: Array<{ id: string; entryId: string; entryName: string; role: string }>;
   suggestions: Array<{ entryId: string; name: string; status: string; role: string; freeRoles: string[]; joinMode: "OPEN" | "CONFIRM"; memberCount: number; averageMmr: number | null }>;
 }
 
@@ -24,5 +25,9 @@ export function startTournamentSoloSearch(slug: string, token: string, roles?: s
 }
 export function cancelTournamentSoloSearch(slug: string, token: string) {
   return apiRequest<TournamentParticipationState>(`/dota/tournaments/${tournamentPathSegment(slug)}/participation/cancel`,
+    { method: "POST", headers: { authorization: `Bearer ${token}` } });
+}
+export function cancelTournamentApplication(slug: string, requestId: string, token: string) {
+  return apiRequest<TournamentParticipationState>(`/dota/tournaments/${tournamentPathSegment(slug)}/participation/requests/${tournamentPathSegment(requestId)}/cancel`,
     { method: "POST", headers: { authorization: `Bearer ${token}` } });
 }

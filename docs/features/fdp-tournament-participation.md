@@ -36,6 +36,22 @@ RECRUITING means the lineup is incomplete, REGISTERED means the five positions
 have a main tournament slot, RESERVE does not promise a main bracket slot.
 Cancel withdraws a pending application or queue, never a joined roster.
 
+Players can keep one application per entry in several teams in the same tournament.
+The first successful acceptance or direct OPEN enrollment withdraws the other
+applications atomically. The tournament advisory lock and the existing partial
+unique index on active membership prevent enrollment in two teams. Pending
+applications suspend automatic enrollment. Participation returns the complete
+`requests` list; `request` remains the first item for older clients. Players can
+withdraw individual applications or all of them. Team previews in the bot show
+the event squad description, player profiles/MMR and free position actions.
+Accepted-application notices expire after 120 seconds and are also deleted when
+the player opens their team through the notice's callback.
+The bot labels website access explicitly and offers roster exit with a 120-second
+confirmation tied to the event entry and the player's membership. It refreshes
+the linked session, rechecks membership and uses the existing roster exit endpoint,
+including tournament cutoff rules and captain succession. Leaving a persistent
+team's event entry transfers event captaincy without changing the base team owner.
+
 Queue assignments, accepted/declined applications and completed main rosters
 enqueue durable Telegram notices in the same database transaction. The ordinary
 notification pipeline delivers them; the bot rechecks current participation and
@@ -82,5 +98,8 @@ Apply additive migration `20261011150000_tournament_solo_participation` with the
 release before bot/web rollout. Old API can run against the additive schema.
 For the recruitment board also apply `20261012120000_tournament_recruitment_board`.
 Existing queue rows default to AUTO; new bot/site board actions send BOARD explicitly.
+Apply `20261012180000_tournament_multiple_applications` before releasing multiple
+application clients. It removes only the single-pending-application index; the
+active-player and active-position membership indexes remain intact.
 Verification uses isolated PostgreSQL and bot mocks; never enroll real users to
 test the queue or send them test messages.

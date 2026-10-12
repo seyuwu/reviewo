@@ -13,7 +13,7 @@ import { fetchMyParties } from "../../social/api/social-api";
 import type { GameParty } from "../../social/types/social";
 import type { DotaTournament } from "../types/dota-tournament";
 import { createDotaTournamentSquad, joinDotaTournamentEntry, recordDotaTournamentSponsorClick, registerDotaTeamForTournament } from "../api/dota-tournaments-api";
-import { cancelTournamentSoloSearch, getTournamentParticipation, startTournamentSoloSearch, type TournamentParticipationState } from "../api/tournament-participation-api";
+import { cancelTournamentApplication, cancelTournamentSoloSearch, getTournamentParticipation, startTournamentSoloSearch, type TournamentParticipationState } from "../api/tournament-participation-api";
 import { tournamentRoomUrl } from "../api/tournament-rooms-api";
 import { TournamentTelegramOnboarding } from "./tournament-telegram-onboarding";
 import { acceptTournamentRecruitInvitation, fetchTournamentRecruitInvitation, type TournamentRecruitInvitation } from "../api/tournament-recruitment-api";
@@ -38,7 +38,7 @@ export function TournamentParticipation({ tournament, open, onOpenChange, onUpda
     return () => { active = false; };
   }, [authSession?.accessToken, isAuthSessionLoaded, open]);
   if (!open) return null;
-  if (!isAuthSessionLoaded || profileState === "checking") return <section className={styles.panel} role="status">{text("Готовим участие…", "Preparing participation…")}</section>;
+  if (!isAuthSessionLoaded || profileState === "checking") return <span className="sr-only" role="status">{text("Готовим участие…", "Preparing participation…")}</span>;
   if (profileState === "error") return <section className={styles.panel}><p className={styles.error}>{text("Не удалось проверить профиль. Попробуй открыть участие ещё раз.", "Could not check your profile. Please retry.")}</p><button className="button-secondary" onClick={() => onOpenChange(false)}>{text("Закрыть", "Close")}</button></section>;
   if (profileState === "missing") return <GamesSearchCinematic purpose="tournament" onVisualPhase={() => undefined}
     onPrepared={() => undefined} onComplete={() => setProfileState("ready")} />;
@@ -134,6 +134,13 @@ function ParticipationFlow({ tournament, onUpdated, onClose }: { tournament: Dot
 
   const status = participation?.entry;
   const invitationId = params.get("recruitInvite");
+  const suggestionCards = (<div className={styles.cards}>{(participation?.suggestions ?? []).map(suggestion => {
+          const selected = suggestion.freeRoles.includes(suggestionRoles[suggestion.entryId] ?? "") ? suggestionRoles[suggestion.entryId]! : suggestion.role;
+          return <div key={suggestion.entryId} className={styles.card}><div><strong>{suggestion.name} · {suggestion.memberCount}/5</strong><span className={styles.meta}>{suggestion.status === "RESERVE" ? text("Резерв · ", "Reserve · ") : ""}{suggestion.averageMmr ?? "—"} MMR · {suggestion.joinMode === "CONFIRM" ? text("По заявке капитану", "Captain approval") : text("Свободное вступление", "Open enrollment")}</span></div>
+            <label className={styles.field}>{text("Позиция", "Position")}<select value={selected} disabled={busy} onChange={event => setSuggestionRoles(previous => ({ ...previous, [suggestion.entryId]: event.target.value }))}>{suggestion.freeRoles.map(value => <option key={value} value={value}>{roleName(value)}</option>)}</select></label>
+            <button className="button-primary" disabled={busy} onClick={() => void act(() => joinDotaTournamentEntry(slug, suggestion.entryId, selected as "1"|"2"|"3"|"4"|"5", token!))}>{suggestion.joinMode === "CONFIRM" ? text("Подать заявку", "Apply") : text("Вступить", "Join")}</button></div>;
+        })}</div>);
+  const pendingTarget = Boolean(target && participation?.requests?.some(request => request.entryId === target.id));
   if (participation?.state === "JOINED" && status) return <>
     <h2 className={styles.heading}>{text("Ты в команде", "You are on the team")} «{status.name}»</h2>
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
@@ -148,7 +155,6 @@ function ParticipationFlow({ tournament, onUpdated, onClose }: { tournament: Dot
       }}>{copied ? text("Ссылка скопирована", "Link copied") : text("🔗 Пригласить друзей", "🔗 Invite friends")}</button><button className="button-secondary" onClick={onClose}>{text("Закрыть", "Close")}</button></div>
   </>;
   if (participation?.state === "CLOSED") return <><h2 className={styles.heading}>{text("Запись завершена", "Registration ended")}</h2><p className={styles.lead}>{text("В этом турнире новые составы уже не принимаются.", "This tournament is no longer accepting new rosters.")}</p><button className="button-secondary" onClick={onClose}>{text("Закрыть", "Close")}</button></>;
-  if (participation?.state === "REQUESTED") return <><h2 className={styles.heading}>{text("Заявка отправлена", "Application sent")}</h2>{error ? <p className={styles.error} role="alert">{error}</p> : null}<p className={styles.status}>{text("Ждём решения капитана", "Waiting for the captain")} «{participation.request?.entryName}». {text("Место пока не подтверждено.", "Your place is not confirmed yet.")}</p><div className={styles.actions}><button className="button-secondary" onClick={refreshParticipation}>{text("Проверить ответ", "Check response")}</button><button className="button-secondary" disabled={busy} onClick={() => void act(() => cancelTournamentSoloSearch(slug, token!))}>{text("Отозвать заявку", "Withdraw application")}</button><button className="button-secondary" onClick={onClose}>{text("Закрыть", "Close")}</button></div></>;
   if (invitationId && token) return <TournamentInvitation slug={slug} id={invitationId} token={token} onJoined={refreshParticipation} onClose={onClose} />;
   return <>
     <h2 className={styles.heading}>{text("Участие в турнире", "Tournament participation")}</h2>
@@ -158,6 +164,16 @@ function ParticipationFlow({ tournament, onUpdated, onClose }: { tournament: Dot
         <p className={styles.lead}>{text("Перед участием открой одного из партнёров турнира. После перехода доступ сохранится для твоего аккаунта.", "Open one tournament partner before participating. Your account will keep this access.")}</p>
         <div className={styles.actions}>{participation.sponsors.map(sponsor => <a className="button-primary" href={sponsor.url} target="_blank" rel="noopener noreferrer" key={sponsor.id}
           onClick={() => { void act(() => recordDotaTournamentSponsorClick(slug, sponsor.id, token!)); }}>{sponsor.name} ↗</a>)}</div>
+      </> : participation.state === "REQUESTED" && !target ? <>
+        <p className={styles.status}>{text("Ждём решения капитанов", "Waiting for captain decisions")}</p>
+        <p className={styles.lead}>{text("Можно подать заявки в несколько команд. Первое принятие запишет тебя в состав и автоматически снимет остальные заявки. Автоподбор приостановлен, пока ждёшь ответа.", "You can apply to several teams. The first acceptance enrolls you and withdraws the other applications. Automatic matching is paused while you wait.")}</p>
+        <div className={styles.cards}>{(participation.requests ?? []).map(request => <div className={styles.card} key={request.id}>
+          <div><strong>{text("Команда:", "Team:")} {request.entryName}</strong><span className={styles.meta}>{roleName(request.role)}</span></div>
+          <button className="button-secondary" disabled={busy} onClick={() => void act(() => cancelTournamentApplication(slug, request.id, token!))}>{text("Отозвать заявку", "Withdraw application")}</button>
+        </div>)}</div>
+        <h3>{text("Другие команды со свободными местами", "Other teams with open positions")}</h3>
+        {suggestionCards}
+        <div className={styles.actions}><button className="button-secondary" disabled={busy} onClick={() => void act(() => cancelTournamentSoloSearch(slug, token!))}>{text("Отозвать все заявки", "Withdraw all applications")}</button><button className="button-secondary" onClick={onClose}>{text("Закрыть", "Close")}</button></div>
       </> : participation.state === "WAITING" ? <>
         <p className={styles.status}>{participation.queueMode === "AUTO" ? text("Автоподбор включён", "Automatic matching is on") : text("Ты ищешь команду для этого турнира", "You are looking for a tournament team")}</p>
         <p className={styles.lead}>{participation.queueMode === "AUTO"
@@ -172,18 +188,16 @@ function ParticipationFlow({ tournament, onUpdated, onClose }: { tournament: Dot
         {searchDraft ? <button className="button-secondary" disabled={busy || !searchDraft.length} onClick={() => void act(async () => {
           const result = await startTournamentSoloSearch(slug, token!, searchDraft, participation.queueMode ?? "BOARD"); setSearchDraft(null); return result;
         })}>{text("Сохранить позиции поиска", "Save search positions")}</button> : null}
-        <div className={styles.cards}>{participation.suggestions.map(suggestion => {
-          const selected = suggestion.freeRoles.includes(suggestionRoles[suggestion.entryId] ?? "") ? suggestionRoles[suggestion.entryId]! : suggestion.role;
-          return <div key={suggestion.entryId} className={styles.card}><div><strong>{suggestion.name} · {suggestion.memberCount}/5</strong><span className={styles.meta}>{suggestion.status === "RESERVE" ? text("Резерв · ", "Reserve · ") : ""}{suggestion.averageMmr ?? "—"} MMR · {suggestion.joinMode === "CONFIRM" ? text("По заявке капитану", "Captain approval") : text("Свободное вступление", "Open enrollment")}</span></div>
-            <label className={styles.field}>{text("Позиция", "Position")}<select value={selected} disabled={busy} onChange={event => setSuggestionRoles(previous => ({ ...previous, [suggestion.entryId]: event.target.value }))}>{suggestion.freeRoles.map(value => <option key={value} value={value}>{roleName(value)}</option>)}</select></label>
-            <button className="button-primary" disabled={busy} onClick={() => void act(() => joinDotaTournamentEntry(slug, suggestion.entryId, selected as "1"|"2"|"3"|"4"|"5", token!))}>{suggestion.joinMode === "CONFIRM" ? text("Подать заявку", "Apply") : text("Вступить", "Join")}</button></div>;
-        })}</div>
+        {suggestionCards}
         {!participation.suggestions.length ? <p className={styles.hint}>{text("Открытых мест пока нет. Поиск сохранён — капитаны смогут пригласить тебя, когда начнут набор.", "No open positions yet. Your search is saved so captains can invite you.")}</p> : null}
         <div className={styles.actions}>{participation.queueMode !== "AUTO" ? <button className="button-secondary" disabled={busy} onClick={() => void act(() => startTournamentSoloSearch(slug, token!, participation.queueRoles, "AUTO"))}>{text("Включить автоподбор", "Enable automatic matching")}</button> : null}<button className="button-secondary" disabled={busy} onClick={() => void act(() => cancelTournamentSoloSearch(slug, token!))}>{text("Остановить поиск команды", "Stop team search")}</button><button className="button-secondary" onClick={onClose}>{text("Закрыть", "Close")}</button></div>
       </> : target ? <>
-        <p className={styles.lead}>{text("Тебя пригласили в состав", "You were invited to")} «{target.teamName}» · {target.members.length}/5</p>
+        <p className={styles.lead}>{text("Команда:", "Team:")} «{target.teamName}» · {target.members.length}/5</p>
+        {target.description ? <p className={styles.lead}>{target.description}</p> : <p className={styles.hint}>{text("Описание команды пока не добавлено.", "No team description yet.")}</p>}
+        <ul>{target.members.map((member, index) => <li key={member.dotaProfileSlug ?? index}>{member.dotaProfileSlug ? <Link href={"/dota/" + encodeURIComponent(member.dotaProfileSlug)}>{member.displayName}</Link> : member.displayName} · {roleName(member.positionRole ?? "")} · {member.mmr ?? "—"} MMR</li>)}</ul>
+        {pendingTarget ? <p className={styles.status}>{text("Заявка в эту команду уже отправлена. Можно выбрать другую команду ниже.", "Your application to this team is pending. You can choose another team below.")}</p> : null}
         {target.members.length >= 5 || !invitedRoles.length ? <p className={styles.hint}>{text("Все позиции в составе уже заняты. Можно подобрать другой состав.", "All positions in this roster are taken. You can find another roster.")}</p> : null}
-        <div className={styles.actions}>{target.members.length < 5 ? invitedRoles.map(value => <button key={value} className="button-primary" disabled={busy}
+        <div className={styles.actions}>{target.members.length < 5 && !pendingTarget ? invitedRoles.map(value => <button key={value} className="button-primary" disabled={busy}
           onClick={() => void act(() => joinDotaTournamentEntry(slug, target.id, value as "1"|"2"|"3"|"4"|"5", token!))}>{target.joinMode === "OPEN" ? text("Вступить", "Join") : text("Подать заявку", "Apply")} · {roleName(value)}</button>) : null}
           <button className="button-secondary" disabled={busy} onClick={() => { setIgnoreTarget(true); setMode("solo"); }}>{text("Подобрать другую команду", "Find another team")}</button></div>
       </> : !mode ? <>

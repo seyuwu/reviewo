@@ -325,6 +325,98 @@ describe("Tournament participation (isolated local PostgreSQL)", { skip: !connec
     assert.equal(request.status, "WITHDRAWN");
   });
 
+  it("keeps simultaneous applications to different teams and withdraws one independently", async () => {
+    const first = await createEntry(users[0]!, "1", "CONFIRM");
+    const second = await createEntry(users[2]!, "1", "CONFIRM");
+    const applicant = users[1]!;
+    const results = await Promise.all([
+      tournaments.joinEntry(slug, first.id, { positionRole: "2" }, applicant),
+      tournaments.joinEntry(slug, second.id, { positionRole: "3" }, applicant)
+    ]);
+    assert.deepEqual(results.map(result => result.result), ["REQUESTED", "REQUESTED"]);
+    const state = await participation.state(slug, applicant);
+    assert.equal(state.state, "REQUESTED");
+    assert.equal(state.requests.length, 2);
+    const request = state.requests.find(item => item.entryId === first.id)!;
+    await assert.rejects(participation.cancelRequest(slug, request.id, users[3]!), rejectsStatus(409));
+    const remaining = await participation.cancelRequest(slug, request.id, applicant);
+    assert.deepEqual(remaining.requests.map(item => item.entryId), [second.id]);
+  });
+
+  it("accepts only one team when two captains simultaneously accept the same player", async () => {
+    // Repeat with fresh users/entries so both requests race under real PostgreSQL locks.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const captainA = await createUser();
+      const captainB = await createUser();
+      const applicant = await createUser();
+      const first = await createEntry(captainA, "1", "CONFIRM");
+      const second = await createEntry(captainB, "1", "CONFIRM");
+      await Promise.all([
+        tournaments.joinEntry(slug, first.id, { positionRole: "2" }, applicant),
+        tournaments.joinEntry(slug, second.id, { positionRole: "3" }, applicant)
+      ]);
+      const requests = (await participation.state(slug, applicant)).requests;
+      const decisions = await Promise.allSettled(requests.map(request => tournaments.decideJoinRequest(
+        slug, request.entryId, request.id, "ACCEPT", request.entryId === first.id ? captainA : captainB
+      )));
+      assert.equal(decisions.filter(result => result.status === "fulfilled").length, 1);
+      const members = await prisma.dotaTournamentEntryMember.findMany({ where: { tournamentId, userId: applicant.id, isActive: true } });
+      assert.equal(members.length, 1);
+      const finalRequests = await prisma.dotaTournamentEntryRequest.findMany({ where: { tournamentId, userId: applicant.id } });
+      assert.deepEqual(finalRequests.map(request => request.status).sort(), ["ACCEPTED", "WITHDRAWN"]);
+      assert.equal(finalRequests.find(request => request.status === "ACCEPTED")!.entryId, members[0]!.entryId);
+      const accepted = await prisma.telegramBotNotification.count({ where: { eventKey: { startsWith: "tournament_participation:accepted:" },
+        telegramUserId: (await prisma.userAuthIdentity.findFirstOrThrow({ where: { userId: applicant.id, provider: "telegram" } })).providerUserId } });
+      assert.equal(accepted, 1);
+      // The database still prevents a second membership even outside the service lock.
+      await assert.rejects(prisma.dotaTournamentEntryMember.create({ data: {
+        tournamentId, entryId: members[0]!.entryId === first.id ? second.id : first.id,
+        userId: applicant.id, displayName: "Duplicate", positionRole: "4", isActive: true
+      } }), (error: unknown) => (error as { code: string }).code === "P2002");
+    }
+  });
+
+  it("withdraws all pending applications on direct enrollment in an OPEN team", async () => {
+    const first = await createEntry(users[0]!, "1", "CONFIRM");
+    const second = await createEntry(users[2]!, "1", "CONFIRM");
+    const open = await createEntry(users[3]!, "1", "OPEN");
+    await tournaments.joinEntry(slug, first.id, { positionRole: "2" }, users[1]!);
+    await tournaments.joinEntry(slug, second.id, { positionRole: "3" }, users[1]!);
+    assert.equal((await tournaments.joinEntry(slug, open.id, { positionRole: "4" }, users[1]!)).result, "JOINED");
+    assert.equal((await participation.state(slug, users[1]!)).requests.length, 0);
+    assert.equal(await prisma.dotaTournamentEntryRequest.count({ where: { tournamentId, userId: users[1]!.id, status: "WITHDRAWN" } }), 2);
+  });
+
+  it("fences acceptance racing with withdrawal and never leaves a pending application", async () => {
+    const entry = await createEntry(users[0]!, "1", "CONFIRM");
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[1]!);
+    const request = (await participation.state(slug, users[1]!)).requests[0]!;
+    const results = await Promise.allSettled([
+      participation.cancelRequest(slug, request.id, users[1]!),
+      tournaments.decideJoinRequest(slug, entry.id, request.id, "ACCEPT", users[0]!)
+    ]);
+    assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+    const latest = await prisma.dotaTournamentEntryRequest.findUniqueOrThrow({ where: { id: request.id } });
+    assert.ok(["ACCEPTED", "WITHDRAWN"].includes(latest.status));
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { tournamentId, userId: users[1]!.id, isActive: true } }), latest.status === "ACCEPTED" ? 1 : 0);
+  });
+
+  it("does not withdraw competing applications when acceptance fails because the position is occupied", async () => {
+    const first = await createEntry(users[0]!, "1", "CONFIRM");
+    const second = await createEntry(users[2]!, "1", "CONFIRM");
+    await tournaments.joinEntry(slug, first.id, { positionRole: "2" }, users[1]!);
+    await tournaments.joinEntry(slug, second.id, { positionRole: "3" }, users[1]!);
+    await prisma.dotaTournamentEntryMember.create({ data: { tournamentId, entryId: first.id,
+      userId: users[3]!.id, displayName: "Taken", positionRole: "2" } });
+    const state = await participation.state(slug, users[1]!);
+    const request = state.requests.find(item => item.entryId === first.id)!;
+    await assert.rejects(tournaments.decideJoinRequest(slug, first.id, request.id, "ACCEPT", users[0]!), rejectsStatus(409));
+    assert.equal((await participation.state(slug, users[1]!)).requests.length, 2);
+    const available = state.requests.find(item => item.entryId === second.id)!;
+    await tournaments.decideJoinRequest(slug, second.id, available.id, "ACCEPT", users[2]!);
+    assert.equal((await participation.state(slug, users[1]!)).entry!.id, second.id);
+  });
+
   it("recovers waiting players in a new worker instance using persisted rows", async () => {
     await begin(users[0]!, ["1"]);
     participation.onModuleDestroy();
