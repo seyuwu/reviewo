@@ -1,4 +1,4 @@
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsUUID, Min } from "class-validator";
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsOptional, IsUUID, Min } from "class-validator";
 
 export class StartTournamentSoloSearchDto {
   @IsOptional()
@@ -18,6 +18,17 @@ export class TournamentRecruitSearchDto {
 }
 export class TournamentRecruitQueryDto {
   @IsOptional() @IsUUID("4") notice?: string;
+}
+export class TournamentApplicationPageDto {
+  @IsOptional() @IsUUID("4") cursor?: string;
+}
+export class TournamentApplicationNotificationsDto {
+  @IsBoolean() enabled!: boolean;
+}
+export class TournamentApplicationDecisionDto {
+  @IsIn(["ACCEPT", "DECLINE"]) decision!: "ACCEPT" | "DECLINE";
+  @IsISO8601() requestUpdatedAt!: string;
+  @IsIn(["1", "2", "3", "4", "5"]) positionRole!: string;
 }
 export class TournamentRecruitInviteDto {
   @IsUUID("4") queueId!: string;

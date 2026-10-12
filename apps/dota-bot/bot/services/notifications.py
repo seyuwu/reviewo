@@ -32,6 +32,11 @@ async def poll_notifications(bot: Bot, api: OpiniaApi, settings: Settings, stora
                 telegram_user_id = int(row["telegramUserId"])
                 if storage.has_delivered_notification(notification_id):
                     delivered = True
+                elif (row.get("payload") or {}).get("type") == "tournament_application":
+                    from .tournament_applications import deliver_tournament_application_notice
+                    delivered = await deliver_tournament_application_notice(bot, api, settings, storage, row)
+                    if delivered:
+                        storage.remember_delivered_notification(notification_id)
                 elif (row.get("payload") or {}).get("type") in {"tournament_recruiting", "tournament_team_invite"}:
                     from .tournament_recruitment import deliver_tournament_recruitment_notice
                     delivered = await deliver_tournament_recruitment_notice(bot, api, settings, storage, row)

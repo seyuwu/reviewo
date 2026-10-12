@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { DotaTournament, DotaTournamentMatchStatus, DotaTournamentStatus, Prisma } from "#prisma/client";
 import { DOTA_PARTY_VERTICAL, DOTA_ATTRIBUTE_KEYS, DOTA_VERTICAL, generateDotaPartyName } from "@reviewo/shared";
 import type { TournamentSoloTicket } from "./dto/tournament-participation.dto.js";
-import { readTournamentTeamInvite } from "./tournament-recruitment-payload.js";
+import { readTournamentApplication, readTournamentTeamInvite } from "./tournament-recruitment-payload.js";
 
 import { AppErrorCode } from "../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../common/exceptions/app.exception.js";
@@ -564,7 +564,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         });
 
         if (latest.joinMode === "CONFIRM" && !recruitmentInviteId) {
-          await tx.dotaTournamentEntryRequest.upsert({
+          const application = await tx.dotaTournamentEntryRequest.upsert({
             create: {
               ...snapshot,
               entryId,
@@ -578,6 +578,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
             },
             where: { entryId_userId: { entryId, userId: currentUser.id } }
           });
+          await this.enqueueTournamentApplication(tx, entryId, application);
           result = "REQUESTED";
           await this.finishSoloQueue(tx, tournament.id, currentUser.id, null);
           return;
@@ -627,7 +628,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     entryId: string,
     requestId: string,
     decision: "ACCEPT" | "DECLINE",
-    currentUser: AuthenticatedUser
+    currentUser: AuthenticatedUser,
+    applicationNoticeId?: string,
+    expectedApplication?: { updatedAt: string; positionRole: string }
   ) {
     const entry = await this.requireManagedEntry(tournamentSlug, entryId, currentUser.id);
     const request = await this.prismaService.dotaTournamentEntryRequest.findFirst({
@@ -640,6 +643,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         statusCode: HttpStatus.NOT_FOUND
       });
     }
+    if (expectedApplication && (request.updatedAt.toISOString() !== expectedApplication.updatedAt || request.positionRole !== expectedApplication.positionRole))
+      throw this.matchConflict("Заявка изменилась. Посмотри профиль игрока заново.");
 
     if (decision === "DECLINE") {
       await this.prismaService.$transaction(async (tx) => {
@@ -651,6 +656,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           (latestEntry.createdByUserId ?? latestEntry.teamParty?.ownerUserId) !== currentUser.id)
           throw this.matchConflict("The tournament team captain has changed");
         this.assertEntryCanRecruit(latestEntry.tournament, latestEntry.status);
+        await this.assertApplicationNotice(tx, request, currentUser.id, applicationNoticeId);
         const declined = await tx.dotaTournamentEntryRequest.updateMany({
           data: { status: "DECLINED" },
           where: { id: request.id, status: "PENDING", updatedAt: request.updatedAt }
@@ -706,41 +712,50 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           });
         }
         this.assertEntryCanRecruit(currentTournament, latestEntry.status);
-        await this.assertSponsorGate(tx, currentTournament.id, request.userId);
+        await this.assertApplicationNotice(tx, latestRequest, currentUser.id, applicationNoticeId);
+        if (applicationNoticeId || expectedApplication) {
+          const [activeUser, activeProfile] = await Promise.all([
+            tx.user.findFirst({ where: { id: latestRequest.userId, status: "active", authIdentities: { some: { provider: "telegram" } } }, select: { id: true } }),
+            tx.entity.findFirst({ where: { ownerUserId: latestRequest.userId, type: "person", visibility: "ACTIVE",
+              attributes: { some: { key: DOTA_ATTRIBUTE_KEYS.vertical, value: DOTA_VERTICAL } } }, select: { id: true } })
+          ]);
+          if (!activeUser || !activeProfile) throw this.matchConflict("Аккаунт или профиль игрока больше недоступен.");
+        }
+        await this.assertSponsorGate(tx, currentTournament.id, latestRequest.userId);
         await this.assertTournamentSlotAvailable(tx, {
           entryId,
-          positionRole: request.positionRole,
+          positionRole: latestRequest.positionRole,
           tournamentId: entry.tournamentId,
-          userId: request.userId
+          userId: latestRequest.userId
         });
         await tx.dotaTournamentEntryMember.upsert({
           create: {
-            displayName: request.displayName,
-            dotaProfileSlug: request.dotaProfileSlug,
+            displayName: latestRequest.displayName,
+            dotaProfileSlug: latestRequest.dotaProfileSlug,
             entryId,
             isActive: true,
-            mmr: request.mmr,
-            positionRole: request.positionRole,
+            mmr: latestRequest.mmr,
+            positionRole: latestRequest.positionRole,
             tournamentId: entry.tournamentId,
-            userId: request.userId
+            userId: latestRequest.userId
           },
           update: {
-            displayName: request.displayName,
-            dotaProfileSlug: request.dotaProfileSlug,
+            displayName: latestRequest.displayName,
+            dotaProfileSlug: latestRequest.dotaProfileSlug,
             isActive: true,
             roomLeftAt: null,
-            mmr: request.mmr,
-            positionRole: request.positionRole
+            mmr: latestRequest.mmr,
+            positionRole: latestRequest.positionRole
           },
-          where: { entryId_userId: { entryId, userId: request.userId } }
+          where: { entryId_userId: { entryId, userId: latestRequest.userId } }
         });
         await tx.dotaTournamentEntryRequest.update({
           data: { status: "ACCEPTED" },
           where: { id: request.id }
         });
-        await this.finishSoloQueue(tx, entry.tournamentId, request.userId, entryId);
+        await this.finishSoloQueue(tx, entry.tournamentId, latestRequest.userId, entryId);
         await this.syncEntryRegistrationStatus(tx, entryId);
-        await this.enqueueTournamentParticipation(tx, entry.tournamentId, entryId, [request.userId], "accepted", `${request.id}:${latestRequest.updatedAt.getTime()}`);
+        await this.enqueueTournamentParticipation(tx, entry.tournamentId, entryId, [latestRequest.userId], "accepted", `${request.id}:${latestRequest.updatedAt.getTime()}`);
       });
     } catch (error) {
       if (this.isPrismaUniqueError(error)) {
@@ -861,6 +876,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           await tx.dotaTournamentEntryRequest.updateMany({
             where: { entryId, status: "PENDING" }, data: { status: "WITHDRAWN" }
           });
+        } else {
+          const applications = await tx.dotaTournamentEntryRequest.findMany({ where: { entryId, status: "PENDING" } });
+          for (const application of applications) await this.enqueueTournamentApplication(tx, entryId, application);
         }
       }
       await this.syncEntryRegistrationStatus(tx, entryId);
@@ -2869,6 +2887,41 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     if (entryId && queued && changed.count) {
       await this.enqueueTournamentParticipation(tx, tournamentId, entryId, [userId], "found", `${queued.id}:${queued.generation}`);
     }
+  }
+
+  private async assertApplicationNotice(tx: Prisma.TransactionClient,
+    request: { id: string; entryId: string; userId: string; tournamentId: string; positionRole: string; updatedAt: Date }, captainId: string, noticeId?: string) {
+    if (!noticeId) return;
+    const [notice, identity] = await Promise.all([
+      tx.telegramBotNotification.findUnique({ where: { id: noticeId } }),
+      tx.userAuthIdentity.findFirst({ where: { userId: captainId, provider: "telegram", user: { status: "active" } }, select: { providerUserId: true } })
+    ]);
+    const payload = readTournamentApplication(notice?.payload);
+    if (!notice || !payload || notice.telegramUserId !== identity?.providerUserId || payload.captainUserId !== captainId ||
+      payload.requestId !== request.id || payload.entryId !== request.entryId || payload.tournamentId !== request.tournamentId ||
+      payload.requesterUserId !== request.userId || payload.positionRole !== request.positionRole ||
+      payload.requestUpdatedAt !== request.updatedAt.toISOString()) throw this.matchConflict("Заявка изменилась. Обнови список заявок.");
+  }
+
+  private async enqueueTournamentApplication(tx: Prisma.TransactionClient, entryId: string,
+    request: { id: string; userId: string; positionRole: string; updatedAt: Date }) {
+    const entry = await tx.dotaTournamentEntry.findUniqueOrThrow({ where: { id: entryId },
+      include: { tournament: { select: { slug: true, title: true } }, teamParty: { select: { ownerUserId: true } } } });
+    const captainId = entry.createdByUserId ?? entry.teamParty?.ownerUserId;
+    if (!captainId) return;
+    const [member, identity, preference] = await Promise.all([
+      tx.dotaTournamentEntryMember.findFirst({ where: { entryId, userId: captainId, isActive: true }, select: { id: true } }),
+      tx.userAuthIdentity.findFirst({ where: { userId: captainId, provider: "telegram", user: { status: "active" } }, select: { providerUserId: true } }),
+      tx.dotaTournamentRecruitPreference.findUnique({ where: { tournamentId_userId: { tournamentId: entry.tournamentId, userId: captainId } }, select: { applicationNoticesEnabled: true } })
+    ]);
+    if (!member || !identity || preference?.applicationNoticesEnabled === false) return;
+    await tx.telegramBotNotification.createMany({ skipDuplicates: true, data: [{
+      telegramUserId: identity.providerUserId,
+      eventKey: `tournament_application:${request.id}:${request.updatedAt.getTime()}:${captainId}:${entry.updatedAt.getTime()}`,
+      payload: { type: "tournament_application", tournamentId: entry.tournamentId, tournamentSlug: entry.tournament.slug,
+        tournamentTitle: entry.tournament.title, entryId, captainUserId: captainId,
+        requestId: request.id, requesterUserId: request.userId, positionRole: request.positionRole, requestUpdatedAt: request.updatedAt.toISOString() }
+    }] });
   }
 
   private async enqueueTournamentParticipation(tx: Prisma.TransactionClient, tournamentId: string, entryId: string,

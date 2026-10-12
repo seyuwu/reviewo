@@ -1,15 +1,21 @@
-import { ConflictException, HttpException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { ConflictException, ForbiddenException, HttpException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { DotaTournament, DotaTournamentSoloSearch } from "#prisma/client";
+import type { DotaTournament, DotaTournamentSoloSearch, Prisma } from "#prisma/client";
 import type { AuthenticatedUser } from "../../common/interfaces/authenticated-request.js";
 import { PrismaService } from "../../database/prisma.service.js";
 import { DotaProfileService } from "../dota/services/dota-profile.service.js";
 import { DotaTournamentsService } from "./tournaments.service.js";
 import type { StartTournamentSoloSearchDto, TournamentSoloTicket } from "./dto/tournament-participation.dto.js";
 import { TournamentRecruitmentService } from "./tournament-recruitment.service.js";
+import { readTournamentApplication } from "./tournament-recruitment-payload.js";
 
 const ACTIVE_ENTRIES = ["RECRUITING", "REGISTERED", "RESERVE"] as const;
 const ROLES = ["1", "2", "3", "4", "5"] as const;
+const APPLICATION_INCLUDE = {
+  entry: { include: { tournament: true, teamParty: { select: { ownerUserId: true } }, members: { where: { isActive: true }, select: { userId: true, positionRole: true } } } },
+  user: { select: { status: true, authIdentities: { where: { provider: "telegram" }, select: { telegramUsername: true }, take: 1 } } }
+} satisfies Prisma.DotaTournamentEntryRequestInclude;
+type ApplicationRecord = Prisma.DotaTournamentEntryRequestGetPayload<{ include: typeof APPLICATION_INCLUDE }>;
 type Candidate = { row: DotaTournamentSoloSearch; user: AuthenticatedUser; roles: string[] };
 
 @Injectable()
@@ -158,6 +164,109 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
       if (!changed.count) throw new ConflictException("Заявка уже обработана или отозвана. Обнови участие.");
     });
     return this.state(slug, user);
+  }
+
+  async application(slug: string, noticeId: string, user: AuthenticatedUser) {
+    const [notice, identity] = await Promise.all([
+      this.prisma.telegramBotNotification.findUnique({ where: { id: noticeId } }),
+      this.prisma.userAuthIdentity.findFirst({ where: { userId: user.id, provider: "telegram", user: { status: "active" } }, select: { providerUserId: true } })
+    ]);
+    const payload = readTournamentApplication(notice?.payload);
+    if (!notice || !payload || payload.tournamentSlug !== slug || payload.captainUserId !== user.id || notice.telegramUserId !== identity?.providerUserId)
+      throw new NotFoundException("Уведомление о заявке больше недоступно.");
+    const { request, view } = await this.managedApplication(slug, payload.requestId, user);
+    if (request.entryId !== payload.entryId || request.tournamentId !== payload.tournamentId || request.userId !== payload.requesterUserId)
+      throw new NotFoundException("Заявка больше недоступна.");
+    const active = view.active && request.updatedAt.toISOString() === payload.requestUpdatedAt && request.positionRole === payload.positionRole;
+    const preference = await this.prisma.dotaTournamentRecruitPreference.findUnique({ where: { tournamentId_userId: { tournamentId: request.tournamentId, userId: user.id } }, select: { applicationNoticesEnabled: true } });
+    return { ...view, id: noticeId, captainUserId: user.id, notificationsEnabled: preference?.applicationNoticesEnabled !== false,
+      active, canAccept: active && view.canAccept, canDecline: active && view.canDecline };
+  }
+
+  private presentApplication(request: ApplicationRecord) {
+    const entry = request.entry;
+    const open = this.tournaments.participationOpen(entry.tournament) && (entry.tournament.status === "REGISTRATION_OPEN" || entry.status === "RESERVE");
+    const active = request.status === "PENDING" && ACTIVE_ENTRIES.some(status => status === entry.status) && open;
+    const username = request.user.authIdentities[0]?.telegramUsername;
+    return { tournamentId: entry.tournamentId, tournamentSlug: entry.tournament.slug, tournamentTitle: entry.tournament.title,
+      entryId: entry.id, entryName: entry.teamNameSnapshot, requestId: request.id, status: request.status, active,
+      requestUpdatedAt: request.updatedAt.toISOString(),
+      canAccept: active && request.user.status === "active" && request.user.authIdentities.length > 0 && entry.members.length < 5
+        && !entry.members.some(member => member.positionRole === request.positionRole), canDecline: active,
+      playerName: request.displayName, profileSlug: request.dotaProfileSlug, role: request.positionRole, mmr: request.mmr,
+      telegramUsername: username && /^[A-Za-z0-9_]{1,32}$/.test(username) ? username : null };
+  }
+
+  private async managedApplication(slug: string, requestId: string, user: AuthenticatedUser) {
+    const request = await this.prisma.dotaTournamentEntryRequest.findUnique({ where: { id: requestId }, include: APPLICATION_INCLUDE });
+    if (!request || request.entry.tournament.slug !== slug || request.entry.tournament.status === "DRAFT")
+      throw new NotFoundException("Заявка больше недоступна.");
+    const entry = request.entry;
+    if ((entry.createdByUserId ?? entry.teamParty?.ownerUserId) !== user.id || !entry.members.some(member => member.userId === user.id))
+      throw new ForbiddenException("Этой заявкой может управлять только текущий капитан.");
+    return { request, view: this.presentApplication(request) };
+  }
+
+  async applicationProfile(slug: string, requestId: string, user: AuthenticatedUser) {
+    return (await this.managedApplication(slug, requestId, user)).view;
+  }
+
+  async applications(slug: string, user: AuthenticatedUser, cursor?: string) {
+    const entry = await this.prisma.dotaTournamentEntry.findFirst({ where: { tournament: { slug, status: { not: "DRAFT" } },
+      status: { in: [...ACTIVE_ENTRIES] }, members: { some: { userId: user.id, isActive: true } },
+      OR: [{ createdByUserId: user.id }, { createdByUserId: null, teamParty: { ownerUserId: user.id } }] },
+      select: { id: true, teamNameSnapshot: true, tournamentId: true } });
+    if (!entry) throw new ForbiddenException("Заявки доступны капитану своей команды.");
+    if (cursor && !await this.prisma.dotaTournamentEntryRequest.findFirst({ where: { id: cursor, entryId: entry.id }, select: { id: true } }))
+      throw new ConflictException("Команда изменилась. Открой список заявок заново.");
+    // Keep database timestamp precision and do not skip a player when the
+    // cursor application was withdrawn between pages.
+    const ids = cursor ? await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT r.id FROM social.dota_tournament_entry_requests r
+      WHERE r.entry_id = ${entry.id}::uuid AND r.status = 'PENDING'
+        AND (r.created_at, r.id) > (SELECT c.created_at, c.id FROM social.dota_tournament_entry_requests c WHERE c.id = ${cursor}::uuid)
+      ORDER BY r.created_at, r.id LIMIT 6` : await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM social.dota_tournament_entry_requests
+      WHERE entry_id = ${entry.id}::uuid AND status = 'PENDING' ORDER BY created_at, id LIMIT 6`;
+    const requests = await this.prisma.dotaTournamentEntryRequest.findMany({ where: { id: { in: ids.slice(0, 5).map(item => item.id) }, status: "PENDING" },
+      include: APPLICATION_INCLUDE, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+    const preference = await this.prisma.dotaTournamentRecruitPreference.findUnique({ where: { tournamentId_userId: { tournamentId: entry.tournamentId, userId: user.id } }, select: { applicationNoticesEnabled: true } });
+    return { entryId: entry.id, entryName: entry.teamNameSnapshot, captainUserId: user.id, notificationsEnabled: preference?.applicationNoticesEnabled !== false,
+      players: requests.map(request => this.presentApplication(request)),
+      nextCursor: ids.length > 5 ? ids[4]!.id : null };
+  }
+
+  async setApplicationNotifications(slug: string, enabled: boolean, user: AuthenticatedUser) {
+    const tournament = await this.tournament(slug);
+    await this.prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${tournament.id}`}))`;
+      const entry = await tx.dotaTournamentEntry.findFirst({ where: { tournamentId: tournament.id, status: { in: [...ACTIVE_ENTRIES] },
+        members: { some: { userId: user.id, isActive: true } },
+        OR: [{ createdByUserId: user.id }, { createdByUserId: null, teamParty: { ownerUserId: user.id } }] }, select: { id: true } });
+      if (!entry) throw new ForbiddenException("Уведомлениями о заявках управляет текущий капитан.");
+      await tx.dotaTournamentRecruitPreference.upsert({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } },
+        create: { tournamentId: tournament.id, userId: user.id, applicationNoticesEnabled: enabled }, update: { applicationNoticesEnabled: enabled } });
+      if (!enabled) await tx.telegramBotNotification.updateMany({ where: { deliveredAt: null,
+        AND: [{ payload: { path: ["type"], equals: "tournament_application" } },
+          { payload: { path: ["tournamentId"], equals: tournament.id } }, { payload: { path: ["captainUserId"], equals: user.id } }] },
+        data: { deliveredAt: new Date() } });
+    });
+    return { enabled, tournamentId: tournament.id, captainUserId: user.id };
+  }
+
+  async decideApplicationRequest(slug: string, requestId: string, input: { decision: "ACCEPT" | "DECLINE"; requestUpdatedAt: string; positionRole: string }, user: AuthenticatedUser) {
+    const application = await this.applicationProfile(slug, requestId, user);
+    if (!application.active || (input.decision === "ACCEPT" && !application.canAccept)) throw new ConflictException("Заявка уже обработана или позиция занята.");
+    await this.tournaments.decideJoinRequest(slug, application.entryId, requestId, input.decision, user, undefined,
+      { updatedAt: input.requestUpdatedAt, positionRole: input.positionRole });
+    return { ok: true, decision: input.decision, entryName: application.entryName, playerName: application.playerName };
+  }
+
+  async decideApplication(slug: string, noticeId: string, decision: "ACCEPT" | "DECLINE", user: AuthenticatedUser) {
+    const application = await this.application(slug, noticeId, user);
+    if (!application.active || (decision === "ACCEPT" && !application.canAccept)) throw new ConflictException("Заявка уже обработана или позиция занята.");
+    await this.tournaments.decideJoinRequest(slug, application.entryId, application.requestId, decision, user, noticeId);
+    return { ok: true, decision, entryName: application.entryName, playerName: application.playerName };
   }
 
   private async scan() {

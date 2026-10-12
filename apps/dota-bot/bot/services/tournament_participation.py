@@ -212,6 +212,8 @@ def tournament_status_keyboard(result: dict, context: dict, settings: Settings) 
             invitation = f"https://t.me/{username}?start=te_{entry_hex}"
             rows.append([InlineKeyboardButton(text="📋 Пригласить друзей", copy_text=CopyTextButton(text=invitation))])
         entry = result.get("entry") or {}
+        if entry.get("isCaptain"):
+            rows.append([InlineKeyboardButton(text="📨 Заявки в команду", callback_data=tournament_callback("requests", event_hex))])
         if entry.get("isCaptain") and len(entry.get("members") or []) < 5:
             rows.append([InlineKeyboardButton(text="Поиск игроков" if entry.get("recruiting") else "Ищем игроков", callback_data=tournament_callback("recruits" if entry.get("recruiting") else "recruit-start", event_hex))])
         if entry.get("canLeave"):

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Param, ParseUUIDPipe, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Header, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../../common/decorators/current-user.decorator.js";
 import type { AuthenticatedUser } from "../../common/interfaces/authenticated-request.js";
 import { ApiRateLimiterService, type RequestLike } from "../../common/rate-limiting/api-rate-limiter.service.js";
@@ -6,9 +6,10 @@ import { createSocialWriteRateLimitRules } from "../../common/rate-limiting/writ
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { OptionalJwtAuthGuard } from "../auth/guards/optional-jwt-auth.guard.js";
 import { TournamentTelegramLinkedGuard } from "./tournament-telegram-linked.guard.js";
-import { StartTournamentSoloSearchDto } from "./dto/tournament-participation.dto.js";
+import { StartTournamentSoloSearchDto, TournamentApplicationDecisionDto, TournamentApplicationNotificationsDto, TournamentApplicationPageDto } from "./dto/tournament-participation.dto.js";
 import { TournamentParticipationService } from "./tournament-participation.service.js";
 import { DotaTournamentsService } from "./tournaments.service.js";
+import { DecideDotaTournamentEntryRequestDto } from "./dto/join-dota-tournament-entry.dto.js";
 
 @Controller("dota/tournaments")
 export class DotaTournamentsPreviewController {
@@ -46,5 +47,36 @@ export class TournamentParticipationController {
     @CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike) {
     await this.rateLimiter.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
     return this.participation.cancelRequest(slug, requestId, user);
+  }
+  @Get(":slug/participation/applications/:noticeId")
+  @Header("Cache-Control", "private, no-store")
+  application(@Param("slug") slug: string, @Param("noticeId", new ParseUUIDPipe({ version: "4" })) noticeId: string,
+    @CurrentUser() user: AuthenticatedUser) { return this.participation.application(slug, noticeId, user); }
+  @Get(":slug/participation/applications")
+  @Header("Cache-Control", "private, no-store")
+  applications(@Param("slug") slug: string, @Query() input: TournamentApplicationPageDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.participation.applications(slug, user, input.cursor);
+  }
+  @Post(":slug/participation/application-notifications")
+  async applicationNotifications(@Param("slug") slug: string, @Body() input: TournamentApplicationNotificationsDto,
+    @CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike) {
+    await this.rateLimiter.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    return this.participation.setApplicationNotifications(slug, input.enabled, user);
+  }
+  @Get(":slug/participation/application-requests/:requestId")
+  @Header("Cache-Control", "private, no-store")
+  applicationProfile(@Param("slug") slug: string, @Param("requestId", new ParseUUIDPipe({ version: "4" })) requestId: string,
+    @CurrentUser() user: AuthenticatedUser) { return this.participation.applicationProfile(slug, requestId, user); }
+  @Post(":slug/participation/application-requests/:requestId/decision")
+  async decideApplicationRequest(@Param("slug") slug: string, @Param("requestId", new ParseUUIDPipe({ version: "4" })) requestId: string,
+    @Body() input: TournamentApplicationDecisionDto, @CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike) {
+    await this.rateLimiter.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    return this.participation.decideApplicationRequest(slug, requestId, input, user);
+  }
+  @Post(":slug/participation/applications/:noticeId/decision")
+  async decideApplication(@Param("slug") slug: string, @Param("noticeId", new ParseUUIDPipe({ version: "4" })) noticeId: string,
+    @Body() input: DecideDotaTournamentEntryRequestDto, @CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike) {
+    await this.rateLimiter.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    return this.participation.decideApplication(slug, noticeId, input.decision, user);
   }
 }

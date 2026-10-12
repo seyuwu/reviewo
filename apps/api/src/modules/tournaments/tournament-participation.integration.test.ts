@@ -158,6 +158,115 @@ describe("Tournament participation (isolated local PostgreSQL)", { skip: !connec
     assert.equal((await participation.state(slug, users[1]!)).entry!.members[1]!.telegramUsername, null);
   });
 
+  const applicationNotices = () => prisma.telegramBotNotification.findMany({ where: {
+    eventKey: { startsWith: "tournament_application:" }, payload: { path: ["tournamentId"], equals: tournamentId }
+  } });
+
+  it("enqueues a captain application notice once and exposes it only to the current captain", async () => {
+    const entry = await createEntry(users[0]!, "1", "CONFIRM");
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[1]!);
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[1]!);
+    const notices = await applicationNotices();
+    assert.equal(notices.length, 1);
+    const view = await participation.application(slug, notices[0]!.id, users[0]!);
+    assert.equal(view.active, true);
+    assert.equal(view.mmr, 0);
+    assert.equal(view.role, "2");
+    assert.equal(view.canAccept, true);
+    await assert.rejects(participation.application(slug, notices[0]!.id, users[2]!), rejectsStatus(404));
+    await assert.rejects(participation.applicationProfile(slug, view.requestId, users[2]!), rejectsStatus(403));
+    const board = await participation.applications(slug, users[0]!);
+    assert.deepEqual(board.players.map(player => player.requestId), [view.requestId]);
+  });
+
+  it("rejects an old notification and old profile after withdrawal and reapplication", async () => {
+    const entry = await createEntry(users[0]!, "1", "CONFIRM");
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[1]!);
+    const notice = (await applicationNotices())[0]!;
+    const profile = await participation.application(slug, notice.id, users[0]!);
+    await participation.cancelRequest(slug, profile.requestId, users[1]!);
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "3" }, users[1]!);
+    assert.equal((await participation.application(slug, notice.id, users[0]!)).active, false);
+    await assert.rejects(participation.decideApplication(slug, notice.id, "ACCEPT", users[0]!), rejectsStatus(409));
+    await assert.rejects(participation.decideApplicationRequest(slug, profile.requestId,
+      { decision: "ACCEPT", positionRole: profile.role, requestUpdatedAt: profile.requestUpdatedAt }, users[0]!), rejectsStatus(409));
+    const current = await participation.applicationProfile(slug, profile.requestId, users[0]!);
+    await participation.decideApplicationRequest(slug, current.requestId,
+      { decision: "ACCEPT", positionRole: current.role, requestUpdatedAt: current.requestUpdatedAt }, users[0]!);
+    assert.equal((await participation.state(slug, users[1]!)).entry!.ownRole, "3");
+  });
+
+  it("notification decisions racing in two teams still produce exactly one active membership", async () => {
+    const first = await createEntry(users[0]!, "1", "CONFIRM");
+    const second = await createEntry(users[2]!, "1", "CONFIRM");
+    await tournaments.joinEntry(slug, first.id, { positionRole: "2" }, users[1]!);
+    await tournaments.joinEntry(slug, second.id, { positionRole: "3" }, users[1]!);
+    const notices = await applicationNotices();
+    const results = await Promise.allSettled(notices.map(notice => participation.decideApplication(slug, notice.id, "ACCEPT",
+      (notice.payload as { entryId: string }).entryId === first.id ? users[0]! : users[2]!)));
+    assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { tournamentId, userId: users[1]!.id, isActive: true } }), 1);
+    assert.equal(await prisma.dotaTournamentEntryRequest.count({ where: { tournamentId, userId: users[1]!.id, status: "PENDING" } }), 0);
+  });
+
+  it("transfers pending application notifications to the new captain", async () => {
+    const entry = await createEntry(users[0]!, "1", "OPEN");
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "3" }, users[1]!);
+    await tournaments.setEntryJoinMode(slug, entry.id, "CONFIRM", users[0]!);
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[2]!);
+    const old = (await applicationNotices())[0]!;
+    await tournaments.leaveEntry(slug, entry.id, users[0]!);
+    const notices = await applicationNotices();
+    assert.equal(notices.length, 2);
+    await assert.rejects(participation.application(slug, old.id, users[0]!), rejectsStatus(403));
+    const next = notices.find(notice => notice.id !== old.id)!;
+    assert.equal((await participation.application(slug, next.id, users[1]!)).active, true);
+  });
+
+  it("declines through a captain notice without enrolling the player", async () => {
+    const entry = await createEntry(users[0]!, "1", "CONFIRM");
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[1]!);
+    const notice = (await applicationNotices())[0]!;
+    await participation.decideApplication(slug, notice.id, "DECLINE", users[0]!);
+    assert.equal((await participation.application(slug, notice.id, users[0]!)).active, false);
+    assert.equal((await participation.state(slug, users[1]!)).state, "NONE");
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { tournamentId, userId: users[1]!.id, isActive: true } }), 0);
+  });
+
+  it("does not skip a player on the next inbox page after the cursor request is withdrawn", async () => {
+    const entry = await createEntry(users[0]!, "1", "CONFIRM");
+    for (let index = 0; index < 6; index++) {
+      const player = await createUser();
+      await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, player);
+    }
+    const first = await participation.applications(slug, users[0]!);
+    assert.equal(first.players.length, 5);
+    assert.ok(first.nextCursor);
+    const last = await prisma.dotaTournamentEntryRequest.findUniqueOrThrow({ where: { id: first.nextCursor } });
+    await participation.cancelRequest(slug, last.id, users.find(user => user.id === last.userId)!);
+    const next = await participation.applications(slug, users[0]!, first.nextCursor);
+    assert.equal(next.players.length, 1);
+    assert.ok(!first.players.some(player => player.requestId === next.players[0]!.requestId));
+  });
+
+  it("application notification preferences stop pending and new notices without hiding applications or changing recruitment", async () => {
+    const entry = await createEntry(users[0]!, "1", "CONFIRM");
+    await prisma.dotaTournamentRecruitPreference.create({ data: { tournamentId, userId: users[0]!.id, enabled: true } });
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[1]!);
+    const first = (await applicationNotices())[0]!;
+    await assert.rejects(participation.setApplicationNotifications(slug, false, users[1]!), rejectsStatus(403));
+    await participation.setApplicationNotifications(slug, false, users[0]!);
+    assert.ok((await prisma.telegramBotNotification.findUniqueOrThrow({ where: { id: first.id } })).deliveredAt);
+    assert.equal((await participation.application(slug, first.id, users[0]!)).notificationsEnabled, false);
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "3" }, users[2]!);
+    assert.equal((await applicationNotices()).length, 1);
+    assert.equal((await participation.applications(slug, users[0]!)).players.length, 2);
+    assert.equal((await prisma.dotaTournamentRecruitPreference.findUniqueOrThrow({ where: { tournamentId_userId: { tournamentId, userId: users[0]!.id } } })).enabled, true);
+    await participation.setApplicationNotifications(slug, true, users[0]!);
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "4" }, users[3]!);
+    assert.equal((await applicationNotices()).length, 2);
+  });
+
   it("persists a zero-MMR solo search without creating an empty squad", async () => {
     const ordinarySearch = await prisma.dotaSearchSession.create({ data: {
       userId: users[0]!.id, source: "web", expiresAt: new Date(Date.now() + 60_000)

@@ -87,6 +87,40 @@ suppresses stale notices before sending. Website participation uses the same
 notifications. Local contexts handle event closure and status display without
 duplicating outbox notices.
 
+## Captain applications
+
+New CONFIRM applications enqueue `tournament_application` notices in the same
+transaction as the application. These captain notifications are independent of
+recruitment preferences. Duplicate submissions do not enqueue
+another notice; withdrawal/reapplication creates a new version. On captain exit,
+pending applications are notified to the successor. Old recipients lose access.
+
+“Посмотреть профиль” opens a fresh panel at the bottom of the captain's private
+chat, then consumes the original notice. Opening the same player from the
+captain's inbox consumes matching notices too; failed deletions are retried and
+old controls are removed. A consumed in-flight send cannot resurrect its controls.
+
+“Заявки в команду” is available to captains directly in their team menu. It lists
+five players per page with profile buttons, MMR and requested positions. Detail
+cards include Telegram contact, a full profile link and accept/decline actions.
+The inbox uses native database cursor timestamps, so withdrawing a cursor request
+does not skip the next player. It does not issue one HTTP request per player.
+
+Both notification and profile actions use fresh linked sessions. The server checks
+the current captain, notification recipient, application ID/version/position and
+roster capacity. Decisions revalidate inside the tournament lock; the active-member
+unique index remains the final protection against joining two teams. Profile
+actions require their displayed application version; stale actions cannot approve
+a replacement application. Completed/withdrawn applications lose their actions.
+
+“Отключить уведомления” mutes only application notices for this captain/tournament.
+It cancels queued notices and suppresses new ones while retaining all applications
+in the inbox. Recruitment alerts and player acceptance notices are unaffected.
+The clicked notice becomes a short inbox reminder without buttons and is deleted
+after 15 seconds. The inbox provides “Включить уведомления” for re-enabling.
+Apply additive migration `20261012193000_tournament_application_notices_preference`
+before deploying the updated API and bot; the default is enabled.
+
 ## Captain recruitment
 
 Captains explicitly enable “Ищем игроков” for this tournament and immediately see
