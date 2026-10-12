@@ -12,6 +12,7 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..storage.database import BotStorage
 from .panel import edit_panel
+from .panel_activity import panel_repost_lock
 from .search_timeout_notices import is_current_search, queue_recruit_stop
 from .temporary_notifications import send_temporary_notification
 
@@ -138,11 +139,15 @@ class PartySearchQueue:
 
             updated_markup = self._make_search_markup(panel)
             try:
-                await self.bot.edit_message_reply_markup(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    reply_markup=updated_markup,
-                )
+                async with panel_repost_lock(telegram_user_id):
+                    current_panel = self.storage.get_panel(telegram_user_id)
+                    if not current_panel or current_panel.chat_id != chat_id or current_panel.message_id != message_id:
+                        return
+                    await self.bot.edit_message_reply_markup(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        reply_markup=updated_markup,
+                    )
             except TelegramBadRequest as error:
                 if "message is not modified" not in str(error).lower():
                     logger.info(

@@ -52,6 +52,34 @@ the linked session, rechecks membership and uses the existing roster exit endpoi
 including tournament cutoff rules and captain succession. Leaving a persistent
 team's event entry transfers event captaincy without changing the base team owner.
 
+Team chat access is labeled “Открыть чат команды” and opens the authenticated room
+at `#tournament-team-chat`, scrolling to the chat once the room has loaded.
+Participation shows current linked Telegram usernames to members of their own
+event roster only. Public previews do not expose these contacts; missing usernames
+are explicitly labeled rather than guessed.
+
+Private bot navigation reposts the requested panel when the current menu message
+is at least three days old. `panel_message_birth` persists the original send time;
+editing does not reset it. Legacy panels recover the original date from their
+own Telegram callback message. Only active private callback handling can request
+this periodic repost: worker updates and inherited background tasks cannot.
+Reposts are serialized per user, publish and save the new panel first, then strip
+buttons from the old message. Old messages are retained because Telegram only
+allows deletion within 48 hours. `/start` keeps its existing immediate repost.
+Only Telegram writes share the publication lock; API rendering and image fetching
+stay outside it. Countdown workers recheck the message and screen after waiting,
+and queued search updates cannot reactivate an archived keyboard.
+
+“Создать свою команду” in team search opens the existing position/create flow
+without loading persistent teams. Entering it pauses the user's solo queue;
+creating the squad withdraws pending applications atomically. Opening the form
+does not withdraw applications. Captain acceptance racing creation can still
+produce only one active tournament membership. The friends explanation is
+underlined and the selected position remains dynamic.
+Main API timeouts are normalized to `ApiError`, matching connection failures;
+server status codes and messages remain intact. Group and Discord connections
+continue using their separate, bounded pools.
+
 Queue assignments, accepted/declined applications and completed main rosters
 enqueue durable Telegram notices in the same database transaction. The ordinary
 notification pipeline delivers them; the bot rechecks current participation and

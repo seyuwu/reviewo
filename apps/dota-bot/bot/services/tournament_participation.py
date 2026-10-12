@@ -187,6 +187,11 @@ def tournament_status_text(result: dict) -> str:
             role = ROLE_NAMES.get(str(member.get("role")), "роль не выбрана")
             mmr = member.get("mmr")
             lines.append(f"• {name} · {role} · {escape(str(mmr if mmr is not None else '—'))} MMR")
+            username = member.get("telegramUsername")
+            if isinstance(username, str) and re.fullmatch(r"[A-Za-z0-9_]{1,32}", username):
+                lines.append(f'  ↳ <a href="https://t.me/{username}">@{escape(username)}</a>')
+            else:
+                lines.append("  ↳ Telegram-ник не указан")
         if str(entry.get("ownRole")) in ROLE_NAMES:
             lines.append("Ваша позиция: " + ROLE_NAMES[str(entry["ownRole"])])
     elif state == "CLOSED":
@@ -201,7 +206,7 @@ def tournament_status_keyboard(result: dict, context: dict, settings: Settings) 
     rows = []
     if result.get("state") == "JOINED":
         entry_hex = uuid_hex((result.get("entry") or {}).get("id"))
-        rows.append([InlineKeyboardButton(text="🌐 Открыть команду на сайте", callback_data=tournament_callback("web", event_hex))])
+        rows.append([InlineKeyboardButton(text="💬 Открыть чат команды", callback_data=tournament_callback("web", event_hex))])
         if entry_hex:
             username = getattr(settings, "main_bot_username", "FDPdotabot")
             invitation = f"https://t.me/{username}?start=te_{entry_hex}"
@@ -283,7 +288,7 @@ async def deliver_tournament_participation_notice(bot: Bot, api: OpiniaApi, sett
         headline = {"found": "Команда найдена", "accepted": "Вашу заявку приняли", "registered": "Состав собран"}[event]
         text = f"✅ <b>{headline}</b>\n\n" + tournament_status_text(result)
         markup = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="Открыть команду на сайте", callback_data=tournament_callback("web", event_hex))
+            InlineKeyboardButton(text="💬 Открыть чат команды", callback_data=tournament_callback("web", event_hex))
         ]])
     try:
         message = await bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)

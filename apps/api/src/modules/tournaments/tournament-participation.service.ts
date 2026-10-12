@@ -53,7 +53,9 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
       }),
       this.prisma.dotaTournamentEntryMember.findFirst({ where: { tournamentId: tournament.id, userId: user.id,
         isActive: true, entry: { status: { in: [...ACTIVE_ENTRIES] } } }, include: {
-        entry: { include: { members: { where: { isActive: true }, orderBy: { positionRole: "asc" } }, teamParty: { select: { ownerUserId: true } } } }
+        entry: { include: { members: { where: { isActive: true }, orderBy: { positionRole: "asc" },
+          include: { user: { select: { authIdentities: { where: { provider: "telegram" }, select: { telegramUsername: true }, take: 1 } } } } },
+          teamParty: { select: { ownerUserId: true } } } }
       } }),
       this.prisma.dotaTournamentEntryRequest.findMany({ where: { tournamentId: tournament.id, userId: user.id, status: "PENDING" },
         include: { entry: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
@@ -79,7 +81,11 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
         isCaptain: (member.entry.createdByUserId ?? member.entry.teamParty?.ownerUserId) === user.id,
         recruiting: open && member.entry.members.length < 5 && Boolean(preference?.enabled),
         joinMode: member.entry.joinMode, ownRole: member.positionRole,
-        members: member.entry.members.map(player => ({ name: player.displayName, role: player.positionRole, mmr: player.mmr })) } : null,
+        members: member.entry.members.map(player => {
+          const username = player.user?.authIdentities[0]?.telegramUsername;
+          return { name: player.displayName, role: player.positionRole, mmr: player.mmr,
+            telegramUsername: username && /^[A-Za-z0-9_]{1,32}$/.test(username) ? username : null };
+        }) } : null,
       request: request ? { entryId: request.entryId, entryName: request.entry.teamNameSnapshot, role: request.positionRole } : null,
       requests: requests.map(item => ({ id: item.id, entryId: item.entryId, entryName: item.entry.teamNameSnapshot, role: item.positionRole })),
       suggestions };

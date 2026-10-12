@@ -314,7 +314,7 @@ class OpiniaApi:
                     message = extract_error_message(data) or "Ошибка связи с Opinia API"
                     raise ApiError(message, response.status)
                 return data
-        except aiohttp.ClientError as error:
+        except (aiohttp.ClientError, TimeoutError) as error:
             raise ApiError("Не удалось связаться с Opinia. Попробуйте ещё раз позже.") from error
 
 

@@ -282,6 +282,18 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await self.state.get_state())
         self.api.user.assert_any_await(USER_ID, "POST", API_ROOT + "/participation/solo", {"mode": "BOARD"})
 
+    async def test_create_own_team_button_pauses_search_and_shows_underlined_instruction(self):
+        await self.action("solo")
+        self.assertTrue(any(button.text == "➕ Создать свою команду" for button in self.buttons()))
+        await self.press(self.callback_for("tr:newteam:"))
+        self.api.user.assert_any_await(USER_ID, "POST", API_ROOT + "/participation/cancel", {})
+        self.assertFalse(any(call.args[2] == "/social/parties/me" for call in self.api.user.await_args_list))
+        self.assertIn("<u>Если вы с друзьями то один создает команду и приглашает остальных</u>", self.bot.views[-1][0])
+        await self.press(participation.tournament_callback("role", self.context["eventHex"], "1"))
+        self.assertIn("Ваша позиция: <b>Керри</b>.", self.bot.views[-1][0])
+        await self.press(self.callback_for("tr:create:"))
+        self.api.user.assert_any_await(USER_ID, "POST", API_ROOT + "/squads", {"positionRole": "1", "joinMode": "OPEN"})
+
     async def test_lost_local_session_recovers_existing_profile(self):
         self.storage.unlink(USER_ID)
         self.api.login_telegram_bot_session.side_effect = None
@@ -386,7 +398,7 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         for number, url in enumerate(urls, 1):
             query = parse_qs(urlparse(url).query)
             self.assertEqual(query["ticket"], [f"fresh-ticket-{number}"])
-            self.assertEqual(query["next"], [f"/games/tournaments/{EVENT['slug']}/teams/{ENTRY_ID}"])
+            self.assertEqual(query["next"], [f"/games/tournaments/{EVENT['slug']}/teams/{ENTRY_ID}#tournament-team-chat"])
 
     async def test_sponsor_gate_is_authoritative_and_resumes_saved_queue(self):
         self.api.sponsor_required = True
@@ -432,6 +444,18 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
             text = participation.tournament_status_text(self.api.result())
             self.assertIn(phrase, text)
             self.assertIn("0 MMR", text)
+
+    async def test_joined_team_displays_safe_clickable_telegram_tags_and_chat_button(self):
+        self.api.state = "JOINED"
+        self.api.entry["members"] = [{"name": "<Player>", "role": "2", "mmr": 0, "telegramUsername": "Player_QA"},
+                                    {"name": "Other", "role": "3", "mmr": 1200, "telegramUsername": 'bad<tag>'}]
+        text = participation.tournament_status_text(self.api.result())
+        self.assertIn('href="https://t.me/Player_QA">@Player_QA</a>', text)
+        self.assertIn("&lt;Player&gt;", text)
+        self.assertIn("Telegram-ник не указан", text)
+        self.assertNotIn("bad<tag>", text)
+        buttons = [button for row in participation.tournament_status_keyboard(self.api.result(), self.context, self.settings).inline_keyboard for button in row]
+        self.assertEqual(buttons[0].text, "💬 Открыть чат команды")
 
     async def test_worker_and_outbox_do_not_double_send_and_delivery_is_durable(self):
         context = self.save_state("WAITING")

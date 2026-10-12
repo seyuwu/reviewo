@@ -337,13 +337,10 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       const existingMember = await tx.dotaTournamentEntryMember.findFirst({
         where: { isActive: true, tournamentId: tournament.id, userId: currentUser.id }
       });
-      const existingRequest = await tx.dotaTournamentEntryRequest.findFirst({
-        where: { status: "PENDING", tournamentId: tournament.id, userId: currentUser.id }
-      });
-      if (existingMember || existingRequest) {
+      if (existingMember) {
         throw createAppException({
           code: AppErrorCode.Conflict,
-          message: "You already belong to or have a pending request for a squad in this tournament",
+          message: "You already belong to a squad in this tournament",
           statusCode: HttpStatus.CONFLICT
         });
       }

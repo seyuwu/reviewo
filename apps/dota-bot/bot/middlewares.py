@@ -5,6 +5,7 @@ import time
 from aiogram import BaseMiddleware
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, Message
+from .services.panel_activity import private_panel_interaction, remember_legacy_panel_date
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +58,13 @@ class RecordPrivateCallbackActivityMiddleware(BaseMiddleware):
             if (
                 message is not None
                 and message.chat.type == "private"
+                and message.chat.id == event.from_user.id
                 and storage is not None
             ):
                 storage.record_bot_user(event.from_user.id)
+                remember_legacy_panel_date(storage, event.from_user.id, message)
+                with private_panel_interaction(event.from_user.id):
+                    return await handler(event, data)
         return await handler(event, data)
 
 

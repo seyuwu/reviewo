@@ -9,7 +9,7 @@ export interface TournamentParticipationState {
   sponsorRequired: boolean;
   sponsors: Array<{ id: string; name: string; url: string }>;
   entry: { id: string; name: string; status: string; joinMode: "OPEN" | "CONFIRM"; ownRole: string | null; isCaptain: boolean; recruiting: boolean;
-    members: Array<{ name: string; role: string | null; mmr: number | null }> } | null;
+    members: Array<{ name: string; role: string | null; mmr: number | null; telegramUsername?: string | null }> } | null;
   request: { entryId: string; entryName: string; role: string } | null;
   requests?: Array<{ id: string; entryId: string; entryName: string; role: string }>;
   suggestions: Array<{ entryId: string; name: string; status: string; role: string; freeRoles: string[]; joinMode: "OPEN" | "CONFIRM"; memberCount: number; averageMmr: number | null }>;

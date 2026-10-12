@@ -244,11 +244,11 @@ async def _show_solo(bot, api, settings, storage, user_id, chat_id, context, res
         if result.get("queueMode") != "AUTO":
             rows.append([_button("Включить автоподбор", "queue", context["eventHex"])])
         rows.append([_button("Остановить поиск команды", "cancel", context["eventHex"])])
-    rows += _back(context["eventHex"])
+    rows += [[_button("➕ Создать свою команду", "newteam", context["eventHex"])]] + _back(context["eventHex"])
     await _panel(bot, storage, api, settings, user_id, chat_id, "solo", "\n".join(lines), rows)
 
 
-async def _show_friends(bot, api, settings, storage, user_id, chat_id, context, result) -> None:
+async def _show_friends(bot, api, settings, storage, user_id, chat_id, context, result, show_existing=True) -> None:
     roles = [str(role) for role in result.get("roles", []) if str(role) in ROLE_NAMES]
     role = context.get("friendsRole") if context.get("friendsRole") in ROLE_NAMES else (roles or ["1"])[0]
     context = save_tournament_context(storage, user_id, result["tournament"], friendsRole=role)
@@ -259,7 +259,7 @@ async def _show_friends(bot, api, settings, storage, user_id, chat_id, context, 
              for selected in ("4", "5")]]
     teams = []
     try:
-        parties = await api.user(user_id, "GET", "/social/parties/me")
+        parties = await api.user(user_id, "GET", "/social/parties/me") if show_existing else {}
         items = list(parties.get("parties") or [])
         if parties.get("team"):
             items.append(parties["team"])
@@ -281,8 +281,8 @@ async def _show_friends(bot, api, settings, storage, user_id, chat_id, context, 
     rows += _back(context["eventHex"])
     await _panel(bot, storage, api, settings, user_id, chat_id, "friends",
                  f"🏆 <b>{escape(context['title'])}</b>\n\n"
-                 f"Ваша позиция: <b>{ROLE_NAMES[role]}</b>. Для турнира можно выбрать любую — роли в профиле не изменятся.\n\n"
-                 "Создадим команду для этого турнира и дадим ссылку для друзей. Название появится автоматически.", rows)
+                 f"Ваша позиция: <b>{ROLE_NAMES[role]}</b>.\n\n"
+                 "<u>Если вы с друзьями то один создает команду и приглашает остальных</u>", rows)
 
 
 async def _show_invite_roles(bot, api, settings, storage, user_id, chat_id, context, pending, result=None) -> None:
@@ -367,8 +367,14 @@ async def _run_intent(bot, state, api, settings, storage, user_id, chat_id, cont
         await api.user(user_id, "POST", tournament_api_path(context) + "/entries", {"teamSlug": pending["teamSlug"], "joinMode": "OPEN"})
         result = await _participation(api, storage, user_id, context)
         await _show_status(bot, api, settings, storage, user_id, chat_id, context, result)
-    elif action == "friends":
-        await _show_friends(bot, api, settings, storage, user_id, chat_id, context, result)
+    elif action in {"friends", "newteam"}:
+        if action == "newteam" and result.get("state") == "WAITING":
+            result = await api.user(user_id, "POST", tournament_api_path(context) + "/participation/cancel", {})
+            remember_participation(storage, user_id, context, result)
+            if result.get("state") == "JOINED":
+                await _show_status(bot, api, settings, storage, user_id, chat_id, context, result)
+                return
+        await _show_friends(bot, api, settings, storage, user_id, chat_id, context, result, show_existing=action != "newteam")
     elif action == "invite":
         await _show_invite_roles(bot, api, settings, storage, user_id, chat_id, context, pending, result)
     elif action == "solo":
@@ -426,8 +432,10 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
             _save_pending(storage, user_id, context, "choose",
                           telegramName=callback.from_user.username or callback.from_user.full_name)
             await _show_modes(callback.bot, api, settings, storage, user_id, chat_id, context)
-        elif action in {"solo", "friends", "queue", "create", "invite", "join", "team", "continue", "role", "pickteam"}:
+        elif action in {"solo", "friends", "newteam", "queue", "create", "invite", "join", "team", "continue", "role", "pickteam"}:
             options = {"telegramName": callback.from_user.username or callback.from_user.full_name}
+            if action in {"friends", "newteam"}:
+                context = save_tournament_context(storage, user_id, {"id": context["eventId"], **context}, newTeamFlow=action == "newteam")
             if action == "pickteam":
                 options.update(entryId=choice["entryId"], teamName=choice.get("name"))
                 action = "invite"
@@ -435,7 +443,7 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
                 if len(parts) != 4 or parts[3] not in ROLE_NAMES:
                     raise ApiError("Выберите позицию из списка.")
                 context = save_tournament_context(storage, user_id, {"id": context["eventId"], **context}, friendsRole=parts[3])
-                action = "friends"
+                action = "newteam" if context.get("newTeamFlow") else "friends"
             elif action in {"join", "team"}:
                 options.update({key: choice[key] for key in ("entryId", "role") if key in choice})
                 if action == "team":
@@ -527,9 +535,9 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
             if result.get("state") != "JOINED" or not entry_hex:
                 await _show_status(callback.bot, api, settings, storage, user_id, chat_id, context, result)
                 return
-            next_path = f"/games/tournaments/{quote(context['slug'], safe='')}/teams/{UUID(entry_hex)}"
+            next_path = f"/games/tournaments/{quote(context['slug'], safe='')}/teams/{UUID(entry_hex)}#tournament-team-chat"
             url = await fresh_tournament_web_url(api, settings, user_id, next_path)
-            rows = [[InlineKeyboardButton(text="🌐 Открыть команду на сайте", url=url)],
+            rows = [[InlineKeyboardButton(text="💬 Открыть чат команды", url=url)],
                     [_button("Обновить ссылку входа", "web", context["eventHex"])]]
             rows += tournament_status_keyboard(result, context, settings).inline_keyboard[1:]
             await _panel(callback.bot, storage, api, settings, user_id, chat_id, "web",

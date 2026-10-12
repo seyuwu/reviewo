@@ -24,6 +24,7 @@ from .search_timeout_notices import queue_solo_timeout, queue_recruit_timeout, s
 from .start_links import bot_friend_invite_url
 from .registration_drafts import clear_registration_draft, registration_draft
 from .party_coordination import enrich_party, party_ping_context
+from .panel_activity import panel_age, panel_repost_due, panel_repost_lock
 from ..ui.formatters import party_text, profile_text
 from ..ui.keyboards import (
     account_keyboard,
@@ -164,98 +165,113 @@ async def edit_panel(
                     party_card_key = None
                     is_default_panel_photo = True
 
-    panel_to_replace = panel if panel and panel.chat_id == destination else None
-    if force_new_message:
-        # /start should bring the menu to the bottom of the chat and recover a
-        # panel whose saved Telegram message was deleted. Send first, then remove
-        # the stale panel below after the replacement has been stored.
-        panel = None
-        loading_panel = None
-    if loading_panel and loading_panel.chat_id == destination and loading_panel.is_photo and photo is not None:
-        try:
-            message = await bot.edit_message_media(
-                chat_id=loading_panel.chat_id,
-                message_id=loading_panel.message_id,
-                media=InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"),
-                reply_markup=keyboard,
-            )
-            storage.save_panel(telegram_user_id, loading_panel.chat_id, loading_panel.message_id, screen)
-            save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
-            if is_default_panel_photo:
-                save_default_panel_file_id(storage, telegram_user_id, message)
-            return
-        except TelegramBadRequest as error:
-            if "message is not modified" in str(error).lower():
-                storage.save_panel(telegram_user_id, loading_panel.chat_id, loading_panel.message_id, screen)
-                return
-            if "message to edit not found" not in str(error).lower() and "can't be edited" not in str(error).lower():
-                logger.warning("Could not edit photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
-                photo = None
-    elif loading_panel and loading_panel.chat_id == destination:
-        # Text loading panels cannot be converted into a photo; replace them after sending the new panel.
-        pass
-    elif panel and panel.chat_id == destination and panel.is_photo and photo is not None:
-        panel_to_replace = panel
-        try:
-            message = await bot.edit_message_media(
-                chat_id=panel.chat_id,
-                message_id=panel.message_id,
-                media=InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"),
-                reply_markup=keyboard,
-            )
-            storage.save_panel(telegram_user_id, panel.chat_id, panel.message_id, screen)
-            save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
-            if is_default_panel_photo:
-                save_default_panel_file_id(storage, telegram_user_id, message)
-            return
-        except TelegramBadRequest as error:
-            if "message is not modified" in str(error).lower():
-                return
-            if "message to edit not found" not in str(error).lower() and "can't be edited" not in str(error).lower():
-                logger.warning("Could not edit photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
-                photo = None
-            else:
-                try:
-                    await bot.delete_message(panel.chat_id, panel.message_id)
-                except TelegramAPIError:
-                    pass
-
-    elif panel and panel.chat_id == destination and not panel.is_photo:
-        if (
-            screen != "admin"
-            and not loading_panel
-            and photo is not None
-            and (isinstance(photo, BufferedInputFile) or screen != "party")
-        ):
-            # Send the replacement first; the old text panel is removed after delivery succeeds.
-            pass
-        else:
+    # Render and image fetching stay outside the per-user publication lock.
+    # Serialize only Telegram writes and refresh the saved message after waiting.
+    async with panel_repost_lock(telegram_user_id):
+        panel = storage.get_panel(telegram_user_id)
+        loading_panel = panel if panel and panel.screen == "loading" else None
+        force_new_message = force_new_message or panel_repost_due(storage, telegram_user_id)
+        panel_to_replace = panel if panel and panel.chat_id == destination else None
+        if force_new_message:
+            # /start should bring the menu to the bottom of the chat and recover a
+            # panel whose saved Telegram message was deleted. Send first, then remove
+            # the stale panel below after the replacement has been stored.
+            panel = None
+            loading_panel = None
+        if loading_panel and loading_panel.chat_id == destination and loading_panel.is_photo and photo is not None:
             try:
-                await bot.edit_message_text(
-                    text,
+                message = await bot.edit_message_media(
+                    chat_id=loading_panel.chat_id,
+                    message_id=loading_panel.message_id,
+                    media=InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"),
+                    reply_markup=keyboard,
+                )
+                storage.save_panel(telegram_user_id, loading_panel.chat_id, loading_panel.message_id, screen)
+                save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
+                if is_default_panel_photo:
+                    save_default_panel_file_id(storage, telegram_user_id, message)
+                return
+            except TelegramBadRequest as error:
+                if "message is not modified" in str(error).lower():
+                    storage.save_panel(telegram_user_id, loading_panel.chat_id, loading_panel.message_id, screen)
+                    return
+                if "message to edit not found" not in str(error).lower() and "can't be edited" not in str(error).lower():
+                    logger.warning("Could not edit photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
+                    photo = None
+        elif loading_panel and loading_panel.chat_id == destination:
+            # Text loading panels cannot be converted into a photo; replace them after sending the new panel.
+            pass
+        elif panel and panel.chat_id == destination and panel.is_photo and photo is not None:
+            panel_to_replace = panel
+            try:
+                message = await bot.edit_message_media(
                     chat_id=panel.chat_id,
                     message_id=panel.message_id,
+                    media=InputMediaPhoto(media=photo, caption=text, parse_mode="HTML"),
+                    reply_markup=keyboard,
+                )
+                storage.save_panel(telegram_user_id, panel.chat_id, panel.message_id, screen)
+                save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
+                if is_default_panel_photo:
+                    save_default_panel_file_id(storage, telegram_user_id, message)
+                return
+            except TelegramBadRequest as error:
+                if "message is not modified" in str(error).lower():
+                    return
+                if "message to edit not found" not in str(error).lower() and "can't be edited" not in str(error).lower():
+                    logger.warning("Could not edit photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
+                    photo = None
+                else:
+                    try:
+                        await bot.delete_message(panel.chat_id, panel.message_id)
+                    except TelegramAPIError:
+                        pass
+
+        elif panel and panel.chat_id == destination and not panel.is_photo:
+            if (
+                screen != "admin"
+                and not loading_panel
+                and photo is not None
+                and (isinstance(photo, BufferedInputFile) or screen != "party")
+            ):
+                # Send the replacement first; the old text panel is removed after delivery succeeds.
+                pass
+            else:
+                try:
+                    await bot.edit_message_text(
+                        text,
+                        chat_id=panel.chat_id,
+                        message_id=panel.message_id,
+                        reply_markup=keyboard,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                    storage.save_panel(telegram_user_id, panel.chat_id, panel.message_id, screen, False)
+                    return
+                except TelegramBadRequest:
+                    pass
+
+        is_photo = photo is not None
+        if photo is not None:
+            try:
+                message = await bot.send_photo(
+                    destination,
+                    photo,
+                    caption=text,
+                    reply_markup=keyboard,
+                    parse_mode="HTML",
+                )
+            except TelegramBadRequest as error:
+                logger.warning("Could not send photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
+                message = await bot.send_message(
+                    destination,
+                    text,
                     reply_markup=keyboard,
                     parse_mode="HTML",
                     disable_web_page_preview=True,
                 )
-                storage.save_panel(telegram_user_id, panel.chat_id, panel.message_id, screen, False)
-                return
-            except TelegramBadRequest:
-                pass
-
-    is_photo = photo is not None
-    if photo is not None:
-        try:
-            message = await bot.send_photo(
-                destination,
-                photo,
-                caption=text,
-                reply_markup=keyboard,
-                parse_mode="HTML",
-            )
-        except TelegramBadRequest as error:
-            logger.warning("Could not send photo panel for user %s; sending a text fallback: %s", telegram_user_id, error)
+                is_photo = False
+        else:
             message = await bot.send_message(
                 destination,
                 text,
@@ -263,38 +279,44 @@ async def edit_panel(
                 parse_mode="HTML",
                 disable_web_page_preview=True,
             )
-            is_photo = False
-    else:
-        message = await bot.send_message(
-            destination,
-            text,
-            reply_markup=keyboard,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
-    storage.save_panel(telegram_user_id, message.chat.id, message.message_id, screen, is_photo)
-    save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
-    if is_default_panel_photo:
-        save_default_panel_file_id(storage, telegram_user_id, message)
-    if panel_to_replace and panel_to_replace.message_id != message.message_id:
-        try:
-            await bot.delete_message(panel_to_replace.chat_id, panel_to_replace.message_id)
-        except TelegramAPIError:
-            logger.warning(
-                "Could not delete replaced bot panel for user %s (old message %s)",
-                telegram_user_id,
-                panel_to_replace.message_id,
-                exc_info=True,
-            )
+        old_panel_age = panel_age(storage, telegram_user_id, panel_to_replace)
+        storage.save_panel(telegram_user_id, message.chat.id, message.message_id, screen, is_photo)
+        save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
+        if is_default_panel_photo:
+            save_default_panel_file_id(storage, telegram_user_id, message)
+        if panel_to_replace and panel_to_replace.message_id != message.message_id:
+            if old_panel_age is not None and old_panel_age >= 48 * 3600:
+                try:
+                    await bot.edit_message_reply_markup(chat_id=panel_to_replace.chat_id,
+                        message_id=panel_to_replace.message_id, reply_markup=None)
+                except TelegramAPIError:
+                    logger.info("Could not deactivate old panel for user %s", telegram_user_id)
+                return
+            try:
+                await bot.delete_message(panel_to_replace.chat_id, panel_to_replace.message_id)
+            except TelegramAPIError:
+                logger.warning(
+                    "Could not delete replaced bot panel for user %s (old message %s)",
+                    telegram_user_id,
+                    panel_to_replace.message_id,
+                    exc_info=True,
+                )
 
 
-async def begin_panel_transition(
+async def begin_panel_transition(bot: Bot, storage: BotStorage, telegram_user_id: int, chat_id: int | None = None) -> None:
+    async with panel_repost_lock(telegram_user_id):
+        await _begin_panel_transition(bot, storage, telegram_user_id, chat_id)
+
+
+async def _begin_panel_transition(
     bot: Bot,
     storage: BotStorage,
     telegram_user_id: int,
     chat_id: int | None = None,
 ) -> None:
     """Show immediate feedback in the current panel while its replacement loads."""
+    if panel_repost_due(storage, telegram_user_id):
+        return
     panel = storage.get_panel(telegram_user_id)
     if panel and panel.screen == "loading":
         return
@@ -441,23 +463,28 @@ async def refresh_active_search_panels(
                     else:
                         continue
                     async def update_message() -> None:
-                        if panel.is_photo:
-                            await bot.edit_message_caption(
-                                chat_id=panel.chat_id,
-                                message_id=panel.message_id,
-                                caption=text,
-                                reply_markup=keyboard,
-                                parse_mode="HTML",
-                            )
-                        else:
-                            await bot.edit_message_text(
-                                text,
-                                chat_id=panel.chat_id,
-                                message_id=panel.message_id,
-                                reply_markup=keyboard,
-                                parse_mode="HTML",
-                                disable_web_page_preview=True,
-                            )
+                        async with panel_repost_lock(telegram_user_id):
+                            current_panel = storage.get_panel(telegram_user_id)
+                            if (not current_panel or current_panel.chat_id != panel.chat_id
+                                    or current_panel.message_id != panel.message_id or current_panel.screen != panel.screen):
+                                return
+                            if panel.is_photo:
+                                await bot.edit_message_caption(
+                                    chat_id=panel.chat_id,
+                                    message_id=panel.message_id,
+                                    caption=text,
+                                    reply_markup=keyboard,
+                                    parse_mode="HTML",
+                                )
+                            else:
+                                await bot.edit_message_text(
+                                    text,
+                                    chat_id=panel.chat_id,
+                                    message_id=panel.message_id,
+                                    reply_markup=keyboard,
+                                    parse_mode="HTML",
+                                    disable_web_page_preview=True,
+                                )
 
                     if panel_update_guard:
                         async with panel_update_guard.panel_lock_for(telegram_user_id):

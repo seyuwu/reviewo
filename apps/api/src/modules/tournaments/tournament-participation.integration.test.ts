@@ -142,6 +142,22 @@ describe("Tournament participation (isolated local PostgreSQL)", { skip: !connec
   });
   after(async () => { if (prisma) await prisma.$disconnect(); });
 
+  it("shows trusted Telegram tags only in the player's own roster and sanitizes invalid tags", async () => {
+    const entry = await createEntry(users[0]!, "1");
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[1]!);
+    await prisma.userAuthIdentity.updateMany({ where: { userId: users[0]!.id, provider: "telegram" }, data: { telegramUsername: "Captain_QA" } });
+    await prisma.userAuthIdentity.updateMany({ where: { userId: users[1]!.id, provider: "telegram" }, data: { telegramUsername: "Player_QA" } });
+    await prisma.dotaTournamentEntryMember.create({ data: { tournamentId, entryId: entry.id, displayName: "Offline player", positionRole: "3" } });
+    const state = await participation.state(slug, users[1]!);
+    assert.deepEqual(state.entry!.members.map(member => member.telegramUsername), ["Captain_QA", "Player_QA", null]);
+    assert.equal((await participation.state(slug, users[2]!)).entry, null);
+    const preview = await tournaments.getPublic(slug, users[2]!);
+    assert.ok(!JSON.stringify(preview).includes("Captain_QA"));
+    assert.ok(!JSON.stringify(preview).includes("telegramUsername"));
+    await prisma.userAuthIdentity.updateMany({ where: { userId: users[1]!.id, provider: "telegram" }, data: { telegramUsername: 'bad<tag>' } });
+    assert.equal((await participation.state(slug, users[1]!)).entry!.members[1]!.telegramUsername, null);
+  });
+
   it("persists a zero-MMR solo search without creating an empty squad", async () => {
     const ordinarySearch = await prisma.dotaSearchSession.create({ data: {
       userId: users[0]!.id, source: "web", expiresAt: new Date(Date.now() + 60_000)
@@ -415,6 +431,32 @@ describe("Tournament participation (isolated local PostgreSQL)", { skip: !connec
     const available = state.requests.find(item => item.entryId === second.id)!;
     await tournaments.decideJoinRequest(slug, second.id, available.id, "ACCEPT", users[2]!);
     assert.equal((await participation.state(slug, users[1]!)).entry!.id, second.id);
+  });
+
+  it("creating an own squad atomically withdraws pending applications", async () => {
+    const first = await createEntry(users[0]!, "1", "CONFIRM");
+    const second = await createEntry(users[2]!, "1", "CONFIRM");
+    await tournaments.joinEntry(slug, first.id, { positionRole: "2" }, users[1]!);
+    await tournaments.joinEntry(slug, second.id, { positionRole: "3" }, users[1]!);
+    const own = await createEntry(users[1]!, "4");
+    const state = await participation.state(slug, users[1]!);
+    assert.equal(state.entry!.id, own.id);
+    assert.equal(state.entry!.isCaptain, true);
+    assert.equal(state.requests.length, 0);
+    assert.equal(await prisma.dotaTournamentEntryRequest.count({ where: { tournamentId, userId: users[1]!.id, status: "WITHDRAWN" } }), 2);
+  });
+
+  it("creating an own squad racing captain acceptance keeps exactly one membership", async () => {
+    const entry = await createEntry(users[0]!, "1", "CONFIRM");
+    await tournaments.joinEntry(slug, entry.id, { positionRole: "2" }, users[1]!);
+    const request = (await participation.state(slug, users[1]!)).requests[0]!;
+    const results = await Promise.allSettled([
+      tournaments.createSquad(slug, { positionRole: "4", joinMode: "OPEN" }, users[1]!),
+      tournaments.decideJoinRequest(slug, entry.id, request.id, "ACCEPT", users[0]!)
+    ]);
+    assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { tournamentId, userId: users[1]!.id, isActive: true } }), 1);
+    assert.equal(await prisma.dotaTournamentEntryRequest.count({ where: { tournamentId, userId: users[1]!.id, status: "PENDING" } }), 0);
   });
 
   it("recovers waiting players in a new worker instance using persisted rows", async () => {

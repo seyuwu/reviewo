@@ -1280,6 +1280,7 @@ class BotStorage:
     ) -> None:
         now = timestamp()
         with self.lock:
+            previous = self.get_panel(telegram_user_id)
             self._connection().execute(
                 """INSERT INTO bot_panels
                      (telegram_user_id, chat_id, message_id, screen, media_type, updated_at)
@@ -1290,6 +1291,14 @@ class BotStorage:
                      updated_at=excluded.updated_at""",
                 (telegram_user_id, chat_id, message_id, screen, "photo" if is_photo else "text", now),
             )
+            if previous is None or previous.chat_id != chat_id or previous.message_id != message_id:
+                birth = [{"chatId": chat_id, "messageId": message_id, "sentAt": datetime.now(UTC).timestamp()}]
+                self._connection().execute(
+                    """INSERT INTO callback_choices VALUES (?, ?, ?, ?)
+                       ON CONFLICT(telegram_user_id, kind) DO UPDATE SET
+                       items_json=excluded.items_json, updated_at=excluded.updated_at""",
+                    (telegram_user_id, "panel_message_birth", json.dumps(birth), now),
+                )
             self._connection().commit()
 
     def record_party_notification(self, telegram_user_id: int) -> None:

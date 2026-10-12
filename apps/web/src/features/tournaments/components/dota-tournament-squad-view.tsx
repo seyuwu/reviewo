@@ -65,6 +65,11 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
   const alive = useRef(true);
   const requestEpoch = useRef(0);
   const serverOffset = useRef(0);
+  useEffect(() => {
+    if (!loading && room?.entryId && window.location.hash === "#tournament-team-chat") {
+      document.getElementById("tournament-team-chat")?.scrollIntoView({ block: "start" });
+    }
+  }, [loading, room?.entryId]);
 
   const mergeMessages = useCallback((items: TournamentRoomMessage[]) => {
     setMessages((previous) => Array.from(new Map([...previous, ...items].map((item) => [item.id, item])).values())
@@ -423,7 +428,7 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
             {descriptionError ? <p className={styles.descriptionError} role="alert">{descriptionError}</p> : null}
             {descriptionSaved ? <p className={styles.descriptionSaved} role="status">{t("dota.tournaments.room.descriptionSaved")}</p> : null}
           </section>
-        <section className={styles.chatPanel}>
+        <section className={styles.chatPanel} id="tournament-team-chat">
           <div className={styles.chatTop}><h2>{t("dota.tournaments.room.chat")}</h2><span>{t(room.canReadChat && !room.isMember ? "dota.tournaments.room.staffWrite" : "dota.tournaments.room.chatPrivate")}</span></div>
           {room.canReadChat ? <>
             <div className={styles.log} ref={logRef} role="log" aria-live="polite" onScroll={() => {
