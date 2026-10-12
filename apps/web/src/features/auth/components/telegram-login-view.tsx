@@ -109,7 +109,7 @@ export function TelegramLoginView() {
           <>
             <p>{error}</p>
             <Link className="button-secondary" href={nextPath}>
-              Открыть страницу пати
+              Продолжить на сайте
             </Link>
           </>
         ) : (
@@ -148,7 +148,8 @@ function safePartyPath(value: string | null): string {
     const target = new URL(value, "https://opinia.invalid");
     if (
       target.origin !== "https://opinia.invalid" ||
-      (target.pathname !== "/profile" && !target.pathname.startsWith("/dota/teams/"))
+      (target.pathname !== "/profile" && !target.pathname.startsWith("/dota/teams/") &&
+        target.pathname !== "/games/tournaments" && !target.pathname.startsWith("/games/tournaments/"))
     ) {
       return "/dota";
     }

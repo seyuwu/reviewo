@@ -51,6 +51,9 @@ export class RoomDiscordDto extends RoomBotDto {
   @Matches(/^\d{1,16}$/) userId!: string;
   @IsInt() @Min(1) generation!: number;
 }
+export class RoomPingDto extends RoomDiscordDto {
+  @IsUUID("4") targetMembershipId!: string;
+}
 export class PartyNoticeContextDto {
   @IsUUID("4") partyId!: string;
   @Matches(/^\d{1,16}$/) userId!: string;

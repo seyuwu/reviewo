@@ -22,7 +22,7 @@ import { createSocialWriteRateLimitRules } from "../../common/rate-limiting/writ
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { TournamentTelegramLinkedGuard } from "./tournament-telegram-linked.guard.js";
 import { RegisterDotaTournamentTeamDto } from "./dto/register-dota-tournament-team.dto.js";
-import { CreateDotaTournamentSquadDto } from "./dto/create-dota-tournament-squad.dto.js";
+import { CreateDotaTournamentSquadDto, RenameDotaTournamentSquadDto } from "./dto/create-dota-tournament-squad.dto.js";
 import {
   DecideDotaTournamentEntryRequestDto,
   JoinDotaTournamentEntryDto,
@@ -44,16 +44,6 @@ export class DotaTournamentsController {
     private readonly apiRateLimiterService: ApiRateLimiterService,
     private readonly dotaTournamentsService: DotaTournamentsService
   ) {}
-
-  @Get()
-  list() {
-    return this.dotaTournamentsService.listPublic();
-  }
-
-  @Get(":slug")
-  get(@Param("slug") slug: string, @CurrentUser() currentUser: AuthenticatedUser) {
-    return this.dotaTournamentsService.getPublic(slug, currentUser);
-  }
 
   @Post(":slug/sponsors/:sponsorId/click")
   async recordSponsorClick(
@@ -204,6 +194,13 @@ export class DotaTournamentsController {
   ) {
     await this.rateLimit(currentUser, request);
     return this.dotaTournamentsService.joinEntry(slug, entryId, input, currentUser);
+  }
+
+  @Patch(":slug/entries/:entryId/name")
+  async renameSquad(@Param("slug") slug: string, @Param("entryId", ParseUUIDPipe) entryId: string,
+    @Body() input: RenameDotaTournamentSquadDto, @CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike) {
+    await this.rateLimit(user, request);
+    return this.dotaTournamentsService.renameSquad(slug, entryId, input.name, user);
   }
 
   @Patch(":slug/entries/:entryId/join-mode")

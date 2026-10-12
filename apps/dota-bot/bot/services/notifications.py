@@ -32,6 +32,11 @@ async def poll_notifications(bot: Bot, api: OpiniaApi, settings: Settings, stora
                 telegram_user_id = int(row["telegramUserId"])
                 if storage.has_delivered_notification(notification_id):
                     delivered = True
+                elif (row.get("payload") or {}).get("type") == "tournament_participation":
+                    from .tournament_participation import deliver_tournament_participation_notice
+                    delivered = await deliver_tournament_participation_notice(bot, api, settings, storage, row)
+                    if delivered:
+                        storage.remember_delivered_notification(notification_id)
                 else:
                     delivered = await send_party_notification(bot, settings, storage, api, row)
                     if delivered:

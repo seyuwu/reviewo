@@ -4,6 +4,7 @@ from html import escape
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from ..api.client import ApiError, OpiniaApi
@@ -156,6 +157,7 @@ async def confirm_telegram_tournament_link(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    state: FSMContext | None = None,
 ) -> None:
     if callback.message is None or callback.message.chat.type != "private" or callback.from_user is None:
         await callback.answer("Откройте FDP в личном чате с ботом.", show_alert=True)
@@ -169,7 +171,7 @@ async def confirm_telegram_tournament_link(
             telegram_user_id,
             callback.from_user.username,
         )
-        storage.save_session(telegram_user_id, auth["accessToken"], auth["refreshToken"])
+        storage.save_session(telegram_user_id, auth["accessToken"], auth["refreshToken"], clear_recovery_url=True)
     except ApiError as error:
         if error.status == 409:
             text = "Этот Telegram или аккаунт сайта уже связан с другой учётной записью. Перенос не выполнен."
@@ -181,6 +183,13 @@ async def confirm_telegram_tournament_link(
         return
 
     await callback.answer("Аккаунты связаны")
+    if state is not None:
+        from ..services.registration_drafts import clear_registration_draft
+        from .tournaments import resume_pending_tournament
+        await state.clear()
+        clear_registration_draft(storage, telegram_user_id)
+        if await resume_pending_tournament(callback.bot, state, api, settings, storage, telegram_user_id, callback.message.chat.id):
+            return
     try:
         await callback.message.edit_text("✅ Аккаунты связаны. Открываю главное меню FDP.")
     except TelegramAPIError:
@@ -203,6 +212,7 @@ async def confirm_telegram_browser_login(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    state: FSMContext | None = None,
 ) -> None:
     if callback.message is None or callback.message.chat.type != "private" or callback.from_user is None:
         await callback.answer("Откройте FDP в личном чате с ботом.", show_alert=True)
@@ -212,7 +222,7 @@ async def confirm_telegram_browser_login(
     request_id = (callback.data or "").rsplit(":", 1)[-1]
     try:
         auth = await api.confirm_telegram_browser_login(telegram_user_id, request_id)
-        storage.save_session(telegram_user_id, auth["accessToken"], auth["refreshToken"])
+        storage.save_session(telegram_user_id, auth["accessToken"], auth["refreshToken"], clear_recovery_url=True)
     except ApiError as error:
         if error.status == 409:
             text = "Этот запрос на вход уже подтверждён другим Telegram. Начни вход заново на своём устройстве."
@@ -224,6 +234,13 @@ async def confirm_telegram_browser_login(
         return
 
     await callback.answer("Вход подтверждён")
+    if state is not None:
+        from ..services.registration_drafts import clear_registration_draft
+        from .tournaments import resume_pending_tournament
+        await state.clear()
+        clear_registration_draft(storage, telegram_user_id)
+        if await resume_pending_tournament(callback.bot, state, api, settings, storage, telegram_user_id, callback.message.chat.id):
+            return
     try:
         await callback.message.edit_text("✅ Вход подтверждён. Открываю главное меню FDP.")
     except TelegramAPIError:
@@ -249,6 +266,7 @@ async def open_telegram_bot_session(
     api: OpiniaApi,
     settings: Settings,
     storage: BotStorage,
+    state: FSMContext | None = None,
 ) -> None:
     if message.chat.type != "private" or message.from_user is None:
         return
@@ -280,7 +298,12 @@ async def open_telegram_bot_session(
             disable_web_page_preview=True,
         )
         return
-    storage.save_session(user_id, auth["accessToken"], auth["refreshToken"])
+    storage.save_session(user_id, auth["accessToken"], auth["refreshToken"], clear_recovery_url=True)
+    if state is not None:
+        from .tournaments import resume_pending_tournament
+        await state.clear()
+        if await resume_pending_tournament(message.bot, state, api, settings, storage, user_id, message.chat.id):
+            return
 
     await edit_panel(message.bot, storage, api, settings, user_id, "home", message.chat.id)
     try:

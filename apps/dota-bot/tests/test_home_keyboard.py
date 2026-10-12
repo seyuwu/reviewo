@@ -4,14 +4,14 @@ from bot.ui.keyboards import account_keyboard, home_keyboard, onboarding_keyboar
 
 
 class HomeKeyboardTests(unittest.TestCase):
-    def test_registered_home_has_tournaments_link_below_account(self) -> None:
+    def test_registered_home_opens_bot_tournaments_below_account(self) -> None:
         keyboard = home_keyboard(True, False, site_url="https://dota.example/")
 
         self.assertEqual(keyboard.inline_keyboard[1][0].callback_data, "panel:account")
         tournament_button = keyboard.inline_keyboard[2][0]
         self.assertEqual(tournament_button.text, "🏆 Турниры")
-        self.assertEqual(tournament_button.url, "https://dota.example/games/tournaments")
-        self.assertIsNone(tournament_button.callback_data)
+        self.assertIsNone(tournament_button.url)
+        self.assertEqual(tournament_button.callback_data, "tournaments:list")
 
     def test_unregistered_home_can_open_account_and_tournaments(self) -> None:
         keyboard = home_keyboard(False, False)
@@ -20,10 +20,8 @@ class HomeKeyboardTests(unittest.TestCase):
         self.assertTrue(any(button.callback_data == "register:start" for button in buttons))
         self.assertTrue(any(button.callback_data == "panel:account" for button in buttons))
         tournament = next(button for button in buttons if button.text == "🏆 Турниры")
-        self.assertEqual(
-            tournament.url,
-            "https://games.opinia.ru/games/tournaments",
-        )
+        self.assertIsNone(tournament.url)
+        self.assertEqual(tournament.callback_data, "tournaments:list")
 
     def test_home_does_not_duplicate_website_login_button(self) -> None:
         for registered in (True, False):

@@ -16,7 +16,7 @@ import { getDiscordLinkUrl } from "../../profile/api/profile";
 import {
   assignDotaTournamentEntryPosition, decideDotaTournamentJoinRequest,
   fetchDotaTournamentManagedEntries, joinDotaTournamentEntry, leaveDotaTournamentEntry,
-  setDotaTournamentEntryJoinMode, withdrawDotaTeamFromTournament
+  setDotaTournamentEntryJoinMode, withdrawDotaTeamFromTournament, renameDotaTournamentSquad
 } from "../api/dota-tournaments-api";
 import {
   ensureTournamentRoomVoice, fetchTournamentRoom, fetchTournamentRoomMessages,
@@ -47,6 +47,8 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
   const [descriptionSaved, setDescriptionSaved] = useState(false);
   const [role, setRole] = useState("");
+  const [nameDraft, setNameDraft] = useState("");
+  const [editingName, setEditingName] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -324,8 +326,14 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
         {room.isMember ? <div className={styles.actions}>
           <button className="button-primary" disabled={busy} onClick={() => void voice(room.voice ? "join" : "create")}>{t(room.voice ? "dota.tournaments.room.joinVoice" : "dota.tournaments.room.createVoice")}</button>
           {room.phase === "TOURNAMENT" && room.canManageRoster ? <button className="button-secondary" disabled={busy} onClick={() => void copyInvite()}>{t("dota.tournaments.inviteSquad")}</button> : null}
+          {room.phase === "TOURNAMENT" && room.isCaptain && room.canManageRoster ? <button className="button-secondary" disabled={busy} onClick={() => { setNameDraft(room.name); setEditingName(true); }}>{t("dota.team.renameEdit")}</button> : null}
         </div> : null}
       </header>
+      {editingName ? <form className={styles.inlineForm} onSubmit={(event) => { event.preventDefault(); void action(async () => {
+        await renameDotaTournamentSquad(slug, entryId, nameDraft, token!); setEditingName(false);
+      }); }}><input aria-label={t("dota.team.renameEdit")} value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} minLength={2} maxLength={80} required />
+        <button className="button-primary" disabled={busy || nameDraft.trim().length < 2}>{t("dota.team.renameSave")}</button>
+        <button className="button-secondary" type="button" onClick={() => setEditingName(false)}>{t("dota.team.renameCancel")}</button></form> : null}
       {room.phase === "AFTERPARTY" ? <div className={styles.notice}>
         <strong>{t("dota.tournaments.room.afterpartyTime", { time: remainingLabel })}</strong>
         <p>{t("dota.tournaments.room.afterpartyHint")}</p>

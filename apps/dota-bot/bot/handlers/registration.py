@@ -777,35 +777,42 @@ async def begin_dota_id_edit(
     panel = storage.get_panel(callback.from_user.id)
     return_screen = panel.screen if panel and panel.screen in {"looking", "party", "profile"} else "profile"
     acknowledge_callback(callback)
-    await begin_panel_transition(callback.bot, storage, callback.from_user.id, callback.message.chat.id)
+    await start_standalone_dota_id(callback.bot, state, api, settings, storage,
+                                   callback.from_user.id, callback.message.chat.id, return_screen=return_screen)
+
+
+async def start_standalone_dota_id(bot, state, api, settings, storage, user_id, chat_id, *, return_screen="profile"):
+    if chat_id != user_id:
+        return
+    await begin_panel_transition(bot, storage, user_id, chat_id)
     try:
-        profile = await api.user(callback.from_user.id, "GET", "/dota/profiles/me")
+        profile = await api.user(user_id, "GET", "/dota/profiles/me")
     except ApiError as error:
         await edit_panel_content(
-            callback.bot,
+            bot,
             storage,
             api,
             settings,
-            callback.from_user.id,
+            user_id,
             "profile:dota-id:error",
             f"Не получилось открыть профиль: {escape(str(error))}",
             back_keyboard(return_screen),
-            callback.message.chat.id,
+            chat_id,
         )
         return
     await state.clear()
     await state.set_state(DotaIdOnlyWizard.dota_id)
     await state.update_data(return_screen=return_screen, current_dota_id=profile.get("dotaAccountId") or "")
     await edit_panel_content(
-        callback.bot,
+        bot,
         storage,
         api,
         settings,
-        callback.from_user.id,
+        user_id,
         "profile:dota-id",
         standalone_dota_id_text(profile.get("dotaAccountId")),
         standalone_dota_id_keyboard(bool(profile.get("dotaAccountId"))),
-        callback.message.chat.id,
+        chat_id,
         dota_id_guide_photo(),
     )
 
@@ -1035,6 +1042,9 @@ async def continue_after_profile_saved(
         return
 
     storage.queue_registration_notice(telegram_user_id)
+    from .tournaments import resume_pending_tournament
+    if await resume_pending_tournament(bot, state, api, settings, storage, telegram_user_id, chat_id, match_wakeup):
+        return
     invite_code = data.get("party_invite_code")
     invite_role = data.get("party_invite_role")
     if invite_code and invite_role in POSITION_NAMES:

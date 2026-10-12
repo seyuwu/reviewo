@@ -46,6 +46,7 @@ interface PreparedContext {
 }
 
 interface GamesSearchCinematicProps {
+  purpose?: "search" | "tournament";
   onComplete: (result: GamesSearchCinematicResult) => void;
   onPrepared: (result: GamesSearchCinematicResult) => void;
   onVisualPhase: (phase: GamesSearchCinematicVisualPhase) => void;
@@ -54,13 +55,14 @@ interface GamesSearchCinematicProps {
 type QuestionnaireState = "center" | "docking" | "hidden";
 
 export function GamesSearchCinematic({
+  purpose = "search",
   onComplete,
   onPrepared,
   onVisualPhase
 }: GamesSearchCinematicProps) {
   const t = useTranslation();
   const { authSession, storeAuthSession } = useAuthSession();
-  const [phase, setPhase] = useState<GamesSearchCinematicPhase>("intent");
+  const [phase, setPhase] = useState<GamesSearchCinematicPhase>(purpose === "tournament" ? "mmr" : "intent");
   const [questionnaireState, setQuestionnaireState] = useState<QuestionnaireState>("center");
   const [intentMode, setIntentMode] = useState<IntentMode>("join");
   const [selectedIntent, setSelectedIntent] = useState<IntentMode | null>(null);
@@ -194,6 +196,11 @@ export function GamesSearchCinematic({
       return;
     }
 
+    if (purpose === "tournament") {
+      void prepareSearch("manual");
+      return;
+    }
+
     if (intentMode === "recruit") {
       void transitionToPhase("recruitRoles");
       return;
@@ -246,6 +253,17 @@ export function GamesSearchCinematic({
     try {
       const prepared = preparedRef.current ?? (await createProfileAndSession(chosenMatchMode));
       preparedRef.current = prepared;
+
+      if (purpose === "tournament") {
+        const result: GamesSearchCinematicResult = { intentMode: "join", matchMode: chosenMatchMode,
+          mmr, party: null, profile: prepared.profile, recruitedRoles: [], roles };
+        onPrepared(result);
+        window.dispatchEvent(new CustomEvent<DotaProfileCreatedEventDetail>(DOTA_PROFILE_CREATED_EVENT, {
+          detail: { cinematic: false, slug: prepared.profile.slug }
+        }));
+        onComplete(result);
+        return;
+      }
 
       let party = prepared.party;
       let createdPartyInThisAttempt = false;
@@ -302,7 +320,7 @@ export function GamesSearchCinematic({
     } catch {
       if (mountedRef.current) {
         setSelectedMatchMode(null);
-        const returnedToForm = await transitionToPhase("matchMode");
+        const returnedToForm = await transitionToPhase(purpose === "tournament" ? "roles" : "matchMode");
         if (returnedToForm && mountedRef.current) {
           setError(t("games.search.cinematic.prepareError"));
         }
@@ -311,7 +329,7 @@ export function GamesSearchCinematic({
   }
 
   async function createProfileAndSession(chosenMatchMode: DotaMatchMode): Promise<PreparedContext> {
-    const profileInput = { matchMode: chosenMatchMode, mmr, roles };
+    const profileInput = purpose === "tournament" ? { mmr, roles } : { matchMode: chosenMatchMode, mmr, roles };
 
     if (authSession?.accessToken) {
       const profile = await createDotaProfile(profileInput, authSession.accessToken);

@@ -20,13 +20,15 @@ import { TournamentNotificationsController } from "./tournament-notifications.co
 import { TournamentMatchChatService } from "./tournament-match-chat.service.js";
 import { TournamentMatchChatController } from "./tournament-match-chat.controller.js";
 import { TournamentTelegramLinkedGuard } from "./tournament-telegram-linked.guard.js";
+import { TournamentParticipationService } from "./tournament-participation.service.js";
+import { DotaTournamentsPreviewController, TournamentParticipationController } from "./tournament-participation.controller.js";
 
 @Module({
-  controllers: [AdminDotaTournamentsController, DotaTournamentRoomsController, DotaTournamentsController, TournamentNotificationsController, TournamentMatchChatController],
+  controllers: [DotaTournamentsPreviewController, TournamentParticipationController, AdminDotaTournamentsController, DotaTournamentRoomsController, DotaTournamentsController, TournamentNotificationsController, TournamentMatchChatController],
   exports: [DotaTournamentsService],
   imports: [AuthModule, DotaModule, PartiesModule, RateLimitingModule, UsersModule],
   providers: [DotaTournamentBracketService, DotaTournamentsService, TournamentManagerGuard,
     DotaTournamentRoomsService, DotaTournamentRoomsGateway, TournamentRoomEvents, DotaTournamentPlansService,
-    TournamentDisputeNotificationsService, TournamentMatchChatService, TournamentTelegramLinkedGuard]
+    TournamentDisputeNotificationsService, TournamentMatchChatService, TournamentTelegramLinkedGuard, TournamentParticipationService]
 })
 export class DotaTournamentsModule {}

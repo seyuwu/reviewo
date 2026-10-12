@@ -1,7 +1,8 @@
 import { HttpStatus, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { DotaTournamentMatchStatus, DotaTournamentStatus, Prisma } from "#prisma/client";
-import { DOTA_PARTY_VERTICAL } from "@reviewo/shared";
+import type { DotaTournament, DotaTournamentMatchStatus, DotaTournamentStatus, Prisma } from "#prisma/client";
+import { DOTA_PARTY_VERTICAL, DOTA_ATTRIBUTE_KEYS, DOTA_VERTICAL, generateDotaPartyName } from "@reviewo/shared";
+import type { TournamentSoloTicket } from "./dto/tournament-participation.dto.js";
 
 import { AppErrorCode } from "../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../common/exceptions/app.exception.js";
@@ -266,9 +267,11 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
   async createSquad(
     tournamentSlug: string,
     input: CreateDotaTournamentSquadDto,
-    currentUser: AuthenticatedUser
+    currentUser: AuthenticatedUser,
+    soloTicket?: TournamentSoloTicket,
+    companion?: { user: AuthenticatedUser; positionRole: "1" | "2" | "3" | "4" | "5"; ticket: TournamentSoloTicket }
   ) {
-    const name = input.name.trim();
+    const name = input.name?.trim() || generateDotaPartyName();
     if (name.length < 2) {
       throw createAppException({
         code: AppErrorCode.ValidationError,
@@ -308,6 +311,10 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const parsedMmr = profile.mmr ? Number.parseInt(profile.mmr, 10) : Number.NaN;
+    const companionProfile = companion ? await this.dotaProfileService.getMyProfile(companion.user) : null;
+    if (companion && (!companionProfile?.roles.includes(companion.positionRole) || companion.positionRole === input.positionRole)) {
+      throw createAppException({ code: AppErrorCode.Conflict, message: "Tournament search positions changed", statusCode: HttpStatus.CONFLICT });
+    }
     await this.prismaService.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${tournament.id}`}))`;
       const latestTournament = await tx.dotaTournament.findUnique({ where: { id: tournament.id } });
@@ -320,6 +327,15 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       }
       await this.assertSponsorGate(tx, latestTournament.id, currentUser.id);
       this.assertEntryCanRecruit(latestTournament, "RESERVE");
+      await this.assertSoloTicket(tx, latestTournament, currentUser.id, input.positionRole, soloTicket);
+      if (companion) {
+        await this.assertSoloTicket(tx, latestTournament, companion.user.id, companion.positionRole, companion.ticket);
+        await this.assertSponsorGate(tx, latestTournament.id, companion.user.id);
+        if (await tx.dotaTournamentEntryMember.findFirst({ where: { tournamentId: tournament.id, userId: companion.user.id, isActive: true } }) ||
+          await tx.dotaTournamentEntryRequest.findFirst({ where: { tournamentId: tournament.id, userId: companion.user.id, status: "PENDING" } })) {
+          throw createAppException({ code: AppErrorCode.Conflict, message: "Tournament search changed", statusCode: HttpStatus.CONFLICT });
+        }
+      }
 
       const existingMember = await tx.dotaTournamentEntryMember.findFirst({
         where: { isActive: true, tournamentId: tournament.id, userId: currentUser.id }
@@ -338,7 +354,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       const entry = await tx.dotaTournamentEntry.create({
         data: {
           createdByUserId: currentUser.id,
-          joinMode: input.joinMode ?? "CONFIRM",
+          joinMode: input.joinMode ?? "OPEN",
           status: latestTournament.status === "REGISTRATION_CLOSED" ? "RESERVE" : "RECRUITING",
           teamNameSnapshot: name.slice(0, 80),
           teamPartyId: null,
@@ -358,6 +374,14 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           userId: currentUser.id
         }
       });
+      await this.finishSoloQueue(tx, tournament.id, currentUser.id, entry.id);
+      if (companion && companionProfile) {
+        const mmr = Number.parseInt(companionProfile.mmr ?? "", 10);
+        await tx.dotaTournamentEntryMember.create({ data: { entryId: entry.id, tournamentId: tournament.id,
+          userId: companion.user.id, isActive: true, displayName: companionProfile.title.slice(0, 80),
+          dotaProfileSlug: companionProfile.slug, mmr: Number.isFinite(mmr) ? mmr : null, positionRole: companion.positionRole } });
+        await this.finishSoloQueue(tx, tournament.id, companion.user.id, entry.id);
+      }
     });
 
     return this.getPublic(tournamentSlug, currentUser);
@@ -428,11 +452,29 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     return { joinMode, ok: true };
   }
 
+  async renameSquad(slug: string, entryId: string, name: string, user: AuthenticatedUser) {
+    const entry = await this.requireManagedEntry(slug, entryId, user.id);
+    await this.prismaService.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"dota-tournament:" + entry.tournamentId}))`;
+      const latest = await tx.dotaTournamentEntry.findUniqueOrThrow({ where: { id: entryId },
+        include: { tournament: true, teamParty: { select: { ownerUserId: true } } } });
+      this.assertEntryCanRecruit(latest.tournament, latest.status);
+      if ((latest.createdByUserId ?? latest.teamParty?.ownerUserId) !== user.id || !this.isActiveEntryStatus(latest.status) || latest.tournament.bracketGeneratedAt) {
+        throw this.matchConflict("The roster or team captain has changed");
+      }
+      if (name.trim().length < 2 || name.trim().length > 80) throw this.matchConflict("Squad name must contain 2 to 80 characters");
+      await tx.dotaTournamentEntry.update({ where: { id: entryId }, data: { teamNameSnapshot: name.trim() } });
+    });
+    this.roomsService?.notifyChanged(entryId);
+    return { ok: true };
+  }
+
   async joinEntry(
     tournamentSlug: string,
     entryId: string,
     input: JoinDotaTournamentEntryDto,
-    currentUser: AuthenticatedUser
+    currentUser: AuthenticatedUser,
+    soloTicket?: TournamentSoloTicket
   ) {
     const { entry, tournament } = await this.findTournamentEntry(tournamentSlug, entryId);
     this.assertEntryCanRecruit(tournament, entry.status);
@@ -486,6 +528,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           });
         }
         this.assertEntryCanRecruit(latest.tournament, latest.status);
+        await this.assertSoloTicket(tx, latest.tournament, currentUser.id, input.positionRole, soloTicket);
         await this.assertSponsorGate(tx, latest.tournamentId, currentUser.id);
 
         const existingMember = await tx.dotaTournamentEntryMember.findUnique({
@@ -519,6 +562,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         });
         if (existingRequest?.status === "PENDING") {
           result = "REQUESTED";
+          await this.finishSoloQueue(tx, tournament.id, currentUser.id, null);
           return;
         }
 
@@ -560,6 +604,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
             where: { entryId_userId: { entryId, userId: currentUser.id } }
           });
           result = "REQUESTED";
+          await this.finishSoloQueue(tx, tournament.id, currentUser.id, null);
           return;
         }
 
@@ -579,6 +624,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           where: { entryId_userId: { entryId, userId: currentUser.id } }
         });
         await this.syncEntryRegistrationStatus(tx, entryId);
+        await this.finishSoloQueue(tx, tournament.id, currentUser.id, entryId);
         if (existingRequest) {
           await tx.dotaTournamentEntryRequest.update({
             data: { status: "ACCEPTED" },
@@ -632,7 +678,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         this.assertEntryCanRecruit(latestEntry.tournament, latestEntry.status);
         const declined = await tx.dotaTournamentEntryRequest.updateMany({
           data: { status: "DECLINED" },
-          where: { id: request.id, status: "PENDING" }
+          where: { id: request.id, status: "PENDING", updatedAt: request.updatedAt }
         });
         if (declined.count !== 1) {
           throw createAppException({
@@ -641,6 +687,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
             statusCode: HttpStatus.CONFLICT
           });
         }
+        await this.enqueueTournamentParticipation(tx, entry.tournamentId, entryId, [request.userId], "request-closed", `${request.id}:${request.updatedAt.getTime()}`);
       });
       this.roomsService?.notifyChanged(entryId);
       return { ok: true, tournament: await this.getPublic(tournamentSlug, currentUser) };
@@ -717,6 +764,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           where: { id: request.id }
         });
         await this.syncEntryRegistrationStatus(tx, entryId);
+        await this.enqueueTournamentParticipation(tx, entry.tournamentId, entryId, [request.userId], "accepted", `${request.id}:${latestRequest.updatedAt.getTime()}`);
       });
     } catch (error) {
       if (this.isPrismaUniqueError(error)) {
@@ -2776,6 +2824,68 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     return TOURNAMENT_ROLES.every((role) => assigned.has(role));
   }
 
+  participationOpen(tournament: Pick<DotaTournament, "status" | "registrationClosesAt" | "bracketGeneratedAt">): boolean {
+    try { this.assertEntryCanRecruit(tournament, "RESERVE"); return true; } catch { return false; }
+  }
+
+  async assertSoloQueueAllowed(tx: Prisma.TransactionClient, tournament: Pick<DotaTournament, "id" | "status" | "registrationClosesAt" | "bracketGeneratedAt">, userId: string) {
+    this.assertEntryCanRecruit(tournament, "RESERVE");
+    await this.assertSponsorGate(tx, tournament.id, userId);
+  }
+
+  private async assertSoloTicket(
+    tx: Prisma.TransactionClient,
+    tournament: { id: string; soloMatchLeaseToken: string | null; soloMatchLeaseUntil: Date | null },
+    userId: string,
+    positionRole: string,
+    ticket?: TournamentSoloTicket
+  ) {
+    if (!ticket) return;
+    const queued = await tx.dotaTournamentSoloSearch.findFirst({ where: {
+      id: ticket.id, tournamentId: tournament.id, userId, generation: ticket.generation, status: "WAITING"
+    } });
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { status: true, role: true } });
+    const identity = user?.role === "ADMIN" || await tx.userAuthIdentity.findFirst({ where: { userId, provider: "telegram" }, select: { id: true } });
+    const pending = await tx.dotaTournamentEntryRequest.findFirst({ where: { tournamentId: tournament.id, userId, status: "PENDING" }, select: { id: true } });
+    const profile = await tx.entity.findFirst({ where: { ownerUserId: userId, type: "person", visibility: "ACTIVE",
+      attributes: { some: { key: DOTA_ATTRIBUTE_KEYS.vertical, value: DOTA_VERTICAL } } },
+      select: { attributes: { where: { key: DOTA_ATTRIBUTE_KEYS.roles }, select: { value: true } } } });
+    const rawRoles = profile?.attributes[0]?.value ?? "";
+    let roles: string[] = [];
+    try { const value: unknown = JSON.parse(rawRoles); if (Array.isArray(value)) roles = value.map(String); }
+    catch { roles = rawRoles.split(",").map(value => value.trim()); }
+    if (!queued || !queued.roles.includes(positionRole) || !roles.includes(positionRole) || !identity || user?.status !== "active" || pending ||
+      tournament.soloMatchLeaseToken !== ticket.leaseToken || !tournament.soloMatchLeaseUntil || tournament.soloMatchLeaseUntil <= new Date()) {
+      throw createAppException({ code: AppErrorCode.Conflict, message: "Tournament search changed", statusCode: HttpStatus.CONFLICT });
+    }
+  }
+
+  private async finishSoloQueue(tx: Prisma.TransactionClient, tournamentId: string, userId: string, entryId: string | null) {
+    const queued = await tx.dotaTournamentSoloSearch.findUnique({ where: { tournamentId_userId: { tournamentId, userId } } });
+    const changed = await tx.dotaTournamentSoloSearch.updateMany({ where: { tournamentId, userId, status: "WAITING" },
+      data: { status: entryId ? "MATCHED" : "CANCELLED", assignedEntryId: entryId } });
+    if (entryId && queued && changed.count) {
+      await this.enqueueTournamentParticipation(tx, tournamentId, entryId, [userId], "found", `${queued.id}:${queued.generation}`);
+    }
+  }
+
+  private async enqueueTournamentParticipation(tx: Prisma.TransactionClient, tournamentId: string, entryId: string,
+    userIds: string[], event: "found" | "accepted" | "registered" | "request-closed", eventId: string) {
+    const [tournament, entry, identities] = await Promise.all([
+      tx.dotaTournament.findUniqueOrThrow({ where: { id: tournamentId }, select: { slug: true, title: true } }),
+      tx.dotaTournamentEntry.findUniqueOrThrow({ where: { id: entryId }, select: { teamNameSnapshot: true, status: true } }),
+      tx.userAuthIdentity.findMany({ where: { provider: "telegram", userId: { in: userIds }, user: { status: "active" } }, select: { providerUserId: true } })
+    ]);
+    // Completing the roster already produces one stronger notice for every player.
+    if ((event === "found" || event === "accepted") && entry.status === "REGISTERED") return;
+    if (!identities.length) return;
+    await tx.telegramBotNotification.createMany({ skipDuplicates: true, data: identities.map(identity => ({
+      telegramUserId: identity.providerUserId, eventKey: `tournament_participation:${event}:${eventId}`,
+      payload: { type: "tournament_participation", event, tournamentId, tournamentSlug: tournament.slug,
+        tournamentTitle: tournament.title, entryId, entryName: entry.teamNameSnapshot }
+    })) });
+  }
+
   private async syncEntryRegistrationStatus(
     tx: Prisma.TransactionClient,
     entryId: string
@@ -2792,7 +2902,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
     });
     if (!entry || !this.isActiveEntryStatus(entry.status)) return;
     const members = await tx.dotaTournamentEntryMember.findMany({
-      select: { positionRole: true },
+      select: { positionRole: true, userId: true },
       where: { entryId, isActive: true }
     });
     const isComplete = this.hasCompleteRoleLineup(members);
@@ -2818,6 +2928,11 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       data: { status: nextStatus },
       where: { id: entryId, status: { in: ["RECRUITING", "REGISTERED", "RESERVE"] } }
     });
+
+    if (nextStatus === "REGISTERED" && entry.status !== "REGISTERED") {
+      await this.enqueueTournamentParticipation(tx, entry.tournament.id, entryId,
+        members.map(member => member.userId).filter((id): id is string => !!id), "registered", entryId);
+    }
 
     if (registrationOpen && entry.tournament.maxTeams) {
       const registeredCount = await tx.dotaTournamentEntry.count({

@@ -65,6 +65,10 @@ async def link_account(
         )
         from .party_links import resume_pending_party_invitation
 
+        from .tournaments import resume_pending_tournament
+        if await resume_pending_tournament(message.bot, state, api, settings, storage, message.from_user.id, message.chat.id, match_wakeup):
+            return
+
         if await resume_pending_party_invitation(
             message.bot, state, api, settings, storage, message.from_user.id, message.chat.id
         ):

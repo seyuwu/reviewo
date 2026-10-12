@@ -24,10 +24,7 @@ def home_keyboard(
                      else button("🚀 Зарегистрироваться", "register:start")])
     rows.append([button(first_label, first_action), button(second_label, second_action)])
     rows.append([button("👤 Аккаунт", "panel:account")])
-    tournaments_url = site_url.rstrip("/")
-    if tournaments_url == "https://dota.opinia.ru":
-        tournaments_url = "https://games.opinia.ru"
-    rows.append([button_url("🏆 Турниры", f"{tournaments_url}/games/tournaments")])
+    rows.append([button("🏆 Турниры", "tournaments:list")])
     if can_share:
         rows.append([button("🔗 Пригласить друзей", "invite:friends")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

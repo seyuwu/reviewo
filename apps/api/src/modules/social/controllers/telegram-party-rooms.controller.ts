@@ -3,7 +3,7 @@ import { TelegramBotService } from "../../telegram/telegram-bot.service.js";
 import { TelegramPartyRoomsService } from "../services/telegram-party-rooms.service.js";
 import { PoolCapacityDto, RegisterRoomDto, ReserveRoomDto, RoomAdminActionDto, RoomAdminDto, RoomAdmissionDto,
   RoomBotDto, RoomDeletedDto, RoomDiscordDto, RoomLeaseDto, RoomMessagesDto, RoomPresenceDto, RoomReportDto,
-  PartyNoticeContextsDto } from "../dto/telegram-party-rooms.dto.js";
+  PartyNoticeContextsDto, RoomPingDto } from "../dto/telegram-party-rooms.dto.js";
 
 @Controller("social/telegram-party-rooms")
 export class TelegramPartyRoomsController {
@@ -95,5 +95,15 @@ export class TelegramPartyRoomsController {
   discord(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string, @Body() input: RoomDiscordDto,
     @Headers("x-telegram-bot-secret") secret?: string) {
     this.authorize(secret); return this.rooms.openDiscord(id, input.botId, input.userId, input.generation);
+  }
+  @Post(":id/ping-targets")
+  pingTargets(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string, @Body() input: RoomDiscordDto,
+    @Headers("x-telegram-bot-secret") secret?: string) {
+    this.authorize(secret); return this.rooms.pingTargets(id, input.botId, input.userId, input.generation);
+  }
+  @Post(":id/ping")
+  ping(@Param("id", new ParseUUIDPipe({ version: "4" })) id: string, @Body() input: RoomPingDto,
+    @Headers("x-telegram-bot-secret") secret?: string) {
+    this.authorize(secret); return this.rooms.ping(id, input.botId, input.userId, input.generation, input.targetMembershipId);
   }
 }

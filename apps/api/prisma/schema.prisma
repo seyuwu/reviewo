@@ -44,6 +44,7 @@ model User {
   dotaTournamentJoinRequests DotaTournamentEntryRequest[]
   dotaTournamentRoomMessages DotaTournamentRoomMessage[]
   dotaTournamentSponsorClicks DotaTournamentSponsorClick[]
+  dotaTournamentSoloSearches DotaTournamentSoloSearch[]
   gamePartyInvitesSent   GamePartyInvite[] @relation("GamePartyInviter")
   gamePartyInvitesReceived GamePartyInvite[] @relation("GamePartyInvitee")
   gamePartyChatMessages  GamePartyChatMessage[]
@@ -1301,11 +1302,33 @@ model DotaTournament {
   matchPlans            DotaTournamentMatchPlan[]
   sponsors              DotaTournamentSponsor[]
   sponsorClicks         DotaTournamentSponsorClick[]
+  soloSearches          DotaTournamentSoloSearch[]
+  soloMatchLeaseToken   String? @map("solo_match_lease_token") @db.Uuid
+  soloMatchLeaseUntil   DateTime? @map("solo_match_lease_until") @db.Timestamptz(6)
 
   @@index([status, registrationClosesAt])
   @@index([automaticBracket, status, startsAt])
   @@index([status, finishedAt])
   @@map("dota_tournaments")
+  @@schema("social")
+}
+
+model DotaTournamentSoloSearch {
+  id              String @id @default(uuid()) @db.Uuid
+  tournamentId    String @map("tournament_id") @db.Uuid
+  userId          String @map("user_id") @db.Uuid
+  roles           String[]
+  status          String @default("WAITING") @db.VarChar(16)
+  generation      Int @default(1)
+  assignedEntryId String? @map("assigned_entry_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tournament      DotaTournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, userId])
+  @@index([status, tournamentId, createdAt])
+  @@map("dota_tournament_solo_searches")
   @@schema("social")
 }
 

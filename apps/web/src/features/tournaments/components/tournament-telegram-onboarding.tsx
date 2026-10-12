@@ -40,7 +40,7 @@ export function TournamentTelegramButton() {
   );
 }
 
-export function TournamentTelegramOnboarding({ children }: { children: ReactNode }) {
+export function TournamentTelegramOnboarding({ children, requireAccess = false }: { children: ReactNode; requireAccess?: boolean }) {
   const t = useTranslation();
   const pathname = usePathname();
   const router = useRouter();
@@ -59,11 +59,16 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
   const [connectionIssue, setConnectionIssue] = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
   const isTournamentRoute = pathname === "/games/tournaments" || pathname.startsWith("/games/tournaments/");
+  const isPreviewRoute = pathname === "/games/tournaments" || (pathname !== "/games/tournaments/manage" && /^\/games\/tournaments\/[^/]+\/?$/.test(pathname));
 
   useEffect(() => {
     if (!isAuthSessionLoaded) return;
     const currentUserId = authSession?.userId ?? null;
     if (activeStatusUserId.current !== currentUserId) {
+      generation.current += 1;
+      if (pollTimer.current !== null) { window.clearTimeout(pollTimer.current); pollTimer.current = null; }
+      popup.current?.close(); popup.current = null;
+      setIsPreparing(false); setConnectionIssue(false); setPopupBlocked(false);
       activeStatusUserId.current = currentUserId;
       statusGeneration.current += 1;
       statusRequest.current = null;
@@ -73,7 +78,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
       setError(null);
     }
 
-    if (!isTournamentRoute) return;
+    if (!isTournamentRoute || (isPreviewRoute && !requireAccess)) return;
     if (!authSession) {
       setAccountState("guest");
       setChallenge(null);
@@ -93,7 +98,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
     setAccountState("loading");
     void getTelegramTournamentBotStatus(authSession.accessToken)
       .then(async ({ botStarted, telegramLinked, canAccessTournamentsWithoutTelegram }) => {
-        // Tournament newcomers use the existing Dota onboarding on the search page.
+        // Tournament newcomers use the existing Dota onboarding before participation.
         // Keep the administrator exemption for accounts used only to manage tournaments.
         if (!canAccessTournamentsWithoutTelegram) {
           const profile = await fetchMyDotaProfile(authSession.accessToken).catch((error: unknown) => {
@@ -137,16 +142,17 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
           statusRequest.current = null;
         }
       });
-  }, [accountState, authSession, isAuthSessionLoaded, isTournamentRoute, verifiedUserId]);
+  }, [accountState, authSession, isAuthSessionLoaded, isTournamentRoute, isPreviewRoute, requireAccess, verifiedUserId]);
 
   useEffect(() => {
     if (
-      isTournamentRoute && isAuthSessionLoaded &&
+      isTournamentRoute && (requireAccess || !isPreviewRoute) && isAuthSessionLoaded &&
       (!authSession || (accountState === "needs-profile" && verifiedUserId === authSession.userId))
     ) {
-      router.replace("/games/search", { scroll: false });
+      const invite = pathname.match(/^\/games\/tournaments\/([^/]+)\/teams\/([^/]+)\/?$/);
+      router.replace(invite ? `/games/tournaments/${invite[1]}?participate=1&entry=${encodeURIComponent(invite[2]!)}` : "/games/tournaments", { scroll: false });
     }
-  }, [accountState, authSession, isAuthSessionLoaded, isTournamentRoute, router, verifiedUserId]);
+  }, [accountState, authSession, isAuthSessionLoaded, isTournamentRoute, isPreviewRoute, requireAccess, pathname, router, verifiedUserId]);
 
   useEffect(() => {
     if (!isTournamentRoute || !authSession || accountState !== "needs-start") return;
@@ -291,7 +297,7 @@ export function TournamentTelegramOnboarding({ children }: { children: ReactNode
 
   const busy = isPreparing || Boolean(challenge);
 
-  if (!isTournamentRoute) return children;
+  if (!isTournamentRoute || (isPreviewRoute && !requireAccess)) return children;
 
   if (isAuthSessionLoaded && (!authSession || accountState === "needs-profile")) {
     return <TournamentPageSkeleton detail={pathname !== "/games/tournaments"} />;

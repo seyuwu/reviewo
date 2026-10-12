@@ -59,6 +59,100 @@ async def open_party_management(message: Message, command: CommandObject, state:
         await message.answer("Не получилось открыть пати. Попробуй ещё раз или открой /start.")
 
 
+@router.message(CommandStart(deep_link=True), F.text.regexp(r"^/start(?:@\w+)?\s+dotaid_[a-f0-9]{32}$"))
+async def open_party_dota_id(message: Message, command: CommandObject, state: FSMContext, api, settings, storage):
+    if message.chat.type != "private" or message.from_user is None:
+        return
+    user_id = message.from_user.id
+    storage.record_bot_user(user_id, display_name=message.from_user.full_name, username=message.from_user.username)
+    party_id = str(UUID((command.args or "").removeprefix("dotaid_")))
+    try:
+        auth = await api.login_telegram_bot_session(user_id)
+        storage.save_session(user_id, auth["accessToken"], auth["refreshToken"], clear_recovery_url=True)
+        response = await api.user(user_id, "GET", "/social/parties/me")
+        parties = list(response.get("parties") or [])
+        if response.get("party"):
+            parties.append(response["party"])
+        if not any(party.get("id") == party_id and party.get("kind") == "PARTY" and party.get("isMember") for party in parties):
+            await message.answer("Эта пати завершилась или ты больше в ней не состоишь. Открой свою пати в меню FDP.")
+            return
+        from .registration import start_standalone_dota_id
+        await start_standalone_dota_id(message.bot, state, api, settings, storage, user_id, message.chat.id, return_screen="party")
+    except ApiError:
+        await message.answer("Не получилось открыть Dota ID. Попробуй ещё раз через «Аккаунт» в FDP.")
+
+
+@router.callback_query(F.data.regexp(r"^roomping:[a-f0-9-]{36}:\d+$"))
+async def group_ping_menu(callback: CallbackQuery, api, settings, storage):
+    if callback.message is None or callback.message.chat.type != "supergroup":
+        await callback.answer("Открой список из чата своей пати.", show_alert=True)
+        return
+    _, room_id, generation = callback.data.split(":")
+    pool = api.party_rooms
+    room = pool.by_chat.get(callback.message.chat.id) if pool else None
+    if not room or room["id"] != room_id:
+        await callback.answer("Кнопка устарела. Открой текущую карточку пати.", show_alert=True)
+        return
+    now = time.time()
+    key = (callback.from_user.id, room_id)
+    requests = [stamp for stamp in pool.ping_chat_requests.get(callback.message.chat.id, []) if stamp > now - 60]
+    if pool.ping_cooldowns.get(key, 0) > now or len(requests) >= 5:
+        await callback.answer("Подожди немного и попробуй снова.")
+        return
+    pool.ping_cooldowns[key] = now + 5
+    pool.ping_chat_requests[callback.message.chat.id] = requests + [now]
+    acknowledge_callback(callback, "Открываю игроков…")
+    try:
+        result = await pool.request("POST", f"/{room_id}/ping-targets", {"userId": str(callback.from_user.id), "generation": int(generation)})
+        choices = [{"token": secrets.token_hex(10), "roomId": room_id, "generation": int(generation),
+                    "chatId": callback.message.chat.id, "targetMembershipId": target["membershipId"], "expiresAt": now + 120,
+                    "name": str(target.get("name") or "Игрок")[:40], "inChat": bool(target.get("inChat"))}
+                   for target in result.get("targets", [])[:4]]
+        storage.set_choices(callback.from_user.id, "room_ping_choices", choices)
+        rows = [[button(("💬 " if choice["inChat"] else "🔔 ") + choice["name"], "roomping:pick:" + choice["token"])] for choice in choices]
+        text = ("<b>Кого позвать в чат?</b>\n\nВыбери игрока — FDP пришлёт ему личное уведомление с кнопкой чата.\n"
+                "💬 — уже состоит в чате. Повторный вызов: раз в 5 минут." if choices
+                else "В пати пока нет других игроков, которые подключили бота FDP.")
+        await pool.mutate(SendPartyDiscordMessage(chat_id=callback.message.chat.id, text=text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
+            ephemeral_message_parameters={"receiver_user_id": callback.from_user.id, "callback_query_id": callback.id}))
+    except ApiError as error:
+        await callback.answer(str(error) if error.status in {400, 403, 409, 429} else "Не удалось открыть список. Попробуй ещё раз.", show_alert=True)
+    except TelegramAPIError:
+        await callback.answer("Не удалось показать список. Открой «Управлять пати» и карточку игрока.", show_alert=True)
+
+
+@router.callback_query(F.data.regexp(r"^roomping:pick:[a-f0-9]{20}$"))
+async def group_ping_player(callback: CallbackQuery, api, settings, storage):
+    if callback.message is None or callback.message.chat.type != "supergroup":
+        await callback.answer("Открой список из чата своей пати.", show_alert=True)
+        return
+    token = callback.data.rsplit(":", 1)[-1]
+    choices = [storage.get_choice(callback.from_user.id, "room_ping_choices", index) for index in range(4)]
+    choice = next((item for item in choices if isinstance(item, dict) and item.get("token") == token), None)
+    if not choice or choice.get("chatId") != callback.message.chat.id or choice.get("expiresAt", 0) <= time.time():
+        await callback.answer("Список устарел. Нажми «Позвать в чат» заново.", show_alert=True)
+        return
+    pool = api.party_rooms
+    room = pool.by_chat.get(callback.message.chat.id) if pool else None
+    if not room or room["id"] != choice["roomId"]:
+        await callback.answer("Пати изменилась. Открой текущую карточку.", show_alert=True)
+        return
+    try:
+        await pool.request("POST", f"/{choice['roomId']}/ping", {"userId": str(callback.from_user.id),
+            "generation": choice["generation"], "targetMembershipId": choice["targetMembershipId"]})
+        await callback.answer("🔔 Позвал игрока — FDP отправит кнопку чата.")
+        ephemeral_id = callback.message.model_dump().get("ephemeral_message_id")
+        if ephemeral_id:
+            try:
+                await pool.mutate(EditPartyDiscordMessage(chat_id=callback.message.chat.id, receiver_user_id=callback.from_user.id,
+                    ephemeral_message_id=ephemeral_id, text="🔔 <b>Игрок приглашён в чат</b>\nFDP отправит ему личное уведомление."))
+            except TelegramAPIError:
+                pass
+    except ApiError as error:
+        await callback.answer(str(error) if error.status in {400, 403, 409, 429} else "Не получилось позвать игрока. Попробуй ещё раз.", show_alert=True)
+
+
 def authorized(event, settings):
     message = event.message if isinstance(event, CallbackQuery) else event
     return (event.from_user is not None and event.from_user.id in settings.admin_ids
@@ -446,6 +540,8 @@ def create_room_worker_router():
             await callback.answer("Нет доступа", show_alert=True)
     worker.callback_query.register(group_ready, F.data.regexp(r"^roomready:[a-f0-9-]{36}:\d+$"))
     worker.callback_query.register(group_discord, F.data.regexp(r"^roomdiscord:[a-f0-9-]{36}:\d+$"))
+    worker.callback_query.register(group_ping_menu, F.data.regexp(r"^roomping:[a-f0-9-]{36}:\d+$"))
+    worker.callback_query.register(group_ping_player, F.data.regexp(r"^roomping:pick:[a-f0-9]{20}$"))
     worker.message.register(register_selected_room, F.chat_shared)
     worker.message.register(change_room_capacity, RoomSettings.capacity, F.text)
     worker.message.register(connect_group_command, Command("fdpchat"))

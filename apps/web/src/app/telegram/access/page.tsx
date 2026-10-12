@@ -11,7 +11,7 @@ export default function TelegramAccessPage() {
     <Suspense
       fallback={
         <main className="shell entity-route">
-          <p>Открываем пати…</p>
+          <p>Открываем FDP…</p>
         </main>
       }
     >

@@ -2,12 +2,12 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
 import type { Prisma, TelegramPartyChatRoom } from "#prisma/client";
-import { DOTA_PARTY_VERTICAL } from "@reviewo/shared";
 import type { EnvironmentVariables } from "../../../config/environment.validation.js";
 import { PrismaService } from "../../../database/prisma.service.js";
 import { GamePartiesService } from "./game-parties.service.js";
 import { PartyCoordinationService } from "./party-coordination.service.js";
 import { DiscordVoiceService } from "./discord-voice.service.js";
+import { PartyChatPingsService } from "./party-chat-pings.service.js";
 import type { RegisterRoomDto, RoomReportDto, RoomMessagesDto, PartyNoticeContextDto } from "../dto/telegram-party-rooms.dto.js";
 
 type RosterMember = { membershipId: string; userId: string; telegramId: string | null; name: string; role: string | null; ready: boolean };
@@ -41,7 +41,7 @@ export class TelegramPartyRoomsService {
   private readonly discordJoins = new Map<string, Promise<{ inviteUrl: string; limit: number; name: string }>>();
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService<EnvironmentVariables, true>,
     private readonly parties: GamePartiesService, private readonly coordination: PartyCoordinationService,
-    private readonly discord: DiscordVoiceService) {}
+    private readonly discord: DiscordVoiceService, private readonly pings?: PartyChatPingsService) {}
 
   assertAdmin(adminId: string) {
     const allowed = new Set((this.config.get("DOTA_BOT_ADMIN_IDS", { infer: true }) ?? "").split(",").map(id => id.trim()));
@@ -133,6 +133,7 @@ export class TelegramPartyRoomsService {
     if (!identity) throw new ForbiddenException("Link Telegram to FDP first");
     const canonical = await this.parties.getPartyBySlug(slug, identity.userId);
     if (!canonical.isMember || canonical.kind !== "PARTY" || canonical.mergedIntoSlug) return null;
+    const dotaAccountId = canonical.members.find(member => member.userId === identity.userId)?.dotaAccountId ?? null;
     return this.prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT "id" FROM "social"."telegram_party_chat_pool" WHERE "id"='default' FOR UPDATE`;
       const party = await tx.gameParty.findUnique({ where: { id: canonical.id }, include: partyInclude });
@@ -140,7 +141,7 @@ export class TelegramPartyRoomsService {
         || !party.members.some(member => member.userId === identity.userId && member.user.status === "active")) return null;
       const existing = await tx.telegramPartyChatRoom.findUnique({ where: { partyId: party.id } });
       const membershipId = party.members.find(member => member.userId === identity.userId)!.id;
-      if (existing) return { ...this.publicRoom(existing), membershipId };
+      if (existing) return { ...this.publicRoom(existing), membershipId, dotaAccountId };
       const pool = await tx.telegramPartyChatPool.findUniqueOrThrow({ where: { id: "default" } });
       const busy = await tx.telegramPartyChatRoom.count({ where: { state: { in: ["PREPARING", "ACTIVE", "ROTATING"] } } });
       if (busy >= pool.capacity) return null;
@@ -155,7 +156,7 @@ export class TelegramPartyRoomsService {
         state: "PREPARING", partyId: party.id, generation: { increment: 1 }, assignedAt: new Date(),
         retryAt: null, data: json(data)
       } });
-      return { ...this.publicRoom(reserved), membershipId };
+      return { ...this.publicRoom(reserved), membershipId, dotaAccountId };
     });
   }
 
@@ -528,5 +529,38 @@ export class TelegramPartyRoomsService {
       }
     });
     return result;
+  }
+
+  private async pingContext(roomId: string, botId: string, telegramId: string, generation: number) {
+    const room = await this.reconcile(roomId); const data = dataOf(room);
+    const sender = data.roster.find(member => member.telegramId === telegramId);
+    if (room.botId !== botId || room.generation !== generation || room.state !== "ACTIVE" || !room.partyId || !sender
+      || !data.partySlug || !data.expiresAt || new Date(data.expiresAt) <= new Date()
+      || (!data.presentIds.includes(telegramId) && !data.staffIds.includes(telegramId))) {
+      throw new ForbiddenException("Вызов доступен только участникам текущего чата пати.");
+    }
+    return { room, data, sender };
+  }
+
+  async pingTargets(roomId: string, botId: string, telegramId: string, generation: number) {
+    const { data, sender } = await this.pingContext(roomId, botId, telegramId, generation);
+    const candidates = data.roster.filter(member => member.membershipId !== sender.membershipId && member.telegramId);
+    const started = await this.prisma.telegramBotStart.findMany({
+      where: { telegramUserId: { in: candidates.map(member => member.telegramId!) } }, select: { telegramUserId: true }
+    });
+    const ids = new Set(started.map(item => item.telegramUserId));
+    return { name: data.partyName ?? "Пати FDP", targets: candidates.filter(member => ids.has(member.telegramId!)).map(member => ({
+      membershipId: member.membershipId, name: member.name, role: member.role, inChat: data.presentIds.includes(member.telegramId!)
+    })) };
+  }
+
+  async ping(roomId: string, botId: string, telegramId: string, generation: number, targetMembershipId: string) {
+    const { room, data, sender } = await this.pingContext(roomId, botId, telegramId, generation);
+    if (!this.pings || !data.roster.some(member => member.membershipId === targetMembershipId && member.membershipId !== sender.membershipId)) {
+      throw new ConflictException("Состав изменился. Открой список игроков заново.");
+    }
+    // Reuse membership fencing, target cooldown and the existing main-bot outbox.
+    return this.pings.create(data.partySlug!, sender.userId, { partyId: room.partyId!, membershipId: sender.membershipId,
+      targetMembershipId, telegramUserId: telegramId });
   }
 }

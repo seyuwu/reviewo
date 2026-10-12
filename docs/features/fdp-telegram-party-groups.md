@@ -63,6 +63,22 @@ the current player's party panel. The `manage_<party UUID>` link is navigation
 only: the bot rechecks current membership and never joins a party from that link.
 Helper workers use `DOTA_BOT_MAIN_USERNAME` (default `FDPdotabot`) for this action.
 
+The chat-ready private notice offers “Указать Dota ID” only when the current
+member has no ID. The shared card also offers it when any member lacks an ID.
+`dotaid_<party UUID>` opens the existing ID-only form in the main bot, rechecks
+current membership and returns to the party. Helper workers never edit profiles.
+Saved notices retain the ID-prompt state so link rotation preserves controls and
+ambiguous Telegram sends are not repeated solely because that state is missing.
+
+“Позвать в чат” opens an ephemeral list visible only to the clicking member.
+Selection tokens are bound to that member, group and generation, expire after
+two minutes and cover at most four other players. The room owner worker validates
+active party membership and presence before delegating to the existing ping
+service. Its per-recipient five-minute cooldown and membership fences remain in
+effect. Delivery goes through the main bot's durable outbox even when a helper
+serves the group. Menus allow five openings per group per minute, with a five-second
+per-user pause, protecting the shared Telegram mutation budget.
+
 “Discord” records one click per current party membership and prepares native
 Discord voice on demand. Each additional distinct player increases the voice
 channel limit, up to five; repeated clicks do not add seats. The invitation is

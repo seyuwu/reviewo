@@ -24,7 +24,7 @@ export function DotaTournamentsView() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   useLayoutEffect(() => {
-    if (cachedDirectory && cachedDirectory.userId === authSession?.userId && Date.now() - cachedDirectory.fetchedAt < DIRECTORY_CACHE_TTL_MS) {
+    if (cachedDirectory && cachedDirectory.userId === (authSession?.userId ?? "guest") && Date.now() - cachedDirectory.fetchedAt < DIRECTORY_CACHE_TTL_MS) {
       setTournaments(cachedDirectory.items);
       setLoading(false);
     }
@@ -32,17 +32,12 @@ export function DotaTournamentsView() {
 
   useEffect(() => {
     if (!isAuthSessionLoaded) return;
-    if (!authSession?.accessToken) {
-      setTournaments([]);
-      setLoading(false);
-      return;
-    }
-
     let active = true;
-    void fetchDotaTournaments(authSession.accessToken)
+    setFailed(false);
+    void fetchDotaTournaments(authSession?.accessToken)
       .then((items) => {
         if (active) {
-          cachedDirectory = { userId: authSession.userId, items, fetchedAt: Date.now() };
+          cachedDirectory = { userId: authSession?.userId ?? "guest", items, fetchedAt: Date.now() };
           setTournaments(items);
         }
       })

@@ -11,10 +11,12 @@ from .party_slots import router as party_slots_router
 from .referral_sharing import router as referral_sharing_router
 from .registration import router as registration_router
 from .search import router as search_router
+from .tournaments import router as tournaments_router
 
 router = Router(name="dota-bot")
 router.include_routers(
     website_login_router,
+    tournaments_router,
     party_rooms_router,
     admin_router,
     account_router,

@@ -172,7 +172,7 @@ export function createDotaTournamentSquad(
   tournamentSlug: string,
   input: {
     joinMode: "OPEN" | "CONFIRM";
-    name: string;
+    name?: string;
     positionRole: "1" | "2" | "3" | "4" | "5";
   },
   accessToken: string
@@ -261,6 +261,11 @@ export function setDotaTournamentEntryJoinMode(
       method: "PATCH"
     }
   );
+}
+
+export function renameDotaTournamentSquad(slug: string, entryId: string, name: string, token: string) {
+  return apiRequest<{ ok: true }>(`/dota/tournaments/${tournamentPathSegment(slug)}/entries/${encodeURIComponent(entryId)}/name`,
+    { method: "PATCH", body: { name }, headers: authHeaders(token) });
 }
 
 export function leaveDotaTournamentEntry(

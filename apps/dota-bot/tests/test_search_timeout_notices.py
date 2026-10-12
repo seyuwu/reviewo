@@ -277,7 +277,7 @@ class TimeoutNoticeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.storage.pending_search_timeout_notices(), [])
         stored = self.storage._connection().execute("SELECT delete_at FROM temporary_messages").fetchone()
         remaining = (datetime.fromisoformat(stored["delete_at"]) - datetime.now(UTC)).total_seconds()
-        self.assertTrue(18 <= remaining <= 20)
+        self.assertTrue(118 <= remaining <= 120)
         self.storage.close()
         self.storage = BotStorage(self.path, self.key)
         self.storage.initialize()
