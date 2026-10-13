@@ -25,7 +25,8 @@ ordinary player search. Selected tournament and entry remain in the return URL.
   positions even if profile preferences are edited later.
 - **Invitation:** `te_<entry UUID hex>` opens the exact entry in FDP and preserves
   intent through registration/linking. If the preferred position is occupied,
-  offer another roster. Existing CONFIRM squads still require captain approval.
+  offer another roster. Entry invitation links admit directly even for CONFIRM squads;
+  ordinary catalog applications retain captain approval.
 - **Bot:** existing session/profile are reused. Website buttons issue a fresh
   one-time authentication ticket for the selected tournament/team on every click.
 
@@ -121,6 +122,23 @@ after 15 seconds. The inbox provides “Включить уведомления�
 Apply additive migration `20261012193000_tournament_application_notices_preference`
 before deploying the updated API and bot; the default is enabled.
 
+## Compact player search menu
+
+Waiting players and players with pending applications see three rows:
+“Выбрать команду”, “Создать команду / Настройки поиска”, and “К турниру”.
+The catalog shows every active tournament entry, including full teams and teams
+with the player's pending application, four per page. Labels show member count,
+full status or an application marker. Opening a team uses the existing member
+preview and per-position application flow; returning preserves the catalog page.
+The private paginated API selects only four entries and the viewer's own pending
+request, rather than loading the full public tournament bracket.
+
+Search settings contain positions, auto selection, stopping search and the
+application inbox. Disabling auto selection preserves the selected positions and
+changes the existing search to BOARD. Viewing teams or settings never enables
+AUTO or enrolls the player. Old application and enrollment checks remain in use.
+“К турниру” opens the tournament overview without cancelling search.
+
 ## Captain recruitment
 
 Captains explicitly enable “Ищем игроков” for this tournament and immediately see
@@ -133,11 +151,66 @@ roster capacity and live searchers. A stopped or changed search disappears from
 recommendations; unrelated ordinary PARTY/LFG search is never changed.
 
 A captain's offer is tied to the player, queue generation, entry, role and current
-captain. It lasts 20 minutes and does not reserve a slot. A player explicitly
+captain. New invitations last six hours and do not reserve a slot. A player explicitly
 accepts it; acceptance rechecks everything inside the existing tournament lock.
 This explicit captain approval allows direct joining even for a CONFIRM entry.
 Normal applications to CONFIRM entries still require a captain decision. Duplicate
 offers for the same search/entry are suppressed. No new Telegram bot is required.
+
+Opening a captain invitation publishes its current card at the bottom of the bot
+conversation and consumes the original notice. Failed deletions remain queued;
+a consumed send still awaiting its Telegram acknowledgement cannot resurrect a
+notice. Notices also expire at their saved deadline and retire on joining another
+entry, applying, stopping search or changing queue generation. Old invitations keep
+their actual deadline rather than gaining an unannounced extension.
+The website action first uses a callback so the bot can consume the source message.
+The resulting panel contains the freshly authenticated website link. Stale invitation
+actions refresh actual participation rather than leaving an unusable acceptance card.
+
+At the owner's request, bot entry deep links, website `entry` links and direct squad
+pages explicitly send `viaInvitation=true`. They admit without an additional captain
+decision, including CONFIRM entries; the links are transferable and not restricted to
+the captain's selected recipient. Ordinary catalog applications still use the entry's
+join policy. Every admission retains account, profile, Telegram, sponsor, registration,
+capacity, position, tournament lock and unique active-member checks. A member already
+in another squad must use the explicit leave or whole-company flow.
+
+## Companies of friends
+
+“Ищем с друзьями” uses an existing temporary tournament squad marked as a company.
+The organizer picks their role and receives the ordinary entry invitation. Friends
+join using the existing registration and position flow. A company of two to four
+shows each member's confirmation and a single primary action; five players become
+a full tournament team using the existing registration rules.
+
+Each person explicitly confirms “Ищем вместе”. Consent is bound to a SHA-256 hash of
+active membership IDs, user IDs and positions. Any roster change or position change
+clears all stored consents and requires fresh confirmation from every member,
+including when a player returns to their previously confirmed position. Enabling
+a company on an existing roster clears any earlier consent. A member can pause
+their own consent from management; unconfirmed companies cannot be admitted. An organizer selects a
+compatible destination and submits one application for the entire confirmed roster.
+Normal auto matching does not fill companies with strangers while they gather friends.
+Incoming catalog players require captain approval; direct friend links remain usable.
+
+Captains see one company application in their native bot inbox, notification and
+website management views, with every player's position/MMR and “Принять всех”.
+Website decisions carry the displayed application timestamp and position, so an
+old card cannot accept a replacement application. The
+destination may also be an incomplete company, allowing 2+3 or 2+2 combinations.
+The destination captain approves; transferring players have already authorized their
+organizer to apply together. Source consent, roster snapshot, current organizer,
+every account/profile/Telegram identity/sponsor gate, target capacity and all positions
+are rechecked under the existing tournament advisory lock. Deactivating the source,
+admitting everyone, withdrawing competing requests, registration updates and recipient
+notifications commit in one transaction. Old source rooms expire and access follows
+current membership. Concurrent accepts cannot split a company or create two active
+memberships. A failed or stale operation leaves the source intact.
+
+Apply additive migration `20261013160000_tournament_company_search` before enabling
+the updated clients. Before rolling back to a server version without company support,
+withdraw pending requests with a non-null `source_entry_id`; older code cannot interpret
+their consent and whole-company semantics.
 
 ## Concurrency and isolation
 
@@ -165,3 +238,22 @@ application clients. It removes only the single-pending-application index; the
 active-player and active-position membership indexes remain intact.
 Verification uses isolated PostgreSQL and bot mocks; never enroll real users to
 test the queue or send them test messages.
+
+## Verification (2026-10-13)
+
+API and web type checks, Prisma validation and ESLint on the changed TypeScript
+files passed. The full local API runner passed 302 tests and web passed 36 tests.
+The final focused consent/admission run passed six tests. The production bot
+candidate passed all 50 tournament bot tests, and API/web candidates built.
+
+A fresh PostgreSQL container on an isolated Docker network passed migrations and
+71 tests covering company consent, tournament participation, reserves, rooms and
+series. Persisted cases include direct entry links, 2+2/2+3 company merges, paused
+consent and simultaneous accepts. All friends remain together when two captains
+race to accept their applications. No production records or real Telegram users
+were used for these tests.
+
+The production database was backed up before the additive company migration.
+Previous API/web/bot image tags are retained for rollback. Before reverting the
+API to a version without company support, withdraw pending company applications
+as described above; preserve the additive columns.

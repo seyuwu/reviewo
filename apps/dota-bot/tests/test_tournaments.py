@@ -141,6 +141,8 @@ class IsolatedApi:
             return {"team": deepcopy(self.parties[0]), "parties": deepcopy(self.parties[1:]), "invites": []}
         if method == "GET" and path == API_ROOT + "/participation":
             return self.result()
+        if method == "GET" and path.startswith(API_ROOT + "/participation/teams?page="):
+            return {"items": deepcopy(self.suggestions[:4]), "page": 0, "pageCount": 1, "total": len(self.suggestions)}
         if method == "GET" and path == API_ROOT:
             return {**deepcopy(EVENT), "entries": [
                 {"id": OTHER_ENTRY_ID, "teamName": "Unrelated squad", "status": "RECRUITING", "joinMode": "OPEN", "members": []},
@@ -274,9 +276,10 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_existing_zero_mmr_profile_gets_suggestions_without_signup(self):
         await self.action("solo")
-        self.assertIn("0 MMR", self.bot.views[-1][0])
-        self.assertTrue(any(button.text == "Включить автоподбор" for button in self.buttons()))
-        self.assertTrue(any(button.text.startswith("Команда: ") for button in self.buttons()))
+        self.assertEqual(self.api.profile["mmr"], 0)
+        self.assertIn("Автоподбор выключен", self.bot.views[-1][0])
+        self.assertTrue(any(button.text == "⚙️ Настройки поиска" for button in self.buttons()))
+        self.assertTrue(any(button.text == "👥 Выбрать команду" for button in self.buttons()))
         self.api.public.assert_not_awaited()
         self.api.login_telegram_bot_session.assert_not_awaited()
         self.assertIsNone(await self.state.get_state())
@@ -284,7 +287,7 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_own_team_button_pauses_search_and_shows_underlined_instruction(self):
         await self.action("solo")
-        self.assertTrue(any(button.text == "➕ Создать свою команду" for button in self.buttons()))
+        self.assertTrue(any(button.text == "➕ Создать команду" for button in self.buttons()))
         await self.press(self.callback_for("tr:newteam:"))
         self.api.user.assert_any_await(USER_ID, "POST", API_ROOT + "/participation/cancel", {})
         self.assertFalse(any(call.args[2] == "/social/parties/me" for call in self.api.user.await_args_list))
@@ -323,7 +326,7 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
             ordinary.assert_not_awaited()
         self.assertEqual(self.api.profile["mmr"], "0")
         self.assertEqual(self.api.profile["roles"], ["3"])
-        self.assertIn("Подберём команду", self.bot.views[-1][0])
+        self.assertIn("Ищем команду для турнира", self.bot.views[-1][0])
         self.assertFalse(self.wakeup.is_set())
         self.assertIsNone(self.storage.get_choice(USER_ID, participation.PENDING_KEY, 0))
         self.assertIsNone(self.storage.get_choice(USER_ID, "pending_onboarding_action", 0))
@@ -368,7 +371,7 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(role_buttons), 4)
         self.assertFalse(any("Мид" in button.text for button in role_buttons))
         await self.press(self.callback_for("tr:join:", "Оффлейн"))
-        self.api.user.assert_any_await(USER_ID, "POST", API_ROOT + "/entries/" + ENTRY_ID + "/join", {"positionRole": "3"})
+        self.api.user.assert_any_await(USER_ID, "POST", API_ROOT + "/entries/" + ENTRY_ID + "/join", {"positionRole": "3", "viaInvitation": True})
         self.assertFalse(any(OTHER_ENTRY_ID in str(call) and call.args[1] == "POST" for call in self.api.user.await_args_list))
         self.assertIn("0 MMR", self.bot.views[-1][0])
 
@@ -538,10 +541,10 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.api.state = "REQUESTED"
         self.api.suggestions[0]["entryId"] = OTHER_ENTRY_ID
         await self.action("solo")
-        self.assertTrue(any(button.text.startswith("Команда: ") for button in self.buttons()))
-        self.assertTrue(any(button.text == "Мои заявки" for button in self.buttons()))
+        self.assertTrue(any(button.text == "👥 Выбрать команду" for button in self.buttons()))
         self.assertFalse(any(button.text == "Включить автоподбор" for button in self.buttons()))
         self.assertFalse(any(call.args[1] == "POST" for call in self.api.user.await_args_list))
+        await self.action("teams")
         await self.press(self.callback_for("tr:pickteam:"))
         self.assertIn("Игроки", self.bot.views[-1][0])
         self.assertTrue(any((button.callback_data or "").startswith("tr:join:") for button in self.buttons()))

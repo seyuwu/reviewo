@@ -230,7 +230,11 @@ export class DotaTournamentsController {
       entryId,
       requestId,
       input.decision,
-      currentUser
+      currentUser,
+      undefined,
+      input.requestUpdatedAt
+        ? { updatedAt: input.requestUpdatedAt, positionRole: input.positionRole! }
+        : undefined
     );
   }
 

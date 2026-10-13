@@ -125,11 +125,28 @@ export class TournamentRecruitmentService {
         }
         throw new ConflictException("Приглашение истекло. Игрок может вступить через страницу команды.");
       }
-      const payload: TournamentTeamInvitePayload = { type: "tournament_team_invite", tournamentId: entry.tournamentId,
-        tournamentSlug: slug, tournamentTitle: entry.tournament.title, entryId, entryName: entry.teamNameSnapshot,
-        senderUserId: user.id, senderName: user.displayName.slice(0, 80), targetUserId: row.userId,
-        queueId: row.id, generation: row.generation, roles: [input.positionRole], expiresAt: new Date(Date.now() + 20 * 60_000).toISOString() };
-      await tx.telegramBotNotification.create({ data: { telegramUserId: identity.providerUserId, eventKey: key, payload: payload as unknown as Prisma.InputJsonValue } });
+      const payload: TournamentTeamInvitePayload = {
+        type: "tournament_team_invite",
+        tournamentId: entry.tournamentId,
+        tournamentSlug: slug,
+        tournamentTitle: entry.tournament.title,
+        entryId,
+        entryName: entry.teamNameSnapshot,
+        senderUserId: user.id,
+        senderName: user.displayName.slice(0, 80),
+        targetUserId: row.userId,
+        queueId: row.id,
+        generation: row.generation,
+        roles: [input.positionRole],
+        expiresAt: new Date(Date.now() + 6 * 60 * 60_000).toISOString()
+      };
+      await tx.telegramBotNotification.create({
+        data: {
+          telegramUserId: identity.providerUserId,
+          eventKey: key,
+          payload: payload as unknown as Prisma.InputJsonValue
+        }
+      });
     });
     return { queued: true };
   }

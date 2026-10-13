@@ -59,9 +59,12 @@ async def show_requests(callback, api, settings, storage, context, action):
     rows = []
     for player, item in zip(board.get("players", []), items):
         name = str(player["playerName"])[:40]
-        lines.append("• " + escape(name) + " · " + ROLE_NAMES.get(str(player.get("role")), "без позиции")
+        if player.get("company"):
+            lines.append("👥 " + escape(name) + " · вступают вместе")
+        else:
+            lines.append("• " + escape(name) + " · " + ROLE_NAMES.get(str(player.get("role")), "без позиции")
             + " · " + escape(str(player.get("mmr") if player.get("mmr") is not None else "—")) + " MMR")
-        rows.append([InlineKeyboardButton(text="👤 " + name, callback_data="ta:player:" + item["token"])])
+        rows.append([InlineKeyboardButton(text=("👥 " if player.get("company") else "👤 ") + name, callback_data="ta:player:" + item["token"])])
     if not items:
         lines.append("Активных заявок пока нет.")
     else:
@@ -89,6 +92,13 @@ async def show_profile(callback, api, settings, storage, context, application, f
     lines = ["👤 <b>" + escape(str(application["playerName"])[:80]) + "</b>", "",
              "MMR: <b>" + escape(str(application.get("mmr") if application.get("mmr") is not None else "—")) + "</b>",
              "Заявка на позицию: <b>" + role + "</b>", "Команда: " + escape(str(application["entryName"])[:80])]
+    company = application.get("company")
+    if company:
+        lines = [f"👥 <b>Компания · {company['count']} игрока</b>", "", "Вступают вместе в «" + escape(str(application["entryName"])[:80]) + "»."]
+        for member in company.get("members", [])[:4]:
+            lines.append("• " + escape(str(member.get("name") or "Игрок")[:35]) + " · "
+                + ROLE_NAMES.get(str(member.get("role")), "без позиции") + " · "
+                + escape(str(member.get("mmr") if member.get("mmr") is not None else "—")) + " MMR")
     username = application.get("telegramUsername")
     if username:
         lines += ["", f'<a href="https://t.me/{quote(str(username), safe="")}">@{escape(str(username))}</a>']
@@ -96,7 +106,7 @@ async def show_profile(callback, api, settings, storage, context, application, f
         "requestId": application["requestId"], "requestUpdatedAt": application["requestUpdatedAt"], "role": application["role"]}])
     rows, decisions = [], []
     if application.get("canAccept"):
-        decisions.append(InlineKeyboardButton(text="✅ Принять", callback_data="ta:accept:" + actions[0]["token"]))
+        decisions.append(InlineKeyboardButton(text="✅ Принять всех" if company else "✅ Принять", callback_data="ta:accept:" + actions[0]["token"]))
     if application.get("canDecline"):
         decisions.append(InlineKeyboardButton(text="❌ Отклонить", callback_data="ta:decline:" + actions[0]["token"]))
     if not application.get("active"):

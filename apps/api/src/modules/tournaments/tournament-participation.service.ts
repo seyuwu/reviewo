@@ -8,12 +8,34 @@ import { DotaTournamentsService } from "./tournaments.service.js";
 import type { StartTournamentSoloSearchDto, TournamentSoloTicket } from "./dto/tournament-participation.dto.js";
 import { TournamentRecruitmentService } from "./tournament-recruitment.service.js";
 import { readTournamentApplication } from "./tournament-recruitment-payload.js";
+import { companyConfirmed, companySnapshotVersion, companyVersion } from "./tournament-company.js";
 
 const ACTIVE_ENTRIES = ["RECRUITING", "REGISTERED", "RESERVE"] as const;
 const ROLES = ["1", "2", "3", "4", "5"] as const;
 const APPLICATION_INCLUDE = {
-  entry: { include: { tournament: true, teamParty: { select: { ownerUserId: true } }, members: { where: { isActive: true }, select: { userId: true, positionRole: true } } } },
-  user: { select: { status: true, authIdentities: { where: { provider: "telegram" }, select: { telegramUsername: true }, take: 1 } } }
+  entry: {
+    include: {
+      tournament: true,
+      teamParty: { select: { ownerUserId: true } },
+      members: { where: { isActive: true }, select: { userId: true, positionRole: true } }
+    }
+  },
+  user: {
+    select: {
+      status: true,
+      authIdentities: {
+        where: { provider: "telegram" },
+        select: { telegramUsername: true },
+        take: 1
+      }
+    }
+  },
+  sourceEntry: {
+    include: {
+      members: { where: { isActive: true } },
+      teamParty: { select: { ownerUserId: true } }
+    }
+  }
 } satisfies Prisma.DotaTournamentEntryRequestInclude;
 type ApplicationRecord = Prisma.DotaTournamentEntryRequestGetPayload<{ include: typeof APPLICATION_INCLUDE }>;
 type Candidate = { row: DotaTournamentSoloSearch; user: AuthenticatedUser; roles: string[] };
@@ -46,8 +68,14 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
     const entry = await this.prisma.dotaTournamentEntry.findFirst({ where: { id: entryId,
       status: { in: [...ACTIVE_ENTRIES] }, tournament: { status: { not: "DRAFT" } } }, include: { tournament: true } });
     if (!entry) throw new NotFoundException("Tournament invitation is no longer available");
-    return { tournamentId: entry.tournamentId, slug: entry.tournament.slug, entryId: entry.id,
-      teamName: entry.teamNameSnapshot, tournamentTitle: entry.tournament.title };
+    return {
+      tournamentId: entry.tournamentId,
+      slug: entry.tournament.slug,
+      entryId: entry.id,
+      teamName: entry.teamNameSnapshot,
+      tournamentTitle: entry.tournament.title,
+      companySearchEnabled: entry.companySearchEnabled
+    };
   }
 
   async state(slug: string, user: AuthenticatedUser) {
@@ -57,17 +85,55 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
         if (error instanceof HttpException && error.getStatus() === 404) return null;
         throw error;
       }),
-      this.prisma.dotaTournamentEntryMember.findFirst({ where: { tournamentId: tournament.id, userId: user.id,
-        isActive: true, entry: { status: { in: [...ACTIVE_ENTRIES] } } }, include: {
-        entry: { include: { members: { where: { isActive: true }, orderBy: { positionRole: "asc" },
-          include: { user: { select: { authIdentities: { where: { provider: "telegram" }, select: { telegramUsername: true }, take: 1 } } } } },
-          teamParty: { select: { ownerUserId: true } } } }
-      } }),
-      this.prisma.dotaTournamentEntryRequest.findMany({ where: { tournamentId: tournament.id, userId: user.id, status: "PENDING" },
-        include: { entry: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
-      this.prisma.dotaTournamentSoloSearch.findUnique({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } } }),
-      this.prisma.dotaTournamentSponsorClick.findUnique({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } }, select: { id: true } }),
-      this.prisma.dotaTournamentRecruitPreference.findUnique({ where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } } })
+      this.prisma.dotaTournamentEntryMember.findFirst({
+        where: {
+          tournamentId: tournament.id,
+          userId: user.id,
+          isActive: true,
+          entry: { status: { in: [...ACTIVE_ENTRIES] } }
+        },
+        include: {
+          entry: {
+            include: {
+              members: {
+                where: { isActive: true },
+                orderBy: { positionRole: "asc" },
+                include: {
+                  user: {
+                    select: {
+                      authIdentities: {
+                        where: { provider: "telegram" },
+                        select: { telegramUsername: true },
+                        take: 1
+                      }
+                    }
+                  }
+                }
+              },
+              teamParty: { select: { ownerUserId: true } },
+              companyRequests: {
+                where: { status: "PENDING" },
+                include: { entry: { select: { teamNameSnapshot: true } } }
+              }
+            }
+          }
+        }
+      }),
+      this.prisma.dotaTournamentEntryRequest.findMany({
+        where: { tournamentId: tournament.id, userId: user.id, status: "PENDING" },
+        include: { entry: true },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+      }),
+      this.prisma.dotaTournamentSoloSearch.findUnique({
+        where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } }
+      }),
+      this.prisma.dotaTournamentSponsorClick.findUnique({
+        where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } },
+        select: { id: true }
+      }),
+      this.prisma.dotaTournamentRecruitPreference.findUnique({
+        where: { tournamentId_userId: { tournamentId: tournament.id, userId: user.id } }
+      })
     ]);
     const roles = profile?.roles.filter(role => ROLES.includes(role as typeof ROLES[number])) ?? [];
     const request = requests[0];
@@ -79,40 +145,354 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
       startsAt: tournament.startsAt?.toISOString() ?? null, registrationClosesAt: tournament.registrationClosesAt?.toISOString() ?? null,
       description: tournament.description, format: tournament.format, gameMode: tournament.gameMode, rulesUrl: tournament.rulesUrl },
       state, roles, profileMmr: profile?.mmr ?? null, queueRoles: queue?.status === "WAITING" ? queue.roles : [], queueMode: queue?.status === "WAITING" ? queue.mode : null,
+      queueId: queue?.status === "WAITING" ? queue.id : null,
+      queueGeneration: queue?.status === "WAITING" ? queue.generation : null,
       sponsorRequired: open && tournament.sponsors.length > 0 && !click,
-      sponsors: tournament.sponsors.map(sponsor => ({ id: sponsor.id, name: sponsor.name, url: sponsor.url })),
-      entry: member ? { id: member.entry.id, membershipId: member.id, name: member.entry.teamNameSnapshot, status: member.entry.status,
-        canLeave: (tournament.status === "REGISTRATION_OPEN" && (!tournament.registrationClosesAt || tournament.registrationClosesAt > new Date()))
-          || (member.entry.status === "RESERVE" && tournament.status === "REGISTRATION_CLOSED" && !tournament.bracketGeneratedAt),
-        isCaptain: (member.entry.createdByUserId ?? member.entry.teamParty?.ownerUserId) === user.id,
-        recruiting: open && member.entry.members.length < 5 && Boolean(preference?.enabled),
-        joinMode: member.entry.joinMode, ownRole: member.positionRole,
-        members: member.entry.members.map(player => {
-          const username = player.user?.authIdentities[0]?.telegramUsername;
-          return { name: player.displayName, role: player.positionRole, mmr: player.mmr,
-            telegramUsername: username && /^[A-Za-z0-9_]{1,32}$/.test(username) ? username : null };
-        }) } : null,
-      request: request ? { entryId: request.entryId, entryName: request.entry.teamNameSnapshot, role: request.positionRole } : null,
-      requests: requests.map(item => ({ id: item.id, entryId: item.entryId, entryName: item.entry.teamNameSnapshot, role: item.positionRole })),
-      suggestions };
+      sponsors: tournament.sponsors.map((sponsor) => ({
+        id: sponsor.id,
+        name: sponsor.name,
+        url: sponsor.url
+      })),
+      entry: member
+        ? {
+            id: member.entry.id,
+            membershipId: member.id,
+            name: member.entry.teamNameSnapshot,
+            status: member.entry.status,
+            company:
+              open &&
+              (tournament.status === "REGISTRATION_OPEN" || member.entry.status === "RESERVE") &&
+              member.entry.companySearchEnabled &&
+              member.entry.members.length < 5
+                ? {
+                    rosterVersion: companyVersion(member.entry.members),
+                    confirmed: companyConfirmed(member.entry.members),
+                    selfConfirmed:
+                      member.companyConsentVersion === companyVersion(member.entry.members),
+                    confirmations: member.entry.members.filter(
+                      (player) =>
+                        player.companyConsentVersion === companyVersion(member.entry.members)
+                    ).length,
+                    requests: member.entry.companyRequests
+                      .filter(
+                        (item) =>
+                          companySnapshotVersion(item.sourceRoster) ===
+                          companyVersion(member.entry.members)
+                      )
+                      .map((item) => ({
+                        id: item.id,
+                        entryId: item.entryId,
+                        name: item.entry.teamNameSnapshot
+                      }))
+                  }
+                : null,
+            canLeave:
+              (tournament.status === "REGISTRATION_OPEN" &&
+                (!tournament.registrationClosesAt ||
+                  tournament.registrationClosesAt > new Date())) ||
+              (member.entry.status === "RESERVE" &&
+                tournament.status === "REGISTRATION_CLOSED" &&
+                !tournament.bracketGeneratedAt),
+            isCaptain:
+              (member.entry.createdByUserId ?? member.entry.teamParty?.ownerUserId) === user.id,
+            recruiting: open && member.entry.members.length < 5 && Boolean(preference?.enabled),
+            joinMode: member.entry.joinMode,
+            ownRole: member.positionRole,
+            members: member.entry.members.map((player) => {
+              const username = player.user?.authIdentities[0]?.telegramUsername;
+              return {
+                name: player.displayName,
+                role: player.positionRole,
+                mmr: player.mmr,
+                confirmed: player.companyConsentVersion === companyVersion(member.entry.members),
+                telegramUsername:
+                  username && /^[A-Za-z0-9_]{1,32}$/.test(username) ? username : null
+              };
+            })
+          }
+        : null,
+      request: request
+        ? {
+            entryId: request.entryId,
+            entryName: request.entry.teamNameSnapshot,
+            role: request.positionRole
+          }
+        : null,
+      requests: requests.map((item) => ({
+        id: item.id,
+        entryId: item.entryId,
+        entryName: item.entry.teamNameSnapshot,
+        role: item.positionRole
+      })),
+      suggestions
+    };
   }
 
-  private async suggestions(tournament: DotaTournament, roles: string[], mmr: string | null, automatic = false, excludeEntries: string[] = []) {
-    const entries = await this.prisma.dotaTournamentEntry.findMany({ where: { tournamentId: tournament.id,
-      ...(excludeEntries.length ? { id: { notIn: excludeEntries } } : {}), ...(automatic ? { joinMode: "OPEN" as const } : {}),
-      status: { in: tournament.status === "REGISTRATION_CLOSED" ? ["RESERVE"] : [...ACTIVE_ENTRIES] } },
-      include: { members: { where: { isActive: true }, select: { positionRole: true, mmr: true } } }, orderBy: { createdAt: "asc" } });
+  async teams(slug: string, user: AuthenticatedUser, requestedPage = 0) {
+    const tournament = await this.tournament(slug);
+    const where = {
+      tournamentId: tournament.id,
+      status: { in: [...ACTIVE_ENTRIES] }
+    } satisfies Prisma.DotaTournamentEntryWhereInput;
+    const total = await this.prisma.dotaTournamentEntry.count({ where });
+    const pageCount = Math.max(1, Math.ceil(total / 4));
+    const page = Math.max(0, Math.min(requestedPage, pageCount - 1));
+    const entries = await this.prisma.dotaTournamentEntry.findMany({
+      where,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      skip: page * 4,
+      take: 4,
+      select: {
+        id: true,
+        teamNameSnapshot: true,
+        joinMode: true,
+        status: true,
+        _count: { select: { members: { where: { isActive: true } } } },
+        joinRequests: {
+          where: { userId: user.id, status: "PENDING" },
+          take: 1,
+          select: { positionRole: true }
+        }
+      }
+    });
+    return {
+      page,
+      pageCount,
+      total,
+      items: entries.map((entry) => ({
+        entryId: entry.id,
+        name: entry.teamNameSnapshot,
+        memberCount: entry._count.members,
+        status: entry.status,
+        joinMode: entry.joinMode,
+        requestedRole: entry.joinRequests[0]?.positionRole ?? null
+      }))
+    };
+  }
+
+  private async currentCompany(
+    slug: string,
+    userId: string,
+    db: Prisma.TransactionClient = this.prisma
+  ) {
+    const entry = await db.dotaTournamentEntry.findFirst({
+      where: {
+        tournament: { slug, status: { not: "DRAFT" } },
+        status: { in: [...ACTIVE_ENTRIES] },
+        members: { some: { userId, isActive: true } }
+      },
+      include: {
+        tournament: true,
+        members: { where: { isActive: true }, orderBy: { createdAt: "asc" } },
+        teamParty: { select: { ownerUserId: true } }
+      }
+    });
+    if (
+      !entry ||
+      !entry.companySearchEnabled ||
+      entry.members.length > 4 ||
+      !this.tournaments.participationOpen(entry.tournament)
+    )
+      throw new ConflictException("Открой текущую компанию в турнире.");
+    return entry;
+  }
+
+  async enableCompany(slug: string, user: AuthenticatedUser) {
+    const tournament = await this.tournament(slug);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${tournament.id}`}))`;
+      const entry = await tx.dotaTournamentEntry.findFirst({
+        where: {
+          tournamentId: tournament.id,
+          status: { in: [...ACTIVE_ENTRIES] },
+          members: { some: { userId: user.id, isActive: true } }
+        },
+        include: {
+          tournament: true,
+          members: { where: { isActive: true } },
+          teamParty: { select: { ownerUserId: true } }
+        }
+      });
+      if (
+        !entry ||
+        (entry.createdByUserId ?? entry.teamParty?.ownerUserId) !== user.id ||
+        entry.members.length > 4
+      )
+        throw new ForbiddenException("Компания доступна капитану неполного состава.");
+      await this.tournaments.assertSoloQueueAllowed(tx, entry.tournament, user.id);
+      if (!entry.companySearchEnabled)
+        await tx.dotaTournamentEntryMember.updateMany({
+          where: { entryId: entry.id },
+          data: { companyConsentVersion: null }
+        });
+      await tx.dotaTournamentEntry.update({
+        where: { id: entry.id },
+        data: { companySearchEnabled: true }
+      });
+    });
+    return this.state(slug, user);
+  }
+
+  async confirmCompany(
+    slug: string,
+    rosterVersion: string,
+    user: AuthenticatedUser,
+    confirmed = true
+  ) {
+    const tournament = await this.tournament(slug);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${tournament.id}`}))`;
+      const entry = await this.currentCompany(slug, user.id, tx);
+      if (companyVersion(entry.members) !== rosterVersion)
+        throw new ConflictException(
+          "Состав изменился. Посмотри компанию и подтверди поиск ещё раз."
+        );
+      if (confirmed) await this.tournaments.assertSoloQueueAllowed(tx, entry.tournament, user.id);
+      const member = entry.members.find((player) => player.userId === user.id)!;
+      await tx.dotaTournamentEntryMember.update({
+        where: { id: member.id },
+        data: { companyConsentVersion: confirmed ? rosterVersion : null }
+      });
+    });
+    return this.state(slug, user);
+  }
+
+  async companyTeams(slug: string, user: AuthenticatedUser, requestedPage = 0) {
+    const source = await this.currentCompany(slug, user.id);
+    if (
+      (source.createdByUserId ?? source.teamParty?.ownerUserId) !== user.id ||
+      !companyConfirmed(source.members)
+    )
+      throw new ConflictException("Дождись подтверждения всех друзей.");
+    const candidates = await this.prisma.dotaTournamentEntry.findMany({
+      where: {
+        tournamentId: source.tournamentId,
+        id: { not: source.id },
+        status: {
+          in: source.tournament.status === "REGISTRATION_CLOSED" ? ["RESERVE"] : [...ACTIVE_ENTRIES]
+        },
+        members: {
+          none: {
+            isActive: true,
+            positionRole: { in: source.members.map((member) => member.positionRole!) }
+          }
+        }
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, _count: { select: { members: { where: { isActive: true } } } } }
+    });
+    const compatible = candidates.filter(
+      (entry) => entry._count.members + source.members.length <= 5
+    );
+    const pageCount = Math.max(1, Math.ceil(compatible.length / 4));
+    const page = Math.max(0, Math.min(requestedPage, pageCount - 1));
+    const ids = compatible.slice(page * 4, page * 4 + 4).map((entry) => entry.id);
+    const entries = await this.prisma.dotaTournamentEntry.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        teamNameSnapshot: true,
+        status: true,
+        joinMode: true,
+        joinRequests: {
+          where: { userId: user.id, sourceEntryId: source.id, status: "PENDING" },
+          select: { positionRole: true, sourceRoster: true },
+          take: 1
+        }
+      }
+    });
+    return {
+      page,
+      pageCount,
+      total: compatible.length,
+      sourceEntryId: source.id,
+      rosterVersion: companyVersion(source.members),
+      items: ids.flatMap((id) => {
+        const entry = entries.find((item) => item.id === id);
+        if (!entry) return [];
+        return [
+          {
+            entryId: id,
+            name: entry.teamNameSnapshot,
+            memberCount: compatible.find((item) => item.id === id)!._count.members,
+            status: entry.status,
+            joinMode: entry.joinMode,
+            requestedRole:
+              companySnapshotVersion(entry.joinRequests[0]?.sourceRoster) ===
+              companyVersion(source.members)
+                ? (entry.joinRequests[0]?.positionRole ?? null)
+                : null
+          }
+        ];
+      })
+    };
+  }
+
+  async applyCompany(
+    slug: string,
+    targetEntryId: string,
+    rosterVersion: string,
+    user: AuthenticatedUser
+  ) {
+    await this.tournaments.submitCompanyApplication(slug, targetEntryId, rosterVersion, user);
+    return this.state(slug, user);
+  }
+
+  private async suggestions(
+    tournament: DotaTournament,
+    roles: string[],
+    mmr: string | null,
+    automatic = false,
+    excludeEntries: string[] = []
+  ) {
+    const entries = await this.prisma.dotaTournamentEntry.findMany({
+      where: {
+        tournamentId: tournament.id,
+        ...(excludeEntries.length ? { id: { notIn: excludeEntries } } : {}),
+        ...(automatic ? { joinMode: "OPEN" as const, companySearchEnabled: false } : {}),
+        status: {
+          in: tournament.status === "REGISTRATION_CLOSED" ? ["RESERVE"] : [...ACTIVE_ENTRIES]
+        }
+      },
+      include: {
+        members: { where: { isActive: true }, select: { positionRole: true, mmr: true } }
+      },
+      orderBy: { createdAt: "asc" }
+    });
     const ownMmr = Number.parseInt(mmr ?? "", 10);
-    return entries.flatMap(entry => {
-      if (entry.members.length >= 5) return [];
-      const freeRoles = ROLES.filter(candidate => !entry.members.some(member => member.positionRole === candidate));
-      const role = roles.find(candidate => freeRoles.includes(candidate as typeof ROLES[number])) ?? (automatic ? undefined : freeRoles[0]);
-      if (!role) return [];
-      const mmrs = entry.members.map(member => member.mmr).filter((value): value is number => value !== null);
-      const averageMmr = mmrs.length ? Math.round(mmrs.reduce((total, value) => total + value, 0) / mmrs.length) : null;
-      return [{ entryId: entry.id, name: entry.teamNameSnapshot, status: entry.status, role, freeRoles: [...freeRoles], joinMode: entry.joinMode, memberCount: entry.members.length, averageMmr,
-        distance: Number.isFinite(ownMmr) && averageMmr !== null ? Math.abs(ownMmr - averageMmr) : 0 }];
-    }).sort((a, b) => b.memberCount - a.memberCount || a.distance - b.distance).slice(0, automatic ? 3 : 6)
+    return entries
+      .flatMap((entry) => {
+        if (entry.members.length >= 5) return [];
+        const freeRoles = ROLES.filter(
+          (candidate) => !entry.members.some((member) => member.positionRole === candidate)
+        );
+        const role =
+          roles.find((candidate) => freeRoles.includes(candidate as (typeof ROLES)[number])) ??
+          (automatic ? undefined : freeRoles[0]);
+        if (!role) return [];
+        const mmrs = entry.members
+          .map((member) => member.mmr)
+          .filter((value): value is number => value !== null);
+        const averageMmr = mmrs.length
+          ? Math.round(mmrs.reduce((total, value) => total + value, 0) / mmrs.length)
+          : null;
+        return [
+          {
+            entryId: entry.id,
+            name: entry.teamNameSnapshot,
+            status: entry.status,
+            role,
+            freeRoles: [...freeRoles],
+            joinMode: entry.companySearchEnabled ? ("CONFIRM" as const) : entry.joinMode,
+            memberCount: entry.members.length,
+            averageMmr,
+            distance:
+              Number.isFinite(ownMmr) && averageMmr !== null ? Math.abs(ownMmr - averageMmr) : 0
+          }
+        ];
+      })
+      .sort((a, b) => b.memberCount - a.memberCount || a.distance - b.distance)
+      .slice(0, automatic ? 3 : 6)
       .map(({ distance: _distance, ...suggestion }) => suggestion);
   }
 
@@ -185,16 +565,57 @@ export class TournamentParticipationService implements OnModuleInit, OnModuleDes
 
   private presentApplication(request: ApplicationRecord) {
     const entry = request.entry;
-    const open = this.tournaments.participationOpen(entry.tournament) && (entry.tournament.status === "REGISTRATION_OPEN" || entry.status === "RESERVE");
-    const active = request.status === "PENDING" && ACTIVE_ENTRIES.some(status => status === entry.status) && open;
+    const open =
+      this.tournaments.participationOpen(entry.tournament) &&
+      (entry.tournament.status === "REGISTRATION_OPEN" || entry.status === "RESERVE");
+    const source = request.sourceEntry;
+    const group = source?.members ?? [];
+    const currentGroup =
+      !source ||
+      (source.companySearchEnabled &&
+        ACTIVE_ENTRIES.some((status) => status === source.status) &&
+        (source.createdByUserId ?? source.teamParty?.ownerUserId) === request.userId &&
+        companyConfirmed(group) &&
+        companyVersion(group) === companySnapshotVersion(request.sourceRoster));
+    const active =
+      request.status === "PENDING" &&
+      ACTIVE_ENTRIES.some((status) => status === entry.status) &&
+      open &&
+      currentGroup;
     const username = request.user.authIdentities[0]?.telegramUsername;
     return { tournamentId: entry.tournamentId, tournamentSlug: entry.tournament.slug, tournamentTitle: entry.tournament.title,
       entryId: entry.id, entryName: entry.teamNameSnapshot, requestId: request.id, status: request.status, active,
       requestUpdatedAt: request.updatedAt.toISOString(),
-      canAccept: active && request.user.status === "active" && request.user.authIdentities.length > 0 && entry.members.length < 5
-        && !entry.members.some(member => member.positionRole === request.positionRole), canDecline: active,
-      playerName: request.displayName, profileSlug: request.dotaProfileSlug, role: request.positionRole, mmr: request.mmr,
-      telegramUsername: username && /^[A-Za-z0-9_]{1,32}$/.test(username) ? username : null };
+      canAccept:
+        active &&
+        request.user.status === "active" &&
+        request.user.authIdentities.length > 0 &&
+        entry.members.length + (source ? group.length : 1) <= 5 &&
+        !entry.members.some((member) =>
+          source
+            ? group.some((player) => player.positionRole === member.positionRole)
+            : member.positionRole === request.positionRole
+        ),
+      canDecline: request.status === "PENDING" && open,
+      company: source
+        ? {
+            name: source.teamNameSnapshot,
+            count: group.length,
+            members: group.map((member) => ({
+              name: member.displayName,
+              role: member.positionRole,
+              mmr: member.mmr
+            }))
+          }
+        : null,
+      playerName: source
+        ? `Компания «${source.teamNameSnapshot}» · ${group.length}`
+        : request.displayName,
+      profileSlug: request.dotaProfileSlug,
+      role: request.positionRole,
+      mmr: request.mmr,
+      telegramUsername: username && /^[A-Za-z0-9_]{1,32}$/.test(username) ? username : null
+    };
   }
 
   private async managedApplication(slug: string, requestId: string, user: AuthenticatedUser) {

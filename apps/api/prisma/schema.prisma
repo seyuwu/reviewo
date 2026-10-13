@@ -1395,6 +1395,7 @@ model DotaTournamentEntry {
   description           String                     @default("") @db.VarChar(1000)
   teamSlugSnapshot      String                     @map("team_slug_snapshot") @db.VarChar(120)
   joinMode              GamePartyJoinMode          @default(CONFIRM) @map("join_mode")
+  companySearchEnabled  Boolean                   @default(false) @map("company_search_enabled")
   status                DotaTournamentEntryStatus @default(REGISTERED)
   createdByUserId       String?                    @map("created_by_user_id") @db.Uuid
   createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -1404,6 +1405,7 @@ model DotaTournamentEntry {
   createdBy             User?                      @relation("DotaTournamentEntryCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   members               DotaTournamentEntryMember[]
   joinRequests          DotaTournamentEntryRequest[]
+  companyRequests       DotaTournamentEntryRequest[] @relation("TournamentCompanySource")
   matchesAsA            DotaTournamentMatch[]        @relation("DotaTournamentMatchEntryA")
   matchesAsB            DotaTournamentMatch[]        @relation("DotaTournamentMatchEntryB")
   bracketSeed           DotaTournamentBracketSeed?
@@ -1582,16 +1584,20 @@ model DotaTournamentEntryRequest {
   dotaProfileSlug  String?                           @map("dota_profile_slug") @db.VarChar(120)
   mmr              Int?
   positionRole     String                            @map("position_role") @db.VarChar(8)
+  sourceEntryId    String?                           @map("source_entry_id") @db.Uuid
+  sourceRoster     Json?                             @map("source_roster")
   status           DotaTournamentEntryRequestStatus @default(PENDING)
   createdAt        DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(6)
   entry            DotaTournamentEntry               @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  sourceEntry      DotaTournamentEntry?              @relation("TournamentCompanySource", fields: [sourceEntryId], references: [id], onDelete: Cascade)
   tournament       DotaTournament                    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   user             User                              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([entryId, userId])
   @@index([tournamentId, status, createdAt])
   @@index([userId, status])
+  @@index([sourceEntryId, status])
   @@map("dota_tournament_entry_requests")
   @@schema("social")
 }
@@ -1607,6 +1613,7 @@ model DotaTournamentEntryMember {
   mmr            Int?
   positionRole   String?            @map("position_role") @db.VarChar(8)
   isActive       Boolean            @default(true) @map("is_active")
+  companyConsentVersion String?     @map("company_consent_version") @db.VarChar(64)
   roomLeftAt     DateTime?           @map("room_left_at") @db.Timestamptz(6)
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   entry          DotaTournamentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)

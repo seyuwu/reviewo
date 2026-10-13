@@ -1527,6 +1527,18 @@ class BotStorage:
             (notification_id,),
         ).fetchone() is not None
 
+    def tournament_recruit_invites(self, user_id: int) -> list[dict]:
+        rows = self._connection().execute("SELECT kind, items_json FROM callback_choices WHERE telegram_user_id=? AND kind LIKE 'tournament_recruit_invite:%' AND items_json <> '[]' LIMIT 100", (user_id,)).fetchall()
+        result = []
+        for row in rows:
+            try:
+                items = json.loads(row["items_json"])
+                if isinstance(items, list) and items and isinstance(items[0], dict):
+                    result.append({"key": row["kind"], **items[0]})
+            except (ValueError, TypeError):
+                continue
+        return result
+
     def remember_delivered_notification(self, notification_id: str) -> None:
         with self.lock:
             self._connection().execute(

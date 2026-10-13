@@ -619,4 +619,78 @@ describe("Tournament participation (isolated local PostgreSQL)", { skip: !connec
     assert.equal(members.length, 2);
     assert.deepEqual(members.map(member => member.positionRole).sort(), ["1", "2"]);
   });
+
+  async function confirmedCompany() {
+    await tournaments.createSquad(slug, { positionRole: "1", companySearch: true }, users[0]!);
+    const source = await prisma.dotaTournamentEntry.findFirstOrThrow({ where: { tournamentId, createdByUserId: users[0]!.id } });
+    await tournaments.joinEntry(slug, source.id, { positionRole: "2", viaInvitation: true }, users[1]!);
+    const version = (await participation.state(slug, users[0]!)).entry!.company!.rosterVersion;
+    await participation.confirmCompany(slug, version, users[0]!);
+    await participation.confirmCompany(slug, version, users[1]!);
+    return { source, version };
+  }
+
+  it("keeps company catalog joins pending while direct links admit without another captain decision", async () => {
+    await tournaments.createSquad(slug, { positionRole: "1", companySearch: true }, users[0]!);
+    const source = await prisma.dotaTournamentEntry.findFirstOrThrow({ where: { tournamentId, createdByUserId: users[0]!.id } });
+    assert.equal((await tournaments.joinEntry(slug, source.id, { positionRole: "2" }, users[1]!)).result, "REQUESTED");
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { entryId: source.id, isActive: true } }), 1);
+    assert.equal((await tournaments.joinEntry(slug, source.id, { positionRole: "2", viaInvitation: true }, users[1]!)).result, "JOINED");
+    assert.equal((await participation.state(slug, users[1]!)).entry!.company!.selfConfirmed, false);
+    const target = await createEntry(users[2]!, "3", "CONFIRM");
+    assert.equal((await tournaments.joinEntry(slug, target.id, { positionRole: "4", viaInvitation: true }, users[3]!)).result, "JOINED");
+  });
+
+  for (const targetSize of [2, 3]) it(`moves two friends together into a company of ${targetSize}`, async () => {
+    const { source, version } = await confirmedCompany();
+    await tournaments.createSquad(slug, { positionRole: "3", companySearch: true }, users[2]!);
+    const target = await prisma.dotaTournamentEntry.findFirstOrThrow({ where: { tournamentId, createdByUserId: users[2]!.id } });
+    await tournaments.joinEntry(slug, target.id, { positionRole: "4", viaInvitation: true }, users[3]!);
+    if (targetSize === 3) await tournaments.joinEntry(slug, target.id, { positionRole: "5", viaInvitation: true }, await createUser());
+    await participation.applyCompany(slug, target.id, version, users[0]!);
+    const request = await prisma.dotaTournamentEntryRequest.findUniqueOrThrow({ where: { entryId_userId: { entryId: target.id, userId: users[0]!.id } } });
+    const managed = await tournaments.listManagedEntries(slug, users[2]!);
+    assert.equal(managed[0]!.requests[0]!.company!.count, 2);
+    await tournaments.decideJoinRequest(slug, target.id, request.id, "ACCEPT", users[2]!, undefined,
+      { updatedAt: request.updatedAt.toISOString(), positionRole: request.positionRole });
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { entryId: source.id, isActive: true } }), 0);
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { entryId: target.id, isActive: true } }), targetSize + 2);
+    assert.equal((await prisma.dotaTournamentEntry.findUniqueOrThrow({ where: { id: source.id } })).status, "WITHDRAWN");
+    assert.equal((await prisma.dotaTournamentEntryRequest.findUniqueOrThrow({ where: { id: request.id } })).status, "ACCEPTED");
+    for (const user of users.slice(0, 2)) assert.equal((await participation.state(slug, user)).entry!.id, target.id);
+    if (targetSize === 2) assert.equal((await participation.state(slug, users[2]!)).entry!.company!.confirmed, false);
+    else assert.equal((await prisma.dotaTournamentEntry.findUniqueOrThrow({ where: { id: target.id } })).status, "REGISTERED");
+  });
+
+  it("leaves the source intact if someone pauses consent before captain acceptance", async () => {
+    const { source, version } = await confirmedCompany();
+    const target = await createEntry(users[2]!, "3");
+    await participation.applyCompany(slug, target.id, version, users[0]!);
+    const request = await prisma.dotaTournamentEntryRequest.findUniqueOrThrow({ where: { entryId_userId: { entryId: target.id, userId: users[0]!.id } } });
+    await participation.confirmCompany(slug, version, users[1]!, false);
+    await assert.rejects(tournaments.decideJoinRequest(slug, target.id, request.id, "ACCEPT", users[2]!), rejectsStatus(409));
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { entryId: source.id, isActive: true } }), 2);
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { entryId: target.id, isActive: true } }), 1);
+    assert.equal((await prisma.dotaTournamentEntryRequest.findUniqueOrThrow({ where: { id: request.id } })).status, "PENDING");
+  });
+
+  it("does not split a company when two captains accept its applications concurrently", async () => {
+    const { source, version } = await confirmedCompany();
+    const targets = [await createEntry(users[2]!, "3"), await createEntry(users[3]!, "4")];
+    for (const target of targets) await participation.applyCompany(slug, target.id, version, users[0]!);
+    const requests = await prisma.dotaTournamentEntryRequest.findMany({ where: { sourceEntryId: source.id, status: "PENDING" } });
+    const decisions = await Promise.allSettled(targets.map((target, index) => {
+      const request = requests.find(item => item.entryId === target.id)!;
+      return tournaments.decideJoinRequest(slug, target.id, request.id, "ACCEPT", users[index + 2]!, undefined,
+        { updatedAt: request.updatedAt.toISOString(), positionRole: request.positionRole });
+    }));
+    assert.equal(decisions.filter(result => result.status === "fulfilled").length, 1);
+    assert.equal(decisions.filter(result => result.status === "rejected").length, 1);
+    const memberships = await prisma.dotaTournamentEntryMember.findMany({ where: { tournamentId, isActive: true, userId: { in: users.slice(0, 2).map(user => user.id) } } });
+    assert.equal(memberships.length, 2);
+    assert.equal(new Set(memberships.map(member => member.entryId)).size, 1);
+    assert.ok(targets.some(target => target.id === memberships[0]!.entryId));
+    assert.equal(await prisma.dotaTournamentEntryMember.count({ where: { entryId: source.id, isActive: true } }), 0);
+    assert.equal(await prisma.dotaTournamentEntryRequest.count({ where: { sourceEntryId: source.id, status: "PENDING" } }), 0);
+  });
 });

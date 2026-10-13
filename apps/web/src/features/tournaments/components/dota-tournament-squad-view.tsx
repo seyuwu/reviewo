@@ -374,30 +374,200 @@ export function DotaTournamentSquadView({ slug, entryId }: { slug: string; entry
               <button className="button-secondary" disabled={busy || selectedRole === own.positionRole}>{t("dota.team.renameSave")}</button>
             </form> : null}
           </section>
-          {room.isCaptain && room.phase === "TOURNAMENT" && token ? <TournamentRecruitment key={`${authSession?.userId}:${entryId}`} slug={slug} entryId={entryId} token={token} /> : null}
-          {room.canJoin && !token ? <Link className="button-primary" href="/profile">{t("dota.tournaments.signInToJoin")}</Link> : room.canJoin && !profile && !profileLoading ? <Link className="button-primary" href="/dota/create">{t("dota.tournaments.createProfileToJoin")}</Link> : room.canJoin && profile && !room.pendingEntryId ? <form className={styles.panel} onSubmit={(event) => {
-            event.preventDefault(); if (!selectedRole || !token) return;
-            void action(async () => {
-              const result = await joinDotaTournamentEntry(slug, entryId, selectedRole as typeof ROLES[number], token);
-              if (result.result === "REQUESTED") setFeedback(t("dota.tournaments.room.requestSent"));
-            });
-          }}><label>{t("dota.tournaments.selectPosition")}<select value={selectedRole} onChange={(event) => setRole(event.target.value)}>{available.map((position) => <option key={position} value={position}>{roleName(position)}</option>)}</select></label>
-            <button className="button-primary" disabled={busy || !available.length}>{t(room.joinMode === "OPEN" ? "dota.tournaments.joinTeam" : "dota.tournaments.applyToTeam")}</button>
-          </form> : null}
-          {!room.isMember && room.phase === "TOURNAMENT" && room.currentEntryId ? <div className={styles.notice}><p>{t("dota.tournaments.room.alreadyMember")}</p><Link className={styles.noticeLink} href={tournamentRoomUrl(slug, room.currentEntryId)}>{t("dota.tournaments.room.myTeam")}<span aria-hidden="true">→</span></Link></div> : null}
-          {!room.isMember && room.pendingEntryId ? <div className={styles.notice}><p>{t("dota.tournaments.room.requestSent")}</p><Link className={styles.noticeLink} href={tournamentRoomUrl(slug, room.pendingEntryId)}>{t("dota.tournaments.room.openRequest")}<span aria-hidden="true">→</span></Link></div> : null}
-          {managed ? <section className={styles.panel}><h2>{t("dota.tournaments.room.management")}</h2>
-            <label>{t("dota.tournaments.teamJoinMode")}<select value={room.joinMode} disabled={busy} onChange={(event) => void action(() => setDotaTournamentEntryJoinMode(slug, entryId, event.target.value as "OPEN" | "CONFIRM", token!))}><option value="OPEN">{t("dota.tournaments.openJoin")}</option><option value="CONFIRM">{t("dota.tournaments.requestJoin")}</option></select></label>
-            {managed.requests.length ? managed.requests.map((request) => <div className={styles.request} key={request.id}><strong>{request.displayName}</strong><small>{roleName(request.positionRole)} · {request.mmr ?? "—"} MMR</small><div className={styles.actions}>
-              <button className="button-primary" disabled={busy} onClick={() => void action(() => decideDotaTournamentJoinRequest(slug, entryId, request.id, "ACCEPT", token!))}>{t("dota.tournaments.acceptRequest")}</button>
-              <button className="button-secondary" disabled={busy} onClick={() => void action(() => decideDotaTournamentJoinRequest(slug, entryId, request.id, "DECLINE", token!))}>{t("dota.tournaments.declineRequest")}</button>
-            </div></div>) : <p className={styles.hint}>{t("dota.tournaments.noPendingRequests")}</p>}
-            <button className="button-secondary" disabled={busy} onClick={() => void action(() => withdrawDotaTeamFromTournament(slug, entryId, token!))}>{t("dota.tournaments.withdrawSquad")}</button>
-          </section> : null}
-          {room.canLeave ? <div className={styles.panel}>
-            {room.isCaptain && room.phase === "TOURNAMENT" ? <p className={styles.hint}>{t("dota.tournaments.room.captainLeaveHint")}</p> : null}
-            <button className="button-secondary" disabled={busy} onClick={() => void action(() => room.phase === "AFTERPARTY" ? leaveTournamentAfterparty(slug, entryId, token!) : leaveDotaTournamentEntry(slug, entryId, token!))}>{t("dota.tournaments.room.leave")}</button>
-          </div> : null}
+          {room.isCaptain && room.phase === "TOURNAMENT" && token ? (
+            <TournamentRecruitment
+              key={`${authSession?.userId}:${entryId}`}
+              slug={slug}
+              entryId={entryId}
+              token={token}
+            />
+          ) : null}
+          {room.canJoin && !token ? (
+            <Link className="button-primary" href="/profile">
+              {t("dota.tournaments.signInToJoin")}
+            </Link>
+          ) : room.canJoin && !profile && !profileLoading ? (
+            <Link className="button-primary" href="/dota/create">
+              {t("dota.tournaments.createProfileToJoin")}
+            </Link>
+          ) : room.canJoin && profile ? (
+            <form
+              className={styles.panel}
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!selectedRole || !token) return;
+                void action(async () => {
+                  const result = await joinDotaTournamentEntry(
+                    slug,
+                    entryId,
+                    selectedRole as (typeof ROLES)[number],
+                    token,
+                    true
+                  );
+                  if (result.result === "REQUESTED")
+                    setFeedback(t("dota.tournaments.room.requestSent"));
+                });
+              }}
+            >
+              <label>
+                {t("dota.tournaments.selectPosition")}
+                <select value={selectedRole} onChange={(event) => setRole(event.target.value)}>
+                  {available.map((position) => (
+                    <option key={position} value={position}>
+                      {roleName(position)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className={styles.hint}>{t("dota.tournaments.invitationJoinHint")}</p>
+              <button className="button-primary" disabled={busy || !available.length}>
+                {t("dota.tournaments.joinTeam")}
+              </button>
+            </form>
+          ) : null}
+          {!room.isMember && room.phase === "TOURNAMENT" && room.currentEntryId ? (
+            <div className={styles.notice}>
+              <p>{t("dota.tournaments.room.alreadyMember")}</p>
+              <Link
+                className={styles.noticeLink}
+                href={tournamentRoomUrl(slug, room.currentEntryId)}
+              >
+                {t("dota.tournaments.room.myTeam")}
+                <span aria-hidden="true">→</span>
+              </Link>
+            </div>
+          ) : null}
+          {!room.isMember && room.pendingEntryId ? (
+            <div className={styles.notice}>
+              <p>{t("dota.tournaments.room.requestSent")}</p>
+              <Link
+                className={styles.noticeLink}
+                href={tournamentRoomUrl(slug, room.pendingEntryId)}
+              >
+                {t("dota.tournaments.room.openRequest")}
+                <span aria-hidden="true">→</span>
+              </Link>
+            </div>
+          ) : null}
+          {managed ? (
+            <section className={styles.panel}>
+              <h2>{t("dota.tournaments.room.management")}</h2>
+              <label>
+                {t("dota.tournaments.teamJoinMode")}
+                <select
+                  value={room.joinMode}
+                  disabled={busy}
+                  onChange={(event) =>
+                    void action(() =>
+                      setDotaTournamentEntryJoinMode(
+                        slug,
+                        entryId,
+                        event.target.value as "OPEN" | "CONFIRM",
+                        token!
+                      )
+                    )
+                  }
+                >
+                  <option value="OPEN">{t("dota.tournaments.openJoin")}</option>
+                  <option value="CONFIRM">{t("dota.tournaments.requestJoin")}</option>
+                </select>
+              </label>
+              {managed.requests.length ? (
+                managed.requests.map((request) => (
+                  <div className={styles.request} key={request.id}>
+                    <strong>
+                      {request.company
+                        ? t("dota.tournaments.companyApplication", { count: request.company.count })
+                        : request.displayName}
+                    </strong>
+                    {request.company ? (
+                      request.company.members.map((member, index) => (
+                        <small key={index}>
+                          {member.displayName} · {roleName(member.positionRole ?? "")} ·{" "}
+                          {member.mmr ?? "—"} MMR
+                        </small>
+                      ))
+                    ) : (
+                      <small>
+                        {roleName(request.positionRole)} · {request.mmr ?? "—"} MMR
+                      </small>
+                    )}
+                    <div className={styles.actions}>
+                      <button
+                        className="button-primary"
+                        disabled={busy}
+                        onClick={() =>
+                          void action(() =>
+                            decideDotaTournamentJoinRequest(
+                              slug,
+                              entryId,
+                              request.id,
+                              "ACCEPT",
+                              token!,
+                              request
+                            )
+                          )
+                        }
+                      >
+                        {request.company
+                          ? t("dota.tournaments.acceptCompany")
+                          : t("dota.tournaments.acceptRequest")}
+                      </button>
+                      <button
+                        className="button-secondary"
+                        disabled={busy}
+                        onClick={() =>
+                          void action(() =>
+                            decideDotaTournamentJoinRequest(
+                              slug,
+                              entryId,
+                              request.id,
+                              "DECLINE",
+                              token!,
+                              request
+                            )
+                          )
+                        }
+                      >
+                        {t("dota.tournaments.declineRequest")}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className={styles.hint}>{t("dota.tournaments.noPendingRequests")}</p>
+              )}
+              <button
+                className="button-secondary"
+                disabled={busy}
+                onClick={() =>
+                  void action(() => withdrawDotaTeamFromTournament(slug, entryId, token!))
+                }
+              >
+                {t("dota.tournaments.withdrawSquad")}
+              </button>
+            </section>
+          ) : null}
+          {room.canLeave ? (
+            <div className={styles.panel}>
+              {room.isCaptain && room.phase === "TOURNAMENT" ? (
+                <p className={styles.hint}>{t("dota.tournaments.room.captainLeaveHint")}</p>
+              ) : null}
+              <button
+                className="button-secondary"
+                disabled={busy}
+                onClick={() =>
+                  void action(() =>
+                    room.phase === "AFTERPARTY"
+                      ? leaveTournamentAfterparty(slug, entryId, token!)
+                      : leaveDotaTournamentEntry(slug, entryId, token!)
+                  )
+                }
+              >
+                {t("dota.tournaments.room.leave")}
+              </button>
+            </div>
+          ) : null}
         </aside>
         <div className={styles.content}>
           <section className={`${styles.panel} ${styles.descriptionPanel}`} aria-labelledby="tournament-team-description-title">

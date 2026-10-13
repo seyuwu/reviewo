@@ -1,6 +1,9 @@
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
 export class CreateDotaTournamentSquadDto {
+  @IsOptional()
+  @IsBoolean()
+  companySearch?: boolean;
   @IsOptional()
   @IsString()
   @MinLength(2)

@@ -169,3 +169,21 @@ class TournamentApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.bot.send_message.assert_not_awaited()
         await self.press("tr:requests:" + self.context["eventHex"])
         self.assertTrue(any(button.callback_data and button.callback_data.startswith("ta:player:") for button in self.panel_buttons()))
+
+    async def test_company_notice_and_profile_show_everyone_and_accept_once(self):
+        self.info["company"] = {"name": "Friends", "count": 2, "members": [
+            {"name": "<First>", "role": "1", "mmr": 0}, {"name": "Second", "role": "2", "mmr": 2000}]}
+        await deliver_tournament_application_notice(self.bot, self.api, self.settings, self.storage, self.row)
+        call = self.bot.send_message.await_args
+        self.assertIn("&lt;First&gt;", call.args[1])
+        self.assertIn("Second", call.args[1])
+        buttons = [button for row in call.kwargs["reply_markup"].inline_keyboard for button in row]
+        self.assertEqual(buttons[0].text, "👥 Посмотреть компанию")
+        self.assertTrue(any(button.text == "✅ Принять всех" for button in buttons))
+        await self.press("tap:profile:" + NOTICE.replace("-", ""), 200)
+        self.bot.delete_message.assert_any_await(USER, 200)
+        accept = next(button for button in self.panel_buttons() if button.text == "✅ Принять всех")
+        await self.press(accept.callback_data, 201)
+        self.api.user.assert_any_await(USER, "POST", BASE + "/application-requests/" + REQUEST + "/decision",
+            {"decision": "ACCEPT", "requestUpdatedAt": INFO["requestUpdatedAt"], "positionRole": "2"})
+        self.assertEqual(sum(call.args[1] == "POST" and call.args[2].endswith("/decision") for call in self.api.user.await_args_list), 1)

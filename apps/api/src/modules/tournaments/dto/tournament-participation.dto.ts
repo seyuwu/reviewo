@@ -1,4 +1,19 @@
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsOptional, IsUUID, Min } from "class-validator";
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsISO8601,
+  IsOptional,
+  IsUUID,
+  Matches,
+  Max,
+  Min
+} from "class-validator";
+import { Type } from "class-transformer";
 
 export class StartTournamentSoloSearchDto {
   @IsOptional()
@@ -21,6 +36,13 @@ export class TournamentRecruitQueryDto {
 }
 export class TournamentApplicationPageDto {
   @IsOptional() @IsUUID("4") cursor?: string;
+}
+export class TournamentTeamPageDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(10000) page?: number;
+}
+export class TournamentCompanyConsentDto {
+  @Matches(/^[a-f0-9]{64}$/) rosterVersion!: string;
+  @IsOptional() @IsBoolean() confirmed?: boolean;
 }
 export class TournamentApplicationNotificationsDto {
   @IsBoolean() enabled!: boolean;

@@ -266,7 +266,10 @@ export function DotaTournamentDetailView({ slug }: { slug: string }) {
         entryId,
         requestId,
         decision,
-        authSession.accessToken
+        authSession.accessToken,
+        managedEntries
+          .find((entry) => entry.entryId === entryId)
+          ?.requests.find((request) => request.id === requestId)
       );
       setTournament(result.tournament);
       await refreshManagedEntries();
@@ -896,8 +899,24 @@ function TournamentEntryManager({
           {entry.requests.map((request) => (
             <div className={styles.entryRequest} key={request.id}>
               <span>
-                {request.displayName} · {roleLabel(request.positionRole, t)} ·{" "}
-                {request.mmr !== null ? `${request.mmr} MMR` : "— MMR"}
+                {request.company ? (
+                  <>
+                    {t("dota.tournaments.companyApplication", { count: request.company.count })}
+                    <br />
+                    {request.company.members.map((member, index) => (
+                      <span key={index}>
+                        {member.displayName} · {roleLabel(member.positionRole ?? "", t)} ·{" "}
+                        {member.mmr ?? "—"} MMR
+                        <br />
+                      </span>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    {request.displayName} · {roleLabel(request.positionRole, t)} ·{" "}
+                    {request.mmr !== null ? `${request.mmr} MMR` : "— MMR"}
+                  </>
+                )}
               </span>
               <div>
                 <button
@@ -906,7 +925,11 @@ function TournamentEntryManager({
                   onClick={() => onDecision(request.id, "ACCEPT")}
                   type="button"
                 >
-                  {t("dota.tournaments.acceptRequest")}
+                  {t(
+                    request.company
+                      ? "dota.tournaments.acceptCompany"
+                      : "dota.tournaments.acceptRequest"
+                  )}
                 </button>
                 <button
                   className="button-secondary"

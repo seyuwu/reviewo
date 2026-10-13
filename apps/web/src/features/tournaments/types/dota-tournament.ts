@@ -50,6 +50,7 @@ export interface DotaTournamentEntryMember {
 
 export interface DotaTournamentEntry {
   id: string;
+  companySearchEnabled?: boolean;
   joinMode: "OPEN" | "CONFIRM";
   members: DotaTournamentEntryMember[];
   status: "RECRUITING" | "REGISTERED" | "RESERVE" | "WITHDRAWN" | "DISQUALIFIED";
@@ -169,9 +170,14 @@ export interface DotaTournamentTeamEntry {
   joinMode: "OPEN" | "CONFIRM";
   members: DotaTournamentEntryMember[];
   requests: Array<{
+    company?: {
+      count: number;
+      members: Array<{ displayName: string; mmr: number | null; positionRole: string | null }>;
+    } | null;
     displayName: string;
     dotaProfileSlug: string | null;
     id: string;
+    requestUpdatedAt: string;
     mmr: number | null;
     positionRole: string;
   }>;
@@ -184,9 +190,14 @@ export interface DotaTournamentManagedEntry {
   joinMode: "OPEN" | "CONFIRM";
   members: DotaTournamentEntryMember[];
   requests: Array<{
+    company?: {
+      count: number;
+      members: Array<{ displayName: string; mmr: number | null; positionRole: string | null }>;
+    } | null;
     displayName: string;
     dotaProfileSlug: string | null;
     id: string;
+    requestUpdatedAt: string;
     mmr: number | null;
     positionRole: string;
   }>;

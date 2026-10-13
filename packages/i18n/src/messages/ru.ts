@@ -2432,6 +2432,10 @@ export const ruMessages: MessageDictionary = {
   "dota.tournaments.teamRegisterError": "Не удалось зарегистрировать команду. Проверь статус турнира и состав.",
   "dota.tournaments.teamCreatedRegistrationFailed": "Команда создана, но не удалось зарегистрировать её на турнир. Проверь, открыт ли набор, и попробуй ещё раз в блоке турниров ниже.",
   "dota.tournaments.teamJoinMode": "Как вступать",
+  "dota.tournaments.companyApplication": "Компания · {count}",
+  "dota.tournaments.acceptCompany": "Принять всех",
+  "dota.tournaments.invitationJoinHint":
+    "По ссылке команды можно вступить сразу, если позиция свободна.",
   "dota.tournaments.acceptRequest": "Принять",
   "dota.tournaments.declineRequest": "Отклонить",
   "dota.tournaments.joinedTournament": "Ты добавлен только в состав на этот турнир. Обычная команда и поиск не меняются.",

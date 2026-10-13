@@ -6,7 +6,14 @@ import { createSocialWriteRateLimitRules } from "../../common/rate-limiting/writ
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { OptionalJwtAuthGuard } from "../auth/guards/optional-jwt-auth.guard.js";
 import { TournamentTelegramLinkedGuard } from "./tournament-telegram-linked.guard.js";
-import { StartTournamentSoloSearchDto, TournamentApplicationDecisionDto, TournamentApplicationNotificationsDto, TournamentApplicationPageDto } from "./dto/tournament-participation.dto.js";
+import {
+  StartTournamentSoloSearchDto,
+  TournamentApplicationDecisionDto,
+  TournamentApplicationNotificationsDto,
+  TournamentApplicationPageDto,
+  TournamentCompanyConsentDto,
+  TournamentTeamPageDto
+} from "./dto/tournament-participation.dto.js";
 import { TournamentParticipationService } from "./tournament-participation.service.js";
 import { DotaTournamentsService } from "./tournaments.service.js";
 import { DecideDotaTournamentEntryRequestDto } from "./dto/join-dota-tournament-entry.dto.js";
@@ -30,7 +37,62 @@ export class TournamentParticipationController {
   constructor(private readonly participation: TournamentParticipationService, private readonly rateLimiter: ApiRateLimiterService) {}
   @Get(":slug/participation")
   @Header("Cache-Control", "private, no-store")
-  state(@Param("slug") slug: string, @CurrentUser() user: AuthenticatedUser) { return this.participation.state(slug, user); }
+  state(@Param("slug") slug: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.participation.state(slug, user);
+  }
+  @Get(":slug/participation/teams")
+  @Header("Cache-Control", "private, no-store")
+  teams(
+    @Param("slug") slug: string,
+    @Query() input: TournamentTeamPageDto,
+    @CurrentUser() user: AuthenticatedUser
+  ) {
+    return this.participation.teams(slug, user, input.page ?? 0);
+  }
+  @Post(":slug/participation/company")
+  async company(
+    @Param("slug") slug: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestLike
+  ) {
+    await this.rateLimiter.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    return this.participation.enableCompany(slug, user);
+  }
+  @Post(":slug/participation/company/confirm")
+  async confirmCompany(
+    @Param("slug") slug: string,
+    @Body() input: TournamentCompanyConsentDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestLike
+  ) {
+    await this.rateLimiter.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    return this.participation.confirmCompany(
+      slug,
+      input.rosterVersion,
+      user,
+      input.confirmed ?? true
+    );
+  }
+  @Get(":slug/participation/company/teams")
+  @Header("Cache-Control", "private, no-store")
+  companyTeams(
+    @Param("slug") slug: string,
+    @Query() input: TournamentTeamPageDto,
+    @CurrentUser() user: AuthenticatedUser
+  ) {
+    return this.participation.companyTeams(slug, user, input.page ?? 0);
+  }
+  @Post(":slug/participation/company/applications/:entryId")
+  async applyCompany(
+    @Param("slug") slug: string,
+    @Param("entryId", new ParseUUIDPipe({ version: "4" })) entryId: string,
+    @Body() input: TournamentCompanyConsentDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestLike
+  ) {
+    await this.rateLimiter.assertWithinLimits(createSocialWriteRateLimitRules(user.id, request));
+    return this.participation.applyCompany(slug, entryId, input.rosterVersion, user);
+  }
   @Post(":slug/participation/solo")
   async start(@Param("slug") slug: string, @Body() input: StartTournamentSoloSearchDto,
     @CurrentUser() user: AuthenticatedUser, @Req() request: RequestLike) {

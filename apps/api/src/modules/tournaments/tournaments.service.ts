@@ -1,7 +1,25 @@
 import { HttpStatus, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { DotaTournament, DotaTournamentMatchStatus, DotaTournamentStatus, Prisma } from "#prisma/client";
-import { DOTA_PARTY_VERTICAL, DOTA_ATTRIBUTE_KEYS, DOTA_VERTICAL, generateDotaPartyName } from "@reviewo/shared";
+import {
+  companyConfirmed,
+  companyRoster,
+  companySnapshotVersion,
+  companyVersion
+} from "./tournament-company.js";
+import type {
+  DotaTournament,
+  DotaTournamentEntry,
+  DotaTournamentEntryRequest,
+  DotaTournamentMatchStatus,
+  DotaTournamentStatus,
+  Prisma
+} from "#prisma/client";
+import {
+  DOTA_PARTY_VERTICAL,
+  DOTA_ATTRIBUTE_KEYS,
+  DOTA_VERTICAL,
+  generateDotaPartyName
+} from "@reviewo/shared";
 import type { TournamentSoloTicket } from "./dto/tournament-participation.dto.js";
 import { readTournamentApplication, readTournamentTeamInvite } from "./tournament-recruitment-payload.js";
 
@@ -157,6 +175,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           positionRole: member.positionRole
         })),
         status: entry.status,
+        companySearchEnabled: entry.companySearchEnabled,
         description: entry.description,
         teamName: entry.teamNameSnapshot,
         teamPartySlug: entry.teamParty?.slug ?? null
@@ -226,7 +245,11 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
 
     const entries = await this.prismaService.dotaTournamentEntry.findMany({
       include: {
-        joinRequests: { orderBy: { createdAt: "asc" }, where: { status: "PENDING" } },
+        joinRequests: {
+          orderBy: { createdAt: "asc" },
+          where: { status: "PENDING" },
+          include: { sourceEntry: { include: { members: { where: { isActive: true } } } } }
+        },
         members: {
           orderBy: [{ positionRole: "asc" }, { createdAt: "asc" }],
           where: { isActive: true }
@@ -256,9 +279,20 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           positionRole: member.positionRole
         })),
         requests: entry.joinRequests.map((request) => ({
+          company: request.sourceEntry
+            ? {
+                count: request.sourceEntry.members.length,
+                members: request.sourceEntry.members.map((member) => ({
+                  displayName: member.displayName,
+                  mmr: member.mmr,
+                  positionRole: member.positionRole
+                }))
+              }
+            : null,
           displayName: request.displayName,
           dotaProfileSlug: request.dotaProfileSlug,
           id: request.id,
+          requestUpdatedAt: request.updatedAt.toISOString(),
           mmr: request.mmr,
           positionRole: request.positionRole
         })),
@@ -348,6 +382,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       const entry = await tx.dotaTournamentEntry.create({
         data: {
           createdByUserId: currentUser.id,
+          companySearchEnabled: input.companySearch ?? false,
           joinMode: input.joinMode ?? "OPEN",
           status: latestTournament.status === "REGISTRATION_CLOSED" ? "RESERVE" : "RECRUITING",
           teamNameSnapshot: name.slice(0, 80),
@@ -393,7 +428,11 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
 
     const entries = await this.prismaService.dotaTournamentEntry.findMany({
       include: {
-        joinRequests: { orderBy: { createdAt: "asc" }, where: { status: "PENDING" } },
+        joinRequests: {
+          orderBy: { createdAt: "asc" },
+          where: { status: "PENDING" },
+          include: { sourceEntry: { include: { members: { where: { isActive: true } } } } }
+        },
         members: {
           where: { isActive: true },
           orderBy: [{ positionRole: "asc" }, { createdAt: "asc" }]
@@ -413,9 +452,20 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         positionRole: member.positionRole
       })),
       requests: entry.joinRequests.map((request) => ({
+        company: request.sourceEntry
+          ? {
+              count: request.sourceEntry.members.length,
+              members: request.sourceEntry.members.map((member) => ({
+                displayName: member.displayName,
+                mmr: member.mmr,
+                positionRole: member.positionRole
+              }))
+            }
+          : null,
         displayName: request.displayName,
         dotaProfileSlug: request.dotaProfileSlug,
         id: request.id,
+        requestUpdatedAt: request.updatedAt.toISOString(),
         mmr: request.mmr,
         positionRole: request.positionRole
       })),
@@ -517,6 +567,9 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           });
         }
         this.assertEntryCanRecruit(latest.tournament, latest.status);
+        if (soloTicket && (latest.joinMode !== "OPEN" || latest.companySearchEnabled)) {
+          throw this.matchConflict("The team no longer accepts automatic matching");
+        }
         await this.assertSoloTicket(tx, latest.tournament, currentUser.id, input.positionRole, soloTicket);
         await this.assertRecruitmentInvite(tx, latest.tournamentId, entryId, currentUser.id, input.positionRole, recruitmentInviteId);
         await this.assertSponsorGate(tx, latest.tournamentId, currentUser.id);
@@ -550,7 +603,13 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         const existingRequest = await tx.dotaTournamentEntryRequest.findUnique({
           where: { entryId_userId: { entryId, userId: currentUser.id } }
         });
-        if (existingRequest?.status === "PENDING" && latest.joinMode === "CONFIRM" && !recruitmentInviteId) {
+        const requiresApproval = latest.joinMode === "CONFIRM" || latest.companySearchEnabled;
+        if (
+          existingRequest?.status === "PENDING" &&
+          requiresApproval &&
+          !recruitmentInviteId &&
+          !input.viaInvitation
+        ) {
           result = "REQUESTED";
           await this.finishSoloQueue(tx, tournament.id, currentUser.id, null);
           return;
@@ -563,7 +622,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
           userId: currentUser.id
         });
 
-        if (latest.joinMode === "CONFIRM" && !recruitmentInviteId) {
+        if (requiresApproval && !recruitmentInviteId && !input.viaInvitation) {
           const application = await tx.dotaTournamentEntryRequest.upsert({
             create: {
               ...snapshot,
@@ -574,6 +633,8 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
             },
             update: {
               ...snapshot,
+              sourceEntryId: null,
+              sourceRoster: {},
               status: "PENDING"
             },
             where: { entryId_userId: { entryId, userId: currentUser.id } }
@@ -621,6 +682,237 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
 
     this.roomsService?.notifyChanged(entryId);
     return { entryId, result, tournament: await this.getPublic(tournamentSlug, currentUser) };
+  }
+
+  private async availableCompany(
+    tx: Prisma.TransactionClient,
+    tournament: DotaTournament,
+    sourceEntryId: string,
+    leaderId: string,
+    version: string | null
+  ) {
+    const source = await tx.dotaTournamentEntry.findFirst({
+      where: { id: sourceEntryId, tournamentId: tournament.id },
+      include: {
+        members: { where: { isActive: true } },
+        teamParty: { select: { ownerUserId: true } }
+      }
+    });
+    if (
+      !source ||
+      !source.companySearchEnabled ||
+      !this.isActiveEntryStatus(source.status) ||
+      (source.createdByUserId ?? source.teamParty?.ownerUserId) !== leaderId ||
+      !companyConfirmed(source.members) ||
+      companyVersion(source.members) !== version
+    )
+      throw this.matchConflict("Компания изменилась. Всем нужно подтвердить поиск заново.");
+    this.assertEntryCanRecruit(tournament, source.status);
+    const ids = source.members.map((member) => member.userId!);
+    const [users, profiles] = await Promise.all([
+      tx.user.count({
+        where: {
+          id: { in: ids },
+          status: "active",
+          authIdentities: { some: { provider: "telegram" } }
+        }
+      }),
+      tx.entity.count({
+        where: {
+          ownerUserId: { in: ids },
+          type: "person",
+          visibility: "ACTIVE",
+          attributes: { some: { key: DOTA_ATTRIBUTE_KEYS.vertical, value: DOTA_VERTICAL } }
+        }
+      })
+    ]);
+    if (users !== ids.length || profiles !== ids.length)
+      throw this.matchConflict("Один из игроков больше недоступен. Обнови компанию.");
+    for (const id of ids) await this.assertSponsorGate(tx, tournament.id, id);
+    return source;
+  }
+
+  async submitCompanyApplication(
+    slug: string,
+    targetEntryId: string,
+    rosterVersion: string,
+    user: AuthenticatedUser
+  ) {
+    const tournament = await this.prismaService.dotaTournament.findFirst({
+      where: { slug, status: { not: "DRAFT" } }
+    });
+    if (!tournament) throw this.matchConflict("Турнир больше недоступен.");
+    await this.prismaService.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dota-tournament:${tournament.id}`}))`;
+      const current = await tx.dotaTournament.findUniqueOrThrow({ where: { id: tournament.id } });
+      const owned = await tx.dotaTournamentEntry.findFirst({
+        where: {
+          tournamentId: current.id,
+          status: { in: ["RECRUITING", "REGISTERED", "RESERVE"] },
+          members: { some: { userId: user.id, isActive: true } },
+          OR: [
+            { createdByUserId: user.id },
+            { createdByUserId: null, teamParty: { ownerUserId: user.id } }
+          ]
+        }
+      });
+      if (!owned) throw this.matchConflict("Компанией управляет её текущий капитан.");
+      const source = await this.availableCompany(tx, current, owned.id, user.id, rosterVersion);
+      const target = await tx.dotaTournamentEntry.findFirst({
+        where: { id: targetEntryId, tournamentId: current.id },
+        include: { members: { where: { isActive: true } } }
+      });
+      if (!target || target.id === source.id || !this.isActiveEntryStatus(target.status))
+        throw this.matchConflict("Выбери другую команду.");
+      this.assertEntryCanRecruit(current, target.status);
+      if (
+        target.members.length + source.members.length > 5 ||
+        source.members.some((player) =>
+          target.members.some((member) => player.positionRole === member.positionRole)
+        )
+      )
+        throw this.matchConflict(
+          "Для всей компании не хватает подходящих мест. Выбери другой состав."
+        );
+      const leader = source.members.find((member) => member.userId === user.id)!;
+      const old = await tx.dotaTournamentEntryRequest.findUnique({
+        where: { entryId_userId: { entryId: target.id, userId: user.id } }
+      });
+      if (
+        old?.status === "PENDING" &&
+        old.sourceEntryId === source.id &&
+        companySnapshotVersion(old.sourceRoster) === rosterVersion
+      )
+        return;
+      const request = await tx.dotaTournamentEntryRequest.upsert({
+        where: { entryId_userId: { entryId: target.id, userId: user.id } },
+        create: {
+          tournamentId: current.id,
+          entryId: target.id,
+          userId: user.id,
+          displayName: leader.displayName,
+          dotaProfileSlug: leader.dotaProfileSlug,
+          mmr: leader.mmr,
+          positionRole: leader.positionRole!,
+          sourceEntryId: source.id,
+          sourceRoster: companyRoster(source.members)
+        },
+        update: {
+          status: "PENDING",
+          displayName: leader.displayName,
+          dotaProfileSlug: leader.dotaProfileSlug,
+          mmr: leader.mmr,
+          positionRole: leader.positionRole!,
+          sourceEntryId: source.id,
+          sourceRoster: companyRoster(source.members),
+          updatedAt: new Date()
+        }
+      });
+      await this.enqueueTournamentApplication(tx, target.id, request);
+    });
+  }
+
+  private async acceptCompany(
+    tx: Prisma.TransactionClient,
+    tournament: DotaTournament,
+    target: DotaTournamentEntry,
+    request: DotaTournamentEntryRequest
+  ) {
+    if (!request.sourceEntryId || request.sourceEntryId === target.id)
+      throw this.matchConflict("Заявка компании устарела.");
+    const source = await this.availableCompany(
+      tx,
+      tournament,
+      request.sourceEntryId,
+      request.userId,
+      companySnapshotVersion(request.sourceRoster)
+    );
+    const targetMembers = await tx.dotaTournamentEntryMember.findMany({
+      where: { entryId: target.id, isActive: true }
+    });
+    if (
+      targetMembers.length + source.members.length > 5 ||
+      source.members.some((player) =>
+        targetMembers.some(
+          (member) => member.positionRole === player.positionRole || member.userId === player.userId
+        )
+      )
+    )
+      throw this.matchConflict("Для всей компании больше нет свободных мест.");
+    // Deactivation and admission commit together under the same tournament lock.
+    await tx.dotaTournamentEntryMember.updateMany({
+      where: { entryId: source.id, isActive: true },
+      data: { isActive: false, roomLeftAt: new Date() }
+    });
+    await tx.dotaTournamentEntry.update({
+      where: { id: source.id },
+      data: { status: "WITHDRAWN", companySearchEnabled: false }
+    });
+    const incoming = await tx.dotaTournamentEntryRequest.findMany({
+      where: { entryId: source.id, status: "PENDING" },
+      select: { id: true, userId: true }
+    });
+    await tx.dotaTournamentEntryRequest.updateMany({
+      where: { OR: [{ sourceEntryId: source.id }, { entryId: source.id }], status: "PENDING" },
+      data: { status: "WITHDRAWN" }
+    });
+    for (const item of incoming)
+      await this.enqueueTournamentParticipation(
+        tx,
+        tournament.id,
+        source.id,
+        [item.userId],
+        "request-closed",
+        `company-merged:${item.id}`
+      );
+    for (const member of source.members) {
+      const userId = member.userId!;
+      await this.assertTournamentSlotAvailable(tx, {
+        entryId: target.id,
+        tournamentId: tournament.id,
+        userId,
+        positionRole: member.positionRole!
+      });
+      await tx.dotaTournamentEntryMember.upsert({
+        where: { entryId_userId: { entryId: target.id, userId } },
+        create: {
+          entryId: target.id,
+          tournamentId: tournament.id,
+          userId,
+          positionRole: member.positionRole,
+          displayName: member.displayName,
+          dotaProfileSlug: member.dotaProfileSlug,
+          mmr: member.mmr
+        },
+        update: {
+          isActive: true,
+          roomLeftAt: null,
+          positionRole: member.positionRole,
+          displayName: member.displayName,
+          dotaProfileSlug: member.dotaProfileSlug,
+          mmr: member.mmr,
+          companyConsentVersion: null
+        }
+      });
+      await this.finishSoloQueue(tx, tournament.id, userId, target.id);
+    }
+    await tx.dotaTournamentEntryRequest.update({
+      where: { id: request.id },
+      data: { status: "ACCEPTED" }
+    });
+    await tx.dotaTournamentRoom.updateMany({
+      where: { entryId: source.id },
+      data: { expiresAt: new Date() }
+    });
+    await this.syncEntryRegistrationStatus(tx, target.id);
+    await this.enqueueTournamentParticipation(
+      tx,
+      tournament.id,
+      target.id,
+      source.members.map((member) => member.userId!),
+      "accepted",
+      `company:${request.id}:${request.updatedAt.getTime()}`
+    );
   }
 
   async decideJoinRequest(
@@ -713,6 +1005,10 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         }
         this.assertEntryCanRecruit(currentTournament, latestEntry.status);
         await this.assertApplicationNotice(tx, latestRequest, currentUser.id, applicationNoticeId);
+        if (latestRequest.sourceEntryId) {
+          await this.acceptCompany(tx, currentTournament, latestEntry, latestRequest);
+          return;
+        }
         if (applicationNoticeId || expectedApplication) {
           const [activeUser, activeProfile] = await Promise.all([
             tx.user.findFirst({ where: { id: latestRequest.userId, status: "active", authIdentities: { some: { provider: "telegram" } } }, select: { id: true } }),
@@ -768,6 +1064,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       throw error;
     }
     this.roomsService?.notifyChanged(entryId);
+    if (request.sourceEntryId) this.roomsService?.notifyChanged(request.sourceEntryId);
     return { ok: true, tournament: await this.getPublic(tournamentSlug, currentUser) };
   }
 
@@ -802,6 +1099,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
         where: { entryId, isActive: true, positionRole, userId: { not: currentUser.id } }
       });
       if (occupied) throw this.matchConflict("This position is already taken");
+      if (member.positionRole === positionRole) return;
       await tx.dotaTournamentEntryMember.update({
         data: { positionRole },
         where: { id: member.id }
@@ -2949,6 +3247,7 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       select: {
         id: true,
         status: true,
+        companySearchEnabled: true,
         createdByUserId: true,
         teamParty: { select: { ownerUserId: true } },
         tournament: {
@@ -2958,6 +3257,13 @@ export class DotaTournamentsService implements OnModuleInit, OnModuleDestroy {
       where: { id: entryId }
     });
     if (!entry || !this.isActiveEntryStatus(entry.status)) return;
+    // Every caller has changed membership or positions. Clear consent even when
+    // the roster returns to a previously confirmed combination of IDs and roles.
+    if (entry.companySearchEnabled)
+      await tx.dotaTournamentEntryMember.updateMany({
+        where: { entryId },
+        data: { companyConsentVersion: null }
+      });
     const members = await tx.dotaTournamentEntryMember.findMany({
       select: { positionRole: true, userId: true },
       where: { entryId, isActive: true }

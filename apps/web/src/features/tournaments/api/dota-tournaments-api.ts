@@ -214,7 +214,8 @@ export function joinDotaTournamentEntry(
   tournamentSlug: string,
   entryId: string,
   positionRole: "1" | "2" | "3" | "4" | "5",
-  accessToken: string
+  accessToken: string,
+  viaInvitation = false
 ): Promise<{ entryId: string; result: "JOINED" | "REQUESTED"; tournament: DotaTournament }> {
   return apiRequest<{
     entryId: string;
@@ -223,7 +224,7 @@ export function joinDotaTournamentEntry(
   }>(
     `/dota/tournaments/${tournamentPathSegment(tournamentSlug)}/entries/${encodeURIComponent(entryId)}/join`,
     {
-      body: { positionRole },
+      body: { positionRole, ...(viaInvitation ? { viaInvitation: true } : {}) },
       headers: authHeaders(accessToken),
       method: "POST"
     }
@@ -235,12 +236,21 @@ export function decideDotaTournamentJoinRequest(
   entryId: string,
   requestId: string,
   decision: "ACCEPT" | "DECLINE",
-  accessToken: string
+  accessToken: string,
+  application?: { requestUpdatedAt: string; positionRole: string }
 ): Promise<{ ok: true; tournament: DotaTournament }> {
   return apiRequest<{ ok: true; tournament: DotaTournament }>(
     `/dota/tournaments/${tournamentPathSegment(tournamentSlug)}/entries/${encodeURIComponent(entryId)}/requests/${encodeURIComponent(requestId)}`,
     {
-      body: { decision },
+      body: {
+        decision,
+        ...(application
+          ? {
+              requestUpdatedAt: application.requestUpdatedAt,
+              positionRole: application.positionRole
+            }
+          : {})
+      },
       headers: authHeaders(accessToken),
       method: "PATCH"
     }

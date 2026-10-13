@@ -2426,6 +2426,10 @@ export const enMessages = {
   "dota.tournaments.teamRegisterError": "Could not register the team. Check the tournament status and roster.",
   "dota.tournaments.teamCreatedRegistrationFailed": "The team was created, but tournament registration failed. Check that registration is open and try again in the tournaments panel below.",
   "dota.tournaments.teamJoinMode": "Joining method",
+  "dota.tournaments.companyApplication": "Group of friends · {count}",
+  "dota.tournaments.acceptCompany": "Accept everyone",
+  "dota.tournaments.invitationJoinHint":
+    "You can join using the team link if your position is available.",
   "dota.tournaments.acceptRequest": "Accept",
   "dota.tournaments.declineRequest": "Decline",
   "dota.tournaments.joinedTournament": "You joined this tournament roster only. Your regular team and search are unchanged.",

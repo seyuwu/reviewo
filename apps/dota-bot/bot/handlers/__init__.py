@@ -14,11 +14,13 @@ from .search import router as search_router
 from .tournaments import router as tournaments_router
 from .tournament_recruitment import router as tournament_recruitment_router
 from .tournament_applications import router as tournament_applications_router
+from .tournament_companies import router as tournament_companies_router
 
 router = Router(name="dota-bot")
 router.include_routers(
     website_login_router,
     tournament_applications_router,
+    tournament_companies_router,
     tournament_recruitment_router,
     tournaments_router,
     party_rooms_router,

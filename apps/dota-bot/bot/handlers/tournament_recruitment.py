@@ -8,8 +8,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..api.client import ApiError
 from ..services.callbacks import acknowledge_callback
-from ..services.panel import edit_panel_content
-from ..services.tournament_recruitment import refresh_linked_tournament_session
+from ..services.panel import edit_panel, edit_panel_content
+from ..services.tournament_recruitment import consume_recruit_invite, refresh_linked_tournament_session
 from ..services.tournament_participation import ROLE_NAMES, fresh_tournament_web_url, load_tournament_context, save_tournament_context, tournament_api_path
 from .tournaments import _action_choice, _button, _private_callback, _save_action_choices, _show_status, _participation
 
@@ -118,11 +118,12 @@ async def recruitment_action(callback, state: FSMContext, api, settings, storage
         await callback.answer(str(error), show_alert=True)
 
 
-@router.callback_query(F.data.regexp(r"^tinvite:[a-f0-9]{32}$|^taccept:[a-f0-9]{32}$"))
+@router.callback_query(F.data.regexp(r"^(?:tinvite|tinviteweb|taccept):[a-f0-9]{32}$"))
 async def tournament_recruit_invitation(callback, state: FSMContext, api, settings, storage):
     if not await _private_callback(callback):
         return
     action, token = callback.data.split(":")
+    context, saved, notice_token = None, None, token
     try:
         acknowledge_callback(callback)
         await refresh_linked_tournament_session(api, storage, callback.from_user.id)
@@ -130,9 +131,11 @@ async def tournament_recruit_invitation(callback, state: FSMContext, api, settin
         if action == "taccept":
             choice = _action_choice(storage, callback.from_user.id, token, "recruit-accept")
             context = load_tournament_context(storage, callback.from_user.id, choice["eventHex"])
+            saved = storage.get_choice(callback.from_user.id, "tournament_recruit_invite:" + UUID(choice["noticeId"]).hex, 0)
             await api.user(callback.from_user.id, "POST", tournament_api_path(context) + f"/participation/invites/{choice['noticeId']}/accept", {"positionRole": choice["role"]})
             result = await _participation(api, storage, callback.from_user.id, context)
             await _show_status(callback.bot, api, settings, storage, callback.from_user.id, callback.message.chat.id, context, result)
+            await consume_recruit_invite(callback.bot, storage, callback.from_user.id, UUID(choice["noticeId"]).hex)
             return
         notice_id = str(UUID(token))
         # A private notice stores its event context, never a URL supplied by a recipient.
@@ -141,14 +144,43 @@ async def tournament_recruit_invitation(callback, state: FSMContext, api, settin
             raise ApiError("Приглашение устарело. Открой поиск команды снова.")
         context = load_tournament_context(storage, callback.from_user.id, saved["eventHex"])
         invitation = await api.user(callback.from_user.id, "GET", tournament_api_path(context) + f"/participation/invites/{notice_id}")
+        storage.set_choices(callback.from_user.id, "tournament_recruit_invite:" + token, [{**saved,
+            "entryId": invitation["entryId"], "expiresAt": invitation.get("expiresAt")}])
+        if action == "tinviteweb":
+            url = await fresh_tournament_web_url(api, settings, callback.from_user.id,
+                f"/games/tournaments/{quote(context['slug'], safe='')}?participate=1&recruitInvite={notice_id}")
+            rows = [[InlineKeyboardButton(text="🌐 Открыть приглашение на сайте", url=url)],
+                [InlineKeyboardButton(text="← Приглашение в боте", callback_data="tinvite:" + token)]]
+            await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "tournaments:recruit-invitation-site",
+                callback.message.chat.id, content=("Приглашение в «" + escape(str(invitation['name'])[:80]) + "». Открой сайт по кнопке ниже.",
+                    InlineKeyboardMarkup(inline_keyboard=rows)), force_new_message=True)
+            await consume_recruit_invite(callback.bot, storage, callback.from_user.id, token, callback.message.message_id)
+            return
         choices = _save_action_choices(storage, callback.from_user.id, [
             {"kind": "recruit-accept", "eventHex": context["eventHex"], "noticeId": notice_id, "role": str(role)} for role in invitation.get("roles", []) if str(role) in ROLE_NAMES])
         rows = [[InlineKeyboardButton(text="Вступить · " + ROLE_NAMES[choice["role"]], callback_data="taccept:" + choice["token"])] for choice in choices]
-        url = await fresh_tournament_web_url(api, settings, callback.from_user.id,
-            f"/games/tournaments/{quote(context['slug'], safe='')}?participate=1&recruitInvite={notice_id}")
-        rows += [[InlineKeyboardButton(text="Посмотреть приглашение на сайте", url=url)], [_button("← Поиск команды", "solo", context["eventHex"])]]
-        await edit_panel_content(callback.bot, storage, api, settings, callback.from_user.id, "tournaments:recruit-invitation",
-            f"<b>{escape(str(invitation['name'])[:80])}</b>\n\nКапитан {escape(str(invitation['senderName'])[:50])} приглашает тебя в состав.\n"
-            "Подтверди позицию и вступление. Дополнительная заявка капитану не нужна.", InlineKeyboardMarkup(inline_keyboard=rows), callback.message.chat.id)
+        username = getattr(settings, "main_bot_username", "FDPdotabot")
+        rows += [[InlineKeyboardButton(text="Посмотреть на сайте", callback_data="tinviteweb:" + token)],
+            [InlineKeyboardButton(text="🔗 Ссылка команды", url=f"https://t.me/{username}?start=te_{UUID(invitation['entryId']).hex}")],
+            [_button("← Поиск команды", "solo", context["eventHex"])]]
+        text = (f"<b>{escape(str(invitation['name'])[:80])}</b>\n\nКапитан {escape(str(invitation['senderName'])[:50])} приглашает тебя в состав.\n"
+            "Выбери позицию и вступи — повторная заявка не нужна.")
+        await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, "tournaments:recruit-invitation",
+            callback.message.chat.id, content=(text, InlineKeyboardMarkup(inline_keyboard=rows)), force_new_message=True)
+        await consume_recruit_invite(callback.bot, storage, callback.from_user.id, token, callback.message.message_id)
     except ApiError as error:
         await callback.answer(str(error), show_alert=True)
+        if error.status in {403, 404, 409} and context:
+            if action == "taccept":
+                notice_token = UUID(choice["noticeId"]).hex
+            await consume_recruit_invite(callback.bot, storage, callback.from_user.id, notice_token)
+            result = await _participation(api, storage, callback.from_user.id, context)
+            if saved and saved.get("entryId") and result.get("state") not in {"JOINED", "CLOSED"}:
+                username = getattr(settings, "main_bot_username", "FDPdotabot")
+                rows = [[InlineKeyboardButton(text="🔗 Вступить по ссылке команды", url=f"https://t.me/{username}?start=te_{UUID(saved['entryId']).hex}")],
+                    [_button("👥 Выбрать другую команду", "solo", context["eventHex"])]]
+                await edit_panel_content(callback.bot, storage, api, settings, callback.from_user.id, "tournaments:expired-invitation",
+                    "Приглашение больше не действует. Если в составе есть свободная позиция, можешь вступить по ссылке команды.",
+                    InlineKeyboardMarkup(inline_keyboard=rows), callback.message.chat.id)
+            else:
+                await _show_status(callback.bot, api, settings, storage, callback.from_user.id, callback.message.chat.id, context, result)

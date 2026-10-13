@@ -22,6 +22,16 @@ def notifications_key(event_hex, captain_id):
 
 
 def application_notice_text(application):
+    company = application.get("company")
+    if company:
+        lines = ["👥 <b>Заявка компании друзей</b>", "", "Команда: <b>" + escape(str(application["entryName"])[:80]) + "</b>"]
+        for member in company.get("members", [])[:4]:
+            lines.append("• " + escape(str(member.get("name") or "Игрок")[:35]) + " · "
+                + ROLE_NAMES.get(str(member.get("role")), "без позиции") + " · " + escape(str(member.get("mmr") if member.get("mmr") is not None else "—")) + " MMR")
+        lines += ["", f"Вступают вместе: {company['count']} игрока. Принятие добавит всех в состав."]
+        if not application.get("canAccept"):
+            lines.append("Состав или позиции изменились — принять заявку сейчас нельзя.")
+        return "\n".join(lines)
     lines = ["📨 <b>Новая заявка в команду</b>", "", "🏆 " + escape(str(application["tournamentTitle"])[:100]),
              "Команда: <b>" + escape(str(application["entryName"])[:80]) + "</b>", "",
              "👤 <b>" + escape(str(application["playerName"])[:60]) + "</b>",
@@ -67,10 +77,10 @@ async def deliver_tournament_application_notice(bot, api, settings, storage, row
     storage.set_choices(user_id, NOTICE_PREFIX + notice_hex, [saved])
     buttons = []
     if application.get("canAccept"):
-        buttons.append(InlineKeyboardButton(text="✅ Принять", callback_data="tap:accept:" + notice_hex))
+        buttons.append(InlineKeyboardButton(text="✅ Принять всех" if application.get("company") else "✅ Принять", callback_data="tap:accept:" + notice_hex))
     if application.get("canDecline"):
         buttons.append(InlineKeyboardButton(text="❌ Отклонить", callback_data="tap:decline:" + notice_hex))
-    rows = [[InlineKeyboardButton(text="👤 Посмотреть профиль", callback_data="tap:profile:" + notice_hex)]]
+    rows = [[InlineKeyboardButton(text="👥 Посмотреть компанию" if application.get("company") else "👤 Посмотреть профиль", callback_data="tap:profile:" + notice_hex)]]
     if buttons:
         rows.append(buttons)
     rows.append([InlineKeyboardButton(text="📨 Все заявки", callback_data=tournament_callback("requests", context["eventHex"]))])
