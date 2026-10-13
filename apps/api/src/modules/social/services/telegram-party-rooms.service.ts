@@ -10,7 +10,7 @@ import { DiscordVoiceService } from "./discord-voice.service.js";
 import { PartyChatPingsService } from "./party-chat-pings.service.js";
 import type { RegisterRoomDto, RoomReportDto, RoomMessagesDto, PartyNoticeContextDto } from "../dto/telegram-party-rooms.dto.js";
 
-type RosterMember = { membershipId: string; userId: string; telegramId: string | null; name: string; role: string | null; ready: boolean };
+type RosterMember = { membershipId: string; userId: string; telegramId: string | null; name: string; role: string | null; ready: boolean; telegramUsername?: string | null };
 type RoomData = {
   staffIds: string[]; links: Array<{ url: string; revoked: boolean }>;
   pendingInvite?: { url: string; generation: number };
@@ -33,8 +33,8 @@ function dataOf(room: TelegramPartyChatRoom): RoomData {
 }
 const json = (data: RoomData) => JSON.parse(JSON.stringify(data)) as Prisma.InputJsonValue;
 const unique = (values: string[]) => [...new Set(values)];
-const partyInclude = { members: { include: { user: { select: { id: true, displayName: true, status: true,
-  authIdentities: { where: { provider: "telegram" }, select: { providerUserId: true } } } } } } } as const;
+const partyInclude = { members: { include: { user: { select: { id: true, displayName: true, status: true, telegramContactVisible: true,
+  authIdentities: { where: { provider: "telegram" }, select: { providerUserId: true, telegramUsername: true } } } } } } } as const;
 
 @Injectable()
 export class TelegramPartyRoomsService {
@@ -121,7 +121,9 @@ export class TelegramPartyRoomsService {
   private roster(party: Prisma.GamePartyGetPayload<{ include: typeof partyInclude }>): RosterMember[] {
     return party.members.filter(member => member.user.status === "active").map(member => ({
       membershipId: member.id, userId: member.userId, telegramId: member.user.authIdentities[0]?.providerUserId ?? null,
-      name: member.user.displayName, role: member.positionRole, ready: Boolean(member.readyAt)
+      name: member.user.displayName, role: member.positionRole, ready: Boolean(member.readyAt),
+      telegramUsername: member.telegramContactShared || member.user.telegramContactVisible
+        ? member.user.authIdentities[0]?.telegramUsername ?? null : null
     }));
   }
 
@@ -141,7 +143,8 @@ export class TelegramPartyRoomsService {
         || !party.members.some(member => member.userId === identity.userId && member.user.status === "active")) return null;
       const existing = await tx.telegramPartyChatRoom.findUnique({ where: { partyId: party.id } });
       const membershipId = party.members.find(member => member.userId === identity.userId)!.id;
-      if (existing) return { ...this.publicRoom(existing), membershipId, dotaAccountId };
+      if (existing) return { ...this.publicRoom(existing), membershipId, dotaAccountId,
+        inChat: dataOf(existing).presentIds.includes(telegramId) || dataOf(existing).staffIds.includes(telegramId) };
       const pool = await tx.telegramPartyChatPool.findUniqueOrThrow({ where: { id: "default" } });
       const busy = await tx.telegramPartyChatRoom.count({ where: { state: { in: ["PREPARING", "ACTIVE", "ROTATING"] } } });
       if (busy >= pool.capacity) return null;
@@ -156,7 +159,7 @@ export class TelegramPartyRoomsService {
         state: "PREPARING", partyId: party.id, generation: { increment: 1 }, assignedAt: new Date(),
         retryAt: null, data: json(data)
       } });
-      return { ...this.publicRoom(reserved), membershipId, dotaAccountId };
+      return { ...this.publicRoom(reserved), membershipId, dotaAccountId, inChat: data.staffIds.includes(telegramId) };
     });
   }
 
@@ -222,7 +225,13 @@ export class TelegramPartyRoomsService {
       OR: [{ kind: "TEAM" }, { kind: "PARTY", expiresAt: { gt: new Date() } }]
     }, include: partyInclude });
     const current = new Map(parties.map(party => [party.id, party]));
+    const rooms = await this.prisma.telegramPartyChatRoom.findMany({ where: {
+      partyId: { in: parties.map(party => party.id) }, state: { in: ["ACTIVE", "ROTATING"] }
+    } });
+    const presence = new Map(rooms.map(room => [room.partyId, dataOf(room)]));
     return contexts.map(context => ({ ...context,
+      inChat: Boolean(presence.get(context.partyId)?.presentIds.includes(context.userId)
+        || presence.get(context.partyId)?.staffIds.includes(context.userId)),
       active: Boolean(current.get(context.partyId)?.members.some(member => member.user.status === "active"
         && member.user.authIdentities.some(identity => identity.providerUserId === context.userId)
         && (!context.membershipId || member.id === context.membershipId)))

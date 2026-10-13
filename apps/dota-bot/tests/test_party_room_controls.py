@@ -9,7 +9,7 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.api.client import ApiError
-from bot.handlers.party_rooms import group_ping_menu, group_ping_player, open_party_dota_id
+from bot.handlers.party_rooms import group_ping_menu, group_ping_player, group_ready, open_party_dota_id
 from bot.handlers.registration import DotaIdOnlyWizard, start_standalone_dota_id
 from bot.services.party_rooms import PartyRooms
 
@@ -26,7 +26,7 @@ class RoomControlTests(unittest.IsolatedAsyncioTestCase):
             set_choices=lambda user, key, values: self.choices.__setitem__((user, key), values),
             track_party_notice=Mock(), add_temporary_message=Mock(),
             get_session=lambda user: object(),
-            record_bot_user=Mock(),
+            record_bot_user=Mock(), record_party_notification=Mock(),
             save_session=Mock(),
         )
         self.settings = SimpleNamespace(party_rooms_enabled=True, main_bot_username="FDPdotabot")
@@ -41,6 +41,7 @@ class RoomControlTests(unittest.IsolatedAsyncioTestCase):
         self.pool.mutate = AsyncMock(return_value=SimpleNamespace(message_id=77))
         self.pool.refresh_private_controls = AsyncMock()
         self.api = SimpleNamespace(party_rooms=self.pool, user=AsyncMock(), login_telegram_bot_session=AsyncMock(return_value={"accessToken": "qa", "refreshToken": "qa"}))
+        self.pool.api = self.api
 
     def callback(self, data, user=None, chat=None):
         return SimpleNamespace(data=data, id="callback", from_user=SimpleNamespace(id=user or self.user_id), answer=AsyncMock(),
@@ -106,6 +107,10 @@ class RoomControlTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_chat_ready_offers_id_only_when_missing_and_updates_same_notice(self):
         fresh = {"partyId": self.party_id, "inviteLink": "https://t.me/+qa", "generation": 4, "membershipId": "own", "dotaAccountId": None}
+        self.api.user.return_value = {"id": self.party_id, "slug": "test", "name": "Test", "maxMembers": 5,
+            "expiresAt": self.room["data"]["expiresAt"], "members": [
+                {"userId": "alice", "membershipId": "own", "isSelf": True, "positionRole": "1"},
+                {"userId": "bob", "membershipId": "peer", "isSelf": False, "positionRole": "2"}]}
         self.pool.for_user = AsyncMock(return_value=fresh)
         await self.pool.refresh_hint(self.user_id, self.party_id, self.room)
         first = self.bot.send_message.await_args.kwargs["reply_markup"]
@@ -136,3 +141,23 @@ class RoomControlTests(unittest.IsolatedAsyncioTestCase):
             self.api.user.return_value = {"parties": []}
             await open_party_dota_id(message, command, object(), self.api, self.settings, self.storage)
             self.assertEqual(form.await_count, 1)
+
+    async def test_missing_id_readiness_shows_private_form_button(self):
+        self.pool.request.side_effect = ApiError("Укажи Dota ID, чтобы команда могла пригласить тебя в игру.", 400)
+        callback = self.callback(f"roomready:{self.room_id}:4")
+        await group_ready(callback, self.api, self.settings, self.storage)
+        method = self.pool.mutate.await_args.args[0]
+        self.assertEqual(method.ephemeral_message_parameters["receiver_user_id"], self.user_id)
+        self.assertTrue(method.reply_markup.inline_keyboard[0][0].url.endswith("dotaid_" + self.party_id.replace("-", "")))
+        self.assertIn("Dota ID", callback.answer.await_args.args[0])
+
+    async def test_required_id_form_explains_readiness_instead_of_optional_skip(self):
+        state = FSMContext(MemoryStorage(), StorageKey(bot_id=12345, chat_id=self.user_id, user_id=self.user_id))
+        self.api.user.return_value = {"dotaAccountId": None}
+        with patch("bot.handlers.registration.begin_panel_transition", new=AsyncMock()), patch("bot.handlers.registration.edit_panel_content", new=AsyncMock()) as panel:
+            await start_standalone_dota_id(self.bot, state, self.api, self.settings, self.storage, self.user_id, self.user_id,
+                return_screen="party", required_for_ready=True)
+        self.assertTrue((await state.get_data())["required_for_ready"])
+        self.assertIn("Готов играть", panel.await_args.args[6])
+        self.assertNotIn("необязательно", panel.await_args.args[6])
+        self.assertEqual(panel.await_args.args[7].inline_keyboard[0][0].text, "← В пати")

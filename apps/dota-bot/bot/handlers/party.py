@@ -63,6 +63,9 @@ async def view_party_readiness(callback: CallbackQuery, api: OpiniaApi, storage:
             raise ApiError("Состав изменился", 409)
         member = next((item for item in coordination["members"] if str(item.get("positionRole")) == role), None)
         text = "Место уже свободно." if member is None else str(member["displayName"])[:40] + (": готов играть ✅" if member.get("readyAt") else ": ещё не подтвердил готовность ❌")
+        pool = getattr(api, "party_rooms", None)
+        if member and member.get("isSelf") and not member.get("readyAt") and pool and pool.enabled:
+            text = "Нажми «Готов играть» в чате пати. Если Dota ID ещё не указан, FDP предложит заполнить его."
         await callback.answer(text, show_alert=True)
     except ApiError:
         await callback.answer("Не удалось проверить готовность. Открой пати заново.", show_alert=True)
@@ -101,6 +104,12 @@ async def update_party_coordination(callback: CallbackQuery, api: OpiniaApi, set
         screen = "party_settings" if action == "contact" and panel and panel.screen == "party_settings" else "party"
         await edit_panel(callback.bot, storage, api, settings, callback.from_user.id, screen)
     except ApiError as error:
+        if action == "ready" and toggle == "on" and error.status == 400 and "Dota ID" in str(error):
+            if state is not None:
+                from .registration import start_standalone_dota_id
+                await start_standalone_dota_id(callback.bot, state, api, settings, storage,
+                    callback.from_user.id, callback.message.chat.id, return_screen="party", required_for_ready=True)
+            return
         if error.status in {403, 404, 409}:
             expire_ready_notice(storage, callback.from_user.id, token)
             text = "Состав пати изменился. Открой свою пати заново."

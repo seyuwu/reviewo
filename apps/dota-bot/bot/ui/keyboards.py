@@ -233,12 +233,14 @@ def party_keyboard(
             member = members_by_role.get(role)
             if member:
                 ready = bool(member.get("readyAt"))
-                action = f"party:ready:{token}:{'off' if ready else 'on'}" if member.get("isSelf") and token else (f"party:status:{token}:{role}" if token else f"party:noop:{role}")
+                action = (f"party:ready:{token}:{'off' if ready else 'on'}"
+                    if member.get("isSelf") and token and (ready or not party.get("telegramRoomEnabled"))
+                    else (f"party:status:{token}:{role}" if token else f"party:noop:{role}"))
                 search_status[index] = button("✅" if ready else "❌", action)
     rows = [slots, search_status]
     self_member = next((member for member in party.get("members", []) if member.get("isSelf")), None)
     primary_actions = []
-    if token and self_member:
+    if token and self_member and not party.get("telegramRoomEnabled"):
         if not self_member.get("readyAt"):
             primary_actions.append(button("✅ Готов играть", f"party:ready:{token}:on"))
     if party.get("telegramRoomUrl"):

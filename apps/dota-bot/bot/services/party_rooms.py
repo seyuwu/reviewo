@@ -13,6 +13,7 @@ from ..api.client import ApiError
 from .join_request_query import AnswerChatJoinRequestQuery
 from .telegram_session import is_connection_setup_failure
 from .party_room_review import review_code_for_reason, review_details
+from ..ui.formatters import telegram_contact_text
 
 logger = logging.getLogger(__name__)
 REQUIRED_RIGHTS = ("can_change_info", "can_delete_messages", "can_restrict_members", "can_invite_users", "can_pin_messages")
@@ -239,7 +240,8 @@ class PartyRooms:
             if not getattr(self.settings, "room_worker_only", False) and room.get("partyId"):
                 roster = room["data"].get("roster", [])
                 previous_roster = old.get("data", {}).get("roster", [])
-                if old.get("generation") != room["generation"] or old.get("state") != room["state"]:
+                if (old.get("generation") != room["generation"] or old.get("state") != room["state"]
+                        or previous_roster != roster or old.get("data", {}).get("presentIds") != room["data"].get("presentIds")):
                     targets = roster + previous_roster
                 else:
                     previous_members = {(member.get("membershipId"), member.get("telegramId")) for member in previous_roster}
@@ -482,8 +484,13 @@ class PartyRooms:
             text += f"{'✅' if member.get('ready') else '❌'} {role} · <b>{name}</b>"
             if member.get("mmr") is not None:
                 text += " · " + escape(str(member["mmr"])) + " MMR"
+            contact = telegram_contact_text(member)
+            if contact:
+                text += "\n📱 " + contact
             text += "\nDota ID: " + escape(str(member.get("dotaAccountId") or "не указан")) + "\n"
         text += "\nПоздоровайтесь и договоритесь об игре.\nЧат временный: после завершения пати переписка удаляется."
+        if any(not member.get("dotaAccountId") for member in members):
+            text += "\n\n🎮 Чтобы подтвердить готовность, сначала укажи Dota ID — команда сможет добавить тебя в игре."
         row = [InlineKeyboardButton(text="✅ Готов играть", callback_data=f"roomready:{room['id']}:{room['generation']}")]
         if len(members) > 1:
             row.append(InlineKeyboardButton(text="🔔 Позвать в чат", callback_data=f"roomping:{room['id']}:{room['generation']}"))
@@ -609,79 +616,26 @@ class PartyRooms:
 
     async def refresh_hint(self, user_id, party_id, room):
         fresh = await self.for_user(user_id, room["data"]["partySlug"])
-        key = "party_room_hint:" + party_id
-        old = self.storage.get_choice(user_id, key, 0)
-        member = next((member for member in room["data"].get("roster", []) if str(member.get("telegramId")) == str(user_id)), None)
-        binding = {"partyId": party_id, "membershipId": (fresh or {}).get("membershipId")
-                   or (member.get("membershipId") if member else None), "chatId": user_id}
-        ready_key = "party_room_ready_link:" + party_id
-        ready_link = self.storage.get_choice(user_id, ready_key, 0)
         ping_key = "party_room_ping_link:" + party_id
         ping_link = self.storage.get_choice(user_id, ping_key, 0)
         if fresh is None and room["state"] == "ACTIVE" and any(str(member.get("telegramId")) == str(user_id) for member in room["data"].get("roster", [])):
             raise ApiError("Chat availability lookup failed; retry notification", 503)
-        if not fresh or not fresh.get("inviteLink") or fresh.get("partyId") != party_id:
-            for saved in (old, ready_link, ping_link):
-                if isinstance(saved, dict) and saved.get("messageId"):
-                    self.storage.add_temporary_message(user_id, user_id, saved["messageId"], 1)
-            self.storage.set_choices(user_id, key, [])
-            self.storage.set_choices(user_id, ready_key, [])
-            self.storage.set_choices(user_id, ping_key, [])
+        if not fresh or fresh.get("partyId") != party_id:
+            if room["state"] in {"CLOSING", "FREE"}:
+                from .party_notice_cleanup import expire_party_notices
+                expire_party_notices(self.storage, party_id, user_id)
             await self.refresh_private_controls(user_id, party_id)
             return
-        if isinstance(old, dict) and old.get("membershipId") != binding["membershipId"]:
-            if old.get("messageId"):
-                self.storage.add_temporary_message(user_id, user_id, old["messageId"], 0)
-            self.storage.set_choices(user_id, key, [])
-            old = None
-        needs_dota_id = "dotaAccountId" in fresh and not fresh["dotaAccountId"]
-        if isinstance(old, dict) and old.get("url") == fresh["inviteLink"] and old.get("dotaIdMissing") == needs_dota_id and (not isinstance(ping_link, dict) or ping_link.get("url") == fresh["inviteLink"]):
-            await self.refresh_private_controls(user_id, party_id)
-            return
-        markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="💬 Открыть чат пати", url=fresh["inviteLink"])]])
-        if isinstance(ping_link, dict) and ping_link.get("url") != fresh["inviteLink"]:
+        if isinstance(ping_link, dict) and fresh.get("inviteLink") and ping_link.get("url") != fresh["inviteLink"]:
+            markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="💬 Открыть чат пати", url=fresh["inviteLink"])]])
             try:
                 await self.bot.edit_message_reply_markup(chat_id=user_id, message_id=ping_link["messageId"], reply_markup=markup)
                 ping_link["url"] = fresh["inviteLink"]
                 self.storage.set_choices(user_id, ping_key, [ping_link])
             except TelegramBadRequest:
                 self.storage.set_choices(user_id, ping_key, [])
-        if isinstance(ready_link, dict) and ready_link.get("url") != fresh["inviteLink"]:
-            try:
-                await self.bot.edit_message_reply_markup(chat_id=user_id, message_id=ready_link["messageId"], reply_markup=markup)
-                ready_link["url"] = fresh["inviteLink"]
-                self.storage.set_choices(user_id, ready_key, [ready_link])
-            except TelegramBadRequest:
-                self.storage.set_choices(user_id, ready_key, [])
-        text = "✅ <b>Чат пати готов!</b>\n\n" + escape(room["data"].get("partyName", "Пати")) + "\nНажми кнопку ниже и заходи к команде."
-        if needs_dota_id:
-            text += "\n\n🎮 Добавь Dota ID, чтобы ребята могли сразу пригласить тебя в игре."
-            markup = InlineKeyboardMarkup(inline_keyboard=[*markup.inline_keyboard, [InlineKeyboardButton(text="🎮 Указать Dota ID",
-                url=f"https://t.me/{getattr(self.settings, 'main_bot_username', 'FDPdotabot')}?start=dotaid_{UUID(party_id).hex}")]])
-        message_id = old.get("messageId") if isinstance(old, dict) else None
-        if message_id:
-            try:
-                await self.bot.edit_message_text(text, chat_id=user_id, message_id=message_id, parse_mode="HTML", reply_markup=markup)
-            except TelegramBadRequest as error:
-                if "not modified" not in str(error).lower():
-                    message_id = None
-        if not message_id:
-            self.storage.set_choices(user_id, key, [{**binding, "messageId": None, "url": fresh["inviteLink"], "generation": fresh["generation"], "dotaIdMissing": needs_dota_id}])
-            try:
-                message = await self.bot.send_message(user_id, text, parse_mode="HTML", reply_markup=markup)
-            except TelegramNetworkError as error:
-                if is_connection_setup_failure(error):
-                    self.storage.set_choices(user_id, key, [])
-                raise
-            message_id = message.message_id
-        self.storage.track_party_notice(user_id, party_id, binding["membershipId"], user_id, message_id)
-        current = self.storage.get_choice(user_id, key, 0)
-        if not isinstance(current, dict) or current.get("membershipId") != binding["membershipId"]:
-            self.storage.add_temporary_message(user_id, user_id, message_id, 0)
-            return
-        self.storage.set_choices(user_id, key, [{**binding, "messageId": message_id, "url": fresh["inviteLink"], "generation": fresh["generation"], "dotaIdMissing": needs_dota_id}])
-        expiry = datetime.fromisoformat(room["data"]["expiresAt"].replace("Z", "+00:00"))
-        self.storage.add_temporary_message(user_id, user_id, message_id, max(1, min(47 * 3600, int((expiry - datetime.now(UTC)).total_seconds()))))
+        from .party_ready import deliver_native_party_notice
+        await deliver_native_party_notice(self.bot, self.api, self.storage, user_id, room["data"]["partySlug"], room=fresh)
         await self.refresh_private_controls(user_id, party_id)
 
     async def refresh_private_controls(self, user_id, party_id):
@@ -690,11 +644,6 @@ class PartyRooms:
         if panel and panel.screen == "party" and isinstance(panel_context, dict) and panel_context.get("partyId") == party_id:
             from .panel import edit_panel
             await edit_panel(self.bot, self.storage, self.api, self.settings, user_id, "party")
-        from .party_ready import _links, refresh_ready_notice
-        for notice in self.storage.party_ready_notices():
-            if notice["userId"] == user_id and notice["partyId"] == party_id:
-                _links.pop((user_id, notice["token"]), None)
-                await refresh_ready_notice(self.bot, self.api, self.settings, self.storage, notice)
 
     async def send_admin_alert(self, user_id, room):
         key = "party_room_alert:" + room["id"]

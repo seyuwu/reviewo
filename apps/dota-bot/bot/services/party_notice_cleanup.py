@@ -78,6 +78,7 @@ async def reconcile_party_notice_memberships(bot, api, storage):
     } for source in sources}
     values = list(contexts.values())
     inactive = set()
+    joined = set()
     for offset in range(0, len(values), 500):
         result = await api.rooms_request("POST", "/notice-memberships", {
             "botId": str(bot.id), "contexts": values[offset:offset + 500]})
@@ -87,7 +88,15 @@ async def reconcile_party_notice_memberships(bot, api, storage):
             key = (int(item["userId"]), item["partyId"], item.get("membershipId"))
             if key in contexts and item.get("active") is False:
                 inactive.add(key)
+            elif key in contexts and item.get("active") and item.get("inChat"):
+                joined.add(key)
     expire_sources(storage, [source for source in sources if context_key(source) in inactive])
+    from .party_ready import complete_native_party_notice
+    for user_id, party_id, membership_id in joined:
+        complete_native_party_notice(storage, user_id, party_id, membership_id)
+    # Legacy invitations and messages whose send acknowledgement arrived after joining.
+    expire_sources(storage, [source for source in sources if context_key(source) in joined
+        and (source["kind"].startswith(("party_ready_notice:", "party_room_hint:", "party_room_ready_link:")))])
     pool = getattr(api, "party_rooms", None)
     if pool:
         for user_id, party_id, membership_id in inactive:

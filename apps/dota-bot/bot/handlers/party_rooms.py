@@ -77,7 +77,8 @@ async def open_party_dota_id(message: Message, command: CommandObject, state: FS
             await message.answer("Эта пати завершилась или ты больше в ней не состоишь. Открой свою пати в меню FDP.")
             return
         from .registration import start_standalone_dota_id
-        await start_standalone_dota_id(message.bot, state, api, settings, storage, user_id, message.chat.id, return_screen="party")
+        await start_standalone_dota_id(message.bot, state, api, settings, storage, user_id, message.chat.id,
+            return_screen="party", required_for_ready=True)
     except ApiError:
         await message.answer("Не получилось открыть Dota ID. Попробуй ещё раз через «Аккаунт» в FDP.")
 
@@ -376,8 +377,19 @@ async def group_ready(callback: CallbackQuery, api, settings, storage):
         await callback.answer("Готовность подтверждена ✅")
         api.party_rooms.sync_after = 0
         api.party_rooms.wakeup.set()
-    except ApiError:
-        await callback.answer("Состав изменился. Открой текущую карточку пати.", show_alert=True)
+    except ApiError as error:
+        if error.status == 400 and "Dota ID" in str(error):
+            await callback.answer("Сначала укажи Dota ID — по нему команда пригласит тебя в игру.", show_alert=True)
+            url = f"https://t.me/{getattr(settings, 'main_bot_username', 'FDPdotabot')}?start=dotaid_{UUID(room['partyId']).hex}"
+            try:
+                await api.party_rooms.mutate(SendPartyDiscordMessage(chat_id=callback.message.chat.id,
+                    text="🎮 <b>Укажи свой Dota ID</b>\n\nКоманда сможет пригласить тебя в игру. Затем нажми «Готов играть».",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎮 Указать Dota ID", url=url)]]),
+                    ephemeral_message_parameters={"receiver_user_id": callback.from_user.id, "callback_query_id": callback.id}))
+            except TelegramAPIError:
+                pass  # The pinned card also contains the permanent ID entry button.
+        else:
+            await callback.answer("Состав изменился. Открой текущую карточку пати.", show_alert=True)
 
 
 @router.callback_query(F.data.regexp(r"^roomdiscord:[a-f0-9-]{36}:\d+$"))

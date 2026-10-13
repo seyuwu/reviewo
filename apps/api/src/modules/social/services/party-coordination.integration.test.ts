@@ -4,6 +4,7 @@ import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#prisma/client";
 import { GUARDS_METADATA } from "@nestjs/common/constants.js";
+import { DOTA_ATTRIBUTE_KEYS } from "@reviewo/shared";
 
 import type { PrismaService } from "../../../database/prisma.service.js";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard.js";
@@ -12,6 +13,7 @@ import { PartiesController } from "../controllers/parties.controller.js";
 import { PartyCoordinationService } from "./party-coordination.service.js";
 
 const url = process.env["PARTY_COORDINATION_TEST_DATABASE_URL"];
+let nextDotaId = 980000000;
 const status = (expected: number) => (error: unknown) => {
   assert.equal((error as { getStatus(): number }).getStatus(), expected);
   return true;
@@ -27,7 +29,8 @@ describe("Party coordination (isolated PostgreSQL)", { skip: !url }, () => {
 
   before(async () => {
     const parsed = new URL(url!);
-    assert.equal(parsed.hostname, "127.0.0.1");
+    assert.ok(parsed.hostname === "127.0.0.1" ||
+      (parsed.hostname === "postgres" && process.env["PARTY_COORDINATION_QA_LOCAL_DOCKER"] === "1"));
     assert.equal(parsed.pathname, "/fdp_rooms_qa");
     prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: url! }) });
     const db = prisma as unknown as PrismaService;
@@ -38,6 +41,10 @@ describe("Party coordination (isolated PostgreSQL)", { skip: !url }, () => {
       data: { displayName, authIdentities: { create: { provider: "telegram", providerUserId: randomUUID(), telegramUsername: displayName.toLowerCase() + "_qa" } } }
     })));
     ids = users.map((user) => user.id);
+    await Promise.all(users.map(user => prisma.entity.create({ data: {
+      title: user.displayName, slug: "coord-profile-" + randomUUID(), type: "person", ownerUserId: user.id,
+      attributes: { create: { key: DOTA_ATTRIBUTE_KEYS.dotaAccountId, value: String(nextDotaId++) } }
+    } })));
     slug = "coord-qa-" + randomUUID();
     const party = await prisma.gameParty.create({ data: {
       name: "Coordination QA", slug, ownerUserId: ids[0]!, vertical: "dota", kind: "PARTY",
@@ -51,6 +58,7 @@ describe("Party coordination (isolated PostgreSQL)", { skip: !url }, () => {
   });
   afterEach(async () => {
     await prisma.gameParty.deleteMany({ where: { ownerUserId: { in: ids } } });
+    await prisma.entity.deleteMany({ where: { ownerUserId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   });
   after(async () => { await prisma.$disconnect(); });
@@ -126,5 +134,23 @@ describe("Party coordination (isolated PostgreSQL)", { skip: !url }, () => {
     const rows = await Promise.all(Array.from({ length: 4 }, () => service.update(slug, ids[0]!, memberships[0]!, { ready: true })));
     assert.equal(rows.filter((row) => row.changed).length, 1);
     assert.equal(new Set(rows.map((row) => row.coordination.members.find((member) => member.isSelf)!.readyAt)).size, 1);
+  });
+
+  it("requires a saved Dota ID before readiness and accepts it immediately after saving", async () => {
+    const entity = await prisma.entity.findUniqueOrThrow({ where: { ownerUserId: ids[0]! } });
+    await prisma.entityAttribute.delete({ where: { entityId_key: { entityId: entity.id, key: DOTA_ATTRIBUTE_KEYS.dotaAccountId } } });
+    await assert.rejects(service.update(slug, ids[0]!, memberships[0]!, { ready: true }), status(400));
+    assert.equal((await service.get(slug, ids[0]!)).members.find(member => member.isSelf)!.readyAt, null);
+    await prisma.entityAttribute.create({ data: { entityId: entity.id, key: DOTA_ATTRIBUTE_KEYS.dotaAccountId, value: String(nextDotaId++) } });
+    assert.ok((await service.update(slug, ids[0]!, memberships[0]!, { ready: true })).coordination.members.find(member => member.isSelf)!.readyAt);
+  });
+
+  it("rejects concurrent confirmations without ID and still allows cancelling readiness", async () => {
+    const entity = await prisma.entity.findUniqueOrThrow({ where: { ownerUserId: ids[0]! } });
+    await prisma.entityAttribute.update({ where: { entityId_key: { entityId: entity.id, key: DOTA_ATTRIBUTE_KEYS.dotaAccountId } }, data: { value: " " } });
+    const results = await Promise.allSettled(Array.from({ length: 4 }, () => service.update(slug, ids[0]!, memberships[0]!, { ready: true })));
+    assert.equal(results.filter(result => result.status === "rejected").length, 4);
+    const withdrawn = await service.update(slug, ids[0]!, memberships[0]!, { ready: false });
+    assert.equal(withdrawn.coordination.members.find(member => member.isSelf)!.readyAt, null);
   });
 });

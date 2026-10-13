@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import type { Prisma } from "#prisma/client";
-import { DOTA_PARTY_VERTICAL } from "@reviewo/shared";
+import { DOTA_ATTRIBUTE_KEYS, DOTA_PARTY_VERTICAL } from "@reviewo/shared";
 
 import { AppErrorCode } from "../../../common/exceptions/app-error-code.js";
 import { createAppException } from "../../../common/exceptions/app.exception.js";
@@ -60,6 +60,14 @@ export class PartyCoordinationService {
         WHERE "id" = ${membershipId}::uuid AND "user_id" = ${userId}::uuid FOR UPDATE`;
       const current = await tx.gamePartyMember.findUnique({ where: { id: membershipId } });
       if (!current || current.userId !== userId || current.partyId !== party.id) this.staleMembership();
+      if (party.kind === "PARTY" && "ready" in change && change.ready) {
+        const profile = await tx.entity.findFirst({ where: { ownerUserId: userId, type: "person" },
+          select: { attributes: { where: { key: DOTA_ATTRIBUTE_KEYS.dotaAccountId }, select: { value: true } } } });
+        if (!profile?.attributes[0]?.value.trim()) {
+          throw createAppException({ code: AppErrorCode.BadRequest,
+            message: "Укажи Dota ID, чтобы команда могла пригласить тебя в игру.", statusCode: HttpStatus.BAD_REQUEST });
+        }
+      }
       const patch = "ready" in change
         ? { readyAt: change.ready ? (current.readyAt ?? new Date()) : null }
         : { telegramContactShared: change.visible };

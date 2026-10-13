@@ -63,12 +63,16 @@ the current player's party panel. The `manage_<party UUID>` link is navigation
 only: the bot rechecks current membership and never joins a party from that link.
 Helper workers use `DOTA_BOT_MAIN_USERNAME` (default `FDPdotabot`) for this action.
 
-The chat-ready private notice offers “Указать Dota ID” only when the current
+The single private party invitation offers “Указать Dota ID” only when the current
 member has no ID. The shared card also offers it when any member lacks an ID.
 `dotaid_<party UUID>` opens the existing ID-only form in the main bot, rechecks
 current membership and returns to the party. Helper workers never edit profiles.
-Saved notices retain the ID-prompt state so link rotation preserves controls and
-ambiguous Telegram sends are not repeated solely because that state is missing.
+The ID form opened from a party explains that the ID is required for readiness.
+The API rejects readiness for a temporary party without a saved Dota ID; joining
+the Telegram group and continuing search remain available. A rejected group
+readiness action shows the player a private ID entry button. Existing IDs are reused.
+Shared roster cards expose Telegram usernames only when the player shared their
+contact with this party or made it public.
 
 “Позвать в чат” opens an ephemeral list visible only to the clicking member.
 Selection tokens are bound to that member, group and generation, expire after
@@ -113,8 +117,17 @@ the roster card is posted. Existing website chat/Discord access remains explicit
 in party settings.
 
 The main party panel shows “Готовим чат” with an approximate five-second hint
-while preparation is pending. Every Telegram-linked member, including players
-combined by automatic solo search, gets “Чат пати готов!” with an entry button.
+while preparation is pending. Match-found and chat-ready events share one short
+private invitation per current membership, with party name, member count and the
+player's position. Preparation updates that same message to add “Войти в чат пати”;
+it never emits a separate chat-ready message. A new roster updates existing
+invitations and sends one to newcomers. A captain alone does not get an invitation.
+Readiness is confirmed from the shared group card rather than from the private
+invitation or the main party panel. Confirmed group presence removes the invitation
+and suppresses subsequent match-found notices for that membership. An invitation
+URL click alone does not count as group presence. After two minutes with a ready
+chat, at most one reminder replaces the invitation for a player who has not entered.
+Legacy chat-ready notices are reused or deleted when upgrading an active party.
 The existing private notification queue retains its rate budget; preparation runs
 on the separate room-service session. A room lookup can hold a panel for at most
 two seconds, and transient failures are handled by the background worker.

@@ -781,7 +781,7 @@ async def begin_dota_id_edit(
                                    callback.from_user.id, callback.message.chat.id, return_screen=return_screen)
 
 
-async def start_standalone_dota_id(bot, state, api, settings, storage, user_id, chat_id, *, return_screen="profile"):
+async def start_standalone_dota_id(bot, state, api, settings, storage, user_id, chat_id, *, return_screen="profile", required_for_ready=False):
     if chat_id != user_id:
         return
     await begin_panel_transition(bot, storage, user_id, chat_id)
@@ -802,7 +802,7 @@ async def start_standalone_dota_id(bot, state, api, settings, storage, user_id, 
         return
     await state.clear()
     await state.set_state(DotaIdOnlyWizard.dota_id)
-    await state.update_data(return_screen=return_screen, current_dota_id=profile.get("dotaAccountId") or "")
+    await state.update_data(return_screen=return_screen, current_dota_id=profile.get("dotaAccountId") or "", required_for_ready=required_for_ready)
     await edit_panel_content(
         bot,
         storage,
@@ -810,20 +810,21 @@ async def start_standalone_dota_id(bot, state, api, settings, storage, user_id, 
         settings,
         user_id,
         "profile:dota-id",
-        standalone_dota_id_text(profile.get("dotaAccountId")),
-        standalone_dota_id_keyboard(bool(profile.get("dotaAccountId"))),
+        standalone_dota_id_text(profile.get("dotaAccountId"), required_for_ready=required_for_ready),
+        standalone_dota_id_keyboard(bool(profile.get("dotaAccountId")), required_for_ready=required_for_ready),
         chat_id,
         dota_id_guide_photo(),
     )
 
 
-def standalone_dota_id_text(current_id: object, error: str | None = None) -> str:
+def standalone_dota_id_text(current_id: object, error: str | None = None, *, required_for_ready=False) -> str:
     text = (
         "<b>Добавить Dota ID</b>\n\n"
         "Откройте свой профиль в Dota 2: ID — цифры справа от ника, как показано на скриншоте. "
         "Введите 8–10 цифр.\n\n"
-        "Это необязательно — можно вернуться к поиску и добавить ID позже."
     )
+    text += ("Dota ID нужен, чтобы команда могла пригласить тебя в игру. После заполнения вернись в чат пати и нажми «Готов играть»."
+             if required_for_ready else "Это необязательно — можно вернуться к поиску и добавить ID позже.")
     if current_id:
         text += f"\n\nСейчас указан: <code>{escape(str(current_id))}</code>"
     if error:
@@ -831,8 +832,8 @@ def standalone_dota_id_text(current_id: object, error: str | None = None) -> str
     return text
 
 
-def standalone_dota_id_keyboard(has_current_id: bool = False) -> InlineKeyboardMarkup:
-    label = "Оставить текущий ID" if has_current_id else "Пропустить пока"
+def standalone_dota_id_keyboard(has_current_id: bool = False, *, required_for_ready=False) -> InlineKeyboardMarkup:
+    label = "Оставить текущий ID" if has_current_id else ("← В пати" if required_for_ready else "Пропустить пока")
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=label, callback_data="profile:dota-id:skip")],
@@ -858,8 +859,8 @@ async def receive_standalone_dota_id(
             settings,
             message.from_user.id,
             "profile:dota-id",
-            standalone_dota_id_text(data.get("current_dota_id"), "Введите 8–10 цифр без пробелов."),
-            standalone_dota_id_keyboard(bool(data.get("current_dota_id"))),
+            standalone_dota_id_text(data.get("current_dota_id"), "Введите 8–10 цифр без пробелов.", required_for_ready=data.get("required_for_ready", False)),
+            standalone_dota_id_keyboard(bool(data.get("current_dota_id")), required_for_ready=data.get("required_for_ready", False)),
             message.chat.id,
             dota_id_guide_photo(),
         )
@@ -874,8 +875,8 @@ async def receive_standalone_dota_id(
             settings,
             message.from_user.id,
             "profile:dota-id",
-            standalone_dota_id_text(data.get("current_dota_id"), str(error)),
-            standalone_dota_id_keyboard(bool(data.get("current_dota_id"))),
+            standalone_dota_id_text(data.get("current_dota_id"), str(error), required_for_ready=data.get("required_for_ready", False)),
+            standalone_dota_id_keyboard(bool(data.get("current_dota_id")), required_for_ready=data.get("required_for_ready", False)),
             message.chat.id,
             dota_id_guide_photo(),
         )

@@ -4,6 +4,7 @@ import time
 from datetime import UTC, datetime
 from html import escape
 from urllib.parse import quote
+from uuid import UUID
 
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramNetworkError
 from aiogram.types import InlineKeyboardMarkup
@@ -75,6 +76,10 @@ async def keep_ready_room_link(bot, api, storage, user_id, token):
     if not pool or not pool.enabled or not isinstance(notice, dict) or not notice.get("messageId"):
         return False
     room = await pool.for_user(user_id, notice["partySlug"])
+    if notice.get("nativeChat"):
+        if room and room.get("inChat"):
+            complete_native_party_notice(storage, user_id, notice["partyId"], notice["membershipId"])
+        return True
     if not room or not room.get("inviteLink"):
         return False
     try:
@@ -129,6 +134,10 @@ def ready_notice_text(coordination, heading, *, needs_confirmation=True):
 
 
 async def deliver_party_ready_notice(bot, api, storage, user_id, site_url, slug, heading):
+    pool = getattr(api, "party_rooms", None)
+    if pool and pool.enabled:
+        await deliver_native_party_notice(bot, api, storage, user_id, slug)
+        return
     lock = _delivery_locks.setdefault(user_id, asyncio.Lock())
     async with lock:
         try:
@@ -203,6 +212,10 @@ async def deliver_party_ready_notice(bot, api, storage, user_id, site_url, slug,
 
 async def refresh_ready_notice(bot, api, settings, storage, notice):
     user_id, token = notice["userId"], notice["token"]
+    pool = getattr(api, "party_rooms", None)
+    if pool and pool.enabled:
+        await deliver_native_party_notice(bot, api, storage, user_id, notice["partySlug"], allow_reminder=True)
+        return
     if time.time() - notice["createdAt"] >= 24 * 60 * 60:
         expire_ready_notice(storage, user_id, token)
         return
@@ -249,6 +262,169 @@ async def refresh_ready_notice(bot, api, settings, storage, notice):
         notice["reminderMessageId"] = message.message_id
         storage.set_choices(user_id, notice_key(token), [notice])
         storage.add_temporary_message(user_id, message.chat.id, message.message_id, max(1, int(notice["createdAt"] + 24 * 60 * 60 - time.time())))
+
+
+def complete_native_party_notice(storage, user_id, party_id, membership_id):
+    """Actual group presence consumes invitations; a URL click alone does not."""
+    context = storage.get_choice(user_id, "party_coordination:" + party_id, 0)
+    if not isinstance(context, dict) or context.get("membershipId") != membership_id:
+        return
+    token = context["token"]
+    if storage.get_choice(user_id, "party_ready_roster:" + token, 0) != {"enteredChat": True}:
+        storage.set_choices(user_id, "party_ready_roster:" + token, [{"enteredChat": True}])
+    expire_ready_notice(storage, user_id, token)
+    for prefix in ("party_room_hint:", "party_room_ready_link:"):
+        key = prefix + party_id
+        saved = storage.get_choice(user_id, key, 0)
+        if isinstance(saved, dict) and saved.get("membershipId") == membership_id:
+            if saved.get("messageId"):
+                storage.add_temporary_message(user_id, user_id, saved["messageId"], 0)
+            storage.set_choices(user_id, key, [])
+
+
+def native_notice_content(coordination, room, username, *, reminded=False):
+    member = own_member(coordination)
+    position = ROLE_NAMES.get(str(member.get("positionRole")), "не выбрана")
+    ready = bool(room and room.get("inviteLink"))
+    lines = ["🔔 <b>Команда собирается в чате</b>" if reminded else "🎮 <b>Пати найдена!</b>", "",
+             f"<b>{escape(str(coordination['name']))} · {len(coordination['members'])}/{coordination['maxMembers']}</b>",
+             f"Твоя позиция: <b>{escape(position)}</b>", ""]
+    rows = []
+    if ready:
+        lines.append("💬 Зайди в чат — договоритесь об игре.")
+        rows.append([button_url("💬 Войти в чат пати", room["inviteLink"])])
+    elif room and room.get("state") in {"PREPARING", "ROTATING"}:
+        lines.append("⏳ Готовим чат… Обычно около 5 секунд.")
+    else:
+        lines.append("⏳ Чат пока недоступен. Проверь его в окне пати.")
+        rows.append([button_url("🎮 Открыть пати", f"https://t.me/{username}?start=manage_{UUID(coordination['id']).hex}")])
+    if room and "dotaAccountId" in room and not room["dotaAccountId"]:
+        lines += ["", "🎮 Для готовности укажи Dota ID — команда сможет пригласить тебя в игру."]
+        rows.append([button_url("🎮 Указать Dota ID", f"https://t.me/{username}?start=dotaid_{UUID(coordination['id']).hex}")])
+    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
+async def deliver_native_party_notice(bot, api, storage, user_id, slug, *, room=None, allow_reminder=False):
+    """One membership-bound invitation, shared by match and room workers."""
+    async with _delivery_locks.setdefault(user_id, asyncio.Lock()):
+        try:
+            coordination = await read_coordination(api, user_id, slug)
+        except ApiError as error:
+            if error.status in {403, 404}:
+                for saved in storage.party_ready_notices():
+                    if saved["userId"] == user_id and saved["partySlug"] == slug:
+                        expire_ready_notice(storage, user_id, saved["token"])
+                return
+            raise
+        context = coordination_context(storage, user_id, coordination)
+        if not context:
+            return
+        token = context["token"]
+        key = notice_key(token)
+        member = own_member(coordination)
+        seen = storage.get_choice(user_id, "party_ready_roster:" + token, 0) or {}
+        if seen.get("enteredChat"):
+            return
+        existing = storage.get_choice(user_id, key, 0)
+        if room is None:
+            room = await api.party_rooms.for_user(user_id, slug)
+        if room and (room.get("partyId") != coordination["id"] or room.get("membershipId") != member["membershipId"]):
+            raise ApiError("Состав пати изменился", 409)
+        if room and isinstance(existing, dict) and (
+                room["generation"] < existing.get("roomGeneration", -1)
+                or (room["generation"] == existing.get("roomGeneration")
+                    and room.get("state") == "PREPARING" and existing.get("roomState") == "ACTIVE")):
+            return  # A slow preparation lookup cannot replace a newer working invitation.
+        if room and room.get("inChat"):
+            complete_native_party_notice(storage, user_id, coordination["id"], member["membershipId"])
+            return
+        if len(coordination["members"]) < 2 and not isinstance(existing, dict):
+            for prefix in ("party_room_hint:", "party_room_ready_link:"):
+                legacy_key = prefix + coordination["id"]
+                legacy = storage.get_choice(user_id, legacy_key, 0)
+                if isinstance(legacy, dict) and legacy.get("membershipId") == member["membershipId"]:
+                    if legacy.get("messageId"):
+                        storage.add_temporary_message(user_id, user_id, legacy["messageId"], 0)
+                    storage.set_choices(user_id, legacy_key, [])
+            return
+        deadline = notice_deadline(coordination)
+        ttl = int((deadline - datetime.now(UTC)).total_seconds())
+        if ttl <= 0:
+            expire_ready_notice(storage, user_id, token)
+            return
+        notice = dict(existing) if isinstance(existing, dict) else {
+            **context, "chatId": user_id, "messageId": None, "createdAt": time.time(), "reminded": False}
+        notice.update(nativeChat=True, expiresAt=deadline.isoformat())
+        if room:
+            notice.update(roomGeneration=room["generation"], roomState=room.get("state"))
+        # Reuse older chat-ready messages when upgrading an active party.
+        for prefix in ("party_room_hint:", "party_room_ready_link:"):
+            legacy_key = prefix + coordination["id"]
+            legacy = storage.get_choice(user_id, legacy_key, 0)
+            if isinstance(legacy, dict) and legacy.get("membershipId") == member["membershipId"]:
+                if not notice.get("messageId") and not isinstance(existing, dict):
+                    notice["messageId"] = legacy.get("messageId")
+                elif legacy.get("messageId") and legacy["messageId"] != notice.get("messageId"):
+                    storage.add_temporary_message(user_id, user_id, legacy["messageId"], 0)
+                storage.set_choices(user_id, legacy_key, [])
+        if not room and isinstance(existing, dict):
+            return  # A transient availability failure preserves the current card for retry.
+        if room and room.get("inviteLink") and not notice.get("chatReadyAt"):
+            notice["chatReadyAt"] = time.time()
+        text, markup = native_notice_content(coordination, room,
+            getattr(getattr(api, "settings", None), "main_bot_username", "FDPdotabot"), reminded=notice.get("reminded", False))
+        signature = (text, markup.model_dump_json() if markup else "")
+        storage.set_choices(user_id, key, [notice])
+        message_id = notice.get("messageId")
+        if message_id:
+            if notice.get("content") != list(signature):
+                try:
+                    await bot.edit_message_text(text, chat_id=user_id, message_id=message_id,
+                        reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
+                except TelegramBadRequest as error:
+                    if "not modified" not in str(error).lower():
+                        if "not found" in str(error).lower():
+                            complete_native_party_notice(storage, user_id, coordination["id"], member["membershipId"])
+                            return
+                        raise
+        elif isinstance(existing, dict):
+            # A lost send acknowledgement must not turn another worker into a duplicate sender.
+            return
+        else:
+            try:
+                message = await bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML",
+                    disable_web_page_preview=True, protect_content=True)
+            except TelegramNetworkError as error:
+                if is_connection_setup_failure(error):
+                    storage.set_choices(user_id, key, [])
+                raise
+            message_id = message.message_id
+            storage.track_party_notice(user_id, coordination["id"], member["membershipId"], user_id, message_id)
+            storage.record_party_notification(user_id)
+        if not storage.get_choice(user_id, key, 0):
+            storage.add_temporary_message(user_id, user_id, message_id, 0)
+            return
+        notice.update(messageId=message_id, content=list(signature))
+        storage.set_choices(user_id, key, [notice])
+        storage.add_temporary_message(user_id, user_id, message_id, ttl)
+        if (not allow_reminder or notice.get("reminded") or not room or not room.get("inviteLink")
+                or not notice.get("chatReadyAt") or time.time() - notice["chatReadyAt"] < 120):
+            return
+        # One reminder replaces the invitation instead of leaving two cards in the conversation.
+        notice["reminded"] = True
+        storage.set_choices(user_id, key, [notice])
+        text, markup = native_notice_content(coordination, room,
+            getattr(getattr(api, "settings", None), "main_bot_username", "FDPdotabot"), reminded=True)
+        message = await bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML",
+            disable_web_page_preview=True, protect_content=True)
+        storage.track_party_notice(user_id, coordination["id"], member["membershipId"], user_id, message.message_id)
+        storage.add_temporary_message(user_id, user_id, message_id, 0)
+        if not storage.get_choice(user_id, key, 0):
+            storage.add_temporary_message(user_id, user_id, message.message_id, 0)
+            return
+        notice.update(messageId=message.message_id, content=[text, markup.model_dump_json() if markup else ""])
+        storage.set_choices(user_id, key, [notice])
+        storage.add_temporary_message(user_id, user_id, message.message_id, ttl)
 
 
 async def party_ready_notice_worker(bot, api, settings, storage):
