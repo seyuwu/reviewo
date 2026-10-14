@@ -321,3 +321,11 @@ actions, company pause consent, stale membership and navigation during a slow
 settings lookup. A static preview built from the actual keyboard markup checked
 captain, settings and member layouts at a 280-pixel card width with no clipped
 labels; this is a layout preview, not a live Telegram screenshot.
+
+Production rollout used `b55aac95199a813e5a78ad565b885b5d0f7e4fb8`.
+The candidate passed 66 tournament tests and 17 panel lifecycle tests. The bot
+SQLite database was backed up and the old image retained before restarting only
+the main bot. Saved reward configuration and the API/web containers remained
+unchanged. Runtime checks confirmed the exact candidate image, four-row captain
+card, member permissions and navigation guard, with zero bot restarts and
+healthy API/web services.
