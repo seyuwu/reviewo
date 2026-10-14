@@ -3,14 +3,20 @@ import { randomUUID } from "node:crypto";
 import { after, before, beforeEach, describe, it, mock } from "node:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#prisma/client";
+import { ConfigService } from "@nestjs/config";
+import type { EnvironmentVariables } from "../../config/environment.validation.js";
 import type { PrismaService } from "../../database/prisma.service.js";
 import { RewardsService } from "./rewards.service.js";
-import { DEFAULT_SETTINGS, moscowWeek } from "./rewards.rules.js";
+import { DEFAULT_SETTINGS, moscowWeek, normalizeSettings } from "./rewards.rules.js";
 import { RewardVerificationService } from "./rewards.verification.js";
+import { RewardsTasksService } from "./rewards-tasks.service.js";
+import { RewardsAnalyticsDatabase } from "./rewards.database.js";
+import type { RewardTaskDto } from "./rewards.dto.js";
 
 const url = process.env["REWARDS_TEST_DATABASE_URL"];
 describe("Rewards with isolated PostgreSQL", { skip: !url }, () => {
   let db: PrismaClient, service: RewardsService;
+  let taskService: RewardsTasksService, analyticsDb: RewardsAnalyticsDatabase;
   const campaign = new Date(Date.now() - 86400000),
     at = () => new Date(Date.now() - 300000).toISOString();
   before(async () => {
@@ -23,17 +29,41 @@ describe("Rewards with isolated PostgreSQL", { skip: !url }, () => {
       adapter: new PrismaPg({ connectionString: url, options: "-c timezone=UTC" })
     });
     await db.$connect();
+    analyticsDb = new RewardsAnalyticsDatabase(
+      new ConfigService<EnvironmentVariables, true>({ DATABASE_URL: url! })
+    );
   });
-  after(async () => db?.$disconnect());
+  after(async () => {
+    await analyticsDb?.$disconnect();
+    await db?.$disconnect();
+  });
   beforeEach(async () => {
-    await db.$executeRaw`TRUNCATE community.giveaway_tickets,community.giveaway_purchases,community.giveaways,community.reward_ledger,community.reward_wallets,community.reward_events,community.reward_tag_verifications,community.reward_steam_links,community.reward_audit,community.reward_notices CASCADE`;
+    await db.$executeRaw`TRUNCATE community.reward_activity_days,community.reward_task_submissions,community.giveaway_tickets,community.giveaway_purchases,community.giveaways,community.reward_ledger,community.reward_wallets,community.reward_events,community.reward_tag_verifications,community.reward_steam_links,community.reward_audit,community.reward_notices CASCADE`;
     await db.rewardProgram.upsert({
       where: { id: "fdp" },
       create: { id: "fdp", enabled: true, startedAt: campaign, settings: DEFAULT_SETTINGS },
       update: { enabled: true, startedAt: campaign, settings: DEFAULT_SETTINGS }
     });
     service = new RewardsService(db as PrismaService);
+    taskService = new RewardsTasksService(service, analyticsDb);
   });
+  const customTask = (patch: Partial<RewardTaskDto> = {}): RewardTaskDto => ({
+    title: "Создай пати",
+    description: "Создай свою пати после появления задания.",
+    amount: 13,
+    condition: "party_created",
+    period: "once",
+    enabled: true,
+    minimumHours: 24,
+    ...patch
+  });
+  async function backdateTask(key: string) {
+    const row = await db.rewardProgram.findUniqueOrThrow({ where: { id: "fdp" } });
+    const settings = normalizeSettings(row.settings);
+    settings.tasks[key]!.createdAt = campaign.toISOString();
+    await db.rewardProgram.update({ where: { id: "fdp" }, data: { settings } });
+    service.invalidateProgram();
+  }
   const balance = async (id = "101") =>
     (await db.rewardWallet.findUnique({ where: { telegramId: id } }))?.balance ?? 0;
   const fund = async (amount = 100, id = "101") =>
@@ -55,6 +85,135 @@ describe("Rewards with isolated PostgreSQL", { skip: !url }, () => {
     await service.action(g.id, "publish", "admin");
     return g;
   }
+  it("creates automatic tasks without claims and keeps them idempotent", async () => {
+    const task = await taskService.save(null, customTask(), "admin");
+    await backdateTask(task.key);
+    await service.ingest([
+      { id: "new-task:1", telegramId: "101", kind: "party_created", occurredAt: at() },
+      { id: "new-task:2", telegramId: "101", kind: "party_created", occurredAt: at() }
+    ]);
+    await service.processBatch();
+    assert.equal(await balance(), 18);
+    assert.equal(await db.rewardLedger.count({ where: { task: task.key } }), 1);
+    assert.equal(
+      (await service.walletPage("101")).tasks.find((t) => t.key === task.key)?.completed,
+      true
+    );
+    assert.equal((await db.rewardAudit.findFirstOrThrow()).action, "task-create");
+  });
+  it("applies task edits to future awards and preserves archived history and analytics", async () => {
+    const task = await taskService.save(null, customTask(), "admin");
+    await backdateTask(task.key);
+    await service.ingest([
+      { id: "edit-task:1", telegramId: "101", kind: "party_created", occurredAt: at() }
+    ]);
+    await service.processBatch();
+    await taskService.save(
+      task.key,
+      customTask({ title: "Обновлённое задание", amount: 17 }),
+      "admin"
+    );
+    await service.ingest([
+      { id: "edit-task:2", telegramId: "202", kind: "party_created", occurredAt: at() }
+    ]);
+    await service.processBatch();
+    await taskService.archive(task.key, "admin");
+    await service.ingest([
+      { id: "edit-task:3", telegramId: "303", kind: "party_created", occurredAt: at() }
+    ]);
+    await service.processBatch();
+    assert.equal(await balance("303"), 5);
+    assert.ok(!(await service.walletPage("101")).tasks.some((t) => t.key === task.key));
+    const report = await taskService.analytics({ task: task.key, offset: 0 });
+    assert.deepEqual(report.totals, { completions: 2, users: 2, amount: 30 });
+    assert.equal(report.tasks[0]?.archived, true);
+    assert.deepEqual(
+      new Set(report.completions.map((row) => row.title)),
+      new Set(["Создай пати", "Обновлённое задание"])
+    );
+    const filtered = await taskService.analytics({ task: task.key, telegramId: "202", offset: 0 });
+    assert.equal(filtered.totals.amount, 17);
+    await taskService.archive(task.key, "admin", true);
+    assert.ok((await service.walletPage("101")).tasks.some((t) => t.key === task.key));
+  });
+  it("does not apply a newly created task to earlier actions", async () => {
+    const task = await taskService.save(null, customTask(), "admin");
+    await service.ingest([
+      { id: "old-for-new-task", telegramId: "101", kind: "party_created", occurredAt: at() }
+    ]);
+    await service.processBatch();
+    assert.equal(await db.rewardLedger.count({ where: { task: task.key } }), 0);
+  });
+  it("reviews a manual task once and honors its submitted reward after edits or archival", async () => {
+    const task = await taskService.save(
+      null,
+      customTask({ condition: "manual", amount: 17 }),
+      "admin"
+    );
+    const submitted = await taskService.submit(task.key, "101", "https://example.com/proof");
+    assert.ok("id" in submitted);
+    await taskService.save(task.key, customTask({ condition: "manual", amount: 99 }), "admin");
+    await taskService.archive(task.key, "admin");
+    await Promise.all([
+      taskService.review(submitted.id!, true, "Проверено", "admin"),
+      taskService.review(submitted.id!, true, "Повтор", "admin")
+    ]);
+    assert.equal(await balance(), 17);
+    assert.equal(await db.rewardLedger.count({ where: { task: task.key } }), 1);
+    assert.equal(await db.rewardAudit.count({ where: { action: "task-review" } }), 1);
+    await assert.rejects(taskService.review(submitted.id!, false, "Передумал", "admin"));
+    await taskService.archive(task.key, "admin", true);
+    assert.deepEqual(await taskService.submit(task.key, "101", "Второй запрос"), {
+      completed: true
+    });
+    assert.equal((await taskService.analytics({ task: task.key, offset: 0 })).totals.amount, 17);
+  });
+  it("allows corrected proof after rejection and keeps player submission status private", async () => {
+    const task = await taskService.save(null, customTask({ condition: "manual" }), "admin");
+    const submitted = await taskService.submit(task.key, "101", "Первое подтверждение");
+    assert.ok("id" in submitted);
+    await taskService.review(submitted.id!, false, "Нужна рабочая ссылка", "admin");
+    const retry = await taskService.submit(task.key, "101", "https://example.com/fixed");
+    assert.equal("status" in retry && retry.status, "PENDING");
+    assert.equal(
+      (await service.walletPage("202")).tasks.find((t) => t.key === task.key)?.submission,
+      null
+    );
+    const queue = await taskService.submissions();
+    assert.equal(queue.total, 1);
+    assert.equal(queue.items[0]?.evidence, "https://example.com/fixed");
+    assert.equal(await balance(), 0);
+  });
+  it("counts seven active days even when the daily task is removed", async () => {
+    const monday = new Date(`${moscowWeek(new Date())}T12:00:00+03:00`);
+    monday.setUTCDate(monday.getUTCDate() - 7);
+    await db.rewardProgram.update({
+      where: { id: "fdp" },
+      data: { startedAt: new Date(monday.getTime() - 86400000) }
+    });
+    await taskService.archive("daily_party", "admin");
+    await service.ingest(
+      Array.from({ length: 7 }, (_, i) => ({
+        id: `independent-week:${i}`,
+        telegramId: "101",
+        kind: "search_started",
+        occurredAt: new Date(monday.getTime() + i * 86400000).toISOString()
+      }))
+    );
+    await service.processBatch();
+    assert.equal(await balance(), 10);
+    assert.equal(await db.rewardActivityDay.count(), 7);
+  });
+  it("validates task conditions and analytics filters before querying", async () => {
+    await assert.rejects(
+      taskService.save(null, customTask({ condition: "manual", period: "friend" }), "admin")
+    );
+    await assert.rejects(taskService.analytics({ task: "invalid", offset: 0 }));
+    await assert.rejects(taskService.analytics({ task: "constructor", offset: 0 }));
+    await assert.rejects(taskService.save("__proto__", customTask(), "admin"));
+    await assert.rejects(taskService.analytics({ telegramId: "101' OR 1=1", offset: 0 }));
+    await assert.rejects(taskService.analytics({ from: "2026-02-31", offset: 0 }));
+  });
   it("credits events before first page view; retries and concurrent workers cannot mint twice", async () => {
     const event = {
       id: "bot:ready:101",
@@ -193,25 +352,31 @@ describe("Rewards with isolated PostgreSQL", { skip: !url }, () => {
     assert.equal(await db.rewardLedger.count({ where: { task: "refund" } }), 1);
     await assert.rejects(service.action(g.id, "draw", "admin"));
   });
-  it("keeps tag rewards on provider outage and rejects forged Steam callbacks without a network call", async () => {
+  it("preserves tag rewards during Telegram outages and rejects the removed Steam task", async () => {
     const check = new RewardVerificationService(service);
+    await fund(10);
     await db.rewardTagVerification.create({
-      data: {
-        telegramId: "101",
-        provider: "steam",
-        profileId: "76561198000000001",
-        firstSeenAt: campaign
-      }
+      data: { telegramId: "101", provider: "telegram", firstSeenAt: campaign }
     });
-    const old = process.env["STEAM_WEB_API_KEY"];
-    delete process.env["STEAM_WEB_API_KEY"];
+    const old = process.env["DOTA_BOT_TOKEN"];
+    process.env["DOTA_BOT_TOKEN"] = "qa-token";
+    const mocked = mock.method(globalThis, "fetch", async () => {
+      throw new Error("Fixture outage");
+    });
     try {
       await check.checkBatch();
-      assert.equal(await balance(), 0);
+      assert.equal(await balance(), 10);
       assert.equal((await db.rewardTagVerification.findFirstOrThrow()).status, "ERROR");
-      await assert.rejects(check.steamCallback({ state: "forged" }));
+      assert.equal(
+        (await db.rewardTagVerification.findFirstOrThrow()).firstSeenAt?.getTime(),
+        campaign.getTime()
+      );
+      await assert.rejects(check.enroll("101", "steam"));
+      assert.ok(!("steam_tag" in (await service.program()).settings.tasks));
     } finally {
-      if (old) process.env["STEAM_WEB_API_KEY"] = old;
+      mocked.mock.restore();
+      if (old) process.env["DOTA_BOT_TOKEN"] = old;
+      else delete process.env["DOTA_BOT_TOKEN"];
     }
   });
   it("awards a week once for seven distinct Moscow days", async () => {
@@ -274,47 +439,6 @@ describe("Rewards with isolated PostgreSQL", { skip: !url }, () => {
     await service.noticeDelivery(notice.id, false);
     assert.deepEqual(await service.claimNotices(), []);
     assert.ok((await db.rewardNotice.findUniqueOrThrow({ where: { id: notice.id } })).sentAt);
-  });
-  it("verifies Steam via the provider, rejects replay, and prevents shared ownership", async () => {
-    const old = process.env["STEAM_WEB_API_KEY"];
-    process.env["STEAM_WEB_API_KEY"] = "qa-key";
-    const fetchMock = mock.method(
-      globalThis,
-      "fetch",
-      async () => new Response("is_valid:true\n", { status: 200 })
-    );
-    try {
-      const checks = new RewardVerificationService(service);
-      const make = async (telegramId: string) => {
-        const login = await checks.steamStart(telegramId),
-          returnTo = new URL(login.url).searchParams.get("openid.return_to")!;
-        const identity = "https://steamcommunity.com/openid/id/76561198000000001";
-        return {
-          state: new URL(returnTo).searchParams.get("state")!,
-          "openid.ns": "http://specs.openid.net/auth/2.0",
-          "openid.mode": "id_res",
-          "openid.op_endpoint": "https://steamcommunity.com/openid/login",
-          "openid.claimed_id": identity,
-          "openid.identity": identity,
-          "openid.return_to": returnTo,
-          "openid.response_nonce": new Date().toISOString().replace(/\.\d{3}Z$/, "Z") + "nonce",
-          "openid.signed": "op_endpoint,claimed_id,identity,return_to,response_nonce"
-        };
-      };
-      const query = await make("101");
-      await assert.rejects(checks.steamCallback({ ...query, "openid.signed": "op_endpoint" }));
-      assert.equal(fetchMock.mock.callCount(), 0);
-      await checks.steamCallback(query);
-      assert.equal(fetchMock.mock.callCount(), 1);
-      await assert.rejects(checks.steamCallback(query));
-      assert.equal(fetchMock.mock.callCount(), 1);
-      await assert.rejects(checks.steamCallback(await make("202")));
-      assert.equal(await db.rewardTagVerification.count({ where: { provider: "steam" } }), 1);
-    } finally {
-      fetchMock.mock.restore();
-      if (old) process.env["STEAM_WEB_API_KEY"] = old;
-      else delete process.env["STEAM_WEB_API_KEY"];
-    }
   });
   it("locks published terms and audits manual tag review", async () => {
     const g = await giveaway();

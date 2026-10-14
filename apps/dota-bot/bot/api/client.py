@@ -27,6 +27,7 @@ class OpiniaApi:
         self.rooms_session: aiohttp.ClientSession | None = None
         self.rooms_discord_session: aiohttp.ClientSession | None = None
         self.reward_program: dict | None = None
+        self.rewards_session: aiohttp.ClientSession | None = None
 
     async def rooms_request(self, method: str, path: str, body: dict | None = None):
         session = self.rooms_discord_session if method == "POST" and path.endswith("/discord") else self.rooms_session
@@ -48,11 +49,16 @@ class OpiniaApi:
         timeout = aiohttp.ClientTimeout(total=15, connect=5)
         connector = aiohttp.TCPConnector(ssl=True)
         self.session = aiohttp.ClientSession(timeout=timeout, connector=connector)
+        if getattr(self.settings, "rewards_enabled", False):
+            self.rewards_session = aiohttp.ClientSession(timeout=timeout, connector=aiohttp.TCPConnector(ssl=True, limit=4))
         self.rooms_session = aiohttp.ClientSession(timeout=timeout, connector=aiohttp.TCPConnector(ssl=True, limit=4))
         self.rooms_discord_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=45, sock_connect=5),
             connector=aiohttp.TCPConnector(ssl=True, limit=2))
 
     async def close(self) -> None:
+        if self.rewards_session is not None:
+            await self.rewards_session.close()
+            self.rewards_session = None
         if self.rooms_discord_session is not None:
             await self.rooms_discord_session.close()
             self.rooms_discord_session = None
@@ -244,6 +250,7 @@ class OpiniaApi:
     async def fetch_party_card(self, site_url: str, party_slug: str, cache_buster: str) -> bytes:
         if self.session is None:
             raise RuntimeError("OpiniaApi.start() must be called first")
+
         from urllib.parse import quote
 
         url = f"{site_url}/og/dota/teams/{quote(party_slug, safe='')}?v={cache_buster or time.time_ns()}"
@@ -294,13 +301,14 @@ class OpiniaApi:
             raise RuntimeError("OpiniaApi.start() must be called first")
 
         headers: dict[str, str] = {}
+        session = self.rewards_session if path.startswith("/rewards/") and self.rewards_session is not None else self.session
         if access_token:
             headers["Authorization"] = f"Bearer {access_token}"
         if bot_secret:
             headers["X-Telegram-Bot-Secret"] = self.settings.api_secret
 
         try:
-            async with self.session.request(
+            async with session.request(
                 method,
                 f"{self.settings.api_base_url}{path}",
                 json=body,

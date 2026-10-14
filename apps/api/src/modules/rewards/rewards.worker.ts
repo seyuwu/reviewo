@@ -21,7 +21,8 @@ export class RewardsWorker implements OnModuleInit, OnModuleDestroy {
     this.database = new PrismaClient({
       adapter: new PrismaPg({
         connectionString: this.config.get("DATABASE_URL", { infer: true }),
-        options: "-c timezone=UTC",
+        options: "-c timezone=UTC -c statement_timeout=5000",
+        application_name: "fdp_rewards_worker",
         max: 2,
         connectionTimeoutMillis: 2000,
         idleTimeoutMillis: 10000

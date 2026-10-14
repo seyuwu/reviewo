@@ -61,8 +61,6 @@ services:
       <<: *app-environment
       DOTA_BOT_TOKEN: ${DOTA_BOT_TOKEN:-}
       DOTA_BOT_USERNAME: ${DOTA_BOT_USERNAME:-FDPdotabot}
-      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
-      REWARDS_STEAM_RETURN_URL: ${REWARDS_STEAM_RETURN_URL:-https://api.opinia.ru/rewards/steam/callback}
     image: reviewo-api:${IMAGE_TAG:-local}
     build:
       context: .

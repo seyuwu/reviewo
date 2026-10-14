@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   ServiceUnavailableException
@@ -8,15 +9,19 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type Giveaway, type RewardEvent } from "#prisma/client";
 import { PrismaService } from "../../database/prisma.service.js";
+import { RewardsDatabase } from "./rewards.database.js";
 import type { GiveawayDto, PurchaseDto, RewardEventDto, RewardSettingsDto } from "./rewards.dto.js";
 import {
   chooseWinners,
   DEFAULT_SETTINGS,
-  DEFAULT_TASKS,
+  activeTask,
   moscowDay,
   moscowWeek,
+  normalizeSettings,
+  taskPeriod,
+  TASK_CONDITIONS,
   type RewardSettings,
-  type TaskKey
+  type RewardTask
 } from "./rewards.rules.js";
 
 type Tx = Prisma.TransactionClient;
@@ -38,7 +43,7 @@ export class RewardsService {
   private cached:
     | { expires: number; enabled: boolean; startedAt: Date | null; settings: RewardSettings }
     | undefined;
-  constructor(readonly prisma: PrismaService) {}
+  constructor(@Inject(RewardsDatabase) readonly prisma: PrismaService) {}
 
   async program(force = false) {
     if (!force && this.cached && this.cached.expires > Date.now()) return this.cached;
@@ -47,19 +52,16 @@ export class RewardsService {
       create: { id: "fdp", settings: DEFAULT_SETTINGS },
       update: {}
     });
-    const saved = row.settings as Partial<RewardSettings>;
     this.cached = {
       expires: Date.now() + 30000,
       enabled: row.enabled,
       startedAt: row.startedAt,
-      settings: {
-        ...DEFAULT_SETTINGS,
-        ...saved,
-        tasks: { ...DEFAULT_TASKS, ...saved.tasks },
-        phrases: { ...DEFAULT_SETTINGS.phrases, ...saved.phrases }
-      }
+      settings: normalizeSettings(row.settings)
     };
     return this.cached;
+  }
+  invalidateProgram() {
+    this.cached = undefined;
   }
   async requireEnabled() {
     const p = await this.program();
@@ -75,43 +77,49 @@ export class RewardsService {
     return identity.providerUserId;
   }
   async settings(input: RewardSettingsDto, actor: string) {
-    const current = await this.program(true);
+    await this.program(true);
     if (![input.programName, input.currencyName, input.mascotName].every((s) => s.trim()))
       throw new BadRequestException("Названия не должны быть пустыми");
-    if (new Set(input.tasks.map((t) => t.key)).size !== input.tasks.length)
+    if (new Set((input.tasks ?? []).map((t) => t.key)).size !== (input.tasks ?? []).length)
       throw new BadRequestException("Повторяющиеся задания");
-    if (input.tasks.some((task) => !task.title.trim()))
+    if (input.tasks?.some((task) => !task.title.trim()))
       throw new BadRequestException("Названия заданий не должны быть пустыми");
     if (Object.values(input.phrases).some((list: string[]) => list.some((s) => !s.trim())))
       throw new BadRequestException("Фразы не должны быть пустыми");
-    const next: RewardSettings = {
-      ...current.settings,
-      programName: input.programName.trim(),
-      currencyName: input.currencyName.trim(),
-      mascotName: input.mascotName.trim(),
-      tag: input.tag,
-      phrases: input.phrases,
-      tasks: { ...current.settings.tasks }
-    };
-    for (const task of input.tasks) {
-      const key = task.key as TaskKey;
-      next.tasks[key] = {
-        ...next.tasks[key],
-        title: task.title.trim(),
-        amount: task.amount,
-        enabled: task.enabled
-      };
-    }
     await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM community.reward_programs WHERE id='fdp' FOR UPDATE`;
+      const row = await tx.rewardProgram.findUniqueOrThrow({ where: { id: "fdp" } });
+      const saved = normalizeSettings(row.settings);
+      const next: RewardSettings = {
+        ...saved,
+        programName: input.programName.trim(),
+        currencyName: input.currencyName.trim(),
+        mascotName: input.mascotName.trim(),
+        tag: input.tag,
+        phrases: input.phrases,
+        tasks: { ...saved.tasks }
+      };
+      for (const task of input.tasks ?? []) {
+        const key = task.key;
+        const existing = Object.hasOwn(next.tasks, key) ? next.tasks[key] : undefined;
+        if (!existing)
+          throw new BadRequestException("Задание не найдено; используйте создание задания");
+        next.tasks[key] = {
+          ...existing,
+          title: task.title.trim(),
+          amount: task.amount,
+          enabled: task.enabled
+        };
+      }
       await tx.rewardProgram.update({
         where: { id: "fdp" },
         data: {
           enabled: input.enabled,
-          startedAt: current.startedAt ?? (input.enabled ? new Date() : null),
+          startedAt: row.startedAt ?? (input.enabled ? new Date() : null),
           settings: next
         }
       });
-      if (input.tag.toLowerCase() !== current.settings.tag.toLowerCase())
+      if (input.tag.toLowerCase() !== saved.tag.toLowerCase())
         await tx.rewardTagVerification.updateMany({
           data: {
             status: "PENDING",
@@ -156,7 +164,7 @@ export class RewardsService {
         take: 10
       }),
       this.prisma.rewardTagVerification.findMany({
-        where: { telegramId },
+        where: { telegramId, provider: "telegram" },
         select: {
           provider: true,
           status: true,
@@ -167,35 +175,55 @@ export class RewardsService {
         }
       })
     ]);
-    const day = moscowDay(new Date()),
-      week = moscowWeek(new Date());
+    const now = new Date();
+    const tasks = Object.entries(p.settings.tasks).filter(([, task]) => activeTask(task));
     const progress = await this.prisma.rewardLedger.findMany({
       where: {
         telegramId,
         amount: { gt: 0 },
-        OR: [
-          {
-            key: {
-              in: [
-                `profile_ready:${telegramId}:once`,
-                `first_party_join:${telegramId}:once`,
-                `daily_party:${telegramId}:${day}`,
-                `weekly_party:${telegramId}:${week}`,
-                `telegram_tag:${telegramId}:${day}`,
-                `steam_tag:${telegramId}:${day}`
-              ]
-            }
-          }
-        ]
+        key: {
+          in: tasks
+            .filter(([, t]) => t.period !== "friend")
+            .map(([key, task]) => `${key}:${telegramId}:${taskPeriod(task, now)}`)
+        }
       },
       select: { task: true }
     });
+    const manualTasks = tasks.filter(([, task]) => task.condition === "manual");
+    const submissions = manualTasks.length
+      ? await this.prisma.rewardTaskSubmission.findMany({
+          where: {
+            telegramId,
+            OR: manualTasks.map(([key, task]) => ({
+              taskKey: key,
+              periodKey: taskPeriod(task, now)
+            }))
+          },
+          take: 50,
+          select: {
+            taskKey: true,
+            periodKey: true,
+            status: true,
+            reason: true,
+            awardedAmount: true,
+            rule: true
+          }
+        })
+      : [];
     return {
       settings: p.settings,
       balance: wallet?.balance ?? 0,
-      tasks: Object.entries(p.settings.tasks)
-        .filter(([, t]) => t.enabled)
-        .map(([key, t]) => ({ key, ...t, completed: progress.some((item) => item.task === key) })),
+      tasks: tasks.map(([key, task]) => ({
+        key,
+        ...task,
+        completed: progress.some((item) => item.task === key),
+        submission:
+          task.condition === "manual"
+            ? (submissions.find(
+                (row) => row.taskKey === key && row.periodKey === taskPeriod(task, now)
+              ) ?? null)
+            : null
+      })),
       history: history.slice(0, 20),
       hasMore: history.length > 20,
       tags,
@@ -468,8 +496,8 @@ export class RewardsService {
       >`SELECT id FROM community.reward_tag_verifications WHERE id=${id}::uuid FOR UPDATE`;
       if (!rows.length) throw new NotFoundException("Проверка не найдена");
       const row = await tx.rewardTagVerification.findUniqueOrThrow({ where: { id } });
-      if (row.profileId !== profileId || (row.provider === "steam" && !row.profileId))
-        throw new ConflictException("Профиль изменился или владение Steam ещё не подтверждено");
+      if (row.provider !== "telegram" || row.profileId !== profileId)
+        throw new ConflictException("Эта проверка не относится к заданию Telegram");
       const now = new Date(),
         first = approved ? (row.firstSeenAt ?? now) : null;
       await tx.rewardTagVerification.update({
@@ -482,23 +510,11 @@ export class RewardsService {
           nextCheckAt: new Date(now.getTime() + 3 * 3600000)
         }
       });
-      const task = row.provider === "telegram" ? "telegram_tag" : "steam_tag",
-        rule = program.settings.tasks[task];
-      if (
-        program.enabled &&
-        approved &&
-        first &&
-        now.getTime() - first.getTime() >= 86400000 &&
-        rule.enabled
-      )
-        await this.grant(
-          tx,
-          row.telegramId,
-          task,
-          `${task}:${row.telegramId}:${moscowDay(now)}`,
-          rule.amount,
-          { title: rule.title, at: now.toISOString(), manual: true, actor }
-        );
+      if (program.enabled && approved && first)
+        await this.creditVerifiedTags(tx, row.telegramId, first, now, program.settings, {
+          manual: true,
+          actor
+        });
       await this.audit(tx, actor, "tag-review", id, { approved, reason, profileId });
       return { ok: true };
     });
@@ -519,9 +535,10 @@ export class RewardsService {
     const p = await this.program(true);
     return {
       ...p,
+      taskConditions: Object.entries(TASK_CONDITIONS).map(([value, rule]) => ({ value, ...rule })),
       giveaways: await this.prisma.giveaway.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
       verifications: await this.prisma.rewardTagVerification.findMany({
-        where: { status: { in: ["PENDING", "ERROR"] } },
+        where: { provider: "telegram", status: { in: ["PENDING", "ERROR"] } },
         take: 50,
         orderBy: { nextCheckAt: "asc" }
       })
@@ -547,6 +564,9 @@ export class RewardsService {
   async processBatch() {
     const p = await this.program(true);
     if (!p.enabled || !p.startedAt) return;
+    // Bound transaction work even when an administrator creates many tasks.
+    const activeCount = Object.values(p.settings.tasks).filter((task) => activeTask(task)).length;
+    const batchSize = Math.max(5, Math.min(100, Math.floor(500 / Math.max(1, activeCount))));
     await this.prisma.$transaction(
       async (tx) => {
         const [lease] = await tx.$queryRaw<
@@ -555,8 +575,12 @@ export class RewardsService {
         if (!lease?.locked) return;
         const events = await tx.$queryRaw<
           RewardEvent[]
-        >`SELECT id,telegram_id AS "telegramId",kind,occurred_at AS "occurredAt",processed_at AS "processedAt" FROM community.reward_events WHERE processed_at IS NULL AND occurred_at<=NOW()-INTERVAL '2 minutes' ORDER BY occurred_at,id LIMIT 100 FOR UPDATE SKIP LOCKED`;
-        if (p.settings.tasks.telegram_tag.enabled)
+        >`SELECT id,telegram_id AS "telegramId",kind,occurred_at AS "occurredAt",processed_at AS "processedAt" FROM community.reward_events WHERE processed_at IS NULL AND occurred_at<=NOW()-INTERVAL '2 minutes' ORDER BY occurred_at,id LIMIT ${batchSize} FOR UPDATE SKIP LOCKED`;
+        if (
+          Object.values(p.settings.tasks).some(
+            (task) => activeTask(task) && task.condition === "telegram_tag"
+          )
+        )
           await tx.rewardTagVerification.createMany({
             data: [
               ...new Set(
@@ -606,6 +630,60 @@ export class RewardsService {
     });
     await this.refundBatch();
   }
+  async creditTask(
+    tx: Tx,
+    id: string,
+    key: string,
+    task: RewardTask,
+    settings: RewardSettings,
+    at: Date,
+    friend?: string,
+    details: Prisma.InputJsonObject = {}
+  ) {
+    const ledgerKey = `${key}:${id}:${taskPeriod(task, at, friend)}`;
+    const credited = await this.grant(tx, id, key, ledgerKey, task.amount, {
+      ...details,
+      at: at.toISOString(),
+      title: task.title,
+      currency: settings.currencyName,
+      ruleVersion: task.updatedAt ?? 1
+    });
+    if (credited && key === "profile_ready")
+      await tx.rewardNotice.createMany({
+        data: [
+          {
+            key: `award:${ledgerKey}`,
+            telegramId: id,
+            payload: {
+              kind: "award",
+              amount: task.amount,
+              title: task.title,
+              currency: settings.currencyName,
+              programName: settings.programName
+            }
+          }
+        ],
+        skipDuplicates: true
+      });
+    return credited;
+  }
+  async creditVerifiedTags(
+    tx: Tx,
+    id: string,
+    first: Date,
+    at: Date,
+    settings: RewardSettings,
+    details: Prisma.InputJsonObject = {}
+  ) {
+    for (const [key, task] of Object.entries(settings.tasks)) {
+      if (
+        activeTask(task, at) &&
+        task.condition === "telegram_tag" &&
+        at.getTime() - first.getTime() >= task.minimumHours * 3600000
+      )
+        await this.creditTask(tx, id, key, task, settings, at, undefined, details);
+    }
+  }
   private async rewardEvent(
     tx: Tx,
     event: RewardEvent,
@@ -613,71 +691,59 @@ export class RewardsService {
     campaignStart: Date
   ) {
     const { telegramId: id, occurredAt: at, kind } = event;
-    const credit = async (task: TaskKey, period: string) => {
-      const rule = settings.tasks[task];
-      if (!rule.enabled) return false;
-      const key = `${task}:${id}:${period}`;
-      const credited = await this.grant(tx, id, task, key, rule.amount, {
-        source: event.id,
-        at: at.toISOString(),
-        title: rule.title,
-        currency: settings.currencyName,
-        ruleVersion: 1
+    const activity = ["search_started", "party_created", "party_joined", "search_result"].includes(
+      kind
+    );
+    let sevenDays = false;
+    if (activity) {
+      await tx.rewardActivityDay.createMany({
+        data: [{ telegramId: id, day: moscowDay(at) }],
+        skipDuplicates: true
       });
-      if (credited && task === "profile_ready")
-        await tx.rewardNotice.createMany({
-          data: [
-            {
-              key: `award:${key}`,
-              telegramId: id,
-              payload: {
-                kind: "award",
-                amount: rule.amount,
-                title: rule.title,
-                currency: settings.currencyName,
-                programName: settings.programName
-              }
-            }
-          ],
-          skipDuplicates: true
-        });
-      return credited;
-    };
-    if (kind === "account_ready") await credit("profile_ready", "once");
-    if (kind === "party_joined" || kind === "search_result")
-      await credit("first_party_join", "once");
-    if (["search_started", "party_created", "party_joined", "search_result"].includes(kind)) {
-      await credit("daily_party", moscowDay(at));
-      const week = moscowWeek(at),
-        start = new Date(`${week}T00:00:00+03:00`),
-        end = new Date(start.getTime() + 7 * 86400000);
-      const [count] = await tx.$queryRaw<
-        { days: number }[]
-      >`SELECT COUNT(*)::int AS days FROM community.reward_ledger WHERE key>=${`daily_party:${id}:${moscowDay(start)}`} AND key<${`daily_party:${id}:${moscowDay(end)}`}`;
-      if (count?.days === 7) await credit("weekly_party", week);
-      const referral = await tx.fdpReferral.findUnique({ where: { inviteeTelegramId: id } });
-      if (
-        referral?.accountReadyAt &&
-        referral.accountReadyAt >= campaignStart &&
-        settings.tasks.referral_active.enabled
-      )
-        await this.grant(
+      const start = new Date(`${moscowWeek(at)}T00:00:00+03:00`);
+      const days = await tx.rewardActivityDay.count({
+        where: {
+          telegramId: id,
+          day: { gte: moscowDay(start), lt: moscowDay(new Date(start.getTime() + 7 * 86400000)) }
+        }
+      });
+      sevenDays = days === 7;
+    }
+    for (const [key, task] of Object.entries(settings.tasks)) {
+      if (!activeTask(task, at)) continue;
+      const matches =
+        (task.condition === "account_ready" && kind === "account_ready") ||
+        (task.condition === "party_activity" && activity) ||
+        (task.condition === "search_started" &&
+          ["search_started", "search_result"].includes(kind)) ||
+        (task.condition === "party_created" && kind === "party_created") ||
+        (task.condition === "party_joined" && ["party_joined", "search_result"].includes(kind)) ||
+        (task.condition === "weekly_party" && activity && sevenDays) ||
+        (["referral_ready", "referral_active"].includes(task.condition) && task.condition === kind);
+      if (matches)
+        await this.creditTask(
           tx,
-          referral.inviterTelegramId,
-          "referral_active",
-          `referral_active:${referral.inviterTelegramId}:${id}`,
-          settings.tasks.referral_active.amount,
-          {
-            source: event.id,
-            at: at.toISOString(),
-            title: settings.tasks.referral_active.title,
-            currency: settings.currencyName,
-            ruleVersion: 1
-          }
+          id,
+          key,
+          task,
+          settings,
+          at,
+          ["referral_ready", "referral_active"].includes(kind)
+            ? event.id.split(":").at(-1)!
+            : undefined,
+          { source: event.id }
         );
     }
-    if (kind === "referral_ready" || kind === "referral_active")
-      await credit(kind, event.id.split(":").at(-1)!);
+    if (activity) {
+      const referral = await tx.fdpReferral.findUnique({ where: { inviteeTelegramId: id } });
+      if (referral?.accountReadyAt && referral.accountReadyAt >= campaignStart)
+        for (const [key, task] of Object.entries(settings.tasks)) {
+          if (activeTask(task, at) && task.condition === "referral_active")
+            await this.creditTask(tx, referral.inviterTelegramId, key, task, settings, at, id, {
+              source: event.id
+            });
+        }
+    }
   }
   async refundBatch() {
     await this.prisma.$transaction(

@@ -20,7 +20,6 @@ import {
   resolveRequestIp,
   type RequestLike
 } from "../../common/rate-limiting/api-rate-limiter.service.js";
-import { AdminGuard } from "../auth/guards/admin.guard.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { TelegramBotService } from "../telegram/telegram-bot.service.js";
 import {
@@ -29,11 +28,16 @@ import {
   RewardSettingsDto,
   RewardNoticeDeliveryDto,
   ReviewTagDto,
+  RewardTaskDto,
+  RewardSubmissionDto,
+  ReviewSubmissionDto,
   SyncRewardsDto,
   TagDto
 } from "./rewards.dto.js";
 import { RewardsService } from "./rewards.service.js";
 import { RewardVerificationService } from "./rewards.verification.js";
+import { RewardsAccessService, RewardsAdminGuard } from "./rewards-access.service.js";
+import { RewardsTasksService } from "./rewards-tasks.service.js";
 
 function page(value: string | undefined, max = 100000) {
   if (value === undefined) return 0;
@@ -97,8 +101,25 @@ export class RewardsController {
   constructor(
     private readonly rewards: RewardsService,
     private readonly checks: RewardVerificationService,
-    private readonly limiter: ApiRateLimiterService
+    private readonly limiter: ApiRateLimiterService,
+    private readonly access: RewardsAccessService,
+    private readonly tasks: RewardsTasksService
   ) {}
+  @Get("access")
+  @Header("Cache-Control", "private, no-store")
+  async accessInfo(@CurrentUser() user: AuthenticatedUser) {
+    return { canManage: await this.access.canManage(user) };
+  }
+  @Post("tasks/:key/submissions")
+  @HttpCode(200)
+  async submitTask(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("key") key: string,
+    @Body() input: RewardSubmissionDto
+  ) {
+    await this.limit(user.id, "submission", 30);
+    return this.tasks.submit(key, await this.rewards.telegramForUser(user.id), input.evidence);
+  }
   @Get("me")
   @Header("Cache-Control", "private, no-store")
   async me(@CurrentUser() user: AuthenticatedUser, @Query("offset") offset?: string) {
@@ -126,11 +147,7 @@ export class RewardsController {
   @HttpCode(200)
   async tag(@CurrentUser() user: AuthenticatedUser, @Body() input: TagDto) {
     await this.limit(user.id, "tag", 12);
-    return this.checks.enroll(
-      await this.rewards.telegramForUser(user.id),
-      input.provider,
-      input.relink ?? false
-    );
+    return this.checks.enroll(await this.rewards.telegramForUser(user.id), input.provider);
   }
   private limit(key: string, action: string, limit: number) {
     return this.limiter.assertWithinLimits([
@@ -144,39 +161,59 @@ export class RewardsController {
     ]);
   }
 }
-@Controller("rewards/steam")
-export class RewardSteamController {
-  constructor(
-    private readonly checks: RewardVerificationService,
-    private readonly limiter: ApiRateLimiterService
-  ) {}
-  @Get("callback")
-  @Header("Content-Type", "text/html; charset=utf-8")
-  @Header("Cache-Control", "no-store")
-  @Header("Referrer-Policy", "no-referrer")
-  async callback(@Query() query: Record<string, unknown>, @Req() request: RequestLike) {
-    await this.limiter.assertWithinLimits([
-      {
-        key: resolveRequestIp(request),
-        namespace: "rewards:steam-callback",
-        limit: 30,
-        windowSeconds: 3600,
-        message: "Too many Steam callbacks"
-      }
-    ]);
-    if (
-      Object.keys(query).length > 24 ||
-      Object.values(query).some((value) => typeof value !== "string" || value.length > 2048)
-    )
-      throw new BadRequestException("Некорректный ответ Steam");
-    await this.checks.steamCallback(query as Record<string, string>);
-    return '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Steam подключён</title><body><h1>Steam подключён</h1><p>Вернитесь в бот. Тег в имени будет проверяться автоматически.</p><a href="https://t.me/FDPdotabot">Открыть FDP</a></body></html>';
-  }
-}
 @Controller("admin/rewards")
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, RewardsAdminGuard)
 export class AdminRewardsController {
-  constructor(private readonly rewards: RewardsService) {}
+  constructor(
+    private readonly rewards: RewardsService,
+    private readonly tasks: RewardsTasksService
+  ) {}
+  @Get("analytics")
+  @Header("Cache-Control", "private, no-store")
+  analytics(
+    @Query("task") task?: string,
+    @Query("telegramId") telegramId?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("offset") offset?: string
+  ) {
+    return this.tasks.analytics({ task, telegramId, from, to, offset: page(offset, 10000) });
+  }
+  @Post("tasks") createTask(@CurrentUser() user: AuthenticatedUser, @Body() input: RewardTaskDto) {
+    return this.tasks.save(null, input, user.id);
+  }
+  @Post("tasks/:key") editTask(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("key") key: string,
+    @Body() input: RewardTaskDto
+  ) {
+    return this.tasks.save(key, input, user.id);
+  }
+  @Post("tasks/:key/:action") taskAction(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("key") key: string,
+    @Param("action") action: string
+  ) {
+    if (!["archive", "restore"].includes(action))
+      throw new BadRequestException("Неизвестное действие");
+    return this.tasks.archive(key, user.id, action === "restore");
+  }
+  @Get("submissions")
+  @Header("Cache-Control", "private, no-store")
+  submissions(
+    @Query("task") task?: string,
+    @Query("status") status?: string,
+    @Query("offset") offset?: string
+  ) {
+    return this.tasks.submissions(task, status ?? "PENDING", page(offset, 10000));
+  }
+  @Post("submissions/:id") reviewSubmission(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() input: ReviewSubmissionDto
+  ) {
+    return this.tasks.review(id, input.approved, input.reason, user.id);
+  }
   @Get() @Header("Cache-Control", "private, no-store") page() {
     return this.rewards.adminPage();
   }

@@ -1949,7 +1949,8 @@ model RewardLedger {
   amount Int
   details Json @default("{}")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  @@index([telegramId, createdAt(sort: Desc), id])
+  @@index([telegramId, createdAt(sort: Desc), id], map: "reward_ledger_user_time_idx")
+  @@index([task, createdAt(sort: Desc), telegramId], map: "reward_ledger_task_time_idx")
   @@map("reward_ledger")
   @@schema("community")
 }
@@ -2062,5 +2063,32 @@ model RewardNotice {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   @@index([sentAt,nextAttemptAt,id])
   @@map("reward_notices")
+  @@schema("community")
+}
+
+model RewardActivityDay {
+  telegramId String @map("telegram_id") @db.VarChar(20)
+  day String @db.VarChar(10)
+  @@id([telegramId, day])
+  @@map("reward_activity_days")
+  @@schema("community")
+}
+
+model RewardTaskSubmission {
+  id String @id @default(uuid()) @db.Uuid
+  taskKey String @map("task_key") @db.VarChar(40)
+  telegramId String @map("telegram_id") @db.VarChar(20)
+  periodKey String @map("period_key") @db.VarChar(40)
+  evidence String @db.VarChar(1000)
+  rule Json
+  status String @default("PENDING") @db.VarChar(16)
+  reason String? @db.VarChar(500)
+  awardedAmount Int @default(0) @map("awarded_amount")
+  submittedAt DateTime @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  reviewedAt DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  @@unique([taskKey, telegramId, periodKey])
+  @@index([status, submittedAt, id], map: "reward_task_submission_status_idx")
+  @@index([telegramId, submittedAt], map: "reward_task_submission_user_idx")
+  @@map("reward_task_submissions")
   @@schema("community")
 }

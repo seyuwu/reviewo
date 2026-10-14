@@ -7,16 +7,19 @@ import { apiRequest } from "../../../lib/api/api-client";
 import { ApiError } from "../../../lib/api/api-error";
 import { readApiErrorMessage } from "../../../lib/api/read-api-error";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
-import { getCurrentUserProfile } from "../../profile/api/profile";
 import styles from "./admin-rewards-page-view.module.css";
+import {
+  AdminRewardsTasks,
+  type RewardTaskInfo,
+  type TaskConditionInfo
+} from "./admin-rewards-tasks";
 
-type Task = { title: string; amount: number; enabled: boolean; period: string };
 type Settings = {
   programName: string;
   mascotName: string;
   currencyName: string;
   tag: string;
-  tasks: Record<string, Task>;
+  tasks: Record<string, RewardTaskInfo>;
   phrases: Record<string, string[]>;
 };
 type Winner = {
@@ -53,6 +56,7 @@ type Data = {
   settings: Settings;
   giveaways: Giveaway[];
   verifications: Verification[];
+  taskConditions: TaskConditionInfo[];
 };
 const localDate = (date = new Date()) =>
   new Date(date.getTime() + 10800000).toISOString().slice(0, 16);
@@ -74,12 +78,16 @@ export function AdminRewardsPageView() {
   const { authSession, isAuthSessionLoaded } = useAuthSession(),
     token = authSession?.accessToken;
   const client = useQueryClient();
-  const profile = useQuery({
-    queryKey: ["profile", "me", token],
-    queryFn: () => getCurrentUserProfile(token ?? ""),
+  const access = useQuery({
+    queryKey: ["rewards-access", token],
+    queryFn: () =>
+      apiRequest<{ canManage: boolean }>("/rewards/access", {
+        headers: { authorization: `Bearer ${token}` },
+        cache: "no-store"
+      }),
     enabled: !!token
   });
-  const admin = profile.data?.role === "ADMIN";
+  const admin = access.data?.canManage === true;
   const query = useQuery({
     queryKey: ["admin-rewards", token],
     enabled: !!token && admin,
@@ -134,14 +142,17 @@ export function AdminRewardsPageView() {
             : "Не удалось сохранить"
       )
   });
-  if (!isAuthSessionLoaded || profile.isLoading) return <p>Загрузка…</p>;
+  if (!isAuthSessionLoaded || access.isLoading) return <p>Загрузка…</p>;
   if (!token)
     return (
       <Link className="button-primary" href="/login">
         Войти в админку
       </Link>
     );
-  if (!admin) return <p>Нужны права администратора сайта.</p>;
+  if (!admin)
+    return (
+      <p>Нужны права администратора наград. Войди через Telegram, добавленный в админы бота.</p>
+    );
   if (query.isLoading) return <p>Загрузка наград…</p>;
   if (!query.data)
     return (
@@ -165,8 +176,8 @@ export function AdminRewardsPageView() {
         <p className="hero-copy">
           Задания, персонаж, билеты и выдача призов. Действия игроков учитываются автоматически.
         </p>
-        <Link className="button-secondary" href="/admin">
-          ← В админку
+        <Link className="button-secondary" href="/">
+          ← К сайту
         </Link>
       </header>
       {feedback && (
@@ -181,14 +192,12 @@ export function AdminRewardsPageView() {
           mutate.mutate({
             path: "settings",
             body: {
-              ...current,
-              enabled: enabled ?? data.enabled,
-              tasks: Object.entries(current.tasks).map(([key, task]) => ({
-                key,
-                title: task.title,
-                amount: task.amount,
-                enabled: task.enabled
-              }))
+              programName: current.programName,
+              mascotName: current.mascotName,
+              currencyName: current.currencyName,
+              tag: current.tag,
+              phrases: current.phrases,
+              enabled: enabled ?? data.enabled
             }
           });
         }}
@@ -231,7 +240,7 @@ export function AdminRewardsPageView() {
             />
           </label>
           <label>
-            Тег в профилях
+            Тег в имени Telegram
             <input
               required
               pattern="@[A-Za-z0-9_]{5,32}"
@@ -244,64 +253,6 @@ export function AdminRewardsPageView() {
             задним числом.
           </p>
         </fieldset>
-        <h3>Задания</h3>
-        <div className={styles.tasks}>
-          {Object.entries(current.tasks).map(([key, task]) => (
-            <div className={styles.task} key={key}>
-              <label className={styles.check}>
-                <input
-                  type="checkbox"
-                  checked={task.enabled}
-                  onChange={(e) =>
-                    update({
-                      tasks: { ...current.tasks, [key]: { ...task, enabled: e.target.checked } }
-                    })
-                  }
-                />
-                <span>
-                  {task.period === "day"
-                    ? "Раз в день"
-                    : task.period === "once"
-                      ? "Один раз"
-                      : task.period === "week"
-                        ? "Раз в неделю"
-                        : "За нового друга"}
-                </span>
-              </label>
-              <label>
-                Название
-                <input
-                  required
-                  maxLength={100}
-                  value={task.title}
-                  onChange={(e) =>
-                    update({
-                      tasks: { ...current.tasks, [key]: { ...task, title: e.target.value } }
-                    })
-                  }
-                />
-              </label>
-              <label>
-                Награда
-                <input
-                  type="number"
-                  min={1}
-                  max={10000}
-                  required
-                  value={task.amount}
-                  onChange={(e) =>
-                    update({
-                      tasks: {
-                        ...current.tasks,
-                        [key]: { ...task, amount: Number(e.target.value) }
-                      }
-                    })
-                  }
-                />
-              </label>
-            </div>
-          ))}
-        </div>
         <h3>Фразы персонажа</h3>
         <p className="muted-copy">
           Каждая строка — отдельная фраза, до 180 символов. Бот меняет фразы при переходах.
@@ -325,6 +276,11 @@ export function AdminRewardsPageView() {
           Сохранить настройки
         </button>
       </form>
+      <AdminRewardsTasks
+        token={token}
+        tasks={data.settings.tasks}
+        conditions={data.taskConditions}
+      />
       <form
         className={`panel-card ${styles.section}`}
         onSubmit={(event) => {

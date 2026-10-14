@@ -26,6 +26,27 @@ USER_ID = 7
 
 
 class PanelActivityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_navigation_out_of_manual_proof_keeps_normal_callback_flow(self):
+        callback = CallbackQuery(id="proof-navigation", from_user=User(id=USER_ID,is_bot=False,first_name="Player"),chat_instance="qa",
+          message=Message(message_id=10,date=datetime.now(UTC),chat=Chat(id=USER_ID,type="private")),data="search:looking")
+        state = SimpleNamespace(clear=AsyncMock())
+        data = {"storage":self.storage,"state":state,"raw_state":"RewardSubmission:evidence"}
+        handler = AsyncMock(return_value="normal-search")
+        result = await RecordPrivateCallbackActivityMiddleware()(handler,callback,data)
+        self.assertEqual(result,"normal-search")
+        state.clear.assert_awaited_once()
+        self.assertIsNone(data["raw_state"])
+        handler.assert_awaited_once_with(callback,data)
+
+    async def test_rewards_do_not_read_or_change_other_callback_states(self):
+        callback = CallbackQuery(id="normal-navigation",from_user=User(id=USER_ID,is_bot=False,first_name="Player"),chat_instance="qa",
+          message=Message(message_id=10,date=datetime.now(UTC),chat=Chat(id=USER_ID,type="private")),data="panel:home")
+        state = SimpleNamespace(clear=AsyncMock(),get_state=AsyncMock())
+        handler = AsyncMock(return_value="normal")
+        await RecordPrivateCallbackActivityMiddleware()(handler,callback,{"storage":self.storage,"state":state,"raw_state":"GuestProfileWizard:mmr"})
+        state.clear.assert_not_awaited()
+        state.get_state.assert_not_awaited()
+
     async def asyncSetUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.path = str(Path(self.folder.name) / "bot.db")

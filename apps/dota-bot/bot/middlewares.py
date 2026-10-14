@@ -62,6 +62,13 @@ class RecordPrivateCallbackActivityMiddleware(BaseMiddleware):
                 and storage is not None
             ):
                 storage.record_bot_user(event.from_user.id)
+                # A navigation tap leaves the proof prompt. raw_state is already
+                # provided by FSM middleware; ordinary callbacks add no reads.
+                if data.get("raw_state") == "RewardSubmission:evidence" and not (event.data or "").startswith("rewards:"):
+                    state = data.get("state")
+                    if state is not None:
+                        await state.clear()
+                        data["raw_state"] = None
                 remember_legacy_panel_date(storage, event.from_user.id, message)
                 with private_panel_interaction(event.from_user.id):
                     return await handler(event, data)

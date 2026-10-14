@@ -54,24 +54,54 @@ export class GiveawayDto {
   @IsDateString({ strict: true }) endsAt!: string;
 }
 export class TagDto {
-  @IsIn(["telegram", "steam"]) provider!: "telegram" | "steam";
+  @IsIn(["telegram"]) provider!: "telegram";
   @IsOptional() @IsBoolean() relink?: boolean;
 }
 export class TaskSettingDto {
-  @IsIn([
-    "profile_ready",
-    "daily_party",
-    "referral_ready",
-    "referral_active",
-    "first_party_join",
-    "weekly_party",
-    "telegram_tag",
-    "steam_tag"
-  ])
+  @IsString()
+  @Matches(/^[a-z0-9_]{1,40}$/)
   key!: string;
   @IsString() @MaxLength(100) title!: string;
   @IsInt() @Min(1) @Max(10000) amount!: number;
   @IsBoolean() enabled!: boolean;
+}
+export class RewardTaskDto {
+  @IsString() @MaxLength(100) title!: string;
+  @IsString() @MaxLength(500) description!: string;
+  @IsInt() @Min(1) @Max(10000) amount!: number;
+  @IsIn(["once", "day", "week", "friend"]) period!: "once" | "day" | "week" | "friend";
+  @IsIn([
+    "account_ready",
+    "party_activity",
+    "search_started",
+    "party_created",
+    "party_joined",
+    "referral_ready",
+    "referral_active",
+    "weekly_party",
+    "telegram_tag",
+    "manual"
+  ])
+  condition!:
+    | "account_ready"
+    | "party_activity"
+    | "search_started"
+    | "party_created"
+    | "party_joined"
+    | "referral_ready"
+    | "referral_active"
+    | "weekly_party"
+    | "telegram_tag"
+    | "manual";
+  @IsBoolean() enabled!: boolean;
+  @IsInt() @Min(1) @Max(168) minimumHours!: number;
+}
+export class RewardSubmissionDto {
+  @IsString() @MaxLength(1000) evidence!: string;
+}
+export class ReviewSubmissionDto {
+  @IsBoolean() approved!: boolean;
+  @IsString() @MaxLength(500) reason!: string;
 }
 export class PhraseSettingsDto {
   @IsArray()
@@ -105,11 +135,12 @@ export class RewardSettingsDto {
   @IsString() @MaxLength(30) mascotName!: string;
   @IsString() @MaxLength(24) currencyName!: string;
   @IsString() @Matches(/^@[A-Za-z0-9_]{5,32}$/) tag!: string;
+  @IsOptional()
   @IsArray()
-  @ArrayMaxSize(8)
+  @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => TaskSettingDto)
-  tasks!: TaskSettingDto[];
+  tasks?: TaskSettingDto[];
   @IsDefined() @ValidateNested() @Type(() => PhraseSettingsDto) phrases!: PhraseSettingsDto;
 }
 export class ReviewTagDto {

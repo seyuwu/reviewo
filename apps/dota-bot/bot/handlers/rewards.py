@@ -3,7 +3,8 @@ from html import escape
 import uuid
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from ..api.client import ApiError
 from ..services.callbacks import acknowledge_callback
@@ -14,12 +15,44 @@ from ..services.temporary_notifications import send_temporary_notification
 router = Router(name="rewards")
 
 
+class RewardSubmission(StatesGroup):
+    evidence = State()
+
+
 def key(text, data):
     return InlineKeyboardButton(text=text, callback_data=data)
 
 
 def when(value):
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone(timedelta(hours=3))).strftime("%d.%m %H:%M МСК")
+
+
+@router.message(RewardSubmission.evidence, F.chat.type == "private", F.text & ~F.text.startswith("/"))
+async def receive_task_evidence(message: Message, api, storage, settings, state):
+    if not message.from_user or not getattr(settings, "rewards_enabled", False):
+        return
+    user = message.from_user.id
+    task_key = (await state.get_data()).get("reward_task_key")
+    text = (message.text or "").strip()
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[key("← Задания", "rewards:earn:0")]])
+    if not task_key:
+        await state.clear()
+        return
+    if not text or len(text) > 1000:
+        result_text = "Пришли описание выполнения или ссылку одним сообщением, от 1 до 1000 символов."
+    else:
+        try:
+            result = await api.user(user, "POST", f"/rewards/tasks/{task_key}/submissions", {"evidence": text})
+            await state.clear()
+            result_text = "✅ Награда за этот период уже начислена." if result.get("completed") else "⏳ Заявка отправлена администратору. Сообщу, когда он её проверит."
+        except ApiError as error:
+            if error.status in {404,409}:
+                await state.clear()
+                result_text = "Условия задания изменились. Вернись в список и открой их заново."
+            else:
+                result_text = "Не удалось отправить подтверждение: " + escape(str(error)[:150]) + "\nПопробуй ещё раз."
+    await edit_panel_content(message.bot, storage, api, settings, user, "rewards:earn", result_text,
+                             keyboard, message.chat.id, media_photo=reward_photo(storage, "rewards:earn"))
 
 
 @router.callback_query(F.data.startswith("rewards:"))
@@ -51,45 +84,75 @@ async def rewards(callback: CallbackQuery, bot, api, storage, settings, state):
             rows.extend([[key("☘️ Заработать", "rewards:earn:0"), key("🧾 История", "rewards:history:0")], [key("← Главное меню", "panel:home")]])
         elif action == "earn":
             scene = "earn"
-            number = max(0, min(1, int(parts[2]) if len(parts)>2 else 0))
             tasks = sorted(page["tasks"], key=lambda task: task["completed"])
-            text = "<b>Заработать</b>\nВсе действия учитываются автоматически. Начисление может занять несколько минут.\n"
-            for task in tasks[number*4:number*4+4]:
+            number = max(0, min(max(0, (len(tasks)-1)//3), int(parts[2]) if len(parts)>2 else 0))
+            text = "<b>Заработать</b>\nАвтоматические задания считаются сами. Для ручных отправь подтверждение. Начисление может занять несколько минут.\n"
+            for task in tasks[number*3:number*3+3]:
                 status = "✅" if task["completed"] else "☘️"
-                text += f"\n{status} {escape(task['title'])}: <b>+{task['amount']}</b>\n"
-                if task["key"] == "daily_party" and not task["completed"]:
-                    rows.append([key("Искать пати", "search:looking"), key("Собрать пати", "search:recruit")])
-                elif task["key"].startswith("referral_"):
-                    if not any(row[0].callback_data == "invite:friends" for row in rows):
-                        rows.append([key("Моя ссылка для друзей", "invite:friends")])
-                elif task["key"] in {"telegram_tag", "steam_tag"}:
-                    provider = task["key"].split("_")[0]
-                    verification = next((v for v in page["tags"] if v["provider"] == provider), None)
-                    text += f"Тег: <code>{escape(config['tag'])}</code>\n"
-                    if verification:
-                        labels = {"VERIFIED":"Тег найден; награды после суток повторных проверок", "MISSING":"Тег пока не найден", "PENDING":"Ожидает проверки", "ERROR":"Проверка недоступна, повторим позже"}
-                        text += labels.get(verification["status"], "На проверке") + "\n"
-                    label = "Проверить имя Telegram" if provider=="telegram" else "Проверить имя Steam" if verification and verification.get("profileId") else "Подключить Steam"
-                    rows.append([key(label, f"rewards:tag:{provider}")])
-                    if provider=="steam" and verification and verification.get("profileId"):
-                        rows.append([key("Сменить Steam", "rewards:relink:steam")])
-                elif task["key"] == "profile_ready" and not task["completed"]:
-                    rows.append([key("Мой аккаунт", "panel:account")])
-            if len(tasks)>4:
-                rows.append([key("Другие задания →" if number==0 else "← Первые задания", f"rewards:earn:{1-number}")])
+                text += f"\n{status} {escape(task['title'][:60])}: <b>+{task['amount']}</b>\n"
+                text += escape(task.get("description", "")[:70]) + "\n"
+                submission = task.get("submission")
+                if submission and submission["status"] == "PENDING":
+                    submitted_amount = (submission.get("rule") or {}).get("amount", task["amount"])
+                    text += f"⏳ Заявка на +{submitted_amount} на проверке\n"
+                rows.append([key("Условия · " + task["title"][:35], "rewards:task:" + task["key"])])
+            navigation = []
+            if number:
+                navigation.append(key("← Назад", f"rewards:earn:{number-1}"))
+            if (number+1)*3 < len(tasks):
+                navigation.append(key("Другие задания →", f"rewards:earn:{number+1}"))
+            if navigation:
+                rows.append(navigation)
             rows.append(back)
-        elif action in {"tag","relink"}:
+        elif action in {"task", "submit", "conditions"}:
             scene = "earn"
-            provider = parts[2]
-            if provider not in {"telegram", "steam"}:
-                raise ValueError("Unknown provider")
-            result = await api.user(user, "POST", "/rewards/tags", {"provider":provider,"relink":action=="relink"})
-            if result.get("url"):
-                text = "<b>Подключить Steam</b>\n\nВойди на официальном сайте Steam. После подключения добавь в имя профиля тег:\n" + f"<code>{escape(config['tag'])}</code>\n\nТег проверяется автоматически. Ссылка действует 10 минут."
-                rows.append([InlineKeyboardButton(text="Войти через Steam",url=result["url"])])
-            else:
-                title = "Тег в имени Telegram" if provider=="telegram" else "Тег в имени Steam"
-                text = f"<b>{title}</b>\n\nДобавь <code>{escape(config['tag'])}</code> в имя своего профиля. Проверка уже поставлена в очередь.\n\nНаграда появляется после суток повторных проверок. Уберёшь тег — новые начисления остановятся."
+            task_key = parts[2]
+            task = next((task for task in page["tasks"] if task["key"] == task_key), None)
+            if not task:
+                raise ApiError("Задание больше не доступно. Открой список заново.")
+            if action == "conditions":
+                await send_temporary_notification(bot, storage, user, callback.message.chat.id,
+                    f"<b>{escape(task['title'])}</b>\n\n{escape(task.get('description', ''))}", 120, parse_mode="HTML")
+            condition = task.get("condition", task_key)
+            labels = {"once":"Один раз", "day":"Раз в день, по Москве", "week":"Раз в неделю, по Москве", "friend":"За каждого нового друга"}
+            text = f"<b>{escape(task['title'][:80])}</b>\n\n{escape(task.get('description', '')[:420])}\n\nНаграда: <b>+{task['amount']} {currency}</b>\n{labels.get(task['period'], '')}\n"
+            if task["completed"] and task["period"] != "friend":
+                text += "\n✅ Уже выполнено за этот период."
+            elif condition == "manual":
+                submission = task.get("submission")
+                if submission and submission["status"] == "PENDING":
+                    submitted_amount = (submission.get("rule") or {}).get("amount", task["amount"])
+                    text += f"\n⏳ Заявка ждёт проверки. Награда по условиям подачи: +{submitted_amount} {currency}."
+                elif action == "submit":
+                    await state.set_state(RewardSubmission.evidence)
+                    await state.update_data(reward_task_key=task_key)
+                    text = f"<b>{escape(task['title'][:80])}</b>\n\nПришли одним сообщением описание выполнения или ссылку на подтверждение, до 1000 символов.\n\nНаграда после решения администратора: <b>+{task['amount']} {currency}</b>."
+                else:
+                    if submission and submission["status"] == "REJECTED":
+                        text += "\nПредыдущая заявка отклонена: " + escape(str(submission.get("reason") or "")[:120])
+                    rows.append([key("Отправить подтверждение", "rewards:submit:" + task_key)])
+            elif condition in {"party_activity", "search_started", "party_created", "weekly_party", "party_joined"}:
+                rows.append([key("Искать пати", "search:looking"), key("Собрать пати", "search:recruit")])
+            elif condition in {"referral_ready", "referral_active"}:
+                rows.append([key("Моя ссылка для друзей", "invite:friends")])
+            elif condition == "account_ready":
+                rows.append([key("Мой аккаунт", "panel:account")])
+            elif condition == "telegram_tag":
+                text += f"\nТег: <code>{escape(config['tag'])}</code>\nМинимум {task.get('minimumHours',24)} ч. с повторными проверками."
+                verification = next((row for row in page.get("tags", []) if row["provider"] == "telegram"), None)
+                if verification:
+                    labels = {"PENDING":"Проверка в очереди", "VERIFIED":"Тег найден", "MISSING":"Тег пока не найден", "ERROR":"Проверка недоступна; повторим позже"}
+                    text += "\n" + labels.get(verification["status"], "На проверке")
+                rows.append([key("Проверить имя Telegram", "rewards:tag:telegram")])
+            if len(task.get("description", "")) > 420:
+                rows.append([key("Полные условия", "rewards:conditions:" + task_key)])
+            rows.append([key("← Задания", "rewards:earn:0")])
+        elif action == "tag":
+            scene = "earn"
+            if parts[2] != "telegram":
+                raise ApiError("Задание Steam убрано. Открой актуальный список заданий.")
+            await api.user(user, "POST", "/rewards/tags", {"provider":"telegram"})
+            text = f"<b>Тег в имени Telegram</b>\n\nДобавь <code>{escape(config['tag'])}</code> в имя профиля. Проверка поставлена в очередь.\n\nСрок удержания указан в условиях задания. Уберёшь тег — новые начисления остановятся."
             rows.append([key("← Задания", "rewards:earn:0")])
         elif action == "history":
             scene = "history"

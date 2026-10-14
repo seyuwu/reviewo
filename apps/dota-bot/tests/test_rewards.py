@@ -1,4 +1,6 @@
 from datetime import UTC, datetime, timedelta
+import asyncio
+from aiohttp import web
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,7 +12,46 @@ from bot.storage.database import BotStorage
 from bot.services.rewards_sync import initialize_stream, source_batch, acknowledge_profiles
 from bot.services.rewards_ui import marina_phrase, reward_photo, save_reward_photo
 from bot.ui.keyboards import home_keyboard
-from bot.handlers.rewards import rewards
+from bot.handlers.rewards import rewards, receive_task_evidence, RewardSubmission
+from bot.api.client import OpiniaApi
+
+
+class RewardsTransportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_slow_rewards_requests_leave_the_core_http_connection_available(self):
+        release = asyncio.Event()
+        saturated = asyncio.Event()
+        count = 0
+        async def reward(request):
+            nonlocal count
+            count += 1
+            if count == 4:
+                saturated.set()
+            await release.wait()
+            return web.json_response({"ok":True})
+        async def core(request):
+            return web.json_response({"core":True})
+        server = web.Application()
+        server.router.add_get("/rewards/me",reward)
+        server.router.add_get("/dota/profiles/me",core)
+        runner = web.AppRunner(server)
+        await runner.setup()
+        site = web.TCPSite(runner,"127.0.0.1",0)
+        await site.start()
+        port = site._server.sockets[0].getsockname()[1]
+        api = OpiniaApi(SimpleNamespace(api_base_url=f"http://127.0.0.1:{port}",rewards_enabled=True),SimpleNamespace())
+        await api.start()
+        # Reach pool saturation with four callers rather than a hundred sockets.
+        api.session.connector._limit = 1
+        held = [asyncio.create_task(api.public("GET","/rewards/me")) for _ in range(4)]
+        try:
+            await asyncio.wait_for(saturated.wait(),2)
+            result = await asyncio.wait_for(api.public("GET","/dota/profiles/me"),1)
+            self.assertEqual(result,{"core":True})
+        finally:
+            release.set()
+            await asyncio.gather(*held,return_exceptions=True)
+            await api.close()
+            await runner.cleanup()
 
 
 class RewardStreamTests(unittest.TestCase):
@@ -146,3 +187,39 @@ class RewardScreenTests(unittest.IsolatedAsyncioTestCase):
         await self.visit("rewards:confirm:expired")
         self.assertEqual(self.posts,[])
         self.assertIn("устарело",self.edit.call_args.args[6])
+
+    async def test_dynamic_task_pages_reach_every_task_and_never_show_steam(self):
+        self.page["tasks"] = [{"key":"custom_" + str(i).zfill(32), "title":f"Задание {i}",
+          "description":"Выполни действие", "amount":5, "period":"once", "condition":"manual", "completed":False}
+          for i in range(14)]
+        call = await self.visit("rewards:earn:4")
+        self.assertIn("Задание 13", call.args[6])
+        self.assertNotIn("Steam", call.args[6])
+        self.assertIn("rewards:earn:3", [b.callback_data for row in call.args[7].inline_keyboard for b in row])
+
+    async def test_manual_proof_is_submitted_once_to_the_selected_task(self):
+        task_key = "custom_" + "1"*32
+        self.page["tasks"] = [{"key":task_key, "title":"Полезный отзыв", "description":"Пришли ссылку",
+          "amount":7, "period":"once", "condition":"manual", "completed":False}]
+        await self.visit("rewards:submit:" + task_key)
+        self.state.set_state.assert_awaited_once_with(RewardSubmission.evidence)
+        self.state.get_data.return_value = {"reward_task_key":task_key}
+        message = SimpleNamespace(from_user=SimpleNamespace(id=7),text="https://example.com/proof",
+                                 bot=self.bot,chat=SimpleNamespace(id=7))
+        await receive_task_evidence(message,self.api,self.storage,self.settings,self.state)
+        self.assertEqual(self.posts,[{"evidence":"https://example.com/proof"}])
+        self.assertEqual(self.api.user.await_args.args[2],f"/rewards/tasks/{task_key}/submissions")
+        self.assertIn("Заявка отправлена",self.edit.call_args.args[6])
+
+    async def test_pending_manual_proof_cannot_open_another_submission_prompt(self):
+        task_key = "custom_" + "2"*32
+        self.page["tasks"] = [{"key":task_key,"title":"Отзыв","description":"Ссылка","amount":7,
+          "period":"once","condition":"manual","completed":False,"submission":{"status":"PENDING"}}]
+        await self.visit("rewards:submit:" + task_key)
+        self.state.set_state.assert_not_awaited()
+        self.assertEqual(self.posts,[])
+
+    async def test_retired_steam_button_makes_no_verification_request(self):
+        await self.visit("rewards:tag:steam")
+        self.assertEqual(self.posts,[])
+        self.assertIn("Steam убрано",self.edit.call_args.args[6])

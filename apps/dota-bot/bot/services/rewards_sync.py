@@ -109,7 +109,11 @@ async def rewards_sync_worker(api, storage, settings):
                     try:
                         if not delivered:
                             payload=notice["payload"]
-                            if payload.get("kind")=="winner":
+                            if payload.get("kind") == "task_review":
+                                text = (f"✅ Задание подтверждено: {escape(payload['title'])}\n+{payload['amount']} {escape(payload['currency'])}" if payload["approved"] else f"Заявка отклонена: {escape(payload['title'])}")
+                                text += "\n\n" + escape(payload.get("reason", ""))
+                                target = "rewards:earn:0"
+                            elif payload.get("kind")=="winner":
                                 text=f"🎉 Твой билет №{payload['number']} выиграл!\n\n{escape(payload['prize'])}\n\nАдминистратор свяжется с тобой для выдачи приза."
                                 target=f"rewards:raffle:{payload['giveawayId']}"
                             else:
