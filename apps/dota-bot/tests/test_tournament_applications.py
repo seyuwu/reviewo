@@ -103,7 +103,8 @@ class TournamentApplicationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_captain_menu_and_list_open_profiles_and_consume_matching_notices(self):
         keyboard = tournament_status_keyboard({"state": "JOINED", "tournament": EVENT, "entry": {"id": ENTRY, "isCaptain": True, "members": []}}, self.context, self.settings)
-        self.assertTrue(any(button.text == "📨 Заявки в команду" for row in keyboard.inline_keyboard for button in row))
+        self.assertTrue(any(button.callback_data == "tr:requests:" + self.context["eventHex"]
+                            for row in keyboard.inline_keyboard for button in row))
         await deliver_tournament_application_notice(self.bot, self.api, self.settings, self.storage, self.row)
         await self.press("tr:requests:" + self.context["eventHex"])
         player = next(button for button in self.panel_buttons() if button.callback_data.startswith("ta:player:"))

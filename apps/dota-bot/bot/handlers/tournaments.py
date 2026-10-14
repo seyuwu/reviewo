@@ -17,12 +17,13 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel_content
+from ..services.panel_activity import panel_repost_lock
 from ..services.tournament_participation import (
     PENDING_KEY, ROLE_NAMES, fresh_tournament_web_url,
     load_tournament_context, remember_participation, save_tournament_context,
     tournament_api_path, tournament_callback, tournament_status_keyboard,
     tournament_status_text, tournament_date_text, tournament_overview_text, tournament_rules_button, participation_requests, uuid_hex,
-    company_menu,
+    company_menu, tournament_team_settings_keyboard,
 )
 from ..storage.database import BotStorage
 
@@ -177,6 +178,26 @@ async def _show_status(bot, api, settings, storage, user_id, chat_id, context, r
                              tournament_status_text(result), tournament_status_keyboard(result, context, settings), chat_id)
 
 
+async def _show_team_settings(bot, api, settings, storage, user_id, chat_id, context, result) -> None:
+    if result.get("state") != "JOINED":
+        await _show_status(bot, api, settings, storage, user_id, chat_id, context, result)
+        return
+    entry = result.get("entry") or {}
+    rows = tournament_team_settings_keyboard(result, context, settings).inline_keyboard
+    company = entry.get("company") or {}
+    if company.get("selfConfirmed") and len(entry.get("members") or []) >= 2:
+        company_menu(storage, user_id, context, result, settings)
+        consent = storage.get_choice(user_id, "company_consent", 0)
+        rows.insert(-1, [_button("⏸ Приостановить поиск вместе", "company-confirm", consent["token"])])
+    text = "⚙️ <b>Настройки команды</b>\n\n<b>" + escape(str(entry.get("name") or "Команда")[:80]) + "</b>"
+    if entry.get("isCaptain"):
+        text += "\n\nНазвание, описание и управление участием в турнире."
+    if company:
+        text += "\n\n" + ("Поиск всей компанией включён." if company.get("confirmed")
+                           else "Поиск всей компанией ожидает подтверждения участников.")
+    await _panel(bot, storage, api, settings, user_id, chat_id, "team-settings", text, rows)
+
+
 async def _show_modes(bot, api, settings, storage, user_id, chat_id, context) -> None:
     await _panel(bot, storage, api, settings, user_id, chat_id, "choose",
                  f"🏆 <b>{escape(context['title'])}</b>\n\nКак будете участвовать?",
@@ -247,7 +268,7 @@ async def _show_team_catalog(bot, api, settings, storage, user_id, chat_id, cont
         label = prefix + str(item.get("name") or "Команда")[:38] + f" · {item.get('memberCount', 0)}/5"
         rows.append([_button(label, "company-pick" if company else "pickteam", choice["token"])])
     if not board.get("total"):
-        lines += ["", "Пока нет команды с местами для всех. Можно добрать игроков в вашу компанию через «Управление»." if company
+        lines += ["", "Пока нет команды с местами для всех. Можно добрать игроков в вашу компанию через «Настройки»." if company
                   else "Команд пока нет. Можешь создать свою в меню поиска."]
     else:
         lines += ["", f"Страница {board['page'] + 1}/{board['pageCount']} · команд: {board['total']}"]
@@ -467,6 +488,7 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
         return
     acknowledge_callback(callback)
     await begin_panel_transition(callback.bot, storage, user_id, chat_id)
+    settings_guard = (panel_repost_lock(user_id), panel_repost_lock(user_id).revision) if action == "team-settings" else None
     await _record_tournament_bot_started(api, storage, user_id)
     try:
         if action == "open":
@@ -598,6 +620,11 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
                        [_button("Остаться в команде", "leave-cancel", context["eventHex"])]])
         elif action == "status":
             await _open_tournament(callback.bot, api, settings, storage, user_id, chat_id, context)
+        elif action == "team-settings":
+            result = await _participation(api, storage, user_id, context)
+            if settings_guard[0].revision != settings_guard[1]:
+                return
+            await _show_team_settings(callback.bot, api, settings, storage, user_id, chat_id, context, result)
         elif action == "cancel":
             result = await _participation(api, storage, user_id, context)
             if result.get("state") in {"WAITING", "REQUESTED"}:
@@ -612,9 +639,9 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
                 return
             next_path = f"/games/tournaments/{quote(context['slug'], safe='')}/teams/{UUID(entry_hex)}#tournament-team-chat"
             url = await fresh_tournament_web_url(api, settings, user_id, next_path)
-            rows = [[InlineKeyboardButton(text="💬 Открыть чат команды", url=url)],
-                    [_button("Обновить ссылку входа", "web", context["eventHex"])]]
-            rows += tournament_status_keyboard(result, context, settings).inline_keyboard[1:]
+            rows = tournament_status_keyboard(result, context, settings).inline_keyboard
+            rows[0] = [InlineKeyboardButton(text="💬 Открыть чат команды", url=url)]
+            rows[-1][0] = _button("🔄 Обновить", "web", context["eventHex"])
             await _panel(callback.bot, storage, api, settings, user_id, chat_id, "web",
                          tournament_status_text(result), rows)
             if storage.is_temporary_message(chat_id, callback.message.message_id):
@@ -639,8 +666,10 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
         else:
             raise ApiError("Кнопка устарела. Откройте турнир заново.")
     except ApiError as error:
+        if settings_guard and settings_guard[0].revision != settings_guard[1]:
+            return
         retry = (tournament_callback("leave", context["eventHex"]) if action in {"leave", "leave-confirm"}
-                 else callback.data if action in {"web", "sponsor", "status", "open", "preview", "teams", "teams-page", "teams-back", "search-settings", "manual"}
+                 else callback.data if action in {"web", "sponsor", "status", "open", "preview", "teams", "teams-page", "teams-back", "search-settings", "manual", "team-settings"}
                  else tournament_callback("continue", context["eventHex"]))
         rows = [[InlineKeyboardButton(text="Попробовать ещё раз", callback_data=retry)]]
         pending = storage.get_choice(user_id, PENDING_KEY, 0) or {}

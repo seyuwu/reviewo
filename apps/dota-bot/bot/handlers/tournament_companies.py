@@ -8,9 +8,9 @@ from ..api.client import ApiError
 from ..services.callbacks import acknowledge_callback
 from ..services.tournament_recruitment import refresh_linked_tournament_session
 from ..services.tournament_participation import (
-    ROLE_NAMES, company_menu, load_tournament_context, tournament_api_path, tournament_status_keyboard, tournament_status_text,
+    ROLE_NAMES, load_tournament_context, tournament_api_path,
 )
-from .tournaments import _action_choice, _button, _panel, _participation, _private_callback, _save_action_choices, _show_status, _show_team_catalog
+from .tournaments import _action_choice, _button, _panel, _participation, _private_callback, _save_action_choices, _show_status, _show_team_catalog, _show_team_settings
 
 router = Router(name="tournament-companies")
 
@@ -52,14 +52,7 @@ async def company_action(callback, state, api, settings, storage):
                 "rosterVersion": choice["rosterVersion"], "confirmed": choice["confirmed"]})
             await _show_status(callback.bot, api, settings, storage, user_id, chat_id, context, result)
         elif action == "company-info":
-            text, _ = company_menu(storage, user_id, context, result, settings)
-            normal = {**result, "entry": {**entry, "company": None}}
-            rows = tournament_status_keyboard(normal, context, settings).inline_keyboard
-            if company.get("selfConfirmed"):
-                consent = storage.get_choice(user_id, "company_consent", 0)
-                rows.insert(0, [_button("⏸ Приостановить поиск вместе", "company-confirm", consent["token"])])
-            rows.insert(0, [_button("← Компания", "status", context["eventHex"])])
-            await _panel(callback.bot, storage, api, settings, user_id, chat_id, "company-info", tournament_status_text(normal), rows)
+            await _show_team_settings(callback.bot, api, settings, storage, user_id, chat_id, context, result)
         else:
             if not entry.get("isCaptain") or not company.get("confirmed"):
                 raise ApiError("Дождись подтверждения друзей. Команду выбирает организатор компании.")

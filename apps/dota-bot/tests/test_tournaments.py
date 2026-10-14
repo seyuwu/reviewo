@@ -396,6 +396,9 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         for _ in range(2):
             await self.action("web")
             urls.append(next(button.url for button in self.buttons() if button.url))
+            self.assertLessEqual(len(self.bot.views[-1][1].inline_keyboard), 4)
+            self.assertEqual(self.bot.views[-1][1].inline_keyboard[-1][0].callback_data,
+                             participation.tournament_callback("web", self.context["eventHex"]))
         self.assertNotEqual(urls[0], urls[1])
         self.assertEqual(self.api.create_web_access_ticket.await_count, 2)
         for number, url in enumerate(urls, 1):
@@ -458,7 +461,61 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Telegram-ник не указан", text)
         self.assertNotIn("bad<tag>", text)
         buttons = [button for row in participation.tournament_status_keyboard(self.api.result(), self.context, self.settings).inline_keyboard for button in row]
-        self.assertEqual(buttons[0].text, "💬 Открыть чат команды")
+        self.assertEqual(buttons[0].text, "💬 Чат команды")
+
+    async def test_team_card_is_compact_and_secondary_actions_follow_current_permissions(self):
+        self.api.state = "JOINED"
+        self.api.entry.update(isCaptain=True, canLeave=True)
+        card = participation.tournament_status_keyboard(self.api.result(), self.context, self.settings)
+        self.assertLessEqual(len(card.inline_keyboard), 4)
+        callbacks = {button.callback_data for row in card.inline_keyboard for button in row}
+        for action in ("requests", "recruit-start", "team-settings"):
+            self.assertIn(participation.tournament_callback(action, self.context["eventHex"]), callbacks)
+        self.assertNotIn(participation.tournament_callback("leave", self.context["eventHex"]), callbacks)
+        await self.action("team-settings")
+        callbacks = {button.callback_data for button in self.buttons()}
+        for action in ("team-edit", "company-enable", "leave", "status"):
+            self.assertIn(participation.tournament_callback(action, self.context["eventHex"]), callbacks)
+        self.api.user.assert_awaited_once_with(USER_ID, "GET", API_ROOT + "/participation")
+        self.api.entry.update(isCaptain=False, canLeave=False)
+        self.api.user.reset_mock()
+        await self.action("team-settings")
+        callbacks = {button.callback_data for button in self.buttons()}
+        for action in ("team-edit", "company-enable", "leave"):
+            self.assertNotIn(participation.tournament_callback(action, self.context["eventHex"]), callbacks)
+        self.api.user.assert_awaited_once_with(USER_ID, "GET", API_ROOT + "/participation")
+
+    async def test_settings_button_returns_to_current_status_after_membership_ends(self):
+        self.api.state = "WAITING"
+        await self.action("team-settings")
+        self.assertEqual(self.storage.get_panel(USER_ID).screen, "tournaments:status")
+        self.assertIn("Ищем команду", self.bot.views[-1][0])
+        self.assertFalse(any(button.callback_data and button.callback_data.startswith("tr:team-edit:")
+                             for button in self.buttons()))
+
+    async def test_slow_settings_lookup_does_not_replace_a_newer_screen(self):
+        self.api.state = "JOINED"
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = self.api.request_user
+        async def delayed(user_id, method, path, body=None):
+            if path.endswith("/participation"):
+                entered.set()
+                await release.wait()
+            return await original(user_id, method, path, body)
+        self.api.user.side_effect = delayed
+        opening = asyncio.create_task(self.action("team-settings"))
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+            from aiogram.types import InlineKeyboardMarkup
+            from bot.services.panel import edit_panel_content
+            await edit_panel_content(self.bot, self.storage, self.api, self.settings, USER_ID,
+                                     "account", "Аккаунт", InlineKeyboardMarkup(inline_keyboard=[]), USER_ID)
+            release.set()
+            await opening
+            self.assertEqual(self.storage.get_panel(USER_ID).screen, "account")
+        finally:
+            release.set()
+            await asyncio.gather(opening, return_exceptions=True)
 
     async def test_worker_and_outbox_do_not_double_send_and_delivery_is_durable(self):
         context = self.save_state("WAITING")

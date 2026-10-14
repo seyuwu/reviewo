@@ -261,8 +261,8 @@ as described above; preserve the additive columns.
 ## Tournament entry name and description in the bot (2026-10-14)
 
 The user clarified that these edits apply to a team in a tournament. Its current
-captain sees **Название и описание** on the team card and the friends/company
-screen. The editor shows current values, accepts a new value as a private text
+captain sees **Название и описание** in the team settings, accessible from both
+the team card and the friends/company screen. The editor shows current values, accepts a new value as a private text
 message, and has a separate button to clear the description. Name limits are
 2–80 characters; descriptions accept up to 1000 and preserve line breaks.
 
@@ -298,3 +298,26 @@ previous bot image retained before switching only the main bot. Saved reward
 settings were unchanged. Runtime verification confirmed the captain-only
 button, router order, stale-navigation guard and a fresh reward-sync cursor;
 API and web remained healthy. The isolated local PostgreSQL was stopped.
+
+## Compact team card (2026-10-14)
+
+The joined team card has at most four keyboard rows: team chat; invite and
+captain recruitment; captain applications and settings; refresh and tournament
+list. Labels in shared rows are short enough for a phone. Editing the name and
+description, switching to whole-company search, leaving the team and tournament
+rules are in **Настройки**. Leaving still requires the existing separate
+confirmation. Captain actions are hidden for regular members.
+
+The friends/company card uses the same settings entry point. Its existing
+consent, pause and whole-company application flows remain available; the old
+`company-info` callback opens the new settings screen. Settings fetch only the
+existing participation snapshot and make no writes or room API calls. A delayed
+settings response cannot replace a screen opened more recently. Opening or
+refreshing a fresh chat access link retains the compact four-row layout.
+
+Verification: the full local bot suite passed 276 tests. Tournament coverage
+checks current captain/member permissions, unchanged request and invitation
+actions, company pause consent, stale membership and navigation during a slow
+settings lookup. A static preview built from the actual keyboard markup checked
+captain, settings and member layouts at a 280-pixel card width with no clipped
+labels; this is a layout preview, not a live Telegram screenshot.

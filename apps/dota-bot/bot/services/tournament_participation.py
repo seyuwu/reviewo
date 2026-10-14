@@ -173,7 +173,6 @@ def company_menu(storage, user_id, context, result, settings):
     if entry.get("isCaptain") and entry_hex:
         username = getattr(settings, "main_bot_username", "FDPdotabot")
         rows.append([InlineKeyboardButton(text="📋 Пригласить друзей", copy_text=CopyTextButton(text=f"https://t.me/{username}?start=te_{entry_hex}"))])
-        rows.append([InlineKeyboardButton(text="✏️ Название и описание", callback_data=tournament_callback("team-edit", context["eventHex"]))])
     if count >= 2:
         token = uuid4().hex
         storage.set_choices(user_id, "company_consent", [{"token": token, "eventHex": context["eventHex"],
@@ -182,8 +181,9 @@ def company_menu(storage, user_id, context, result, settings):
             rows.append([InlineKeyboardButton(text="✅ Ищем вместе", callback_data=tournament_callback("company-confirm", token))])
     if entry.get("isCaptain") and company.get("confirmed"):
         rows.append([InlineKeyboardButton(text=f"👥 Найти команду для нас · {count}", callback_data=tournament_callback("company-teams", context["eventHex"]))])
-    rows.append([InlineKeyboardButton(text="🔄 Обновить", callback_data=tournament_callback("status", context["eventHex"])),
-        InlineKeyboardButton(text="⚙️ Управление", callback_data=tournament_callback("company-info", context["eventHex"]))])
+    rows.append([InlineKeyboardButton(text="⚙️ Настройки", callback_data=tournament_callback("team-settings", context["eventHex"])),
+        InlineKeyboardButton(text="🔄 Обновить", callback_data=tournament_callback("status", context["eventHex"]))])
+    rows.append([InlineKeyboardButton(text="← Турниры", callback_data="tournaments:list")])
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -241,22 +241,26 @@ def tournament_status_keyboard(result: dict, context: dict, settings: Settings) 
     event_hex = context["eventHex"]
     rows = []
     if result.get("state") == "JOINED":
-        entry_hex = uuid_hex((result.get("entry") or {}).get("id"))
-        rows.append([InlineKeyboardButton(text="💬 Открыть чат команды", callback_data=tournament_callback("web", event_hex))])
+        entry = result.get("entry") or {}
+        entry_hex = uuid_hex(entry.get("id"))
+        rows.append([InlineKeyboardButton(text="💬 Чат команды", callback_data=tournament_callback("web", event_hex))])
+        recruitment = []
         if entry_hex:
             username = getattr(settings, "main_bot_username", "FDPdotabot")
             invitation = f"https://t.me/{username}?start=te_{entry_hex}"
-            rows.append([InlineKeyboardButton(text="📋 Пригласить друзей", copy_text=CopyTextButton(text=invitation))])
-        entry = result.get("entry") or {}
-        if entry.get("isCaptain"):
-            rows.append([InlineKeyboardButton(text="✏️ Название и описание", callback_data=tournament_callback("team-edit", event_hex))])
-            rows.append([InlineKeyboardButton(text="📨 Заявки в команду", callback_data=tournament_callback("requests", event_hex))])
+            recruitment.append(InlineKeyboardButton(text="📋 Пригласить", copy_text=CopyTextButton(text=invitation)))
         if entry.get("isCaptain") and len(entry.get("members") or []) < 5:
-            if entry.get("canLeave"):
-                rows.append([InlineKeyboardButton(text="👥 Искать команду вместе", callback_data=tournament_callback("company-enable", event_hex))])
-            rows.append([InlineKeyboardButton(text="Поиск игроков" if entry.get("recruiting") else "Ищем игроков", callback_data=tournament_callback("recruits" if entry.get("recruiting") else "recruit-start", event_hex))])
-        if entry.get("canLeave"):
-            rows.append([InlineKeyboardButton(text="🚪 Выйти из команды", callback_data=tournament_callback("leave", event_hex))])
+            recruitment.append(InlineKeyboardButton(text="🔎 Поиск",
+                callback_data=tournament_callback("recruits" if entry.get("recruiting") else "recruit-start", event_hex)))
+        if recruitment:
+            rows.append(recruitment)
+        management = []
+        if entry.get("isCaptain"):
+            management.append(InlineKeyboardButton(text="📨 Заявки", callback_data=tournament_callback("requests", event_hex)))
+        management.append(InlineKeyboardButton(text="⚙️ Настройки", callback_data=tournament_callback("team-settings", event_hex)))
+        rows += [management, [InlineKeyboardButton(text="🔄 Обновить", callback_data=tournament_callback("status", event_hex)),
+                             InlineKeyboardButton(text="← Турниры", callback_data="tournaments:list")]]
+        return InlineKeyboardMarkup(inline_keyboard=rows)
     elif result.get("state") in {"WAITING", "REQUESTED"}:
         return InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="👥 Выбрать команду", callback_data=tournament_callback("teams", event_hex))],
@@ -268,6 +272,32 @@ def tournament_status_keyboard(result: dict, context: dict, settings: Settings) 
     rows += [[tournament_rules_button(result.get("tournament") or context, settings)],
              [InlineKeyboardButton(text="🔄 Обновить статус", callback_data=tournament_callback("status", event_hex))],
              [InlineKeyboardButton(text="← Турниры", callback_data="tournaments:list")]]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def tournament_team_settings_keyboard(result: dict, context: dict, settings: Settings) -> InlineKeyboardMarkup:
+    """Secondary actions for the current membership; no additional API requests."""
+    entry = result.get("entry") or {}
+    event_hex = context["eventHex"]
+    company = entry.get("company") or {}
+    rows = []
+    if entry.get("isCaptain"):
+        rows.append([InlineKeyboardButton(text="✏️ Название и описание", callback_data=tournament_callback("team-edit", event_hex))])
+        if company:
+            recruitment = []
+            if len(entry.get("members") or []) < 5:
+                recruitment.append(InlineKeyboardButton(text="🔎 Поиск",
+                    callback_data=tournament_callback("recruits" if entry.get("recruiting") else "recruit-start", event_hex)))
+            recruitment.append(InlineKeyboardButton(text="📨 Заявки", callback_data=tournament_callback("requests", event_hex)))
+            rows.append(recruitment)
+        elif len(entry.get("members") or []) < 5 and entry.get("canLeave"):
+            rows.append([InlineKeyboardButton(text="👥 Искать команду вместе", callback_data=tournament_callback("company-enable", event_hex))])
+    if entry.get("canLeave"):
+        rows.append([InlineKeyboardButton(text="🚪 Выйти из команды", callback_data=tournament_callback("leave", event_hex))])
+    rules_button = tournament_rules_button(result.get("tournament") or context, settings)
+    rules_button.text = "📋 Правила"
+    rows.append([rules_button,
+                 InlineKeyboardButton(text="← К команде", callback_data=tournament_callback("status", event_hex))])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

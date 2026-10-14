@@ -14,7 +14,7 @@ from bot.api.client import ApiError
 from bot.handlers import router, tournament_team_edit as editor
 from bot.middlewares import RecordPrivateCallbackActivityMiddleware
 from bot.services.panel import edit_panel_content
-from bot.services.tournament_participation import company_menu, save_tournament_context, tournament_callback, tournament_status_keyboard
+from bot.services.tournament_participation import company_menu, save_tournament_context, tournament_callback, tournament_team_settings_keyboard
 from bot.storage.database import BotStorage
 from test_tournaments import IsolatedApi, IsolatedBot, EVENT, ENTRY_ID, USER_ID
 
@@ -84,7 +84,7 @@ class TournamentTeamEditTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(names.index("tournament-team-edit"),names.index("tournaments"))
         for captain in (True,False):
             self.api.entry["isCaptain"] = captain
-            keyboard = tournament_status_keyboard(self.api.result(),self.context,self.settings)
+            keyboard = tournament_team_settings_keyboard(self.api.result(),self.context,self.settings)
             buttons = [button.callback_data for row in keyboard.inline_keyboard for button in row]
             self.assertEqual(any(value and value.startswith("tr:team-edit:") for value in buttons),captain)
 
@@ -101,6 +101,9 @@ class TournamentTeamEditTests(unittest.IsolatedAsyncioTestCase):
         result = self.api.result()
         result["entry"]["company"] = {"confirmed":False,"rosterVersion":"a"*64}
         _,keyboard = company_menu(self.storage,USER_ID,self.context,result,self.settings)
+        callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+        self.assertIn(tournament_callback("team-settings",self.context["eventHex"]),callbacks)
+        keyboard = tournament_team_settings_keyboard(result,self.context,self.settings)
         callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
         self.assertIn(tournament_callback("team-edit",self.context["eventHex"]),callbacks)
 

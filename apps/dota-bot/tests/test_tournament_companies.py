@@ -89,6 +89,15 @@ class TournamentCompanyTests(unittest.IsolatedAsyncioTestCase):
         self.api.login_telegram_bot_session.assert_awaited_once_with(USER)
         self.api.user.assert_any_await(USER, "POST", BASE + "/confirm", {"rosterVersion": VERSION, "confirmed": True})
 
+    async def test_company_settings_keep_pause_and_entry_editor_without_duplicating_team_card(self):
+        await self.press("tr:company-info:" + self.context["eventHex"])
+        self.assertEqual(self.storage.get_panel(USER).screen, "tournaments:team-settings")
+        self.assertLessEqual(len(self.bot.views[-1][1].inline_keyboard), 5)
+        self.assertTrue(self.button("tr:team-edit:"))
+        await self.press(self.button("tr:company-confirm:"))
+        self.api.user.assert_any_await(USER, "POST", BASE + "/confirm", {"rosterVersion": VERSION, "confirmed": False})
+        self.assertLessEqual(len(self.bot.views[-1][1].inline_keyboard), 4)
+
     async def test_old_confirm_does_not_confirm_a_replacement_company(self):
         self.entry["company"]["selfConfirmed"] = False
         await _show_status(self.bot, self.api, self.settings, self.storage, USER, USER, self.context, self.result())
