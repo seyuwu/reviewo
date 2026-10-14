@@ -257,3 +257,36 @@ The production database was backed up before the additive company migration.
 Previous API/web/bot image tags are retained for rollback. Before reverting the
 API to a version without company support, withdraw pending company applications
 as described above; preserve the additive columns.
+
+## Tournament entry name and description in the bot (2026-10-14)
+
+The user clarified that these edits apply to a team in a tournament. Its current
+captain sees **Название и описание** on the team card and the friends/company
+screen. The editor shows current values, accepts a new value as a private text
+message, and has a separate button to clear the description. Name limits are
+2–80 characters; descriptions accept up to 1000 and preserve line breaks.
+
+The bot uses the existing entry `/name`, `/description` and `/room` endpoints.
+It rechecks the current captain and entry before saving and uses the server's
+room permissions. Rename is offered only while roster editing is allowed;
+the API additionally freezes the name after bracket generation. Description
+editing follows existing room permissions. These changes edit only the entry,
+preserving any linked persistent team's name and other tournament entries.
+
+Navigation cancels the text prompt. A transient API failure keeps the value in
+the FSM draft and offers a retry. Entry changes and lost captaincy invalidate
+the draft. Per-user publication generations prevent a delayed editor request
+from restoring its screen or prompt after the user navigates away. The new
+router precedes the general tournament callback handler. No new API routes,
+migrations, or requests in ordinary search or navigation are introduced.
+
+Verification uses real SQLite/FSM and isolated API/Telegram transports for the
+bot, and the existing tournament rooms/participation integration suites against
+an isolated local PostgreSQL database. No production entry or user is enrolled
+or modified to test this feature.
+
+The existing API build and ESLint check passed. All 49 isolated PostgreSQL
+tournament rooms/participation tests passed, including a new check for captain
+rename permissions, entry isolation, retained description and frozen bracket
+names. The full bot run passed 270 tests; the final focused editor run passed
+12 tests, including the company captain and retrying a failed description clear.

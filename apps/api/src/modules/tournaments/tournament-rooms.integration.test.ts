@@ -125,6 +125,21 @@ describe("Tournament team rooms (isolated local PostgreSQL)", { skip: !connectio
     assert.equal((await rooms.get(slug, entryA)).description, "");
   });
 
+  it("renames only the captains event entry and freezes its name after bracket generation", async () => {
+    await service.joinEntry(slug, entryA, { positionRole: "2" }, users[2]!);
+    await rooms.updateDescription(slug, entryA, users[0]!, "Keep the description");
+    for (const user of [users[1]!, users[2]!, users[3]!, users[6]!, users[7]!]) {
+      await assert.rejects(service.renameSquad(slug, entryA, "Unauthorized", user), rejectsStatus(403));
+    }
+    await service.renameSquad(slug, entryA, "  Renamed squad  ", users[0]!);
+    assert.equal((await rooms.get(slug, entryA, users[0]!)).name, "Renamed squad");
+    assert.equal((await rooms.get(slug, entryA, users[0]!)).description, "Keep the description");
+    assert.equal((await rooms.get(slug, entryB, users[1]!)).name, "Beta");
+    await assert.rejects(service.renameSquad(parallelSlug, entryA, "Wrong event", users[0]!), rejectsStatus(404));
+    await assert.rejects(service.renameSquad(slug, entryA, "x".repeat(81), users[0]!), rejectsStatus(409));
+    await prisma.dotaTournament.update({where:{id:tournamentIds[0]!},data:{bracketGeneratedAt:new Date()}});
+    await assert.rejects(service.renameSquad(slug, entryA, "Frozen name", users[0]!), rejectsStatus(409));
+  });
   it("transfers description permissions with captaincy and freezes closed rooms", async () => {
     await service.joinEntry(slug, entryA, { positionRole: "2" }, users[2]!);
     await rooms.updateDescription(slug, entryA, users[0]!, "Original description");

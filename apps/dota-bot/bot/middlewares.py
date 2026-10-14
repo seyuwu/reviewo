@@ -62,9 +62,14 @@ class RecordPrivateCallbackActivityMiddleware(BaseMiddleware):
                 and storage is not None
             ):
                 storage.record_bot_user(event.from_user.id)
-                # A navigation tap leaves the proof prompt. raw_state is already
+                # Navigation leaves a proof or team edit prompt. raw_state is already
                 # provided by FSM middleware; ordinary callbacks add no reads.
-                if data.get("raw_state") == "RewardSubmission:evidence" and not (event.data or "").startswith("rewards:"):
+                data_text = event.data or ""
+                cancel_prompt = (
+                    data.get("raw_state") == "RewardSubmission:evidence" and not data_text.startswith("rewards:")
+                    or data.get("raw_state") == "TournamentTeamEdit:value" and not data_text.startswith("tr:team-retry:")
+                )
+                if cancel_prompt:
                     state = data.get("state")
                     if state is not None:
                         await state.clear()

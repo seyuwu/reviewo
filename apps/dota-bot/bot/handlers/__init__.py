@@ -13,6 +13,7 @@ from .referral_sharing import router as referral_sharing_router
 from .registration import router as registration_router
 from .search import router as search_router
 from .tournaments import router as tournaments_router
+from .tournament_team_edit import router as tournament_team_edit_router
 from .tournament_recruitment import router as tournament_recruitment_router
 from .tournament_applications import router as tournament_applications_router
 from .tournament_companies import router as tournament_companies_router
@@ -24,6 +25,7 @@ router.include_routers(
     tournament_applications_router,
     tournament_companies_router,
     tournament_recruitment_router,
+    tournament_team_edit_router,
     tournaments_router,
     party_rooms_router,
     admin_router,

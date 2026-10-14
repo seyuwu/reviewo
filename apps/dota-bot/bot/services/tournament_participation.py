@@ -173,6 +173,7 @@ def company_menu(storage, user_id, context, result, settings):
     if entry.get("isCaptain") and entry_hex:
         username = getattr(settings, "main_bot_username", "FDPdotabot")
         rows.append([InlineKeyboardButton(text="📋 Пригласить друзей", copy_text=CopyTextButton(text=f"https://t.me/{username}?start=te_{entry_hex}"))])
+        rows.append([InlineKeyboardButton(text="✏️ Название и описание", callback_data=tournament_callback("team-edit", context["eventHex"]))])
     if count >= 2:
         token = uuid4().hex
         storage.set_choices(user_id, "company_consent", [{"token": token, "eventHex": context["eventHex"],
@@ -248,6 +249,7 @@ def tournament_status_keyboard(result: dict, context: dict, settings: Settings) 
             rows.append([InlineKeyboardButton(text="📋 Пригласить друзей", copy_text=CopyTextButton(text=invitation))])
         entry = result.get("entry") or {}
         if entry.get("isCaptain"):
+            rows.append([InlineKeyboardButton(text="✏️ Название и описание", callback_data=tournament_callback("team-edit", event_hex))])
             rows.append([InlineKeyboardButton(text="📨 Заявки в команду", callback_data=tournament_callback("requests", event_hex))])
         if entry.get("isCaptain") and len(entry.get("members") or []) < 5:
             if entry.get("canLeave"):
