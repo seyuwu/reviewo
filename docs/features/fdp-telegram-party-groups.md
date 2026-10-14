@@ -343,3 +343,12 @@ Four isolated PostgreSQL tests cover the reported rejection, mutual consent,
 changed selections under the transactional reread, captain transfer and
 persistence of the remaining selected roles. API compilation and ESLint passed.
 The full local API runner passed 320 tests.
+
+Production rollout used `ac6c0b2ca3b0c268c148295951553893bf51ac5f`.
+The API candidate passed all 30 planner, PostgreSQL merge and coordination
+checks on a separate PostgreSQL 17 instance and private Docker network, which
+were removed afterward. PostgreSQL was backed up and the former API image kept
+for rollback before restarting only the API. Bot/web containers and saved reward
+settings were preserved. Runtime checks confirmed the exact image and corrected
+planner behavior, healthy API/web, no recent error markers or container restarts,
+and a fresh bot reward-sync cursor. The local test PostgreSQL was also stopped.
