@@ -275,7 +275,7 @@ export class RewardsService {
     return tx.giveaway.findUniqueOrThrow({ where: { id } });
   }
   private async lockWallet(tx: Tx, telegramId: string) {
-    await tx.rewardWallet.upsert({ where: { telegramId }, create: { telegramId }, update: {} });
+    await tx.rewardWallet.createMany({ data: [{ telegramId }], skipDuplicates: true });
     const [wallet] = await tx.$queryRaw<
       { balance: number }[]
     >`SELECT balance FROM community.reward_wallets WHERE telegram_id=${telegramId} FOR UPDATE`;
@@ -300,6 +300,23 @@ export class RewardsService {
         data: { balance: { increment: amount } }
       });
     return inserted.count > 0;
+  }
+  async firstTaskNotice(
+    tx: Tx,
+    telegramId: string,
+    ledgerKey: string,
+    payload: Prisma.InputJsonObject
+  ) {
+    // grant() holds this user's wallet lock, including across concurrent tasks.
+    // The indexed existence check also recognizes awards from earlier releases.
+    const inserted = await tx.$executeRaw`
+      INSERT INTO community.reward_notices (id,key,telegram_id,payload)
+      SELECT ${randomUUID()}::uuid,${`first-task:${telegramId}`},${telegramId},${JSON.stringify(payload)}::jsonb
+      WHERE NOT EXISTS (
+        SELECT 1 FROM community.reward_ledger
+        WHERE telegram_id=${telegramId} AND key<>${ledgerKey} AND amount>0 AND details ? 'ruleVersion'
+      ) ON CONFLICT (key) DO NOTHING`;
+    return inserted > 0;
   }
   async purchase(id: string, telegramId: string, input: PurchaseDto) {
     await this.requireEnabled();
@@ -648,22 +665,13 @@ export class RewardsService {
       currency: settings.currencyName,
       ruleVersion: task.updatedAt ?? 1
     });
-    if (credited && key === "profile_ready")
-      await tx.rewardNotice.createMany({
-        data: [
-          {
-            key: `award:${ledgerKey}`,
-            telegramId: id,
-            payload: {
-              kind: "award",
-              amount: task.amount,
-              title: task.title,
-              currency: settings.currencyName,
-              programName: settings.programName
-            }
-          }
-        ],
-        skipDuplicates: true
+    if (credited)
+      await this.firstTaskNotice(tx, id, ledgerKey, {
+        kind: "award",
+        amount: task.amount,
+        title: task.title,
+        currency: settings.currencyName,
+        programName: settings.programName
       });
     return credited;
   }

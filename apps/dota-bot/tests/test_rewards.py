@@ -9,11 +9,70 @@ from types import SimpleNamespace
 
 from cryptography.fernet import Fernet
 from bot.storage.database import BotStorage
-from bot.services.rewards_sync import initialize_stream, source_batch, acknowledge_profiles
+from bot.services.rewards_sync import initialize_stream, source_batch, acknowledge_profiles, deliver_reward_notice
+from bot.services.notifications import cleanup_temporary_messages
 from bot.services.rewards_ui import marina_phrase, reward_photo, save_reward_photo
 from bot.ui.keyboards import home_keyboard
 from bot.handlers.rewards import rewards, receive_task_evidence, RewardSubmission
 from bot.api.client import OpiniaApi
+
+
+class RewardNoticeTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.path = str(Path(self.folder.name) / "bot.db")
+        self.key = Fernet.generate_key()
+        self.storage = BotStorage(self.path, self.key)
+        self.storage.initialize()
+        self.bot = SimpleNamespace(send_message=AsyncMock(return_value=SimpleNamespace(
+            chat=SimpleNamespace(id=7), message_id=101)), delete_message=AsyncMock())
+        self.notice = {"id":"notice-id","telegramId":"7","payload":{
+            "kind":"award","amount":5,"currency":"танго","title":"Заполни игровой профиль",
+            "programName":"Танго от Марины"}}
+
+    async def asyncTearDown(self):
+        self.storage.close()
+        self.folder.cleanup()
+
+    async def test_first_task_notice_explains_completion_and_expires_in_ten_seconds(self):
+        before = datetime.now(UTC)
+        await deliver_reward_notice(self.bot, self.storage, self.notice)
+        text = self.bot.send_message.await_args.args[1]
+        self.assertIn("Выполнено задание «Заполни игровой профиль»", text)
+        self.assertIn("можно заработать ещё и выиграть призы", text)
+        self.assertTrue(text.endswith("Сообщение удалится через 10 секунд."))
+        at = self.storage._connection().execute("SELECT delete_at FROM temporary_messages").fetchone()[0]
+        self.assertAlmostEqual((datetime.fromisoformat(at)-before).total_seconds(), 10, delta=.5)
+        await deliver_reward_notice(self.bot, self.storage, self.notice)
+        self.bot.send_message.assert_awaited_once()
+
+    async def test_expiry_survives_restart_and_cleanup_deletes_the_actual_message(self):
+        await deliver_reward_notice(self.bot, self.storage, self.notice)
+        self.storage.close()
+        self.storage = BotStorage(self.path, self.key)
+        self.storage.initialize()
+        after = (datetime.now(UTC)+timedelta(seconds=11)).isoformat()
+        with patch("bot.storage.database.timestamp",return_value=after), \
+                patch("bot.services.notifications.asyncio.sleep",new=AsyncMock(side_effect=asyncio.CancelledError)):
+            with self.assertRaises(asyncio.CancelledError):
+                await cleanup_temporary_messages(self.bot,self.storage)
+        self.bot.delete_message.assert_awaited_once_with(7,101)
+        self.assertFalse(self.storage.is_temporary_message(7,101))
+
+    async def test_winner_notification_remains_available_for_claiming_the_prize(self):
+        self.notice["payload"] = {"kind":"winner","number":4,"prize":"Сокровищница","giveawayId":"giveaway-id"}
+        await deliver_reward_notice(self.bot,self.storage,self.notice)
+        self.assertIn("выиграл",self.bot.send_message.await_args.args[1])
+        self.assertFalse(self.storage.is_temporary_message(7,101))
+
+    async def test_requested_telegram_check_result_explains_the_name_and_expires(self):
+        self.notice["payload"] = {"kind":"tag_check","status":"MISSING","tag":"@FDPdotabot"}
+        await deliver_reward_notice(self.bot,self.storage,self.notice)
+        text = self.bot.send_message.await_args.args[1]
+        self.assertIn("не найден",text)
+        self.assertIn("имя или фамилию",text)
+        self.assertIn("@username не проверяется",text)
+        self.assertTrue(self.storage.is_temporary_message(7,101))
 
 
 class RewardsTransportTests(unittest.IsolatedAsyncioTestCase):
@@ -223,3 +282,29 @@ class RewardScreenTests(unittest.IsolatedAsyncioTestCase):
         await self.visit("rewards:tag:steam")
         self.assertEqual(self.posts,[])
         self.assertIn("Steam убрано",self.edit.call_args.args[6])
+
+    async def test_task_descriptions_are_underlined_and_mascot_copy_is_removed(self):
+        description = "Приглашённый друг начал пользоваться поиском или пати."
+        self.page["tasks"] = [{"key":"referral_active","title":"Пригласи друга","description":description,
+                               "amount":15,"period":"friend","condition":"referral_active","completed":False}]
+        for action in ("rewards:earn:0","rewards:task:referral_active"):
+            call = await self.visit(action)
+            self.assertIn("<u>"+description+"</u>",call.args[6])
+            self.assertNotIn("Марина:",call.args[6])
+            self.assertNotIn("Привет!",call.args[6])
+
+    async def test_telegram_check_request_explains_the_automatic_result_and_offers_refresh(self):
+        call = await self.visit("rewards:tag:telegram")
+        self.assertEqual(self.posts,[{"provider":"telegram"}])
+        self.assertIn("Результат придёт отдельным сообщением",call.args[6])
+        self.assertIn("@username не проверяется",call.args[6])
+        callbacks = [button.callback_data for row in call.args[7].inline_keyboard for button in row]
+        self.assertIn("rewards:tag-status:telegram",callbacks)
+
+    async def test_telegram_status_refresh_shows_each_result_without_restarting_the_check(self):
+        for status,text in (("PENDING","Проверка в очереди"),("VERIFIED","Тег найден"),
+                            ("MISSING","Тег не найден"),("ERROR","Telegram временно не ответил")):
+            self.page["tags"] = [{"provider":"telegram","status":status,"firstSeenAt":None,"checkedAt":None}]
+            call = await self.visit("rewards:tag-status:telegram")
+            self.assertIn(text,call.args[6])
+        self.assertEqual(self.posts,[])

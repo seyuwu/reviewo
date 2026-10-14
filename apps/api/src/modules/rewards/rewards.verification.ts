@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import { randomInt } from "node:crypto";
 import { RewardsService } from "./rewards.service.js";
 import { activeTask, containsTag } from "./rewards.rules.js";
@@ -7,12 +7,18 @@ import { activeTask, containsTag } from "./rewards.rules.js";
 export class RewardVerificationService {
   constructor(private readonly rewards: RewardsService) {}
   async enroll(telegramId: string, provider: string) {
-    await this.rewards.requireEnabled();
+    const program = await this.rewards.requireEnabled();
     if (provider !== "telegram") throw new BadRequestException("Задание Steam убрано");
+    if (
+      !Object.values(program.settings.tasks).some(
+        (task) => activeTask(task) && task.condition === "telegram_tag"
+      )
+    )
+      throw new ConflictException("Задание проверки Telegram выключено");
     await this.rewards.prisma.rewardTagVerification.upsert({
       where: { telegramId_provider: { telegramId, provider } },
       create: { telegramId, provider },
-      update: { nextCheckAt: new Date() }
+      update: { status: "PENDING", reason: null, nextCheckAt: new Date() }
     });
     return { pending: true };
   }
@@ -79,6 +85,21 @@ export class RewardVerificationService {
           });
           if (found && first)
             await this.rewards.creditVerifiedTags(tx, row.telegramId, first, now, p.settings);
+          if (row.status === "PENDING")
+            await tx.rewardNotice.createMany({
+              data: [
+                {
+                  key: `tag-check:${row.id}:${row.nextCheckAt.toISOString()}`,
+                  telegramId: row.telegramId,
+                  payload: {
+                    kind: "tag_check",
+                    status: found ? "VERIFIED" : "MISSING",
+                    tag: p.settings.tag
+                  }
+                }
+              ],
+              skipDuplicates: true
+            });
         });
       } catch {
         // Never log provider URLs/tokens, and do not interpret outages as missing tags.
@@ -90,6 +111,17 @@ export class RewardVerificationService {
             nextCheckAt: new Date(Date.now() + 30 * 60000)
           }
         });
+        if (row.status === "PENDING")
+          await this.rewards.prisma.rewardNotice.createMany({
+            data: [
+              {
+                key: `tag-check:${row.id}:${row.nextCheckAt.toISOString()}`,
+                telegramId: row.telegramId,
+                payload: { kind: "tag_check", status: "ERROR", tag: p.settings.tag }
+              }
+            ],
+            skipDuplicates: true
+          });
       }
     }
   }

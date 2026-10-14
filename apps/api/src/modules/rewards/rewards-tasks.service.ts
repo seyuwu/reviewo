@@ -249,7 +249,7 @@ export class RewardsTasksService {
     };
   }
   async review(id: string, approved: boolean, reason: string, actor: string) {
-    await this.rewards.requireEnabled();
+    const program = await this.rewards.requireEnabled();
     if (!reason.trim()) throw new BadRequestException("Укажите причину решения");
     return this.rewards.prisma.$transaction(async (tx) => {
       const found = await tx.$queryRaw<
@@ -305,23 +305,39 @@ export class RewardsTasksService {
           }
         }
       });
-      await tx.rewardNotice.createMany({
-        data: [
+      const welcome =
+        credited &&
+        (await this.rewards.firstTaskNotice(
+          tx,
+          row.telegramId,
+          `${row.taskKey}:${row.telegramId}:${row.periodKey}`,
           {
-            key: `task-review:${id}:${row.submittedAt.toISOString()}`,
-            telegramId: row.telegramId,
-            payload: {
-              kind: "task_review",
-              approved,
-              title: rule.title,
-              amount: result.awardedAmount,
-              currency: rule.currencyName,
-              reason: reason.trim()
-            }
+            kind: "award",
+            amount: result.awardedAmount,
+            title: rule.title,
+            currency: rule.currencyName,
+            programName: program.settings.programName,
+            reason: reason.trim()
           }
-        ],
-        skipDuplicates: true
-      });
+        ));
+      if (!welcome)
+        await tx.rewardNotice.createMany({
+          data: [
+            {
+              key: `task-review:${id}:${row.submittedAt.toISOString()}`,
+              telegramId: row.telegramId,
+              payload: {
+                kind: "task_review",
+                approved,
+                title: rule.title,
+                amount: result.awardedAmount,
+                currency: rule.currencyName,
+                reason: reason.trim()
+              }
+            }
+          ],
+          skipDuplicates: true
+        });
       return result;
     });
   }

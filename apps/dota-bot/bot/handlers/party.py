@@ -11,6 +11,7 @@ from ..api.client import ApiError, OpiniaApi
 from ..config import Settings
 from ..services.callbacks import acknowledge_callback
 from ..services.panel import begin_panel_transition, edit_panel, edit_panel_content
+from ..services.panel_activity import panel_repost_lock
 from ..storage.database import BotStorage
 from ..services.party_notifications import deliver_join_hint, deliver_member_joined_notice
 from ..services.temporary_notifications import send_temporary_notification
@@ -204,6 +205,9 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
             )
             return True
         if event_type == "party_updated":
+            panel_before = storage.get_panel(telegram_user_id)
+            publication_lock = panel_repost_lock(telegram_user_id)
+            revision = publication_lock.revision
             parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
             live_parties = parties.get("parties") or []
             if parties.get("party"):
@@ -214,8 +218,12 @@ async def send_party_notification(bot, settings, storage, api, row: dict) -> boo
             active = parties.get("party") or ((parties.get("parties") or [None])[-1])
             # Membership is authoritative: a delayed event for an old party
             # must not replace the user's current party panel with the home screen.
-            screen = "party" if active else "home"
-            await edit_panel(bot, storage, api, settings, telegram_user_id, screen)
+            screen = ("party_settings" if panel_before and panel_before.screen == "party_settings" else "party") if active else "home"
+            # Background roster updates may refresh the open party view, but
+            # must not navigate away from another tab or a newer user action.
+            if (panel_before and panel_before.screen in {"party", "party_settings", "recruiting"}
+                    and publication_lock.revision == revision):
+                await edit_panel(bot, storage, api, settings, telegram_user_id, screen)
             if active and active.get("kind") == "PARTY" and active.get("memberCount", 0) > 1:
                 await deliver_join_hint(bot, api, storage, telegram_user_id, settings.site_url, active["slug"])
             return True

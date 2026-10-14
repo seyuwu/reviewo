@@ -68,6 +68,72 @@ describe("Rewards with isolated PostgreSQL", { skip: !url }, () => {
     (await db.rewardWallet.findUnique({ where: { telegramId: id } }))?.balance ?? 0;
   const fund = async (amount = 100, id = "101") =>
     db.$transaction((tx) => service.grant(tx, id, "fixture", `fixture:${id}`, amount));
+  it("welcomes only the first completed task when the profile task is disabled", async () => {
+    await taskService.save(
+      "profile_ready",
+      { ...DEFAULT_SETTINGS.tasks["profile_ready"]!, enabled: false },
+      "admin"
+    );
+    await service.ingest([
+      { id: "welcome:create", telegramId: "101", kind: "party_created", occurredAt: at() },
+      { id: "welcome:join", telegramId: "101", kind: "party_joined", occurredAt: at() },
+      { id: "welcome:profile", telegramId: "101", kind: "account_ready", occurredAt: at() }
+    ]);
+    await service.processBatch();
+    assert.equal(await balance(), 10);
+    const notices = await db.rewardNotice.findMany();
+    assert.equal(notices.length, 1);
+    assert.equal(notices[0]!.key, "first-task:101");
+    assert.equal(
+      (notices[0]!.payload as { title: string }).title,
+      DEFAULT_SETTINGS.tasks["daily_party"]!.title
+    );
+    await service.ingest([
+      { id: "welcome:repeat", telegramId: "101", kind: "party_joined", occurredAt: at() }
+    ]);
+    await service.processBatch();
+    assert.equal(await db.rewardNotice.count(), 1);
+  });
+  it("does not repeat a welcome already sent by an earlier release", async () => {
+    await service.ingest([
+      { id: "legacy:profile", telegramId: "101", kind: "account_ready", occurredAt: at() }
+    ]);
+    await service.processBatch();
+    await db.rewardNotice.updateMany({
+      data: { key: "award:profile_ready:101:once", sentAt: new Date() }
+    });
+    await service.ingest([
+      { id: "legacy:party", telegramId: "101", kind: "party_created", occurredAt: at() }
+    ]);
+    await service.processBatch();
+    assert.equal(await db.rewardNotice.count(), 1);
+    assert.equal(await db.rewardNotice.count({ where: { sentAt: null } }), 0);
+  });
+  it("serializes first-task notices for concurrent approvals of different tasks", async () => {
+    const first = await taskService.save(null, customTask({ condition: "manual" }), "admin");
+    const second = await taskService.save(null, customTask({ condition: "manual" }), "admin");
+    const submissions = await Promise.all([
+      taskService.submit(first.key, "202", "Первое подтверждение"),
+      taskService.submit(second.key, "202", "Второе подтверждение")
+    ]);
+    await Promise.all(
+      submissions.map((submission) => {
+        assert.ok("id" in submission);
+        return taskService.review(submission.id!, true, "Проверено", "admin");
+      })
+    );
+    assert.equal(await balance("202"), 26);
+    const notices = await db.rewardNotice.findMany();
+    assert.equal(
+      notices.filter((notice) => (notice.payload as { kind: string }).kind === "award").length,
+      1
+    );
+    assert.equal(
+      notices.filter((notice) => (notice.payload as { kind: string }).kind === "task_review")
+        .length,
+      1
+    );
+  });
   async function giveaway(maxTickets = 10) {
     const g = await service.createGiveaway(
       {
@@ -367,6 +433,10 @@ describe("Rewards with isolated PostgreSQL", { skip: !url }, () => {
       await check.checkBatch();
       assert.equal(await balance(), 10);
       assert.equal((await db.rewardTagVerification.findFirstOrThrow()).status, "ERROR");
+      assert.equal(await db.rewardNotice.count(), 1);
+      await db.rewardTagVerification.updateMany({ data: { nextCheckAt: new Date() } });
+      await check.checkBatch();
+      assert.equal(await db.rewardNotice.count(), 1); // Background retries do not notify again.
       assert.equal(
         (await db.rewardTagVerification.findFirstOrThrow()).firstSeenAt?.getTime(),
         campaign.getTime()
@@ -378,6 +448,51 @@ describe("Rewards with isolated PostgreSQL", { skip: !url }, () => {
       if (old) process.env["DOTA_BOT_TOKEN"] = old;
       else delete process.env["DOTA_BOT_TOKEN"];
     }
+  });
+  it("reports an explicit Telegram check and keeps periodic checks quiet", async () => {
+    const check = new RewardVerificationService(service);
+    await db.rewardTagVerification.create({
+      data: { telegramId: "101", provider: "telegram", status: "MISSING" }
+    });
+    await check.enroll("101", "telegram");
+    assert.equal((await db.rewardTagVerification.findFirstOrThrow()).status, "PENDING");
+    const old = process.env["DOTA_BOT_TOKEN"];
+    process.env["DOTA_BOT_TOKEN"] = "qa-token";
+    let name = "QA @FDPdotabot";
+    const mocked = mock.method(
+      globalThis,
+      "fetch",
+      async () => new Response(JSON.stringify({ ok: true, result: { id: 101, first_name: name } }))
+    );
+    try {
+      await check.checkBatch();
+      assert.equal((await db.rewardTagVerification.findFirstOrThrow()).status, "VERIFIED");
+      assert.equal(await balance(), 0); // The hold period has only just started.
+      assert.equal(await db.rewardNotice.count(), 1);
+      await db.rewardTagVerification.updateMany({ data: { nextCheckAt: new Date() } });
+      await check.checkBatch();
+      assert.equal(await db.rewardNotice.count(), 1);
+      name = "QA";
+      await check.enroll("101", "telegram");
+      await check.checkBatch();
+      assert.equal((await db.rewardTagVerification.findFirstOrThrow()).status, "MISSING");
+      assert.equal(await db.rewardNotice.count(), 2);
+    } finally {
+      mocked.mock.restore();
+      if (old) process.env["DOTA_BOT_TOKEN"] = old;
+      else delete process.env["DOTA_BOT_TOKEN"];
+    }
+  });
+  it("rejects requests for a disabled Telegram task without creating a check", async () => {
+    await taskService.save(
+      "telegram_tag",
+      { ...DEFAULT_SETTINGS.tasks["telegram_tag"]!, enabled: false },
+      "admin"
+    );
+    await assert.rejects(new RewardVerificationService(service).enroll("101", "telegram"), {
+      status: 409
+    });
+    assert.equal(await db.rewardTagVerification.count(), 0);
   });
   it("awards a week once for seven distinct Moscow days", async () => {
     const monday = new Date(`${moscowWeek(new Date())}T12:00:00+03:00`);

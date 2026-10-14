@@ -9,8 +9,48 @@ import aiohttp
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from .telegram_session import RetryingAiohttpSession
+from .temporary_notifications import send_temporary_notification
 
 logger = logging.getLogger(__name__)
+
+
+async def deliver_reward_notice(bot, storage, notice):
+    notice_id = "rewards:" + notice["id"]
+    if storage.has_delivered_notification(notice_id):
+        return
+    payload = notice["payload"]
+    temporary = payload.get("kind") in {"award", "tag_check"}
+    if payload.get("kind") == "tag_check":
+        tag = escape(payload["tag"])
+        if payload["status"] == "VERIFIED":
+            text = f"✅ Тег <code>{tag}</code> найден в имени Telegram.\n\nНаграда начислится после срока удержания, указанного в задании."
+        elif payload["status"] == "MISSING":
+            text = f"Тег <code>{tag}</code> не найден.\n\nДобавь его в имя или фамилию профиля Telegram и проверь снова. @username не проверяется."
+        else:
+            text = "Telegram временно не ответил на проверку. Повторим автоматически; статус доступен в задании."
+        text += "\n\nСообщение удалится через 10 секунд."
+        target = "rewards:tag-status:telegram"
+    elif payload.get("kind") == "task_review":
+        text = (f"✅ Задание подтверждено: {escape(payload['title'])}\n+{payload['amount']} {escape(payload['currency'])}"
+                if payload["approved"] else f"Заявка отклонена: {escape(payload['title'])}")
+        text += "\n\n" + escape(payload.get("reason", ""))
+        target = "rewards:earn:0"
+    elif payload.get("kind") == "winner":
+        text = f"🎉 Твой билет №{payload['number']} выиграл!\n\n{escape(payload['prize'])}\n\nАдминистратор свяжется с тобой для выдачи приза."
+        target = f"rewards:raffle:{payload['giveawayId']}"
+    else:
+        text = f"☘️ +{payload['amount']} {escape(payload['currency'])}\nВыполнено задание «{escape(payload['title'])}»"
+        if payload.get("reason"):
+            text += "\n\n" + escape(payload["reason"])
+        text += f"\n\nВ разделе «{escape(payload['programName'])}» можно заработать ещё и выиграть призы.\n\nСообщение удалится через 10 секунд."
+        target = "rewards:home"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Открыть награды", callback_data=target)]])
+    if temporary:
+        await send_temporary_notification(bot, storage, int(notice["telegramId"]), int(notice["telegramId"]),
+                                          text, 10, parse_mode="HTML", reply_markup=keyboard)
+    else:
+        await bot.send_message(int(notice["telegramId"]), text, parse_mode="HTML", reply_markup=keyboard)
+    storage.remember_delivered_notification(notice_id)
 
 
 def initialize_stream(storage):
@@ -108,19 +148,7 @@ async def rewards_sync_worker(api, storage, settings):
                     delivered=storage.has_delivered_notification(notice_id)
                     try:
                         if not delivered:
-                            payload=notice["payload"]
-                            if payload.get("kind") == "task_review":
-                                text = (f"✅ Задание подтверждено: {escape(payload['title'])}\n+{payload['amount']} {escape(payload['currency'])}" if payload["approved"] else f"Заявка отклонена: {escape(payload['title'])}")
-                                text += "\n\n" + escape(payload.get("reason", ""))
-                                target = "rewards:earn:0"
-                            elif payload.get("kind")=="winner":
-                                text=f"🎉 Твой билет №{payload['number']} выиграл!\n\n{escape(payload['prize'])}\n\nАдминистратор свяжется с тобой для выдачи приза."
-                                target=f"rewards:raffle:{payload['giveawayId']}"
-                            else:
-                                text=f"☘️ +{payload['amount']} {escape(payload['currency'])}\n{escape(payload['title'])}\n\nВ разделе «{escape(payload['programName'])}» можно заработать ещё и купить билеты."
-                                target="rewards:home"
-                            await notice_bot.send_message(int(notice["telegramId"]),text,parse_mode="HTML",reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Открыть награды",callback_data=target)]]))
-                            storage.remember_delivered_notification(notice_id)
+                            await deliver_reward_notice(notice_bot, storage, notice)
                             delivered=True
                     except asyncio.CancelledError:
                         raise

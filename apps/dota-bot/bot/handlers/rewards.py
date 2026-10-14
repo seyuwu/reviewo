@@ -90,7 +90,7 @@ async def rewards(callback: CallbackQuery, bot, api, storage, settings, state):
             for task in tasks[number*3:number*3+3]:
                 status = "✅" if task["completed"] else "☘️"
                 text += f"\n{status} {escape(task['title'][:60])}: <b>+{task['amount']}</b>\n"
-                text += escape(task.get("description", "")[:70]) + "\n"
+                text += "<u>" + escape(task.get("description", "")[:70]) + "</u>\n"
                 submission = task.get("submission")
                 if submission and submission["status"] == "PENDING":
                     submitted_amount = (submission.get("rule") or {}).get("amount", task["amount"])
@@ -112,10 +112,10 @@ async def rewards(callback: CallbackQuery, bot, api, storage, settings, state):
                 raise ApiError("Задание больше не доступно. Открой список заново.")
             if action == "conditions":
                 await send_temporary_notification(bot, storage, user, callback.message.chat.id,
-                    f"<b>{escape(task['title'])}</b>\n\n{escape(task.get('description', ''))}", 120, parse_mode="HTML")
+                    f"<b>{escape(task['title'])}</b>\n\n<u>{escape(task.get('description', ''))}</u>", 120, parse_mode="HTML")
             condition = task.get("condition", task_key)
             labels = {"once":"Один раз", "day":"Раз в день, по Москве", "week":"Раз в неделю, по Москве", "friend":"За каждого нового друга"}
-            text = f"<b>{escape(task['title'][:80])}</b>\n\n{escape(task.get('description', '')[:420])}\n\nНаграда: <b>+{task['amount']} {currency}</b>\n{labels.get(task['period'], '')}\n"
+            text = f"<b>{escape(task['title'][:80])}</b>\n\n<u>{escape(task.get('description', '')[:420])}</u>\n\nНаграда: <b>+{task['amount']} {currency}</b>\n{labels.get(task['period'], '')}\n"
             if task["completed"] and task["period"] != "friend":
                 text += "\n✅ Уже выполнено за этот период."
             elif condition == "manual":
@@ -144,15 +144,39 @@ async def rewards(callback: CallbackQuery, bot, api, storage, settings, state):
                     labels = {"PENDING":"Проверка в очереди", "VERIFIED":"Тег найден", "MISSING":"Тег пока не найден", "ERROR":"Проверка недоступна; повторим позже"}
                     text += "\n" + labels.get(verification["status"], "На проверке")
                 rows.append([key("Проверить имя Telegram", "rewards:tag:telegram")])
+                rows.append([key("Статус проверки", "rewards:tag-status:telegram")])
             if len(task.get("description", "")) > 420:
                 rows.append([key("Полные условия", "rewards:conditions:" + task_key)])
             rows.append([key("← Задания", "rewards:earn:0")])
-        elif action == "tag":
+        elif action in {"tag", "tag-status"}:
             scene = "earn"
             if parts[2] != "telegram":
                 raise ApiError("Задание Steam убрано. Открой актуальный список заданий.")
-            await api.user(user, "POST", "/rewards/tags", {"provider":"telegram"})
-            text = f"<b>Тег в имени Telegram</b>\n\nДобавь <code>{escape(config['tag'])}</code> в имя профиля. Проверка поставлена в очередь.\n\nСрок удержания указан в условиях задания. Уберёшь тег — новые начисления остановятся."
+            tag = escape(config["tag"])
+            text = f"<b>Тег в имени Telegram</b>\n\nДобавь <code>{tag}</code> в имя или фамилию профиля. @username не проверяется.\n\n"
+            if action == "tag":
+                await api.user(user, "POST", "/rewards/tags", {"provider":"telegram"})
+                text += "⏳ Проверка запущена автоматически. Результат придёт отдельным сообщением. Заявка админу не требуется."
+            else:
+                verification = next((row for row in page.get("tags", []) if row["provider"] == "telegram"), None)
+                status = (verification or {}).get("status")
+                if status == "VERIFIED":
+                    text += "✅ Тег найден."
+                    if verification.get("firstSeenAt"):
+                        text += " Наблюдение с " + when(verification["firstSeenAt"]) + "."
+                    text += " Награда начислится по сроку удержания из условий задания."
+                elif status == "MISSING":
+                    text += "Тег не найден в имени или фамилии. После изменения имени нажми «Проверить снова»."
+                elif status == "ERROR":
+                    text += "⏳ Telegram временно не ответил. Повторим автоматически; можно запустить проверку снова."
+                elif status == "PENDING":
+                    text += "⏳ Проверка в очереди. Результат появится здесь и придёт отдельным сообщением."
+                else:
+                    text += "Проверка ещё не запускалась."
+                if verification and verification.get("checkedAt"):
+                    text += "\nПоследняя проверка: " + when(verification["checkedAt"])
+                rows.append([key("Проверить снова", "rewards:tag:telegram")])
+            rows.append([key("Обновить статус", "rewards:tag-status:telegram")])
             rows.append([key("← Задания", "rewards:earn:0")])
         elif action == "history":
             scene = "history"
@@ -230,7 +254,8 @@ async def rewards(callback: CallbackQuery, bot, api, storage, settings, state):
         else:
             raise ValueError("Unknown reward screen")
         phrase_scene = "raffle" if scene in {"raffle","confirm","tickets"} else scene
-        text += "\n" + marina_phrase(storage,user,config,phrase_scene)
+        if scene != "earn":
+            text += "\n" + marina_phrase(storage,user,config,phrase_scene)
         # Configured titles/phrases have API limits; avoid malformed HTML truncation.
         if len(text)>1024:
             text = text.rsplit("\n",1)[0]

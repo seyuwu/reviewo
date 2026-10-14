@@ -294,3 +294,22 @@ and restarting recruitment for exactly the freed position. The local diagnostic
 replay additionally exercises the real API service and PostgreSQL removal and
 replacement membership. This correction is prepared locally; production rollout
 is a separate step.
+
+## Navigation after deleting a party (14 October 2026)
+
+The delayed `party_updated` notification previously fetched the current
+membership and unconditionally opened `home` when the deleted party was gone.
+That could replace an account or other tab opened in the meantime. The same
+effect happened if the background membership request started before navigation
+and finished afterward.
+
+The handler now captures the existing panel and its publication generation
+before the membership request. It refreshes only an open party view with the
+same generation. An open settings view stays on settings while the party exists;
+deletion still closes a party view that the user has not left. Notice cleanup
+continues even when refreshing the panel is skipped. This adds no API requests
+or database queries to navigation.
+
+`tests/test_party_deleted_navigation.py` reproduced two failures before the fix
+and now checks delayed notification delivery, navigation during the lookup,
+reopening a new party, settings preservation, and closing the deleted party view.
