@@ -22,6 +22,18 @@ _interaction: ContextVar[PanelInteraction | None] = ContextVar("panel_interactio
 _repost_locks: WeakValueDictionary = WeakValueDictionary()
 
 
+class PanelPublicationLock(asyncio.Lock):
+    """Keep a render generation alive only while its per-user lock is in use."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.revision = 0
+
+    def begin_update(self) -> int:
+        self.revision += 1
+        return self.revision
+
+
 @contextmanager
 def private_panel_interaction(user_id):
     interaction = PanelInteraction(user_id)
@@ -74,6 +86,6 @@ def panel_repost_due(storage, user_id):
 def panel_repost_lock(user_id):
     lock = _repost_locks.get(user_id)
     if lock is None:
-        lock = asyncio.Lock()
+        lock = PanelPublicationLock()
         _repost_locks[user_id] = lock
     return lock

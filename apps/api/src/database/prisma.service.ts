@@ -9,7 +9,8 @@ import type { EnvironmentVariables } from "../config/environment.validation.js";
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor(configService: ConfigService<EnvironmentVariables, true>) {
     const adapter = new PrismaPg({
-      connectionString: configService.get("DATABASE_URL", { infer: true })
+      connectionString: configService.get("DATABASE_URL", { infer: true }),
+      options: "-c timezone=UTC"
     });
 
     super({ adapter });

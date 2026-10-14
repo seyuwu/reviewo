@@ -272,3 +272,25 @@ Before enabling real usage, connect one group and exercise joining, a forwarded
 invitation from a nonmember, leaving FDP, leaving only Telegram, rejoining, link
 rotation, party deletion, restart recovery and incomplete-cleanup quarantine.
 Then connect the remaining groups and increase the working limit if needed.
+
+## Private party cards after roster changes
+
+The 2026-10-14 regression scenario is a full 5/5 party followed by the last
+participant leaving: the captain must see 4/5, a free position and working
+recruitment controls. An old render waiting for an image and an old search timer
+could previously overwrite the newer card. Combining a newer coordination
+response with the older member list also preserved the departed player.
+
+Private panel publication now checks a per-user render generation under its
+existing lock. Loading transitions and timer writes participate in the same
+generation, so obsolete results cannot restore an old roster or old controls.
+The later coordination response supplies the member list and recalculated
+capacity; the caption, buttons and image cache use that same snapshot. These
+checks run in memory and add no API requests to the normal search flow.
+
+`tests/test_party_roster_refresh.py` covers leaving between the two API reads,
+delayed image rendering, delayed timer publication, image/cache consistency,
+and restarting recruitment for exactly the freed position. The local diagnostic
+replay additionally exercises the real API service and PostgreSQL removal and
+replacement membership. This correction is prepared locally; production rollout
+is a separate step.

@@ -23,7 +23,7 @@ FROM base AS production
 ENV NODE_ENV=production
 ENV APP_NAME=api
 
-RUN corepack pnpm build
+RUN corepack pnpm --filter @reviewo/api... build
 
 USER node
 

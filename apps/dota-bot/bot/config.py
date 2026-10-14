@@ -19,6 +19,7 @@ class Settings:
     party_rooms_enabled: bool = False
     room_worker_only: bool = False
     main_bot_username: str = "FDPdotabot"
+    rewards_enabled: bool = False
 
 
 def load_settings() -> Settings:
@@ -53,6 +54,7 @@ def load_settings() -> Settings:
         party_rooms_enabled=os.getenv("DOTA_BOT_PARTY_ROOMS_ENABLED", "").strip().lower() in {"1", "true", "yes"},
         room_worker_only=os.getenv("DOTA_BOT_ROOM_WORKER_ONLY", "").strip().lower() in {"1", "true", "yes"},
         main_bot_username=main_bot_username,
+        rewards_enabled=os.getenv("DOTA_BOT_REWARDS_ENABLED", "").strip().lower() in {"1", "true", "yes"},
     )
 
 

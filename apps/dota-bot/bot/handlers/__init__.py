@@ -1,6 +1,7 @@
 from aiogram import Router
 
 from .website_login import router as website_login_router
+from .rewards import router as rewards_router
 from .admin import router as admin_router
 from .party_rooms import router as party_rooms_router
 from .account import router as account_router
@@ -19,6 +20,7 @@ from .tournament_companies import router as tournament_companies_router
 router = Router(name="dota-bot")
 router.include_routers(
     website_login_router,
+    rewards_router,
     tournament_applications_router,
     tournament_companies_router,
     tournament_recruitment_router,

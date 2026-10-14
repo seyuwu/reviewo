@@ -61,6 +61,8 @@ services:
       <<: *app-environment
       DOTA_BOT_TOKEN: ${DOTA_BOT_TOKEN:-}
       DOTA_BOT_USERNAME: ${DOTA_BOT_USERNAME:-FDPdotabot}
+      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      REWARDS_STEAM_RETURN_URL: ${REWARDS_STEAM_RETURN_URL:-https://api.opinia.ru/rewards/steam/callback}
     image: reviewo-api:${IMAGE_TAG:-local}
     build:
       context: .
@@ -172,6 +174,7 @@ services:
       DOTA_BOT_ENCRYPTION_KEY: ${DOTA_BOT_ENCRYPTION_KEY:-}
       DOTA_BOT_ADMIN_IDS: ${DOTA_BOT_ADMIN_IDS:-}
       DOTA_BOT_PARTY_ROOMS_ENABLED: ${DOTA_BOT_PARTY_ROOMS_ENABLED:-false}
+      DOTA_BOT_REWARDS_ENABLED: ${DOTA_BOT_REWARDS_ENABLED:-false}
       DOTA_BOT_ROOM_WORKER_ONLY: ${DOTA_BOT_ROOM_WORKER_ONLY:-false}
       TELEGRAM_BOT_API_SECRET: ${TELEGRAM_BOT_API_SECRET:-}
       TELEGRAM_PROXY: ${TELEGRAM_PROXY:-}

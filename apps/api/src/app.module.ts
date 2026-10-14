@@ -31,6 +31,7 @@ import { TrustModule } from "./modules/trust/trust.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
 import { DotaTournamentsModule } from "./modules/tournaments/tournaments.module.js";
 import { ReferralsModule } from "./modules/referrals/referrals.module.js";
+import { RewardsModule } from "./modules/rewards/rewards.module.js";
 
 import { RedisModule } from "./redis/redis.module.js";
 
@@ -65,6 +66,7 @@ import { RedisModule } from "./redis/redis.module.js";
     DotaTournamentsModule,
     AnalyticsModule,
     ReferralsModule,
+    RewardsModule,
     GrowthModule
   ],
   providers: [AppLogger, GlobalExceptionFilter]

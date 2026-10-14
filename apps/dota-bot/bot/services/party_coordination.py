@@ -41,9 +41,20 @@ async def enrich_party(api, storage, user_id, party):
     if coordination["id"] != party.get("id"):
         return party
     context = coordination_context(storage, user_id, coordination)
-    details = {member["userId"]: member for member in coordination["members"]}
+    previous_members = {member["userId"]: member for member in party["members"]}
     result = {**party, "coordinationAvailable": True, "coordinationToken": context["token"] if context else None}
-    result["members"] = [{**member, **details.get(member["userId"], {})} for member in party["members"]]
+    # The coordination read happens after the party read. Its roster may already
+    # contain a join/leave; merging into the old list kept departed players alive.
+    result["members"] = [
+        {"role": "OWNER" if member["userId"] == party.get("ownerUserId") else "MEMBER",
+         **previous_members.get(member["userId"], {}), **member}
+        for member in coordination["members"]
+    ]
+    result["memberCount"] = len(result["members"])
+    result["maxMembers"] = coordination["maxMembers"]
+    result["openSlots"] = max(0, result["maxMembers"] - result["memberCount"])
+    occupied = {str(member.get("positionRole")) for member in result["members"]}
+    result["recruitedRoles"] = [role for role in party.get("recruitedRoles", []) if str(role) not in occupied]
     return result
 
 

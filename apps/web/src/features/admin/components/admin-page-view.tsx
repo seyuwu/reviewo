@@ -146,6 +146,7 @@ export function AdminPageView() {
         <Link className="button-secondary" href="/admin/analytics">
           {t("web.admin.analytics.openPanel")}
         </Link>
+        <Link className="button-secondary" href="/admin/rewards">Награды и розыгрыши FDP</Link>
         <Link className="button-secondary" href="/admin/referrals">
           {t("web.admin.referrals.openPanel")}
         </Link>

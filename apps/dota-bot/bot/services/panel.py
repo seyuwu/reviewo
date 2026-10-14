@@ -23,6 +23,7 @@ from .temporary_notifications import send_temporary_notification
 from .search_timeout_notices import queue_solo_timeout, queue_recruit_timeout, search_reached_timeout
 from .start_links import bot_friend_invite_url
 from .registration_drafts import clear_registration_draft, registration_draft
+from .rewards_ui import save_reward_photo
 from .party_coordination import enrich_party, party_ping_context
 from .panel_activity import panel_age, panel_repost_due, panel_repost_lock
 from ..ui.formatters import party_text, profile_text
@@ -114,6 +115,8 @@ async def edit_panel(
     media_photo: str | BufferedInputFile | None = None,
     force_new_message: bool = False,
 ) -> None:
+    publication_lock = panel_repost_lock(telegram_user_id)
+    revision = publication_lock.begin_update()
     if screen == "recruiting":
         screen = "party"
     party_data = None
@@ -167,7 +170,11 @@ async def edit_panel(
 
     # Render and image fetching stay outside the per-user publication lock.
     # Serialize only Telegram writes and refresh the saved message after waiting.
-    async with panel_repost_lock(telegram_user_id):
+    async with publication_lock:
+        # A newer roster/navigation refresh can finish while this render waits
+        # for its image. Do not let the older response restore stale controls.
+        if publication_lock.revision != revision:
+            return
         panel = storage.get_panel(telegram_user_id)
         loading_panel = panel if panel and panel.screen == "loading" else None
         force_new_message = force_new_message or panel_repost_due(storage, telegram_user_id)
@@ -188,6 +195,7 @@ async def edit_panel(
                 )
                 storage.save_panel(telegram_user_id, loading_panel.chat_id, loading_panel.message_id, screen)
                 save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
+                save_reward_photo(storage, screen, message)
                 if is_default_panel_photo:
                     save_default_panel_file_id(storage, telegram_user_id, message)
                 return
@@ -212,6 +220,7 @@ async def edit_panel(
                 )
                 storage.save_panel(telegram_user_id, panel.chat_id, panel.message_id, screen)
                 save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
+                save_reward_photo(storage, screen, message)
                 if is_default_panel_photo:
                     save_default_panel_file_id(storage, telegram_user_id, message)
                 return
@@ -282,6 +291,7 @@ async def edit_panel(
         old_panel_age = panel_age(storage, telegram_user_id, panel_to_replace)
         storage.save_panel(telegram_user_id, message.chat.id, message.message_id, screen, is_photo)
         save_party_card_file_id(storage, telegram_user_id, party_card_key, message)
+        save_reward_photo(storage, screen, message)
         if is_default_panel_photo:
             save_default_panel_file_id(storage, telegram_user_id, message)
         if panel_to_replace and panel_to_replace.message_id != message.message_id:
@@ -304,7 +314,11 @@ async def edit_panel(
 
 
 async def begin_panel_transition(bot: Bot, storage: BotStorage, telegram_user_id: int, chat_id: int | None = None) -> None:
-    async with panel_repost_lock(telegram_user_id):
+    publication_lock = panel_repost_lock(telegram_user_id)
+    revision = publication_lock.begin_update()
+    async with publication_lock:
+        if publication_lock.revision != revision:
+            return
         await _begin_panel_transition(bot, storage, telegram_user_id, chat_id)
 
 
@@ -401,11 +415,15 @@ async def refresh_active_search_panels(
             for telegram_user_id in storage.session_user_ids():
                 if panel_update_guard and panel_update_guard.is_processing(telegram_user_id):
                     continue
+                publication_lock = panel_repost_lock(telegram_user_id)
+                revision = publication_lock.revision
                 search = storage.get_choice(telegram_user_id, "auto_search", 0) or {}
                 panel = storage.get_panel(telegram_user_id)
                 try:
                     if search.get("mode") == "looking":
                         profile = await api.user(telegram_user_id, "GET", "/dota/profiles/me")
+                        if publication_lock.revision != revision:
+                            continue
                         if not profile.get("looking"):
                             if profile.get("lfgTimedOut") and search_reached_timeout(storage, telegram_user_id, search):
                                 memberships = await api.user(telegram_user_id, "GET", "/social/parties/me")
@@ -436,6 +454,8 @@ async def refresh_active_search_panels(
                         if (not panel or panel.screen != "party") and not search_reached_timeout(storage, telegram_user_id, search):
                             continue
                         parties = await api.user(telegram_user_id, "GET", "/social/parties/me")
+                        if publication_lock.revision != revision:
+                            continue
                         if (storage.get_choice(telegram_user_id, "auto_search", 0) or {}) != search:
                             continue
                         party = parties.get("party") or ((parties.get("parties") or [None])[-1])
@@ -463,11 +483,14 @@ async def refresh_active_search_panels(
                     else:
                         continue
                     async def update_message() -> None:
-                        async with panel_repost_lock(telegram_user_id):
+                        async with publication_lock:
+                            if publication_lock.revision != revision:
+                                return
                             current_panel = storage.get_panel(telegram_user_id)
                             if (not current_panel or current_panel.chat_id != panel.chat_id
                                     or current_panel.message_id != panel.message_id or current_panel.screen != panel.screen):
                                 return
+                            publication_lock.begin_update()
                             if panel.is_photo:
                                 await bot.edit_message_caption(
                                     chat_id=panel.chat_id,
@@ -696,6 +719,8 @@ async def render_screen(
             site_url=settings.site_url,
             can_share=True,
             registration_pending=link_pending,
+            rewards_label=(getattr(api, "reward_program", None) or {}).get("settings", {}).get("programName")
+                if getattr(settings, "rewards_enabled", False) and (getattr(api, "reward_program", None) or {}).get("enabled") else None,
         )
 
     if screen == "looking":
@@ -785,6 +810,8 @@ async def render_screen(
         if not party:
             return "Вы пока не состоите в пати.", home_keyboard(True, False, site_url=settings.site_url, can_share=True)
         party = await enrich_party(api, storage, telegram_user_id, party)
+        # edit_panel uses this same snapshot to choose/cache the roster image.
+        my_parties["party"] = party
         pool = getattr(api, "party_rooms", None)
         if pool and pool.enabled and party.get("kind") == "PARTY":
             party["telegramRoomEnabled"] = True

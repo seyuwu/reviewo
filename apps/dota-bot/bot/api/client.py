@@ -26,6 +26,7 @@ class OpiniaApi:
         self.party_rooms = None
         self.rooms_session: aiohttp.ClientSession | None = None
         self.rooms_discord_session: aiohttp.ClientSession | None = None
+        self.reward_program: dict | None = None
 
     async def rooms_request(self, method: str, path: str, body: dict | None = None):
         session = self.rooms_discord_session if method == "POST" and path.endswith("/discord") else self.rooms_session

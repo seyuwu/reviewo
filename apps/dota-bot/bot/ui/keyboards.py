@@ -12,6 +12,7 @@ def home_keyboard(
     site_url: str = "https://dota.opinia.ru",
     can_share: bool = False,
     registration_pending: bool = False,
+    rewards_label: str | None = None,
 ) -> InlineKeyboardMarkup:
     first_label = "🔎 Ищу пати" if is_looking else "🎯 Ищу пати"
     first_action = "panel:looking" if is_looking else "search:looking"
@@ -25,6 +26,8 @@ def home_keyboard(
     rows.append([button(first_label, first_action), button(second_label, second_action)])
     rows.append([button("👤 Аккаунт", "panel:account")])
     rows.append([button("🏆 Турниры", "tournaments:list")])
+    if rewards_label:
+        rows.append([button(f"☘️ {rewards_label}", "rewards:home")])
     if can_share:
         rows.append([button("🔗 Пригласить друзей", "invite:friends")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -48,6 +51,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
             [button("👋 Сообщение после регистрации", "admin:registration")],
             [button("💬 Группы пати", "roomadmin:list:0")],
             [button("🔄 Обновить статистику", "admin:refresh")],
+            [button_url("☘️ Награды и розыгрыши", "https://dota.opinia.ru/admin/rewards")],
         ]
     )
 

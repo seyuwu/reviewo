@@ -29,6 +29,7 @@ from .services.tournament_participation import tournament_participation_worker
 from .services.party_rooms import PartyRooms
 from .services.party_room_journal import PartyRoomJournal
 from .services.referrals import referral_sync_worker
+from .services.rewards_sync import rewards_sync_worker
 from .services.log_safety import TelegramTokenRedactionFilter
 from .services.panel import (
     recover_loading_panels,
@@ -90,6 +91,8 @@ async def main() -> None:
                 )
             ),
         ])
+        if settings.rewards_enabled:
+            tasks.append(asyncio.create_task(rewards_sync_worker(api, storage, settings)))
 
     try:
         await bot.delete_webhook(drop_pending_updates=False)
