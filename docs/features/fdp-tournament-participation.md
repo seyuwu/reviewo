@@ -290,3 +290,11 @@ tournament rooms/participation tests passed, including a new check for captain
 rename permissions, entry isolation, retained description and frozen bracket
 names. The full bot run passed 270 tests; the final focused editor run passed
 12 tests, including the company captain and retrying a failed description clear.
+
+Production rollout on 2026-10-14 used code
+`4e5c17e271bc89308fc4deacf6eba0d02d234085`. The candidate bot image passed
+12 editor tests and 17 panel lifecycle tests. SQLite was backed up and the
+previous bot image retained before switching only the main bot. Saved reward
+settings were unchanged. Runtime verification confirmed the captain-only
+button, router order, stale-navigation guard and a fresh reward-sync cursor;
+API and web remained healthy. The isolated local PostgreSQL was stopped.
