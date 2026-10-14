@@ -313,3 +313,33 @@ or database queries to navigation.
 `tests/test_party_deleted_navigation.py` reproduced two failures before the fix
 and now checks delayed notification delivery, navigation during the lookup,
 reopening a new party, settings preservation, and closing the deleted party view.
+
+## Mutual position selection for automatic party merging (14 October 2026)
+
+An automatic merge requires every incoming member's occupied position to be
+selected in the opposite captain's current recruitment settings, in both
+directions. A carry on position 1 searching for 4 and 5 cannot merge with a
+party occupying 2 and 3. A matching support can merge only when their own party
+also searches for position 1. A partially matching group and an unassigned
+member are rejected. Existing capacity, position uniqueness, MMR, exclusions,
+invite and voice restrictions remain in force.
+
+Previously the planner checked only for nonempty recruitment and distinct
+occupied positions, so it admitted unrequested roles. The shared planner now
+checks the selections during candidate matching and again after the repository
+has locked and reread the parties and captain profiles. Changed recruitment
+between matching and commit cancels the merge without moving any members.
+
+After merging, recruitment retains the union of both captains' selected roles,
+minus occupied positions. It does not automatically enable every empty slot.
+When all selected positions are filled, recruitment stops even if fewer than
+five players remain. These checks use the existing snapshots, add no queries
+or network calls, and touch only temporary recruiting parties; ordinary solo
+admission and tournament/company application flows are unchanged. Previously
+merged production rosters are not modified or split by this correction.
+
+Seven regression cases failed before the fix; all 15 planner tests now pass.
+Four isolated PostgreSQL tests cover the reported rejection, mutual consent,
+changed selections under the transactional reread, captain transfer and
+persistence of the remaining selected roles. API compilation and ESLint passed.
+The full local API runner passed 320 tests.

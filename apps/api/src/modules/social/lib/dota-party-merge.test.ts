@@ -30,6 +30,55 @@ function party(
 }
 
 describe("planDotaPartyMerge", () => {
+  it("does not merge a carry searching for supports with a mid and offlane party", () => {
+    const carry = party("older", [["carry", "1"]], { recruitedRoles: ["4", "5"] });
+    const cores = party("newer", [["mid", "2"], ["offlane", "3"]], { recruitedRoles: ["1", "4", "5"] });
+    assert.equal(planDotaPartyMerge(carry, cores, now), null);
+    assert.equal(planDotaPartyMerge(cores, carry, now), null);
+  });
+
+  it("requires the other party to search for every incoming role too", () => {
+    const carry = party("older", [["carry", "1"]], { recruitedRoles: ["4", "5"] });
+    const support = party("newer", [["support", "4"]], { recruitedRoles: ["2", "3"] });
+    assert.equal(planDotaPartyMerge(carry, support, now), null);
+    assert.equal(planDotaPartyMerge(support, carry, now), null);
+  });
+
+  it("rejects a whole party when only one of its players matches the searched roles", () => {
+    const carry = party("older", [["carry", "1"]], { recruitedRoles: ["4", "5"] });
+    const mixed = party("newer", [["support", "4"], ["mid", "2"]], { recruitedRoles: ["1", "3", "5"] });
+    assert.equal(planDotaPartyMerge(carry, mixed, now), null);
+  });
+
+  it("merges mutually requested positions without enabling unrequested vacancies", () => {
+    const carry = party("older", [["carry", "1"]], { recruitedRoles: ["4", "5"] });
+    const support = party("newer", [["support", "4"]], { recruitedRoles: ["1", "5"] });
+    for (const [left, right] of [[carry, support], [support, carry]]) {
+      const plan = planDotaPartyMerge(left!, right!, now);
+      assert.equal(plan?.survivorPartyId, "older");
+      assert.deepEqual(plan?.recruitedRoles, ["5"]);
+    }
+  });
+
+  it("stops recruitment when all positions selected by either party are filled", () => {
+    const carry = party("older", [["carry", "1"]], { recruitedRoles: ["4", "5"] });
+    const supports = party("newer", [["soft", "4"], ["hard", "5"]], { recruitedRoles: ["1"] });
+    assert.deepEqual(planDotaPartyMerge(carry, supports, now)?.recruitedRoles, []);
+  });
+
+  it("retains remaining roles requested by either captain", () => {
+    const carry = party("older", [["carry", "1"]], { recruitedRoles: ["4", "5"] });
+    const support = party("newer", [["support", "4"]], { recruitedRoles: ["1", "2"] });
+    assert.deepEqual(planDotaPartyMerge(carry, support, now)?.recruitedRoles, ["2", "5"]);
+  });
+
+  it("does not merge players without a selected position", () => {
+    const carry = party("older", [["carry", "1"]]);
+    const unassigned = party("newer", [["unknown", null]]);
+    assert.equal(planDotaPartyMerge(carry, unassigned, now), null);
+    assert.equal(planDotaPartyMerge(unassigned, carry, now), null);
+  });
+
   it("does not return a former member through a merge, in either direction", () => {
     const older = party("older", [["a", "1"]], { blockedUserIds: ["b"] });
     const newer = party("newer", [["b", "2"]]);

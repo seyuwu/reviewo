@@ -36,7 +36,8 @@ const MAX_PARTY_MMR_SPREAD = DOTA_PARTY_RECRUIT_MMR_SPREAD * 2;
 
 /**
  * Plans a merge only for two active, open recruiting parties whose current
- * rosters can coexist. Each surviving vacancy becomes searchable after merge.
+ * rosters can coexist and each searches for every incoming player's position.
+ * Only previously requested vacancies remain searchable after merge.
  */
 export function planDotaPartyMerge(
   left: DotaPartyMergeCandidate,
@@ -93,6 +94,15 @@ export function planDotaPartyMerge(
     return null;
   }
 
+  // Free slots alone do not imply consent to recruit those positions. Check
+  // every incoming player against the opposite captain's current selection.
+  if (
+    right.members.some(({ positionRole }) => positionRole === null || !left.recruitedRoles.includes(positionRole)) ||
+    left.members.some(({ positionRole }) => positionRole === null || !right.recruitedRoles.includes(positionRole))
+  ) {
+    return null;
+  }
+
   const mmrBounds = [...left.mmrBounds, ...right.mmrBounds];
   if (
     mmrBounds.length !== members.length ||
@@ -114,14 +124,16 @@ export function planDotaPartyMerge(
     return null;
   }
 
-  // The older party keeps its URL and chat. Vacant roles remain in recruitment.
+  // The older party keeps its URL and chat. Preserve both captains' remaining
+  // requests without silently enabling positions neither captain selected.
   const survivor = comparePartyAge(left, right) <= 0 ? left : right;
   const retired = survivor.id === left.id ? right : left;
   const claimed = new Set(occupiedRoles);
+  const requested = new Set([...left.recruitedRoles, ...right.recruitedRoles]);
 
   return {
     leaderCandidates: [left.ownerUserId, right.ownerUserId],
-    recruitedRoles: DOTA_POSITION_ROLES.filter((role) => !claimed.has(role)),
+    recruitedRoles: DOTA_POSITION_ROLES.filter((role) => requested.has(role) && !claimed.has(role)),
     retiredPartyId: retired.id,
     retiredPartySlug: retired.slug,
     survivorPartyId: survivor.id
