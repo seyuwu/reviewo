@@ -377,11 +377,11 @@ settings were preserved. Runtime checks confirmed the exact image and corrected
 planner behavior, healthy API/web, no recent error markers or container restarts,
 and a fresh bot reward-sync cursor. The local test PostgreSQL was also stopped.
 
-## In-group Dota ID replies (15 October 2026, local only)
+## In-group Dota ID replies (15 October 2026)
 
-The user asked to batch this with later changes. Do not deploy or push until
-they request the combined release. The production bot still has the earlier
-private-entry flow until that release.
+The user initially asked to batch this with later changes, then explicitly
+authorized the combined production release. Deployment verification is recorded
+below; the original private-entry flow remains available as an alternative.
 
 When a player without a Dota ID clicks “Готов играть”, or clicks the shared
 card's “Указать Dota ID” button, the assigned room bot asks for an ID directly
@@ -435,13 +435,13 @@ complete Nest graph resolves the profile dependency and both new room routes
 without route collisions; no HTTP listener or real bot credentials are used.
 The earlier prepared Telegram task checks remain local alongside this change.
 
-## Complete tracked cleanup after party termination (15 October 2026, local only)
+## Complete tracked cleanup after party termination (15 October 2026)
 
-The lifecycle and two-phase cleanup described above are prepared locally with the
-in-group Dota ID and task-review changes. Nothing was pushed or deployed. A future
-combined release must update the API before every main/helper room worker: older
-workers cannot supply the new cleanup fence and post-cleanup poll proof, so rooms
-remain closing until their worker is updated.
+The lifecycle and two-phase cleanup described above shipped with the in-group
+Dota ID and task-review changes after the user's explicit combined-release request.
+Always update the API before every main/helper room worker: older workers cannot
+supply the new cleanup fence and post-cleanup poll proof, so rooms remain closing
+until their worker is updated.
 
 Regression tests first reproduced premature release and deletion-timeout failures.
 Coverage includes expiry, deletion/orphaning, merging, empty rosters, existing voice
@@ -463,3 +463,25 @@ HTTP pool; ordinary search and chat-message flows gain no network calls.
 Unknown old history still needs one initial owner cleanup. Telegram's 48-hour
 deletion limit and immutable group-creation notices remain platform limitations;
 the implementation never claims to enumerate or erase inaccessible history.
+
+### Production verification
+
+Release `9066fc40bdb3cac6636076318a8f6f89fd09e807` is running on API, web and
+the main bot after validated PostgreSQL/SQLite/configuration backups. The new
+additive rewards migration ran first, then the bot and web switched. Every
+registered room belongs to the main bot; there were no separate helper processes
+to update. No environment or room-capacity settings were changed.
+
+The built API image passed all 393 tests on isolated PostgreSQL 17, including
+the real room lifecycle transactions. The built bot passed 72 party tests with
+network disabled. Startup checks verified both router variants, Dota ID handlers,
+cleanup fence/retry/waiting code, fresh room-worker heartbeat and reward-sync
+cursor after restart. API/web are healthy with the expected images; containers
+have no restarts or checked error markers. Public health/rewards/search pages
+return 200. The existing pool remained at three active, one review and six free
+groups during verification. No real party was deleted or kicked for a smoke test.
+
+The pre-existing review group was not force-released. Initial unknown history and
+Telegram deletion limits still require the documented owner confirmation. Full
+release evidence, preservation checks and backup location are recorded in
+[the rewards release notes](fdp-rewards.md#совместная-выкладка-15-октября-2026).
