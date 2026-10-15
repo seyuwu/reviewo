@@ -51,6 +51,14 @@ class BotStorage:
             bot_id INTEGER PRIMARY KEY, update_id INTEGER NOT NULL DEFAULT 0,
             observed_at REAL NOT NULL DEFAULT 0, rooms TEXT NOT NULL DEFAULT '[]'
           );
+          CREATE TABLE IF NOT EXISTS temporary_ephemeral_messages (
+            bot_id INTEGER NOT NULL, chat_id INTEGER NOT NULL,
+            receiver_user_id INTEGER NOT NULL, ephemeral_message_id INTEGER NOT NULL,
+            delete_at TEXT NOT NULL,
+            PRIMARY KEY(bot_id,chat_id,receiver_user_id,ephemeral_message_id)
+          );
+          CREATE INDEX IF NOT EXISTS idx_temporary_ephemeral_due
+            ON temporary_ephemeral_messages(bot_id,delete_at);
         """)
         self.connection.execute("PRAGMA journal_mode=WAL")
         self.connection.execute("PRAGMA foreign_keys=ON")
@@ -1491,6 +1499,28 @@ class BotStorage:
             (timestamp(),),
         ).fetchall()
         return [(row["telegram_user_id"], row["chat_id"], row["message_id"]) for row in rows]
+
+    def add_temporary_ephemeral_message(self, bot_id: int, chat_id: int, receiver_user_id: int,
+                                      ephemeral_message_id: int, ttl_seconds: int) -> None:
+        delete_at = (datetime.now(UTC) + timedelta(seconds=ttl_seconds)).isoformat()
+        with self.lock:
+            self._connection().execute("INSERT OR REPLACE INTO temporary_ephemeral_messages VALUES(?,?,?,?,?)",
+                (bot_id, chat_id, receiver_user_id, ephemeral_message_id, delete_at))
+            self._connection().commit()
+
+    def due_temporary_ephemeral_messages(self, bot_id: int) -> list[tuple[int, int, int]]:
+        rows = self._connection().execute("""SELECT chat_id,receiver_user_id,ephemeral_message_id
+            FROM temporary_ephemeral_messages WHERE bot_id=? AND delete_at<=? ORDER BY delete_at LIMIT 3""",
+            (bot_id, timestamp())).fetchall()
+        return [(row["chat_id"], row["receiver_user_id"], row["ephemeral_message_id"]) for row in rows]
+
+    def remove_temporary_ephemeral_message(self, bot_id: int, chat_id: int, receiver_user_id: int,
+                                         ephemeral_message_id: int) -> None:
+        with self.lock:
+            self._connection().execute("""DELETE FROM temporary_ephemeral_messages
+                WHERE bot_id=? AND chat_id=? AND receiver_user_id=? AND ephemeral_message_id=?""",
+                (bot_id, chat_id, receiver_user_id, ephemeral_message_id))
+            self._connection().commit()
 
     def has_short_lived_temporary_message(self, telegram_user_id: int) -> bool:
         cutoff = (datetime.now(UTC) + timedelta(seconds=30)).isoformat()

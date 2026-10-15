@@ -71,12 +71,13 @@ async def main() -> None:
     username_sync = TelegramUsernameSyncMiddleware()
     dispatcher.message.outer_middleware(username_sync)
     dispatcher.callback_query.outer_middleware(username_sync)
-    tasks = [asyncio.create_task(party_rooms.worker())]
+    tasks = [asyncio.create_task(party_rooms.worker()),
+        asyncio.create_task(cleanup_temporary_messages(bot, storage, bot_id=bot.id,
+            ephemeral_only=settings.room_worker_only))]
     if not settings.room_worker_only:
         tasks.extend([
             asyncio.create_task(reconcile_saved_telegram_links(api, storage)),
             asyncio.create_task(poll_notifications(bot, api, settings, storage)),
-            asyncio.create_task(cleanup_temporary_messages(bot, storage)),
             asyncio.create_task(auto_match_loop(bot, api, settings, storage, match_wakeup)),
             asyncio.create_task(broadcast_worker(bot, storage)),
             asyncio.create_task(search_timeout_notice_worker(bot, storage)),

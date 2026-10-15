@@ -143,6 +143,18 @@ class RoomControlTests(RoomControlFixture, unittest.IsolatedAsyncioTestCase):
         self.assertEqual([choice["targetMembershipId"] for choice in choices], [self.target])
         self.assertEqual(self.pool.mutate.await_args.args[0].reply_markup.inline_keyboard[0][0].text, "🔔 Позвать Bob")
 
+    async def test_private_invitation_menu_gets_a_durable_two_minute_cleanup(self):
+        self.storage.add_temporary_ephemeral_message = Mock()
+        self.pool.mutate.return_value = SimpleNamespace(ephemeral_message_id=321)
+        callback = self.callback(f"roomping:{self.room_id}:4")
+        callback.bot = self.bot
+        with patch("bot.handlers.party_rooms.acknowledge_callback"):
+            await group_ping_menu(callback, self.api, self.settings, self.storage)
+        args = self.storage.add_temporary_ephemeral_message.call_args.args
+        self.assertEqual(args[:4], (12345, self.chat_id, self.user_id, 321))
+        self.assertTrue(118 <= args[4] <= 120)
+        self.assertIn("Меню удалится автоматически", self.pool.mutate.await_args.args[0].text)
+
     async def test_inviting_one_player_keeps_the_next_player_available(self):
         self.pool.request.return_value = {"targets": [
             {"membershipId": self.target, "name": "Bob", "inChat": False},

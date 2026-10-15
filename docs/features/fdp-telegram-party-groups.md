@@ -94,6 +94,14 @@ current group members and party administrators cannot be targeted there. The
 existing per-recipient five-minute cooldown still applies across all senders.
 These are additional fields/text from existing room/card reads, with no new
 polling loop or requests in ordinary matchmaking.
+The private selection menu warns that it is removed two minutes after opening.
+Its bot/chat/recipient/ephemeral-message ID and deadline are persisted in a small
+indexed SQLite queue, so restarting does not discard cleanup. The existing
+temporary-message worker deletes it via Telegram's recipient-specific ephemeral
+deletion method; network and rate-limit failures retain a delayed retry. Helpers
+run an ephemeral-only cleanup pass and cannot consume main-bot private-message
+timers. Each pass selects at most three due private menus. Ordinary group history
+and other recipients' menus are never deletion targets for this cleanup.
 Selection tokens are bound to that member, group and generation, expire after
 two minutes and cover at most four other players. The room owner worker validates
 active party membership and presence before delegating to the existing ping

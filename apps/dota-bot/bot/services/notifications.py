@@ -2,12 +2,13 @@ import asyncio
 import logging
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 
 from ..api.client import OpiniaApi
 from ..config import Settings
 from ..handlers.party import send_party_notification
 from ..storage.database import BotStorage
+from .party_discord import DeletePartyEphemeralMessage
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +60,30 @@ async def poll_notifications(bot: Bot, api: OpiniaApi, settings: Settings, stora
         await asyncio.sleep(5)
 
 
-async def cleanup_temporary_messages(bot: Bot, storage: BotStorage) -> None:
+async def cleanup_temporary_ephemeral_messages(bot: Bot, storage: BotStorage, bot_id: int) -> None:
+    for chat_id, receiver_id, message_id in storage.due_temporary_ephemeral_messages(bot_id):
+        try:
+            success = await bot(DeletePartyEphemeralMessage(chat_id=chat_id,
+                receiver_user_id=receiver_id, ephemeral_message_id=message_id), request_timeout=2)
+            if not success:
+                storage.add_temporary_ephemeral_message(bot_id, chat_id, receiver_id, message_id, 10)
+                continue
+        except (TelegramBadRequest, TelegramForbiddenError):
+            pass  # Already absent or no longer accessible; never touch ordinary group messages.
+        except TelegramRetryAfter as error:
+            storage.add_temporary_ephemeral_message(bot_id, chat_id, receiver_id, message_id, error.retry_after + 1)
+            continue
+        except TelegramAPIError:
+            storage.add_temporary_ephemeral_message(bot_id, chat_id, receiver_id, message_id, 10)
+            continue
+        storage.remove_temporary_ephemeral_message(bot_id, chat_id, receiver_id, message_id)
+
+
+async def cleanup_temporary_messages(bot: Bot, storage: BotStorage, *, bot_id: int | None = None,
+                                     ephemeral_only: bool = False) -> None:
     while True:
         try:
-            for telegram_user_id, chat_id, message_id in storage.due_temporary_messages():
+            for telegram_user_id, chat_id, message_id in ([] if ephemeral_only else storage.due_temporary_messages()):
                 try:
                     await bot.delete_message(chat_id, message_id)
                     storage.remove_temporary_message(chat_id, message_id)
@@ -81,6 +102,8 @@ async def cleanup_temporary_messages(bot: Bot, storage: BotStorage) -> None:
                         telegram_user_id,
                         error,
                     )
+            if bot_id is not None:
+                await cleanup_temporary_ephemeral_messages(bot, storage, bot_id)
         except asyncio.CancelledError:
             raise
         except Exception:

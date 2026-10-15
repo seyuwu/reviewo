@@ -108,6 +108,7 @@ def ping_menu_content(choices):
         text += "\n\nЗвать одного игрока можно раз в 5 минут."
     else:
         text = "✅ <b>Все тиммейты приглашены</b>\nFDP отправит им кнопки входа. Осталось дождаться их в чате."
+    text += "\n\nМеню удалится автоматически через 2 минуты после открытия."
     return text, InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
@@ -139,9 +140,13 @@ async def group_ping_menu(callback: CallbackQuery, api, settings, storage):
                    for target in result.get("targets", []) if not target.get("inChat")][:4]
         storage.set_choices(callback.from_user.id, "room_ping_choices", choices)
         text, markup = ping_menu_content(choices)
-        await pool.mutate(SendPartyDiscordMessage(chat_id=callback.message.chat.id, text=text,
+        message = await pool.mutate(SendPartyDiscordMessage(chat_id=callback.message.chat.id, text=text,
             reply_markup=markup,
             ephemeral_message_parameters={"receiver_user_id": callback.from_user.id, "callback_query_id": callback.id}))
+        ephemeral_id = getattr(message, "ephemeral_message_id", None)
+        if ephemeral_id:
+            storage.add_temporary_ephemeral_message(callback.bot.id, callback.message.chat.id,
+                callback.from_user.id, ephemeral_id, max(1, int(now + 120 - time.time())))
     except ApiError as error:
         await callback.answer(str(error) if error.status in {400, 403, 409, 429} else "Не удалось открыть список. Попробуй ещё раз.", show_alert=True)
     except TelegramAPIError:

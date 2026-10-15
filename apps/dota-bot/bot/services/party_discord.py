@@ -25,3 +25,12 @@ class EditPartyDiscordMessage(TelegramMethod[bool]):
     text: str
     parse_mode: str = "HTML"
     reply_markup: InlineKeyboardMarkup | None = None
+
+
+class DeletePartyEphemeralMessage(TelegramMethod[bool]):
+    __returning__ = bool
+    __api_method__ = "deleteEphemeralMessage"
+
+    chat_id: int
+    receiver_user_id: int
+    ephemeral_message_id: int
