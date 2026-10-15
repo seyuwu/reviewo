@@ -25,6 +25,7 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
         self.pool.request = AsyncMock(return_value=[])
         async def report(room,event,**fields):
             if event=="cleanup-fenced": room["data"]["cleanupFenceAt"]=datetime.now(UTC).isoformat()
+            if event=="history-visible": room["data"]["cleanupUncertain"]=True
             return room
         self.pool.report = AsyncMock(side_effect=report)
         self.pool.flush_messages = AsyncMock(return_value=False)
@@ -173,7 +174,7 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_visible_history_requires_a_one_time_baseline_and_then_is_allowed(self):
         self.pool.by_chat={int(self.room["chatId"]):self.room}
-        self.room["state"]="ACTIVE"
+        self.room["state"]="PREPARING"
         chat=SimpleNamespace(type="supergroup",username=None,is_forum=False,has_visible_history=True)
         admin=SimpleNamespace(status="administrator",**{right:True for right in ("can_change_info","can_delete_messages","can_restrict_members","can_invite_users","can_pin_messages")})
         async def read(method,*args,**kwargs):
@@ -186,6 +187,18 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.exception.code,"history_baseline")
         self.room["data"]["historyBaselineAt"]=datetime.now(UTC).isoformat()
         self.assertEqual((await self.pool.validate_group(int(self.room["chatId"])))[1],["1"])
+        del self.room["data"]["historyBaselineAt"]
+        self.room["state"]="ACTIVE"
+        self.assertEqual((await self.pool.validate_group(int(self.room["chatId"])))[1],["1"])
+
+    async def test_live_visible_history_is_deferred_without_freezing_current_players(self):
+        self.room["state"]="ACTIVE"
+        self.pool.validate_group.return_value=(SimpleNamespace(has_visible_history=True),["1"])
+        self.pool.update_card=AsyncMock()
+        await self.pool.operate(self.room)
+        self.pool.report.assert_any_await(self.room,"history-visible")
+        self.assertEqual(self.room["state"],"ACTIVE")
+        self.pool.mutate.assert_not_awaited()
 
     async def test_poll_barrier_advances_only_after_updates_are_durable(self):
         self.storage.room_last_observed_at=Mock(return_value=0)

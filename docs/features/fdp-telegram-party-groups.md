@@ -533,9 +533,20 @@ changed-file ESLint pass. These corrections add no table/migration and no reques
 to ordinary search; added eligibility checks occur only during member removal.
 
 History checks on enabled production groups confirmed hidden history in every
-successful Telegram response, including room 12; one response timed out and was
-not treated as a confirmed setting. The owner must enable “Изменить → История
+successful Telegram response, including room 12; one response was unavailable and
+was not treated as a confirmed setting. The owner must enable “Изменить → История
 чата → Видна” once after initial cleanup. Bot API exposes `has_visible_history`
 but cannot toggle it; [the Telegram method is for user accounts only](https://core.telegram.org/method/channels.togglePreHistoryHidden).
 Message contents are not stored/copied as a workaround. This history setting is
 separate from writing permissions and does not justify muting existing players.
+
+During production verification the history setting became visible in existing
+groups 2, 4 and 12. The earlier baseline rule then quarantined even these already
+established live parties. Existing-party evidence (a published card/link or a
+known present roster member) now permits resuming that same party. Live/rotating
+groups preserve writing and invitations after a visibility change. The worker
+records history uncertainty once through the fenced `history-visible` event;
+normal termination still requires initial owner confirmation before another party
+can reuse that group. A newly assigned, never-published group with unknown visible
+history remains blocked before its first invitation. History-gap reviews are not
+automatically cleared. No current conversation is deleted to satisfy a setup check.

@@ -196,7 +196,7 @@ class PartyRooms:
             raise RoomConfigurationError("Группа должна быть приватной и без тем.", "private_group")
         room = self.by_chat.get(chat_id, {})
         if (getattr(chat, "has_visible_history", False) and owner_id is None
-            and not room.get("data", {}).get("historyBaselineAt") and room.get("state") != "CLOSING"):
+            and not room.get("data", {}).get("historyBaselineAt") and room.get("state") not in {"ACTIVE", "ROTATING", "CLOSING"}):
             raise RoomReviewError("Visible history needs an initial owner cleanup confirmation", "history_baseline")
         member = await self.read("get_chat_member", chat_id, self.bot.id)
         if member.status != "administrator":
@@ -563,9 +563,12 @@ class PartyRooms:
             return
         chat_id = int(room["chatId"])
         if room["state"] != "ACTIVE" or time.time() - self.validated_at.get(room["id"], 0) >= 120:
-            _, staff = await self.validate_group(chat_id)
+            chat, staff = await self.validate_group(chat_id)
             if set(staff) != set(room["data"].get("staffIds", [])):
                 raise RoomConfigurationError("Administrator list changed; manual review required", "admins_changed")
+            if (getattr(chat, "has_visible_history", False) and not room["data"].get("historyBaselineAt")
+                and not room["data"].get("cleanupUncertain")):
+                await self.report(room, "history-visible")
             self.validated_at[room["id"]] = time.time()
         settling = room["state"] == "CLOSING" and room["data"].get("cleanupFenceAt")
         if room["state"] == "ROTATING":

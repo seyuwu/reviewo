@@ -448,6 +448,52 @@ describe("Group Dota ID and lifecycle with isolated PostgreSQL", { skip: !url },
     });
     assert.equal((await rooms.reconcile(roomId)).state, "REVIEW");
   });
+  it("enabling history does not stop an already established live party", async () => {
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: {
+        state: "REVIEW",
+        data: {
+          errorCode: "history_baseline",
+          cleanupUncertain: true,
+          cardId: 501,
+          presentIds: [telegramId],
+          roster: []
+        }
+      }
+    });
+    const room = await rooms.reconcile(roomId);
+    assert.equal(room.state, "ROTATING");
+    assert.equal((room.data as { cleanupUncertain: boolean }).cleanupUncertain, true);
+  });
+  it("a new group with unknown visible history still needs initial owner confirmation", async () => {
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: {
+        state: "REVIEW",
+        data: {
+          errorCode: "history_baseline",
+          cleanupUncertain: true,
+          roster: [],
+          presentIds: [],
+          links: []
+        }
+      }
+    });
+    assert.equal((await rooms.reconcile(roomId)).state, "REVIEW");
+  });
+  it("defers visible-history confirmation until the active party ends", async () => {
+    const claim = await rooms.claim(roomId, "12345");
+    assert.ok(claim);
+    const result = await rooms.report(roomId, {
+      botId: "12345",
+      generation: claim.generation,
+      leaseToken: claim.leaseToken,
+      event: "history-visible"
+    });
+    assert.equal(result.state, "ACTIVE");
+    assert.equal((result.data as { cleanupUncertain: boolean }).cleanupUncertain, true);
+  });
   it("a preparation timeout cannot freeze an already present current party member", async () => {
     await db.telegramPartyChatRoom.update({
       where: { id: roomId },

@@ -30,7 +30,7 @@ export class RoomLeaseDto extends RoomBotDto {
   @IsInt() @Min(1) generation!: number;
 }
 export class RoomReportDto extends RoomLeaseDto {
-  @IsIn(["invite-created", "prepared", "rotated", "link-revoked", "member-removed", "member-unbanned", "admitting", "joined", "card", "card-pinned", "cleanup-fenced", "closed", "review", "retry"]) event!: string;
+  @IsIn(["invite-created", "prepared", "rotated", "link-revoked", "member-removed", "member-unbanned", "admitting", "joined", "card", "card-pinned", "history-visible", "cleanup-fenced", "closed", "review", "retry"]) event!: string;
   @IsOptional() @IsInt() @Min(1) pollStartedAt?: number;
   @IsOptional() @Matches(/^https:\/\/t\.me\/\+[A-Za-z0-9_-]+$/) inviteLink?: string;
   @IsOptional() @Matches(/^\d{1,16}$/) userId?: string;

@@ -195,7 +195,10 @@ export class TelegramPartyRoomsService {
         } });
       }
       const removalReview = room.state === "REVIEW" && data.errorCode === "participant_removal";
-      if (room.state === "REVIEW" && !removalReview) return room;
+      const activeHistoryReview = room.state === "REVIEW" && data.errorCode === "history_baseline"
+        && Boolean(data.cardId || data.links.some(link => !link.revoked)
+          || data.presentIds.some(id => data.roster.some(member => member.telegramId === id)));
+      if (room.state === "REVIEW" && !removalReview && !activeHistoryReview) return room;
       const party = room.partyId ? await tx.gameParty.findUnique({ where: { id: room.partyId }, include: partyInclude }) : null;
       // Discord occupancy can extend an expired party through its existing lifecycle.
       // Wait for that lifecycle to extend/delete it rather than interrupting a call.
@@ -213,9 +216,10 @@ export class TelegramPartyRoomsService {
       const roster = this.roster(party);
       if (room.state === "CLOSING" && data.closingReason === "preparation_timeout"
         && !data.presentIds.some(id => roster.some(member => member.telegramId === id))) return room;
-      const resume = removalReview || room.state === "CLOSING";
+      const resume = removalReview || activeHistoryReview || room.state === "CLOSING";
       if (resume) {
         delete data.cleanupFenceAt; delete data.closingReason; delete data.error; delete data.errorCode;
+        if (activeHistoryReview) data.cleanupUncertain = true;
       }
       const removed = data.roster.some(old => !roster.some(member => member.membershipId === old.membershipId && member.telegramId === old.telegramId));
       const allowed = new Set(roster.map(member => member.telegramId).filter(Boolean));
@@ -369,6 +373,9 @@ export class TelegramPartyRoomsService {
       } else if (input.event === "card-pinned" && input.messageId) {
         if (data.cardId !== input.messageId) throw new ConflictException("Party card changed");
         data.cardPendingPin = false;
+      } else if (input.event === "history-visible") {
+        if (!["ACTIVE", "ROTATING", "CLOSING"].includes(room.state)) throw new ConflictException("Initial visible-history cleanup is not confirmed");
+        if (!data.historyBaselineAt) data.cleanupUncertain = true;
       } else if (input.event === "review") {
         state = "REVIEW";
         data.reviewId ??= randomUUID();
