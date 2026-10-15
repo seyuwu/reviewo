@@ -14,7 +14,7 @@ from bot.handlers.registration import DotaIdOnlyWizard, start_standalone_dota_id
 from bot.services.party_rooms import PartyRooms
 
 
-class RoomControlTests(unittest.IsolatedAsyncioTestCase):
+class RoomControlFixture:
     def setUp(self):
         self.user_id = 11
         self.chat_id = -10012345678
@@ -54,6 +54,8 @@ class RoomControlTests(unittest.IsolatedAsyncioTestCase):
             await group_ping_menu(callback, self.api, self.settings, self.storage)
         return callback
 
+
+class RoomControlTests(RoomControlFixture, unittest.IsolatedAsyncioTestCase):
     async def test_ping_menu_is_private_bounded_and_bound_to_sender(self):
         await self.menu()
         method = self.pool.mutate.await_args.args[0]
@@ -92,7 +94,7 @@ class RoomControlTests(unittest.IsolatedAsyncioTestCase):
         callback.answer.assert_awaited_once_with("Игрока уже позвали", show_alert=True)
         self.pool.mutate.assert_not_awaited()
 
-    async def test_room_card_has_ping_and_missing_id_main_bot_links(self):
+    async def test_room_card_offers_dota_id_inside_current_chat(self):
         self.pool.finish_card = AsyncMock()
         self.pool.report = AsyncMock()
         self.pool.request.return_value = {"generation": 4, "name": "Test", "members": [
@@ -102,7 +104,7 @@ class RoomControlTests(unittest.IsolatedAsyncioTestCase):
         markup = self.pool.mutate.await_args.kwargs["reply_markup"]
         buttons = [button for row in markup.inline_keyboard for button in row]
         self.assertTrue(any(button.callback_data == f"roomping:{self.room_id}:4" for button in buttons))
-        self.assertTrue(any(button.url == "https://t.me/FDPdotabot?start=dotaid_" + self.party_id.replace("-", "") for button in buttons))
+        self.assertTrue(any(button.callback_data == f"roomdota:{self.room_id}:4" for button in buttons))
         self.assertIn("0 MMR", self.pool.mutate.await_args.args[2])
 
     async def test_chat_ready_offers_id_only_when_missing_and_updates_same_notice(self):
@@ -142,14 +144,15 @@ class RoomControlTests(unittest.IsolatedAsyncioTestCase):
             await open_party_dota_id(message, command, object(), self.api, self.settings, self.storage)
             self.assertEqual(form.await_count, 1)
 
-    async def test_missing_id_readiness_shows_private_form_button(self):
-        self.pool.request.side_effect = ApiError("Укажи Dota ID, чтобы команда могла пригласить тебя в игру.", 400)
+    async def test_missing_id_readiness_requests_reply_in_group(self):
+        self.pool.request.side_effect = [ApiError("Укажи Dota ID, чтобы команда могла пригласить тебя в игру.", 400),
+            {"partyId": self.party_id, "generation": 4, "membershipId": "own"}]
         callback = self.callback(f"roomready:{self.room_id}:4")
         await group_ready(callback, self.api, self.settings, self.storage)
-        method = self.pool.mutate.await_args.args[0]
-        self.assertEqual(method.ephemeral_message_parameters["receiver_user_id"], self.user_id)
-        self.assertTrue(method.reply_markup.inline_keyboard[0][0].url.endswith("dotaid_" + self.party_id.replace("-", "")))
-        self.assertIn("Dota ID", callback.answer.await_args.args[0])
+        self.assertEqual(self.pool.mutate.await_args.args[0], "send_message")
+        self.assertTrue(self.pool.mutate.await_args.kwargs["reply_markup"].force_reply)
+        self.assertTrue(self.pool.mutate.await_args.kwargs["reply_markup"].selective)
+        self.assertIn("Dota ID", self.pool.mutate.await_args.args[2])
 
     async def test_required_id_form_explains_readiness_instead_of_optional_skip(self):
         state = FSMContext(MemoryStorage(), StorageKey(bot_id=12345, chat_id=self.user_id, user_id=self.user_id))

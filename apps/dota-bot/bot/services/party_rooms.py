@@ -33,6 +33,10 @@ class RoomConfigurationError(RoomReviewError):
     """A confirmed configuration problem, without an uncertain Telegram write."""
 
 
+class RoomCleanupRetry(Exception):
+    """A known, repeatable cleanup operation can safely resume after a lost reply."""
+
+
 def permissions(enabled):
     return ChatPermissions(can_send_messages=enabled, can_send_audios=enabled, can_send_documents=enabled,
         can_send_photos=enabled, can_send_videos=enabled, can_send_video_notes=enabled, can_send_voice_notes=enabled,
@@ -57,6 +61,8 @@ class PartyRooms:
         self.next_hint = 0.0
         self.notice_rooms = {}
         self.ready_cooldowns = {}
+        self.dota_id_locks = {}
+        self.dota_id_cooldowns = {}
         self.discord_cooldowns = {}
         self.discord_chat_requests = {}
         self.ping_cooldowns = {}
@@ -71,6 +77,7 @@ class PartyRooms:
         self.join_query_tasks = {}
         self.join_query_releases = set()
         self.join_query_slots = asyncio.Semaphore(3)
+        self.last_poll_started_at = 0.0
 
     def dispatch_join_queries(self):
         for event in self.storage.pending_room_join_queries(self.bot.id):
@@ -187,8 +194,10 @@ class PartyRooms:
             raise RoomConfigurationError("Нужна супергруппа. В настройках группы включи «Темы», затем выключи и добавь группу ещё раз.", "private_group")
         if chat.username or chat.is_forum:
             raise RoomConfigurationError("Группа должна быть приватной и без тем.", "private_group")
-        if getattr(chat, "has_visible_history", False):
-            raise RoomConfigurationError("В настройках группы поставь скрытую историю для новых участников.", "visible_history")
+        room = self.by_chat.get(chat_id, {})
+        if (getattr(chat, "has_visible_history", False) and owner_id is None
+            and not room.get("data", {}).get("historyBaselineAt") and room.get("state") != "CLOSING"):
+            raise RoomReviewError("Visible history needs an initial owner cleanup confirmation", "history_baseline")
         member = await self.read("get_chat_member", chat_id, self.bot.id)
         if member.status != "administrator":
             raise RoomConfigurationError("FDP должен быть администратором группы.", "bot_admin")
@@ -435,11 +444,25 @@ class PartyRooms:
         if any((datetime.now(UTC) - datetime.fromisoformat(item["sentAt"].replace("Z", "+00:00"))).total_seconds() >= 48 * 3600 for item in batch):
             raise RoomReviewError("Messages older than Telegram deletion limit need manual cleanup", "old_messages")
         ids = [item["messageId"] for item in batch]
-        success = await self.mutate("delete_messages", int(room["chatId"]), ids)
+        success = await self.cleanup_mutate("delete_messages", int(room["chatId"]), ids)
         if not success:
-            raise RoomReviewError("Message deletion not confirmed", "cleanup_unconfirmed")
+            raise RoomCleanupRetry("Message deletion awaits acknowledgement")
         await self.request("POST", f"/{room['id']}/deleted", {**self.lease_body(room), "messageIds": ids})
         return True
+
+    async def cleanup_mutate(self, method, *args, **kwargs):
+        # Only these known targets are safe to replay. Admission/invite creation and
+        # participant bans retain the existing ownership/uncertainty handling.
+        if method not in {"delete_messages", "set_chat_title", "set_chat_permissions"}:
+            raise ValueError("Operation is not repeatable cleanup")
+        try:
+            return await self.mutate(method, *args, **kwargs)
+        except (TelegramNetworkError, TelegramServerError) as error:
+            raise RoomCleanupRetry("Telegram cleanup acknowledgement unavailable") from error
+        except TelegramBadRequest as error:
+            if method in {"set_chat_title", "set_chat_permissions"} and "not modified" in str(error).lower():
+                return True
+            raise
 
     async def restore_eligible_members(self, room):
         banned = set(room["data"].get("botBannedIds", []))
@@ -461,8 +484,8 @@ class PartyRooms:
             await self.report(room, "card-pinned", messageId=message_id)
         obsolete = room["data"].get("cardObsoleteIds", [])[:100]
         if obsolete:
-            if not await self.mutate("delete_messages", int(room["chatId"]), obsolete):
-                raise RoomReviewError("Previous party card deletion not confirmed", "cleanup_unconfirmed")
+            if not await self.cleanup_mutate("delete_messages", int(room["chatId"]), obsolete):
+                raise RoomCleanupRetry("Previous party card deletion awaits acknowledgement")
             await self.request("POST", f"/{room['id']}/deleted", {**self.lease_body(room), "messageIds": obsolete})
             room["data"]["cardObsoleteIds"] = [value for value in room["data"].get("cardObsoleteIds", []) if value not in obsolete]
 
@@ -490,7 +513,7 @@ class PartyRooms:
             text += "\nDota ID: " + escape(str(member.get("dotaAccountId") or "не указан")) + "\n"
         text += "\nПоздоровайтесь и договоритесь об игре.\nЧат временный: после завершения пати переписка удаляется."
         if any(not member.get("dotaAccountId") for member in members):
-            text += "\n\n🎮 Чтобы подтвердить готовность, сначала укажи Dota ID — команда сможет добавить тебя в игре."
+            text += "\n\n🎮 Dota ID можно указать прямо здесь: нажми кнопку и ответь боту цифрами."
         row = [InlineKeyboardButton(text="✅ Готов играть", callback_data=f"roomready:{room['id']}:{room['generation']}")]
         if len(members) > 1:
             row.append(InlineKeyboardButton(text="🔔 Позвать в чат", callback_data=f"roomping:{room['id']}:{room['generation']}"))
@@ -501,7 +524,7 @@ class PartyRooms:
         rows = [row, actions]
         if any(not member.get("dotaAccountId") for member in members):
             rows.append([InlineKeyboardButton(text="🎮 Указать Dota ID",
-                url=f"https://t.me/{getattr(self.settings, 'main_bot_username', 'FDPdotabot')}?start=dotaid_{UUID(room['partyId']).hex}")])
+                callback_data=f"roomdota:{room['id']}:{room['generation']}")])
         markup = InlineKeyboardMarkup(inline_keyboard=rows)
         message_id = room["data"].get("cardId")
         if message_id and not replace_card:
@@ -522,14 +545,17 @@ class PartyRooms:
         await self.report(room, "card", messageId=message_id, cardJoinVersion=join_version)
 
     async def operate(self, room):
+        if self.awaiting_cleanup_poll(room):
+            return
         chat_id = int(room["chatId"])
         if room["state"] != "ACTIVE" or time.time() - self.validated_at.get(room["id"], 0) >= 120:
             _, staff = await self.validate_group(chat_id)
             if set(staff) != set(room["data"].get("staffIds", [])):
                 raise RoomConfigurationError("Administrator list changed; manual review required", "admins_changed")
             self.validated_at[room["id"]] = time.time()
-        if room["state"] in {"PREPARING", "ROTATING", "CLOSING"}:
-            await self.mutate("set_chat_permissions", chat_id, permissions(False), use_independent_chat_permissions=True)
+        settling = room["state"] == "CLOSING" and room["data"].get("cleanupFenceAt")
+        if room["state"] in {"PREPARING", "ROTATING", "CLOSING"} and not settling:
+            await self.cleanup_mutate("set_chat_permissions", chat_id, permissions(False), use_independent_chat_permissions=True)
             pending = room["data"].get("pendingInvite")
             preserve_pending = room["state"] in {"PREPARING", "ROTATING"} and pending and pending["generation"] == room["generation"]
             await self.revoke(room, preserve_pending=bool(preserve_pending))
@@ -537,22 +563,28 @@ class PartyRooms:
                 pass
             await self.remove_members(room)
         if room["state"] == "CLOSING":
+            if not room["data"].get("cleanupFenceAt"):
+                for user_id in list(room["data"].get("botBannedIds", [])):
+                    check = await self.request("POST", f"/{room['id']}/eligible", {
+                        "userId": user_id, "generation": room["generation"], "inviteLink": ""})
+                    if not check.get("botOwnedBan"):
+                        continue
+                    await self.mutate("unban_chat_member", chat_id, int(user_id), only_if_banned=True)
+                    await self.report(room, "member-unbanned", userId=user_id)
+                await self.cleanup_mutate("set_chat_title", chat_id, room["title"])
+                await self.report(room, "cleanup-fenced")
+                return
+            fence = datetime.fromisoformat(room["data"]["cleanupFenceAt"].replace("Z", "+00:00")).timestamp()
+            if self.last_poll_started_at < fence:
+                return
             while await self.flush_messages():
                 pass
             if await self.delete_batch(room):
                 return
-            for user_id in list(room["data"].get("botBannedIds", [])):
-                check = await self.request("POST", f"/{room['id']}/eligible", {
-                    "userId": user_id, "generation": room["generation"], "inviteLink": ""})
-                if not check.get("botOwnedBan"):
-                    continue
-                await self.mutate("unban_chat_member", chat_id, int(user_id), only_if_banned=True)
-                await self.report(room, "member-unbanned", userId=user_id)
             admins = await self.read("get_chat_administrators", chat_id, return_bots=True)
             if await self.read("get_chat_member_count", chat_id) != len(admins):
                 raise RoomReviewError("Untracked participants remain in the group", "unknown_participants")
-            await self.mutate("set_chat_title", chat_id, room["title"])
-            await self.report(room, "closed")
+            await self.report(room, "closed", pollStartedAt=int(self.last_poll_started_at * 1000))
             return
         if room["state"] == "PREPARING":
             while await self.flush_messages():
@@ -682,7 +714,14 @@ class PartyRooms:
             if key[1] == room_id:
                 self.alert_queue.pop(key, None)
 
+    def awaiting_cleanup_poll(self, room):
+        fence = room.get("data", {}).get("cleanupFenceAt")
+        return (room.get("state") == "CLOSING" and bool(fence)
+            and self.last_poll_started_at < datetime.fromisoformat(fence.replace("Z", "+00:00")).timestamp())
+
     def operation_ready(self, room):
+        if self.awaiting_cleanup_poll(room):
+            return False
         if time.time() < self.operation_after.get(room["id"], 0):
             return False
         now = datetime.now(UTC)
@@ -742,6 +781,10 @@ class PartyRooms:
                             self.transient_attempts.pop(room["id"], None)
                         except TelegramRetryAfter as error:
                             await self.report(room, "retry", retrySeconds=error.retry_after + 1)
+                        except RoomCleanupRetry:
+                            attempt = min(4, self.transient_attempts.get(room["id"], 0) + 1)
+                            self.transient_attempts[room["id"]] = attempt
+                            await self.report(room, "retry", retrySeconds=min(30, 5 * 2 ** (attempt - 1)))
                         except ApiError as error:
                             self.operation_after[room["id"]] = time.time() + 5
                             if error.status != 409:

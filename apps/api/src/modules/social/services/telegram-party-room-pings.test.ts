@@ -8,6 +8,7 @@ import type { GamePartiesService } from "./game-parties.service.js";
 import type { PartyCoordinationService } from "./party-coordination.service.js";
 import type { DiscordVoiceService } from "./discord-voice.service.js";
 import type { PartyChatPingsService } from "./party-chat-pings.service.js";
+import type { DotaProfileService } from "../../dota/services/dota-profile.service.js";
 import { TelegramPartyRoomsService } from "./telegram-party-rooms.service.js";
 
 function fixture() {
@@ -21,7 +22,7 @@ function fixture() {
   const db = { telegramBotStart: { findMany: async () => [{ telegramUserId: "22" }] } } as unknown as PrismaService;
   const pings = { create: async (...args: unknown[]) => { calls.push(args); return { queued: true }; } } as unknown as PartyChatPingsService;
   const service = new TelegramPartyRoomsService(db, new ConfigService<EnvironmentVariables, true>(), {} as GamePartiesService,
-    {} as PartyCoordinationService, {} as DiscordVoiceService, pings);
+    {} as PartyCoordinationService, {} as DiscordVoiceService, {} as DotaProfileService, pings);
   service.reconcile = async () => room;
   return { service, calls, room };
 }

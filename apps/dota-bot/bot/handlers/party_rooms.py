@@ -23,15 +23,27 @@ from ..services.party_discord import SendPartyDiscordMessage, EditPartyDiscordMe
 from ..services.party_room_review import review_details
 from ..services.temporary_notifications import send_temporary_notification
 from ..ui.keyboards import button
+from .party_dota_id import request_group_dota_id, receive_group_dota_id
 
 router = Router(name="party-rooms")
 logger = logging.getLogger(__name__)
+router.callback_query.register(request_group_dota_id, F.data.regexp(r"^roomdota:[a-f0-9-]{36}:\d+$"))
+router.message.register(receive_group_dota_id, F.chat.type == "supergroup", F.reply_to_message,
+    F.text & ~F.text.startswith("/"))
 STATES = {"FREE": "Свободна", "PREPARING": "Подготовка", "ACTIVE": "Занята", "ROTATING": "Смена приглашения", "CLOSING": "Очистка", "REVIEW": "Требует проверки"}
 
 
 class RoomSettings(StatesGroup):
     choosing_group = State()
     capacity = State()
+
+
+def registration_notice(room):
+    if room.get("state") != "REVIEW":
+        return "подключена."
+    if room.get("data", {}).get("errorCode") == "history_baseline":
+        return "добавлена. Перед первой выдачей один раз очисти историю для всех и подтверди ручную очистку в «Группы пати»."
+    return "добавлена, но пока не готова к выдаче. Открой её карточку в «Группы пати»: там причина и дальнейшие действия."
 
 
 @router.message(CommandStart(deep_link=True), F.text.regexp(r"^/start(?:@\w+)?\s+manage_[a-f0-9]{32}$"))
@@ -263,7 +275,7 @@ async def room_admin_action(callback: CallbackQuery, state: FSMContext, api, set
             if room["state"] == "REVIEW":
                 rows.append([button(review_details(room)["retryLabel"], f"roomadmin:confirm:{room['id']}:retry")])
                 rows.append([button("Подтвердить ручную очистку", f"roomadmin:confirm:{room['id']}:manual")])
-            rows.append([button("← Все группы", "roomadmin:list:0")])
+            rows.append([button("🔄 Обновить", f"roomadmin:view:{room['id']}"), button("← Все группы", "roomadmin:list:0")])
             await edit_panel_content(callback.bot, storage, api, settings, user_id, "admin:rooms:group", text, InlineKeyboardMarkup(inline_keyboard=rows), user_id)
         elif action == "confirm":
             target = parts[3]
@@ -320,13 +332,13 @@ async def register_selected_room(message: Message, state: FSMContext, api, setti
     try:
         pool = api.party_rooms
         chat, staff = await pool.validate_group(shared.chat_id, owner_id=message.from_user.id)
-        await api.rooms_request("POST", "/admin/register", {"botId": str(message.bot.id), "adminId": str(message.from_user.id),
-            "chatId": str(chat.id), "title": chat.title, "staffIds": staff})
+        registered = await api.rooms_request("POST", "/admin/register", {"botId": str(message.bot.id), "adminId": str(message.from_user.id),
+            "chatId": str(chat.id), "title": chat.title, "staffIds": staff, "historyVisible": bool(getattr(chat, "has_visible_history", False))})
         await pool.sync()
         pool.wakeup.set()
         storage.set_choices(message.from_user.id, "party_room_registration", [])
         await state.clear()
-        await message.answer("Группа подключена.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Группа " + registration_notice(registered), reply_markup=ReplyKeyboardRemove())
         await show_rooms(message.bot, api, settings, storage, message.from_user.id, message.chat.id)
     except ValueError as error:
         await message.answer(str(error), reply_markup=ReplyKeyboardRemove())
@@ -379,15 +391,7 @@ async def group_ready(callback: CallbackQuery, api, settings, storage):
         api.party_rooms.wakeup.set()
     except ApiError as error:
         if error.status == 400 and "Dota ID" in str(error):
-            await callback.answer("Сначала укажи Dota ID — по нему команда пригласит тебя в игру.", show_alert=True)
-            url = f"https://t.me/{getattr(settings, 'main_bot_username', 'FDPdotabot')}?start=dotaid_{UUID(room['partyId']).hex}"
-            try:
-                await api.party_rooms.mutate(SendPartyDiscordMessage(chat_id=callback.message.chat.id,
-                    text="🎮 <b>Укажи свой Dota ID</b>\n\nКоманда сможет пригласить тебя в игру. Затем нажми «Готов играть».",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎮 Указать Dota ID", url=url)]]),
-                    ephemeral_message_parameters={"receiver_user_id": callback.from_user.id, "callback_query_id": callback.id}))
-            except TelegramAPIError:
-                pass  # The pinned card also contains the permanent ID entry button.
+            await request_group_dota_id(callback, api, settings, storage)
         else:
             await callback.answer("Состав изменился. Открой текущую карточку пати.", show_alert=True)
 
@@ -499,13 +503,13 @@ async def connect_group_command(message: Message, api, settings, storage):
     try:
         pool = api.party_rooms
         chat, staff = await pool.validate_group(message.chat.id, owner_id=user_id)
-        await api.rooms_request("POST", "/admin/register", {"botId": str(message.bot.id), "adminId": str(user_id),
-            "chatId": str(chat.id), "title": chat.title, "staffIds": staff})
+        registered = await api.rooms_request("POST", "/admin/register", {"botId": str(message.bot.id), "adminId": str(user_id),
+            "chatId": str(chat.id), "title": chat.title, "staffIds": staff, "historyVisible": bool(getattr(chat, "has_visible_history", False))})
         await pool.sync()
         storage.journal_room_message(message.bot.id, message.chat.id, message.message_id, int(message.date.timestamp()))
         await message.delete()
         pool.wakeup.set()
-        result = f"✅ Группа «{chat.title}» подключена."
+        result = ("⚠️" if registered.get("state") == "REVIEW" else "✅") + f" Группа «{chat.title}» " + registration_notice(registered)
     except ValueError as error:
         result = f"Группа «{message.chat.title}»: {error}"
     except Exception:
@@ -551,12 +555,15 @@ def create_room_worker_router():
         else:
             await callback.answer("Нет доступа", show_alert=True)
     worker.callback_query.register(group_ready, F.data.regexp(r"^roomready:[a-f0-9-]{36}:\d+$"))
+    worker.callback_query.register(request_group_dota_id, F.data.regexp(r"^roomdota:[a-f0-9-]{36}:\d+$"))
     worker.callback_query.register(group_discord, F.data.regexp(r"^roomdiscord:[a-f0-9-]{36}:\d+$"))
     worker.callback_query.register(group_ping_menu, F.data.regexp(r"^roomping:[a-f0-9-]{36}:\d+$"))
     worker.callback_query.register(group_ping_player, F.data.regexp(r"^roomping:pick:[a-f0-9]{20}$"))
     worker.message.register(register_selected_room, F.chat_shared)
     worker.message.register(change_room_capacity, RoomSettings.capacity, F.text)
     worker.message.register(connect_group_command, Command("fdpchat"))
+    worker.message.register(receive_group_dota_id, F.chat.type == "supergroup", F.reply_to_message,
+        F.text & ~F.text.startswith("/"))
     worker.message.register(consume_group_message, F.chat.type.in_({"group", "supergroup"}))
     worker.chat_member.register(consume_group_event)
     worker.my_chat_member.register(consume_group_event)

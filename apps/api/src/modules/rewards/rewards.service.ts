@@ -10,6 +10,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type Giveaway, type RewardEvent } from "#prisma/client";
 import { PrismaService } from "../../database/prisma.service.js";
 import { RewardsDatabase } from "./rewards.database.js";
+import { telegramUsername } from "./rewards-telegram.js";
 import type { GiveawayDto, PurchaseDto, RewardEventDto, RewardSettingsDto } from "./rewards.dto.js";
 import {
   chooseWinners,
@@ -125,6 +126,11 @@ export class RewardsService {
             status: "PENDING",
             firstSeenAt: null,
             checkedAt: null,
+            observedName: null,
+            observedUsername: null,
+            observedAt: null,
+            attemptedAt: null,
+            errorCode: null,
             nextCheckAt: new Date(),
             reason: null
           }
@@ -523,6 +529,7 @@ export class RewardsService {
           status: approved ? "VERIFIED" : "MISSING",
           firstSeenAt: first,
           checkedAt: now,
+          errorCode: null,
           reason: reason.trim(),
           nextCheckAt: new Date(now.getTime() + 3 * 3600000)
         }
@@ -550,15 +557,52 @@ export class RewardsService {
   }
   async adminPage() {
     const p = await this.program(true);
-    return {
-      ...p,
-      taskConditions: Object.entries(TASK_CONDITIONS).map(([value, rule]) => ({ value, ...rule })),
-      giveaways: await this.prisma.giveaway.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
-      verifications: await this.prisma.rewardTagVerification.findMany({
+    const [giveaways, verifications, recentVerifications] = await Promise.all([
+      this.prisma.giveaway.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
+      this.prisma.rewardTagVerification.findMany({
         where: { provider: "telegram", status: { in: ["PENDING", "ERROR"] } },
         take: 50,
         orderBy: { nextCheckAt: "asc" }
+      }),
+      this.prisma.rewardTagVerification.findMany({
+        where: { provider: "telegram", status: { in: ["VERIFIED", "MISSING"] } },
+        take: 20,
+        orderBy: { checkedAt: "desc" }
       })
+    ]);
+    // One bounded lookup, only on the restricted administration page; never call Telegram on GET.
+    const ids = [
+      ...new Set(
+        [...verifications, ...recentVerifications]
+          .filter((row) => !row.observedAt)
+          .map((row) => row.telegramId)
+      )
+    ];
+    const identities = ids.length
+      ? await this.prisma.userAuthIdentity.findMany({
+          where: { provider: "telegram", providerUserId: { in: ids } },
+          select: { providerUserId: true, telegramUsername: true }
+        })
+      : [];
+    const usernames = new Map(
+      identities.map((identity) => [
+        identity.providerUserId,
+        telegramUsername(identity.telegramUsername)
+      ])
+    );
+    const contact = (row: (typeof verifications)[number]) => ({
+      ...row,
+      telegramUsername: row.observedAt
+        ? telegramUsername(row.observedUsername)
+        : (usernames.get(row.telegramId) ?? null),
+      contactSource: row.observedAt ? "check" : "account"
+    });
+    return {
+      ...p,
+      taskConditions: Object.entries(TASK_CONDITIONS).map(([value, rule]) => ({ value, ...rule })),
+      giveaways,
+      verifications: verifications.map(contact),
+      recentVerifications: recentVerifications.map(contact)
     };
   }
   async tickets(id: string, after: number) {

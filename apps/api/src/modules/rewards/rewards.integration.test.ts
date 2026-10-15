@@ -494,6 +494,238 @@ describe("Rewards with isolated PostgreSQL", { skip: !url }, () => {
     });
     assert.equal(await db.rewardTagVerification.count(), 0);
   });
+  it("records check details and exposes successful results separately to administrators", async () => {
+    const check = new RewardVerificationService(service);
+    await check.enroll("101", "telegram");
+    const old = process.env["DOTA_BOT_TOKEN"];
+    process.env["DOTA_BOT_TOKEN"] = "qa-token";
+    let calls = 0;
+    const request = mock.method(globalThis, "fetch", async () => {
+      if (++calls === 1) throw new DOMException("Fixture", "TimeoutError");
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: { id: 101, first_name: "QA @FDPdotabot", username: "qa_player" }
+        })
+      );
+    });
+    try {
+      await check.checkBatch();
+      const page = await service.adminPage();
+      assert.equal(page.verifications.length, 0);
+      const row = page.recentVerifications[0]!;
+      assert.equal(row.status, "VERIFIED");
+      assert.equal(row.telegramUsername, "qa_player");
+      assert.equal(row.contactSource, "check");
+      assert.ok(row.attemptedAt && row.observedAt && row.checkedAt);
+      assert.equal(row.errorCode, null);
+      assert.equal(await balance(), 0); // Finding a tag does not bypass its hold period.
+      assert.equal(await db.rewardNotice.count(), 1);
+    } finally {
+      request.mock.restore();
+      if (old) process.env["DOTA_BOT_TOKEN"] = old;
+      else delete process.env["DOTA_BOT_TOKEN"];
+    }
+  });
+  it("admin retries preserve holds, do not send notices and cannot pay the same reward twice", async () => {
+    const check = new RewardVerificationService(service);
+    const row = await db.rewardTagVerification.create({
+      data: { telegramId: "101", provider: "telegram", status: "ERROR", firstSeenAt: campaign }
+    });
+    const old = process.env["DOTA_BOT_TOKEN"];
+    process.env["DOTA_BOT_TOKEN"] = "qa-token";
+    const request = mock.method(
+      globalThis,
+      "fetch",
+      async () =>
+        new Response(
+          JSON.stringify({ ok: true, result: { id: 101, first_name: "QA @FDPdotabot" } })
+        )
+    );
+    try {
+      await check.retry(row.id, "admin");
+      await Promise.all([check.checkBatch(), new RewardVerificationService(service).checkBatch()]);
+      const firstBalance = await balance();
+      assert.ok(firstBalance > 0);
+      await check.retry(row.id, "admin");
+      await check.checkBatch();
+      assert.equal(await balance(), firstBalance);
+      assert.equal(
+        await db.rewardNotice.count({
+          where: { payload: { path: ["kind"], equals: "tag_check" } }
+        }),
+        0
+      );
+      assert.equal(
+        (
+          await db.rewardTagVerification.findUniqueOrThrow({ where: { id: row.id } })
+        ).firstSeenAt?.getTime(),
+        campaign.getTime()
+      );
+      assert.equal(await db.rewardAudit.count({ where: { action: "tag_retry" } }), 2);
+    } finally {
+      request.mock.restore();
+      if (old) process.env["DOTA_BOT_TOKEN"] = old;
+      else delete process.env["DOTA_BOT_TOKEN"];
+    }
+  });
+  it("a delayed automatic result cannot overwrite a newer manual decision", async () => {
+    const row = await db.rewardTagVerification.create({
+      data: { telegramId: "101", provider: "telegram", status: "ERROR", firstSeenAt: campaign }
+    });
+    const old = process.env["DOTA_BOT_TOKEN"];
+    process.env["DOTA_BOT_TOKEN"] = "qa-token";
+    const request = mock.method(globalThis, "fetch", async () => {
+      await service.reviewTag(row.id, false, "Профиль проверен вручную", null, "admin");
+      return new Response(
+        JSON.stringify({ ok: true, result: { id: 101, first_name: "QA @FDPdotabot" } })
+      );
+    });
+    try {
+      await new RewardVerificationService(service).checkBatch();
+      const after = await db.rewardTagVerification.findUniqueOrThrow({ where: { id: row.id } });
+      assert.equal(after.status, "MISSING");
+      assert.equal(after.reason, "Профиль проверен вручную");
+      assert.equal(after.firstSeenAt, null);
+      assert.equal(await balance(), 0);
+    } finally {
+      request.mock.restore();
+      if (old) process.env["DOTA_BOT_TOKEN"] = old;
+      else delete process.env["DOTA_BOT_TOKEN"];
+    }
+  });
+  it("retains the previous profile snapshot and records an outage separately", async () => {
+    const row = await db.rewardTagVerification.create({
+      data: {
+        telegramId: "101",
+        provider: "telegram",
+        status: "ERROR",
+        observedName: "Earlier name",
+        observedUsername: "earlier_user",
+        observedAt: campaign,
+        checkedAt: campaign
+      }
+    });
+    const old = process.env["DOTA_BOT_TOKEN"];
+    process.env["DOTA_BOT_TOKEN"] = "qa-token";
+    const request = mock.method(globalThis, "fetch", async () => {
+      throw new DOMException("Fixture timeout", "TimeoutError");
+    });
+    try {
+      await new RewardVerificationService(service).checkBatch();
+      const after = await db.rewardTagVerification.findUniqueOrThrow({ where: { id: row.id } });
+      assert.equal(after.errorCode, "TIMEOUT");
+      assert.ok(after.attemptedAt!.getTime() > campaign.getTime());
+      assert.equal(after.observedAt!.getTime(), campaign.getTime());
+      assert.equal(after.checkedAt!.getTime(), campaign.getTime());
+      assert.equal(after.observedName, "Earlier name");
+      assert.equal(after.observedUsername, "earlier_user");
+      assert.equal(request.mock.callCount(), 2);
+      assert.equal(await db.rewardNotice.count(), 0);
+    } finally {
+      request.mock.restore();
+      if (old) process.env["DOTA_BOT_TOKEN"] = old;
+      else delete process.env["DOTA_BOT_TOKEN"];
+    }
+  });
+  it("uses a cached contact for old checks but never restores a removed username", async () => {
+    const id = "800001001";
+    const user = await db.user.create({
+      data: {
+        displayName: "Contact QA",
+        authIdentities: {
+          create: { provider: "telegram", providerUserId: id, telegramUsername: "cached_qa" }
+        }
+      }
+    });
+    const old = process.env["DOTA_BOT_TOKEN"];
+    process.env["DOTA_BOT_TOKEN"] = "qa-token";
+    const request = mock.method(
+      globalThis,
+      "fetch",
+      async () =>
+        new Response(
+          JSON.stringify({ ok: true, result: { id: Number(id), first_name: "Fresh name" } })
+        )
+    );
+    try {
+      await db.rewardTagVerification.create({
+        data: { telegramId: id, provider: "telegram", status: "ERROR", observedName: "Old name" }
+      });
+      const before = (await service.adminPage()).verifications[0]!;
+      assert.equal(before.telegramUsername, "cached_qa");
+      assert.equal(before.contactSource, "account");
+      assert.equal(before.observedAt, null);
+      await new RewardVerificationService(service).checkBatch();
+      const after = (await service.adminPage()).recentVerifications[0]!;
+      assert.equal(after.telegramUsername, null);
+      assert.equal(after.observedName, "Fresh name");
+      assert.equal(after.contactSource, "check");
+      assert.ok(after.observedAt);
+    } finally {
+      request.mock.restore();
+      await db.user.delete({ where: { id: user.id } });
+      if (old) process.env["DOTA_BOT_TOKEN"] = old;
+      else delete process.env["DOTA_BOT_TOKEN"];
+    }
+  });
+  it("discards a failed in-flight request after a newer manual decision", async () => {
+    const row = await db.rewardTagVerification.create({
+      data: { telegramId: "101", provider: "telegram", status: "ERROR" }
+    });
+    const old = process.env["DOTA_BOT_TOKEN"];
+    process.env["DOTA_BOT_TOKEN"] = "qa-token";
+    let calls = 0;
+    const request = mock.method(globalThis, "fetch", async () => {
+      if (++calls === 1) await service.reviewTag(row.id, false, "Проверено вручную", null, "admin");
+      throw new DOMException("Fixture timeout", "TimeoutError");
+    });
+    try {
+      await new RewardVerificationService(service).checkBatch();
+      const after = await db.rewardTagVerification.findUniqueOrThrow({ where: { id: row.id } });
+      assert.equal(after.status, "MISSING");
+      assert.equal(after.errorCode, null);
+      assert.equal(after.reason, "Проверено вручную");
+      assert.equal(await db.rewardNotice.count(), 0);
+    } finally {
+      request.mock.restore();
+      if (old) process.env["DOTA_BOT_TOKEN"] = old;
+      else delete process.env["DOTA_BOT_TOKEN"];
+    }
+  });
+  it("honors a task disabled while the provider request was in flight", async () => {
+    await db.rewardTagVerification.create({
+      data: { telegramId: "101", provider: "telegram", status: "ERROR", firstSeenAt: campaign }
+    });
+    const old = process.env["DOTA_BOT_TOKEN"];
+    process.env["DOTA_BOT_TOKEN"] = "qa-token";
+    const request = mock.method(globalThis, "fetch", async () => {
+      await taskService.save(
+        "telegram_tag",
+        { ...DEFAULT_SETTINGS.tasks["telegram_tag"]!, enabled: false },
+        "admin"
+      );
+      return new Response(
+        JSON.stringify({ ok: true, result: { id: 101, first_name: "QA @FDPdotabot" } })
+      );
+    });
+    try {
+      await new RewardVerificationService(service).checkBatch();
+      assert.equal(await balance(), 0);
+      assert.equal((await db.rewardTagVerification.findFirstOrThrow()).status, "VERIFIED");
+      await assert.rejects(
+        new RewardVerificationService(service).retry(
+          (await db.rewardTagVerification.findFirstOrThrow()).id,
+          "admin"
+        ),
+        { status: 409 }
+      );
+    } finally {
+      request.mock.restore();
+      if (old) process.env["DOTA_BOT_TOKEN"] = old;
+      else delete process.env["DOTA_BOT_TOKEN"];
+    }
+  });
   it("awards a week once for seven distinct Moscow days", async () => {
     const monday = new Date(`${moscowWeek(new Date())}T12:00:00+03:00`);
     monday.setUTCDate(monday.getUTCDate() - 7);

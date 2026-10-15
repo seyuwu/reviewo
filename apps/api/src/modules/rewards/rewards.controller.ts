@@ -166,7 +166,9 @@ export class RewardsController {
 export class AdminRewardsController {
   constructor(
     private readonly rewards: RewardsService,
-    private readonly tasks: RewardsTasksService
+    private readonly tasks: RewardsTasksService,
+    private readonly checks: RewardVerificationService,
+    private readonly limiter: ApiRateLimiterService
   ) {}
   @Get("analytics")
   @Header("Cache-Control", "private, no-store")
@@ -247,6 +249,30 @@ export class AdminRewardsController {
       input.profileId ?? null,
       user.id
     );
+  }
+  @Post("verifications/:id/retry")
+  @HttpCode(200)
+  async retryVerification(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) id: string
+  ) {
+    await this.limiter.assertWithinLimits([
+      {
+        key: user.id,
+        namespace: "rewards:admin-tag-retry",
+        limit: 60,
+        windowSeconds: 3600,
+        message: "Слишком много повторных проверок"
+      },
+      {
+        key: `${user.id}:${id}`,
+        namespace: "rewards:admin-tag-profile",
+        limit: 1,
+        windowSeconds: 30,
+        message: "Проверка уже запрошена, подождите 30 секунд"
+      }
+    ]);
+    return this.checks.retry(id, user.id);
   }
   @Get("giveaways/:id/tickets") tickets(
     @Param("id", ParseUUIDPipe) id: string,

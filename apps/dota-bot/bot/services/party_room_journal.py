@@ -15,6 +15,7 @@ class PartyRoomJournal(BaseRequestMiddleware):
         self.rooms = rooms
 
     async def __call__(self, make_request, bot, method):
+        poll_started_at = time.time() if method.__api_method__ == "getUpdates" else None
         result = await make_request(bot, method)
         if method.__api_method__ == "getUpdates":
             last = self.rooms.storage.room_last_observed_at(bot.id)
@@ -26,7 +27,7 @@ class PartyRoomJournal(BaseRequestMiddleware):
             for update in result:
                 events = []
                 message = update.message
-                if message and message.chat.id in self.rooms.by_chat:
+                if message and message.message_id and message.chat.id in self.rooms.by_chat:
                     events.append({"kind": "message", "payload": {
                         "chatId": str(message.chat.id), "messageId": message.message_id,
                         "sentAt": int(message.date.timestamp()),
@@ -60,6 +61,7 @@ class PartyRoomJournal(BaseRequestMiddleware):
                     events.append({"kind": "review", "payload": {"chatId": str(mine.chat.id), "reason": "Bot administrator rights removed"}})
                 batches.append((update.update_id, events))
             self.rooms.storage.journal_room_updates(bot.id, batches)
+            self.rooms.last_poll_started_at = poll_started_at
             # Native guard decisions have a ten-second deadline. Dispatch after
             # durable journaling, without waiting behind background cleanup.
             self.rooms.dispatch_join_queries()

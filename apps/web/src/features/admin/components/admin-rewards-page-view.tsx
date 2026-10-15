@@ -8,6 +8,7 @@ import { ApiError } from "../../../lib/api/api-error";
 import { readApiErrorMessage } from "../../../lib/api/read-api-error";
 import { useAuthSession } from "../../auth/hooks/use-auth-session";
 import styles from "./admin-rewards-page-view.module.css";
+import { AdminRewardVerifications, type RewardVerification } from "./admin-reward-verifications";
 import {
   AdminRewardsTasks,
   type RewardTaskInfo,
@@ -42,20 +43,13 @@ type Giveaway = {
   nextTicket: number;
   draw: null | { winners: Winner[]; ticketCount: number; hash: string };
 };
-type Verification = {
-  id: string;
-  provider: string;
-  telegramId: string;
-  profileId: string | null;
-  observedName: string | null;
-  reason: string | null;
-};
 type Data = {
   enabled: boolean;
   startedAt: string | null;
   settings: Settings;
   giveaways: Giveaway[];
-  verifications: Verification[];
+  verifications: RewardVerification[];
+  recentVerifications: RewardVerification[];
   taskConditions: TaskConditionInfo[];
 };
 const localDate = (date = new Date()) =>
@@ -78,6 +72,9 @@ export function AdminRewardsPageView() {
   const { authSession, isAuthSessionLoaded } = useAuthSession(),
     token = authSession?.accessToken;
   const client = useQueryClient();
+  const [requestedChecks, setRequestedChecks] = useState<
+    Record<string, { previousAttempt: string | null; expiresAt: number }>
+  >({});
   const access = useQuery({
     queryKey: ["rewards-access", token],
     queryFn: () =>
@@ -91,6 +88,11 @@ export function AdminRewardsPageView() {
   const query = useQuery({
     queryKey: ["admin-rewards", token],
     enabled: !!token && admin,
+    refetchInterval: (result) =>
+      result.state.data?.verifications.length ||
+      Object.values(requestedChecks).some((check) => check.expiresAt > Date.now())
+        ? 10000
+        : false,
     queryFn: () =>
       apiRequest<Data>("/admin/rewards", {
         headers: { authorization: `Bearer ${token}` },
@@ -122,14 +124,28 @@ export function AdminRewardsPageView() {
       )
   });
   const mutate = useMutation({
-    mutationFn: ({ path, body }: { path: string; body?: unknown }) =>
+    mutationFn: ({
+      path,
+      body
+    }: {
+      path: string;
+      body?: unknown;
+      verification?: RewardVerification;
+    }) =>
       apiRequest<unknown>(`/admin/rewards/${path}`, {
         method: "POST",
         headers: { authorization: `Bearer ${token}` },
         body: body ?? {}
       }),
-    onSuccess: () => {
-      setFeedback("Сохранено");
+    onSuccess: (_result, variables) => {
+      if (variables.verification) {
+        const v = variables.verification;
+        setRequestedChecks((previous) => ({
+          ...previous,
+          [v.id]: { previousAttempt: v.attemptedAt, expiresAt: Date.now() + 120000 }
+        }));
+        setFeedback("Проверка запрошена. Результат обновится автоматически.");
+      } else setFeedback("Сохранено");
       void client.invalidateQueries({ queryKey: ["admin-rewards"] });
       void client.invalidateQueries({ queryKey: ["admin-reward-tickets"] });
     },
@@ -553,60 +569,24 @@ export function AdminRewardsPageView() {
           </div>
         </section>
       )}
-      <section className={`panel-card ${styles.section}`}>
-        <h2>Проверки профилей</h2>
-        <p className="muted-copy">
-          Обычные проверки выполняются автоматически. Ошибки провайдера не отнимают награды.
-        </p>
-        {data.verifications.length === 0 ? (
-          <p>Нет ожидающих проверок.</p>
-        ) : (
-          data.verifications.map((v) => (
-            <div key={v.id} className={styles.winner}>
-              <p>
-                {v.provider === "steam" ? "Steam" : "Telegram"} · Telegram ID {v.telegramId}
-              </p>
-              {v.profileId && (
-                <a
-                  href={`https://steamcommunity.com/profiles/${encodeURIComponent(v.profileId)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Открыть Steam
-                </a>
-              )}
-              <p>{v.observedName ?? "Имя ещё не получено"}</p>
-              <p>{v.reason ?? "В очереди фоновой проверки"}</p>
-              <label>
-                Причина ручного решения
-                <input
-                  maxLength={500}
-                  value={reviewReasons[v.id] ?? ""}
-                  onChange={(e) => setReviewReasons({ ...reviewReasons, [v.id]: e.target.value })}
-                />
-              </label>
-              <div className={styles.actions}>
-                {[true, false].map((approved) => (
-                  <button
-                    key={String(approved)}
-                    type="button"
-                    className="button-secondary"
-                    disabled={mutate.isPending || !(reviewReasons[v.id] ?? "").trim()}
-                    onClick={() =>
-                      mutate.mutate({
-                        path: `verifications/${v.id}`,
-                        body: { approved, reason: reviewReasons[v.id], profileId: v.profileId }
-                      })
-                    }
-                  >
-                    {approved ? "Проверил: тег есть" : "Тег не найден"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))
-        )}
-      </section>
+      <AdminRewardVerifications
+        queue={data.verifications}
+        recent={data.recentVerifications ?? []}
+        tag={data.settings.tag}
+        busy={mutate.isPending}
+        reasons={reviewReasons}
+        requested={requestedChecks}
+        onReason={(id, reason) => setReviewReasons((previous) => ({ ...previous, [id]: reason }))}
+        onRetry={(verification) =>
+          mutate.mutate({ path: `verifications/${verification.id}/retry`, verification })
+        }
+        onReview={(v, approved) =>
+          mutate.mutate({
+            path: `verifications/${v.id}`,
+            body: { approved, reason: reviewReasons[v.id], profileId: v.profileId }
+          })
+        }
+      />
     </section>
   );
 }

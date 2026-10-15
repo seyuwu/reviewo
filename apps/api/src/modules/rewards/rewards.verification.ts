@@ -1,7 +1,13 @@
-import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException
+} from "@nestjs/common";
 import { randomInt } from "node:crypto";
 import { RewardsService } from "./rewards.service.js";
-import { activeTask, containsTag } from "./rewards.rules.js";
+import { activeTask, containsTag, normalizeSettings } from "./rewards.rules.js";
+import { readTelegramProfile, TelegramCheckError } from "./rewards-telegram.js";
 
 @Injectable()
 export class RewardVerificationService {
@@ -22,6 +28,23 @@ export class RewardVerificationService {
     });
     return { pending: true };
   }
+  async retry(id: string, actor: string) {
+    const p = await this.rewards.requireEnabled();
+    if (
+      !Object.values(p.settings.tasks).some(
+        (task) => activeTask(task) && task.condition === "telegram_tag"
+      )
+    )
+      throw new ConflictException("Задание проверки Telegram выключено");
+    await this.rewards.prisma.$transaction(async (tx) => {
+      const row = await tx.rewardTagVerification.findUnique({ where: { id } });
+      if (!row || row.provider !== "telegram") throw new NotFoundException("Проверка не найдена");
+      // Keep the status: an administrative retry must not notify the player again.
+      await tx.rewardTagVerification.update({ where: { id }, data: { nextCheckAt: new Date() } });
+      await this.rewards.audit(tx, actor, "tag_retry", id, {});
+    });
+    return { pending: true };
+  }
   async checkBatch() {
     const p = await this.rewards.program(true);
     if (
@@ -31,7 +54,7 @@ export class RewardVerificationService {
       )
     )
       return;
-    // Claim one external request per pass. Lease is persisted before network I/O.
+    // At most three profiles per pass. Leases persist before network I/O.
     const rows = await this.rewards.prisma.$transaction(async (tx) => {
       const selected = await tx.$queryRaw<
         { id: string }[]
@@ -45,84 +68,97 @@ export class RewardVerificationService {
         where: { id: { in: selected.map((row) => row.id) } }
       });
     });
-    for (const row of rows) {
-      try {
-        const token = process.env["DOTA_BOT_TOKEN"];
-        if (!token) throw new Error("Telegram verification is not configured");
-        const response = await fetch(`https://api.telegram.org/bot${token}/getChat`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ chat_id: row.telegramId }),
-          signal: AbortSignal.timeout(5000),
-          redirect: "error"
-        });
-        const data = (await response.json()) as {
-          ok?: boolean;
-          result?: { id: number; first_name?: string; last_name?: string };
-        };
-        if (!response.ok || !data.ok || String(data.result?.id) !== row.telegramId)
-          throw new Error("Telegram verification unavailable");
-        const name = `${data.result?.first_name ?? ""} ${data.result?.last_name ?? ""}`;
-        const now = new Date(),
-          found = containsTag(name, p.settings.tag);
-        await this.rewards.prisma.$transaction(async (tx) => {
-          const current = await tx.rewardTagVerification.findUniqueOrThrow({
-            where: { id: row.id }
+    const outcomes = await Promise.allSettled(
+      rows.map(async (row) => {
+        try {
+          const profile = await readTelegramProfile(row.telegramId);
+          const name = profile.name;
+          const now = new Date(),
+            found = containsTag(name, p.settings.tag);
+          await this.rewards.prisma.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT id FROM community.reward_tag_verifications WHERE id=${row.id}::uuid FOR UPDATE`;
+            const current = await tx.rewardTagVerification.findUniqueOrThrow({
+              where: { id: row.id }
+            });
+            // A concurrent relink must not inherit a previous profile's check.
+            if (
+              current.profileId !== row.profileId ||
+              current.nextCheckAt.getTime() !== row.nextCheckAt.getTime()
+            )
+              return;
+            const first = found ? (current.firstSeenAt ?? now) : null;
+            await tx.rewardTagVerification.update({
+              where: { id: row.id },
+              data: {
+                status: found ? "VERIFIED" : "MISSING",
+                firstSeenAt: first,
+                checkedAt: now,
+                observedName: name.slice(0, 256),
+                observedUsername: profile.username,
+                observedAt: now,
+                attemptedAt: now,
+                errorCode: null,
+                reason: null,
+                nextCheckAt: new Date(now.getTime() + (3 * 3600 + randomInt(3600)) * 1000)
+              }
+            });
+            if (found && first) {
+              // An administrator can disable/edit a task during the external request.
+              const currentProgram = await tx.rewardProgram.findUniqueOrThrow({
+                where: { id: "fdp" }
+              });
+              if (currentProgram.enabled)
+                await this.rewards.creditVerifiedTags(
+                  tx,
+                  row.telegramId,
+                  first,
+                  now,
+                  normalizeSettings(currentProgram.settings)
+                );
+            }
+            if (row.status === "PENDING")
+              await tx.rewardNotice.createMany({
+                data: [
+                  {
+                    key: `tag-check:${row.id}:${row.nextCheckAt.toISOString()}`,
+                    telegramId: row.telegramId,
+                    payload: {
+                      kind: "tag_check",
+                      status: found ? "VERIFIED" : "MISSING",
+                      tag: p.settings.tag
+                    }
+                  }
+                ],
+                skipDuplicates: true
+              });
           });
-          // A concurrent relink must not inherit a previous profile's check.
-          if (current.profileId !== row.profileId) return;
-          const first = found ? (current.firstSeenAt ?? now) : null;
-          await tx.rewardTagVerification.update({
-            where: { id: row.id },
+        } catch (error) {
+          // Never log provider URLs/tokens, and do not interpret outages as missing tags.
+          const updated = await this.rewards.prisma.rewardTagVerification.updateMany({
+            where: { id: row.id, profileId: row.profileId, nextCheckAt: row.nextCheckAt },
             data: {
-              status: found ? "VERIFIED" : "MISSING",
-              firstSeenAt: first,
-              checkedAt: now,
-              observedName: name.slice(0, 256),
-              reason: null,
-              nextCheckAt: new Date(now.getTime() + (3 * 3600 + randomInt(3600)) * 1000)
+              status: "ERROR",
+              attemptedAt: new Date(),
+              errorCode: error instanceof TelegramCheckError ? error.code : "INTERNAL",
+              reason: "Проверка временно недоступна; повторим автоматически",
+              nextCheckAt: new Date(Date.now() + 30 * 60000)
             }
           });
-          if (found && first)
-            await this.rewards.creditVerifiedTags(tx, row.telegramId, first, now, p.settings);
-          if (row.status === "PENDING")
-            await tx.rewardNotice.createMany({
+          if (updated.count && row.status === "PENDING")
+            await this.rewards.prisma.rewardNotice.createMany({
               data: [
                 {
                   key: `tag-check:${row.id}:${row.nextCheckAt.toISOString()}`,
                   telegramId: row.telegramId,
-                  payload: {
-                    kind: "tag_check",
-                    status: found ? "VERIFIED" : "MISSING",
-                    tag: p.settings.tag
-                  }
+                  payload: { kind: "tag_check", status: "ERROR", tag: p.settings.tag }
                 }
               ],
               skipDuplicates: true
             });
-        });
-      } catch {
-        // Never log provider URLs/tokens, and do not interpret outages as missing tags.
-        await this.rewards.prisma.rewardTagVerification.updateMany({
-          where: { id: row.id, profileId: row.profileId },
-          data: {
-            status: "ERROR",
-            reason: "Проверка временно недоступна; повторим автоматически",
-            nextCheckAt: new Date(Date.now() + 30 * 60000)
-          }
-        });
-        if (row.status === "PENDING")
-          await this.rewards.prisma.rewardNotice.createMany({
-            data: [
-              {
-                key: `tag-check:${row.id}:${row.nextCheckAt.toISOString()}`,
-                telegramId: row.telegramId,
-                payload: { kind: "tag_check", status: "ERROR", tag: p.settings.tag }
-              }
-            ],
-            skipDuplicates: true
-          });
-      }
-    }
+        }
+      })
+    );
+    if (outcomes.some((outcome) => outcome.status === "rejected"))
+      throw new Error("Telegram check persistence failed; leased work will retry");
   }
 }

@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
 import type { Prisma, TelegramPartyChatRoom } from "#prisma/client";
@@ -8,6 +8,7 @@ import { GamePartiesService } from "./game-parties.service.js";
 import { PartyCoordinationService } from "./party-coordination.service.js";
 import { DiscordVoiceService } from "./discord-voice.service.js";
 import { PartyChatPingsService } from "./party-chat-pings.service.js";
+import { DotaProfileService } from "../../dota/services/dota-profile.service.js";
 import type { RegisterRoomDto, RoomReportDto, RoomMessagesDto, PartyNoticeContextDto } from "../dto/telegram-party-rooms.dto.js";
 
 type RosterMember = { membershipId: string; userId: string; telegramId: string | null; name: string; role: string | null; ready: boolean; telegramUsername?: string | null };
@@ -27,6 +28,8 @@ type RoomData = {
   purgedThrough?: Record<string, number>;
   cleanupDoneIds?: string[];
   possibleIds?: string[];
+  cleanupFenceAt?: string;
+  historyBaselineAt?: string;
 };
 function dataOf(room: TelegramPartyChatRoom): RoomData {
   return { staffIds: [], links: [], presentIds: [], seenIds: [], evictIds: [], roster: [], ...(room.data as object) } as RoomData;
@@ -41,7 +44,8 @@ export class TelegramPartyRoomsService {
   private readonly discordJoins = new Map<string, Promise<{ inviteUrl: string; limit: number; name: string }>>();
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService<EnvironmentVariables, true>,
     private readonly parties: GamePartiesService, private readonly coordination: PartyCoordinationService,
-    private readonly discord: DiscordVoiceService, private readonly pings?: PartyChatPingsService) {}
+    private readonly discord: DiscordVoiceService, private readonly profiles: DotaProfileService,
+    private readonly pings?: PartyChatPingsService) {}
 
   assertAdmin(adminId: string) {
     const allowed = new Set((this.config.get("DOTA_BOT_ADMIN_IDS", { infer: true }) ?? "").split(",").map(id => id.trim()));
@@ -82,7 +86,10 @@ export class TelegramPartyRoomsService {
     }
     return this.prisma.telegramPartyChatRoom.create({ data: {
       chatId: input.chatId, botId: input.botId, title: input.title.trim().slice(0, 128),
-      data: json({ staffIds: unique(input.staffIds), links: [], presentIds: [], seenIds: [], evictIds: [], roster: [] })
+      ...(input.historyVisible ? { state: "REVIEW" } : {}),
+      data: json({ staffIds: unique(input.staffIds), links: [], presentIds: [], seenIds: [], evictIds: [], roster: [],
+        ...(input.historyVisible ? { cleanupUncertain: true, errorCode: "history_baseline", reviewId: randomUUID(),
+          error: "Visible history needs an initial owner cleanup confirmation" } : {}) })
     } });
   }
 
@@ -103,13 +110,15 @@ export class TelegramPartyRoomsService {
           state: "FREE", generation: { increment: 1 }, leaseToken: null, leaseUntil: null, retryAt: null,
           partyId: null, assignedAt: null,
           data: json({ staffIds: unique(staffIds), links: [], presentIds: [], seenIds: [], evictIds: [], roster: [],
-            botBannedIds: dataOf(room).botBannedIds ?? [], presenceUpdates: dataOf(room).presenceUpdates ?? {} })
+            botBannedIds: dataOf(room).botBannedIds ?? [], presenceUpdates: dataOf(room).presenceUpdates ?? {},
+            historyBaselineAt: new Date().toISOString() })
         } });
       }
       if (action === "retry") {
         if (room.state !== "REVIEW") throw new ConflictException("Group does not require review");
+        const data = dataOf(room); delete data.cleanupFenceAt;
         return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
-          state: "CLOSING", generation: { increment: 1 }, leaseToken: null, leaseUntil: null, retryAt: null
+          state: "CLOSING", generation: { increment: 1 }, leaseToken: null, leaseUntil: null, retryAt: null, data: json(data)
         } });
       }
       return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
@@ -150,7 +159,7 @@ export class TelegramPartyRoomsService {
       if (busy >= pool.capacity) return null;
       // The main bot may assign a room served by a helper; only its owner bot operates that room.
       const live = await tx.telegramPartyChatWorker.findMany({ where: { heartbeatAt: { gte: new Date(Date.now() - 90_000) } }, select: { botId: true } });
-      const free = await tx.telegramPartyChatRoom.findFirst({ where: { enabled: true, removeWhenFree: false, state: "FREE", botId: { in: live.map(worker => worker.botId) } }, orderBy: { createdAt: "asc" } });
+      const free = await tx.telegramPartyChatRoom.findFirst({ where: { enabled: true, removeWhenFree: false, state: "FREE", messages: { none: { deletedAt: null } }, botId: { in: live.map(worker => worker.botId) } }, orderBy: { createdAt: "asc" } });
       if (!free) return null;
       const data = dataOf(free);
       data.roster = this.roster(party); data.partyName = party.name; data.partySlug = party.slug;
@@ -171,10 +180,15 @@ export class TelegramPartyRoomsService {
 
   async reconcile(roomId: string) {
     return this.locked(roomId, async (tx, room) => {
-      if (!room.partyId || ["FREE", "REVIEW", "CLOSING"].includes(room.state)) return room;
+      if (["FREE", "REVIEW", "CLOSING"].includes(room.state)) return room;
       const data = dataOf(room);
-      const party = await tx.gameParty.findUnique({ where: { id: room.partyId }, include: partyInclude });
-      if (!party || party.kind !== "PARTY" || party.mergedIntoSlug) {
+      const party = room.partyId ? await tx.gameParty.findUnique({ where: { id: room.partyId }, include: partyInclude }) : null;
+      // Discord occupancy can extend an expired party through its existing lifecycle.
+      // Wait for that lifecycle to extend/delete it rather than interrupting a call.
+      if (!party || party.kind !== "PARTY" || party.mergedIntoSlug || !party.expiresAt
+        || (party.expiresAt <= new Date() && !party.discordChannelId)
+        || !party.members.some(member => member.user.status === "active")) {
+        delete data.cleanupFenceAt;
         data.evictIds = unique([...data.evictIds, ...data.presentIds, ...(data.possibleIds ?? [])].filter(id => !data.staffIds.includes(id)));
         return tx.telegramPartyChatRoom.update({ where: { id: room.id }, data: {
           state: "CLOSING", generation: { increment: 1 }, data: json(data)
@@ -338,8 +352,15 @@ export class TelegramPartyRoomsService {
         if (input.inviteLink && data.pendingInvite?.url !== input.inviteLink && !data.links.some(link => link.url === input.inviteLink)) {
           data.links.push({ url: input.inviteLink, revoked: false });
         }
+      } else if (input.event === "cleanup-fenced") {
+        if (room.state !== "CLOSING" || data.pendingInvite || data.links.some(link => !link.revoked)
+          || [...data.presentIds, ...(data.possibleIds ?? [])].some(id => !data.staffIds.includes(id)))
+          throw new ConflictException("Group cleanup mutations are incomplete");
+        data.cleanupFenceAt ??= new Date().toISOString();
       } else if (input.event === "closed") {
         if (room.state !== "CLOSING" || data.pendingInvite || data.links.some(link => !link.revoked) || [...data.presentIds, ...(data.possibleIds ?? [])].some(id => !data.staffIds.includes(id))) throw new ConflictException("Group cleanup incomplete");
+        if (!data.cleanupFenceAt || !input.pollStartedAt || input.pollStartedAt < Date.parse(data.cleanupFenceAt)
+          || input.pollStartedAt > Date.now() + 5000) throw new ConflictException("Await fresh Telegram updates after cleanup");
         if (await tx.telegramPartyChatMessage.count({ where: { roomId, deletedAt: null } })) throw new ConflictException("Messages still pending deletion");
         if (data.cleanupUncertain) return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
           state: "REVIEW", data: json({ ...data, reviewId: data.reviewId ?? randomUUID(), error: "Manual confirmation of complete history cleanup required", errorCode: "manual_history" })
@@ -350,7 +371,8 @@ export class TelegramPartyRoomsService {
           state: "FREE", partyId: null, assignedAt: null, generation: { increment: 1 }, retryAt: null,
           leaseToken: null, leaseUntil: null,
           data: json({ staffIds: data.staffIds, links: [], presentIds: [], seenIds: [], evictIds: [], roster: [],
-            botBannedIds: data.botBannedIds ?? [], presenceUpdates: data.presenceUpdates ?? {} })
+            botBannedIds: data.botBannedIds ?? [], presenceUpdates: data.presenceUpdates ?? {},
+            ...(data.historyBaselineAt ? { historyBaselineAt: data.historyBaselineAt } : {}) })
         } });
       }
       return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
@@ -440,8 +462,10 @@ export class TelegramPartyRoomsService {
           senderId: item.userId ?? null,
           deletedAt: item.userId && item.sentAt < (data.purgedThrough?.[item.userId] ?? 0) ? new Date() : null
         })), skipDuplicates: true });
-        if (changed) await tx.telegramPartyChatRoom.update({ where: { id: room.id }, data: {
-          ...(data.cleanupUncertain ? { state: "REVIEW" } : {}), data: json(data)
+        const dirtyFree = room.state === "FREE" && items.length && await tx.telegramPartyChatMessage.count({ where: { roomId: room.id, deletedAt: null } });
+        if (dirtyFree) delete data.cleanupFenceAt;
+        if (changed || dirtyFree) await tx.telegramPartyChatRoom.update({ where: { id: room.id }, data: {
+          ...(data.cleanupUncertain ? { state: "REVIEW" } : dirtyFree ? { state: "CLOSING", generation: { increment: 1 } } : {}), data: json(data)
         } });
       });
     }
@@ -523,10 +547,11 @@ export class TelegramPartyRoomsService {
       limit: Math.max(1, data.discordClickedMembershipIds?.length ?? 1), name: context.name };
   }
 
-  async ready(roomId: string, botId: string, telegramId: string, ready: boolean, generation?: number) {
+  async ready(roomId: string, botId: string, telegramId: string, ready: boolean, generation?: number, expectedMembershipId?: string) {
     const room = await this.reconcile(roomId); const data = dataOf(room);
     const member = data.roster.find(member => member.telegramId === telegramId);
     if (room.botId !== botId || room.state !== "ACTIVE" || room.generation !== generation || !member
+      || (expectedMembershipId !== undefined && member.membershipId !== expectedMembershipId)
       || (!data.presentIds.includes(telegramId) && !data.staffIds.includes(telegramId))) throw new ForbiddenException();
     const result = await this.coordination.update(data.partySlug!, member.userId, member.membershipId, { ready });
     await this.locked(roomId, async (tx, current) => {
@@ -538,6 +563,55 @@ export class TelegramPartyRoomsService {
       }
     });
     return result;
+  }
+
+  async dotaIdContext(roomId: string, botId: string, telegramId: string, generation: number) {
+    const { room, sender } = await this.pingContext(roomId, botId, telegramId, generation);
+    return {
+      partyId: room.partyId!,
+      membershipId: sender.membershipId,
+      generation: room.generation
+    };
+  }
+
+  async saveDotaId(
+    roomId: string,
+    botId: string,
+    telegramId: string,
+    generation: number,
+    partyId: string,
+    membershipId: string,
+    dotaAccountId: string
+  ) {
+    if (!/^[0-9]{8,10}$/.test(dotaAccountId))
+      throw new BadRequestException("Введите 8–10 цифр Dota ID.");
+    const { room, sender } = await this.pingContext(roomId, botId, telegramId, generation);
+    if (room.partyId !== partyId || sender.membershipId !== membershipId)
+      throw new ConflictException("Пати или состав изменились. Нажми «Готов играть» заново.");
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: sender.userId },
+      select: {
+        id: true,
+        avatarUrl: true,
+        displayName: true,
+        email: true,
+        role: true,
+        status: true,
+        username: true
+      }
+    });
+    if (user.status !== "active") throw new ForbiddenException();
+    // Reuse normal profile ownership/uniqueness rules; helpers never obtain a user JWT.
+    await this.profiles.updateMyProfile({ dotaAccountId }, user);
+    try {
+      await this.ready(roomId, botId, telegramId, true, generation, membershipId);
+    } catch (error) {
+      if (error instanceof HttpException && [400, 403, 404, 409].includes(error.getStatus()))
+        return { saved: true, ready: false };
+      throw error;
+    }
+    // The ordinary readiness reconciliation refreshes the shared roster card.
+    return { saved: true, ready: true };
   }
 
   private async pingContext(roomId: string, botId: string, telegramId: string, generation: number) {

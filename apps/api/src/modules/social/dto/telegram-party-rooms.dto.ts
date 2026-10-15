@@ -9,6 +9,7 @@ export class RoomAdminDto extends RoomBotDto {
   @Matches(/^\d{1,16}$/) adminId!: string;
 }
 export class RegisterRoomDto extends RoomAdminDto {
+  @IsOptional() @IsBoolean() historyVisible?: boolean;
   @Matches(/^-100\d{5,16}$/) chatId!: string;
   @IsString() @MaxLength(128) title!: string;
   @IsArray() @ArrayMaxSize(50) @ArrayUnique() @Matches(/^\d{1,16}$/, { each: true }) staffIds!: string[];
@@ -29,7 +30,8 @@ export class RoomLeaseDto extends RoomBotDto {
   @IsInt() @Min(1) generation!: number;
 }
 export class RoomReportDto extends RoomLeaseDto {
-  @IsIn(["invite-created", "prepared", "rotated", "link-revoked", "member-removed", "member-unbanned", "admitting", "joined", "card", "card-pinned", "closed", "review", "retry"]) event!: string;
+  @IsIn(["invite-created", "prepared", "rotated", "link-revoked", "member-removed", "member-unbanned", "admitting", "joined", "card", "card-pinned", "cleanup-fenced", "closed", "review", "retry"]) event!: string;
+  @IsOptional() @IsInt() @Min(1) pollStartedAt?: number;
   @IsOptional() @Matches(/^https:\/\/t\.me\/\+[A-Za-z0-9_-]+$/) inviteLink?: string;
   @IsOptional() @Matches(/^\d{1,16}$/) userId?: string;
   @IsOptional() @IsBoolean() ownedBan?: boolean;
@@ -53,6 +55,11 @@ export class RoomDiscordDto extends RoomBotDto {
 }
 export class RoomPingDto extends RoomDiscordDto {
   @IsUUID("4") targetMembershipId!: string;
+}
+export class RoomDotaIdDto extends RoomDiscordDto {
+  @IsUUID("4") partyId!: string;
+  @IsUUID("4") membershipId!: string;
+  @IsString() @Matches(/^[0-9]{8,10}$/) dotaAccountId!: string;
 }
 export class PartyNoticeContextDto {
   @IsUUID("4") partyId!: string;

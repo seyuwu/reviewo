@@ -12,8 +12,9 @@ For bulk setup, use “Подключить несколько групп” and
 `/fdpchat` message to the groups using Telegram's multiple-recipient forward dialog.
 Only a configured FDP administrator who owns the group can connect it this way.
 The bot checks privacy, forum mode, its management rights, the owner's creator
-status, and that only administrators and the bot are present. Use hidden history
-for new members. Use only the bot's controlled invitations for players; owner and
+status, and that only administrators and the bot are present. Visible history
+requires a one-time owner cleanup confirmation as described below; hidden history
+remains supported. Use only the bot's controlled invitations for players; owner and
 moderator invitations or manual admissions bypass automated membership checks.
 Basic groups must first be converted to supergroups (enable topics, then disable
 them) before connection. No public usernames or forum topics are used.
@@ -51,9 +52,11 @@ not erase a newer ban. Ownership survives group reuse and manual cleanup
 confirmation. Every automatic unban rechecks current ownership on the API so a
 moderator's subsequent ban is preserved.
 
-Groups keep history hidden for newcomers. After a confirmed Telegram join, the
-worker sends a fresh roster card, pins it and deletes the preceding card. Editing
-the older card alone would leave it invisible to the newcomer. Consecutive joins
+Groups may expose current-party history to newcomers after the owner confirms the
+initial cleanup. The owner enables history visibility in Telegram; Bot API cannot
+toggle it. After a confirmed Telegram join, the worker sends a fresh roster card,
+pins it and deletes the preceding card. This also supports hidden-history groups,
+where editing the older card alone would leave it invisible. Consecutive joins
 are coalesced for two seconds, and persisted join versions prevent a concurrent
 join from being lost when a card send is acknowledged. Existing active groups
 receive one replacement card after this feature is first enabled.
@@ -66,11 +69,14 @@ Helper workers use `DOTA_BOT_MAIN_USERNAME` (default `FDPdotabot`) for this acti
 The single private party invitation offers “Указать Dota ID” only when the current
 member has no ID. The shared card also offers it when any member lacks an ID.
 `dotaid_<party UUID>` opens the existing ID-only form in the main bot, rechecks
-current membership and returns to the party. Helper workers never edit profiles.
+current membership and returns to the party. This remains available as a private
+alternative to the locally prepared in-group reply flow described below.
 The ID form opened from a party explains that the ID is required for readiness.
 The API rejects readiness for a temporary party without a saved Dota ID; joining
 the Telegram group and continuing search remain available. A rejected group
-readiness action shows the player a private ID entry button. Existing IDs are reused.
+readiness action previously showed the player a private ID entry button. The
+prepared change below also accepts an explicit reply inside the assigned group.
+Existing IDs are reused by ordinary readiness actions.
 Shared roster cards expose Telegram usernames only when the player shared their
 contact with this party or made it public.
 
@@ -107,9 +113,11 @@ notices alive after a player rejoins. New messages and existing saved notice
 pointers are both covered, including messages still being delivered during exit.
 
 Stopping recruitment does not end the party or group. Party extensions update
-invitation expiry. Canonical merged or deleted parties enter cleanup. Mere expiry
-does not release the group before normal API cleanup has handled Discord occupancy
-and possible lifetime extension. Failed preparation times out after 10 minutes.
+invitation expiry. Canonical merged, deleted, orphaned or empty parties enter
+cleanup. Expired parties without a Discord channel enter cleanup immediately.
+For voice-backed parties, normal API cleanup first handles Discord occupancy and
+possible lifetime extension; it must not interrupt an active call. Failed
+preparation times out after 10 minutes.
 A successfully prepared chat follows the party lifetime, including when players
 have not entered it yet. New assignments wake synchronization immediately and preparation
 takes priority over ordinary card refreshes. The invite becomes available before
@@ -186,9 +194,17 @@ for ordinary individual deletion.
 Messages are scheduled for deletion after 12 hours. This is a bot-managed timer,
 not Telegram's native auto-delete setting: deletion requires a working bot.
 On party termination, invitations are revoked, group writes are suspended,
-members removed and verified, tracked messages deleted in batches of up to 100,
-and member count checked against the administrators. A free group is released
-only after pending tracked deletions and removals are acknowledged.
+members removed and verified, and the original title restored. The API records a
+cleanup fence after those mutations. The worker then waits for a Telegram poll
+started after that fence and durably journals its result, including the trailing
+leave/title service messages. It drains tracked deletions in batches of up to 100
+and checks member count against the administrators. Only then can the API release
+the group. Restarting the worker requires a fresh poll again. A retry of this
+settling phase does not repeat title changes or participant removals.
+
+Late messages recorded while a group is free automatically return it to cleanup.
+Allocation additionally excludes free groups with pending tracked deletions in
+the existing selection query. Message text/media are not copied or replayed.
 
 Bot API cannot enumerate the full group history. Telegram's create-group service
 messages cannot be deleted, and ordinary deletion is limited to messages younger
@@ -197,13 +213,20 @@ for review, before Telegram's 24-hour update retention can lose metadata. Transp
 uncertainty, lost rights, changed group IDs/admin lists, old messages and incomplete
 cleanup also quarantine a group. Automated retries do not erase uncertainty.
 Read-only Telegram network failures and connection-establishment failures before
-a write was sent instead schedule automatic retries after 5–30 seconds. Confirmed
+a write was sent instead schedule automatic retries after 5–30 seconds. Known-ID
+deletion, permission freezing and title restoration also retry on network/server
+errors: repeating these specific operations is safe even after a lost reply.
+Message IDs are acknowledged only after successful deletion. Ambiguous admission,
+invitation creation and ban ownership retain their conservative review policy. Confirmed
 configuration errors or rejected operations still stop allocations, but do not
 invent history uncertainty: after correcting the issue, successful retry cleanup
 can release the group. Existing history uncertainty always survives those retries.
 The owner may manually clear history for everyone, remove players, and explicitly
 confirm cleanup through the administrator UI. This is a human confirmation, not
-a claim that the bot inspected the entire history.
+a claim that the bot inspected the entire history. A newly registered group with
+visible history stays in review until that explicit confirmation establishes
+`historyBaselineAt`. This marker survives normal reuse. Retrying cleanup does not
+erase genuine history uncertainty or substitute for the owner's confirmation.
 
 The main bot stores each administrator's review alert message ID and sends only
 one alert per unresolved review, across restarts and repeated cleanup attempts.
@@ -238,7 +261,8 @@ are never rendered. Rights, unexpected participants, old messages, interrupted
 admission and uncertain history have separate explanations.
 
 Read-only Telegram server errors use the same automatic retry policy as read-only
-network errors. Server errors during writes retain the conservative review path.
+network errors. Server errors during writes retain the conservative review path,
+apart from the repeatable cleanup operations explicitly listed above.
 The worker excludes groups waiting for retry deadlines or another lease, backs
 off failed API claims, and uses separate round-robin cursors for urgent and routine
 work. When both queues are ready, routine maintenance gets at least one turn after
@@ -352,3 +376,90 @@ for rollback before restarting only the API. Bot/web containers and saved reward
 settings were preserved. Runtime checks confirmed the exact image and corrected
 planner behavior, healthy API/web, no recent error markers or container restarts,
 and a fresh bot reward-sync cursor. The local test PostgreSQL was also stopped.
+
+## In-group Dota ID replies (15 October 2026, local only)
+
+The user asked to batch this with later changes. Do not deploy or push until
+they request the combined release. The production bot still has the earlier
+private-entry flow until that release.
+
+When a player without a Dota ID clicks “Готов играть”, or clicks the shared
+card's “Указать Dota ID” button, the assigned room bot asks for an ID directly
+in the group. A selective ForceReply mentions that player and explains where
+to find the ID. The player replies with 8–10 ASCII digits. The API saves it
+through the ordinary Dota profile service and then confirms readiness; the
+existing background reconciliation updates the roster card. This works in the
+main bot and helper-only room routers without moving or clearing a private FSM.
+
+The request is stored in the bot's existing choices storage and expires five
+minutes after the latest prompt. It is bound to sender, serving bot, chat,
+prompt message, room, generation, party and membership. Only that sender's
+explicit reply to the serving bot's prompt is accepted. Unrelated messages,
+bare numbers, other senders, old prompt IDs and replies from another chat/bot
+cannot edit a profile. Per-user locks serialize prompt/save operations and
+completed requests are consumed so concurrent replies do not save twice.
+Repeated prompt openings have a three-second per-player/room cooldown.
+
+The bot-secret-protected `POST /:id/dota-id/context` uses fresh active room
+membership, presence and expiry. `POST /:id/dota-id` checks the same conditions
+plus the original party/membership IDs and validates the numeric format before
+editing the current member's own profile. It reuses ordinary profile ownership,
+uniqueness and attribute-preservation rules, without creating helper user JWTs.
+The room readiness call additionally fences the original membership against
+leave/rejoin. An ID conflict permits a corrected reply. An expired/reassigned
+request is rejected. If the ID was saved but the party changed before readiness,
+the response explicitly distinguishes saved ID from unconfirmed readiness.
+An uncertain API result never claims success and permits an explicit retry.
+
+There is no new polling, table or migration for this feature. Only opening the
+input and submitting a matching valid reply call the room API. Ordinary chat
+messages/search flows add no network requests. Prompt/reply messages use the
+existing room message journal, so they follow normal temporary-chat cleanup.
+The private main-bot form and old deep links remain usable. A future release
+must update the API before the main and helper bot processes.
+
+Two updated regression tests first failed on the old link-only behavior.
+Tests cover ForceReply, identity/context fencing, invalid and conflicting IDs,
+retries, duplicate replies, both router registrations and real aiogram dispatch.
+Isolated PostgreSQL tests use the real profile repositories, room service and
+coordination service to verify saved ID/readiness, unchanged roles/MMR/peers,
+duplicate-ID rejection and stale leave/rejoin replies. No real Telegram chats
+or production players are used by these tests.
+
+Validation: all 303 bot tests and 382 API tests passed. The latter run includes
+both isolated local rewards and party-coordination databases, three new real
+PostgreSQL ID scenarios and nine new API boundary/ownership cases. A real
+aiogram dispatcher test confirms that an existing private profile-edit draft
+survives the group reply. API compilation and changed-file ESLint pass. The
+complete Nest graph resolves the profile dependency and both new room routes
+without route collisions; no HTTP listener or real bot credentials are used.
+The earlier prepared Telegram task checks remain local alongside this change.
+
+## Complete tracked cleanup after party termination (15 October 2026, local only)
+
+The lifecycle and two-phase cleanup described above are prepared locally with the
+in-group Dota ID and task-review changes. Nothing was pushed or deployed. A future
+combined release must update the API before every main/helper room worker: older
+workers cannot supply the new cleanup fence and post-cleanup poll proof, so rooms
+remain closing until their worker is updated.
+
+Regression tests first reproduced premature release and deletion-timeout failures.
+Coverage includes expiry, deletion/orphaning, merging, empty rosters, existing voice
+extension policy, trailing service messages, restart/poll barriers, transient
+deletion retries, late free-room messages, immutable creation notices, initial
+owner confirmation, retained history uncertainty and registry removal only after
+message acknowledgement. Local PostgreSQL tests exercise real room transactions.
+The follow-up review passed all 393 API tests, 312 bot tests and 36 web tests.
+Final focused room tests also cover the subsequent waiting optimization: a group
+waiting for its post-cleanup poll is excluded from claim/validation work in memory,
+including after a worker restart. Twenty room tests pass after that change.
+Registration now explains when initial owner cleanup is still required instead of
+claiming the room is ready. Other review reasons point to the room's actual action
+list. The room detail panel has a refresh button without returning to the list.
+API/web type checks and changed-file ESLint also pass. No new table or migration is
+needed for cleanup. It runs in the existing background room worker and separate
+HTTP pool; ordinary search and chat-message flows gain no network calls.
+
+Unknown old history still needs one initial owner cleanup. Telegram's 48-hour
+deletion limit and immutable group-creation notices remain platform limitations;
+the implementation never claims to enumerate or erase inaccessible history.
