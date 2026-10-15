@@ -282,7 +282,8 @@ def tournament_team_settings_keyboard(result: dict, context: dict, settings: Set
     company = entry.get("company") or {}
     rows = []
     if entry.get("isCaptain"):
-        rows.append([InlineKeyboardButton(text="✏️ Название и описание", callback_data=tournament_callback("team-edit", event_hex))])
+        rows.append([InlineKeyboardButton(text="👥 Состав", callback_data=tournament_callback("roster", event_hex)),
+                     InlineKeyboardButton(text="✏️ О команде", callback_data=tournament_callback("team-edit", event_hex))])
         if company:
             recruitment = []
             if len(entry.get("members") or []) < 5:
@@ -305,6 +306,30 @@ async def fresh_tournament_web_url(api: OpiniaApi, settings: Settings, user_id: 
     ticket = await api.create_web_access_ticket(user_id)
     return (f"{settings.site_url.rstrip('/')}/telegram/access?ticket={quote(ticket, safe='')}"
             f"&next={quote(next_path, safe='')}")
+
+
+async def retire_legacy_tournament_notice(bot, storage, user_id, message, context):
+    """Replace a clicked historical roster snapshot, without a new notification."""
+    text = getattr(message, "text", None) or getattr(message, "caption", None) or ""
+    if not text.startswith(("✅ Состав собран", "✅ Команда найдена", "✅ Вашу заявку приняли")) or "\n• " not in text:
+        return
+    panel = storage.get_panel(user_id)
+    if panel and panel.message_id == message.message_id and panel.chat_id == message.chat.id:
+        return
+    updated = (f"ℹ️ <b>Обновление команды</b>\n\n🏆 {escape(context['title'])}\n\n"
+               "Состав мог измениться. Открой актуальную карточку команды.")
+    markup = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="👥 Моя команда", callback_data=tournament_callback("status", context["eventHex"]))]])
+    try:
+        if getattr(message, "text", None):
+            await bot.edit_message_text(updated, chat_id=message.chat.id, message_id=message.message_id,
+                                        parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+        else:
+            await bot.edit_message_caption(caption=updated, chat_id=message.chat.id, message_id=message.message_id,
+                                           parse_mode="HTML", reply_markup=markup)
+    except TelegramAPIError:
+        # A deleted or too-old notification must not block the live team card.
+        pass
 
 
 async def deliver_tournament_participation_notice(bot: Bot, api: OpiniaApi, settings: Settings,
@@ -357,10 +382,12 @@ async def deliver_tournament_participation_notice(bot: Bot, api: OpiniaApi, sett
                 or (event == "registered" and entry.get("status") != "REGISTERED")):
             return True
         headline = {"found": "Команда найдена", "accepted": "Вашу заявку приняли", "registered": "Состав собран"}[event]
-        text = f"✅ <b>{headline}</b>\n\n" + tournament_status_text(result)
-        markup = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="💬 Открыть чат команды", callback_data=tournament_callback("web", event_hex))
-        ]])
+        text = (f"✅ <b>{headline}</b>\n\n🏆 {escape(context['title'])}\n"
+                f"Команда: <b>{escape(str(entry.get('name') or 'Команда')[:80])}</b>\n\n"
+                "Актуальный состав и управление — по кнопке «Моя команда».")
+        markup = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="👥 Моя команда", callback_data=tournament_callback("status", event_hex))],
+            [InlineKeyboardButton(text="💬 Чат команды", callback_data=tournament_callback("web", event_hex))]])
     try:
         message = await bot.send_message(user_id, text, reply_markup=markup, parse_mode="HTML", disable_web_page_preview=True)
         if event == "accepted":

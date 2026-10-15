@@ -261,7 +261,7 @@ as described above; preserve the additive columns.
 ## Tournament entry name and description in the bot (2026-10-14)
 
 The user clarified that these edits apply to a team in a tournament. Its current
-captain sees **Название и описание** in the team settings, accessible from both
+captain opens **О команде** in the team settings to edit the name and description, accessible from both
 the team card and the friends/company screen. The editor shows current values, accepts a new value as a private text
 message, and has a separate button to clear the description. Name limits are
 2–80 characters; descriptions accept up to 1000 and preserve line breaks.
@@ -329,3 +329,44 @@ the main bot. Saved reward configuration and the API/web containers remained
 unchanged. Runtime checks confirmed the exact candidate image, four-row captain
 card, member permissions and navigation guard, with zero bot restarts and
 healthy API/web services.
+
+## Captain roster controls and historical notices (2026-10-15)
+
+A production read-only inspection of the reported Brutal Phantoms entry found
+four active members, an open position 5 and RECRUITING status. The circled former
+mid player was already inactive and had been replaced. The screenshot was the
+earlier permanent **Состав собран** notification, which retained a full roster
+snapshot. Captain removal existed on the website/API but had no bot control.
+
+Captains now open **Настройки → Состав** to see current active players and
+select a peer for removal. Each button includes the position and name. The next
+screen requires explicit confirmation. Controls remain available for a full
+REGISTERED entry while existing tournament rules allow roster changes; they
+are hidden when editing is closed. The self-removal path remains the separate
+leave action. Settings keep roster and team details in one compact shared row.
+
+The bot uses existing participation, room, authenticated-user and member DELETE
+routes. It rechecks current captaincy, captain membership, entry, target identity,
+position, current roster and room permissions before deletion. Choices expire
+after two minutes and the confirmation is consumed before the request so double
+clicks and uncertain transport errors cannot automatically repeat a deletion.
+A delayed lookup cannot mutate or restore the screen after navigation. A known
+successful removal remains reported as successful if the follow-up refresh fails.
+No API routes, schema changes or extra ordinary-search/background polls are added.
+
+New found/accepted/registered notifications contain an event headline and team
+name with **Моя команда** and chat buttons, rather than a frozen roster. The live
+card always fetches current participation. Clicking a legacy notification's
+existing chat/status button opens the current card and best-effort replaces its
+old roster snapshot with a neutral link. It never overwrites the live panel or
+sends a new broadcast; untouched old notifications remain historical until opened.
+
+Two regression tests failed before the fix. The full local bot run passed 291
+tests; the final focused roster run passed 13, including simultaneous duplicate
+confirmation, self-removal protection, stale target replacement, changed captain
+membership, closed editing, transport failure and navigation during lookup. API
+compilation and ESLint passed. All 50 isolated PostgreSQL rooms/participation tests
+passed, including 5/5 REGISTERED → captain removal → 4/5 RECRUITING → refill →
+5/5 REGISTERED → self-departure → 4/5 with no former player in the live roster.
+Three handler-generated preview screens at a 280-pixel card width had no clipped
+button labels; these were static previews, not live Telegram screenshots.

@@ -542,6 +542,30 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.deliver("registered"))
         self.assertEqual(len(self.bot.sent_messages), 2)
 
+    async def test_registered_notice_does_not_preserve_a_roster_that_can_become_stale(self):
+        self.save_state("JOINED")
+        self.api.entry.update(status="REGISTERED", isCaptain=True)
+        self.api.entry["members"] = [{"name": "DepartedSnapshot" if role == "5" else "Player " + role,
+                                      "role": role, "mmr": 4000} for role in participation.ROLE_NAMES]
+        self.assertTrue(await self.deliver("registered"))
+        text, markup = self.bot.sent_messages[-1][1:]
+        self.assertNotIn("DepartedSnapshot", text)
+        self.assertIn(participation.tournament_callback("status", self.context["eventHex"]),
+                      [button.callback_data for row in markup.inline_keyboard for button in row])
+        self.api.entry["members"] = self.api.entry["members"][:-1]
+        self.api.entry["status"] = "RECRUITING"
+        await self.action("status")
+        self.assertIn("4/5", self.bot.views[-1][0])
+        self.assertNotIn("DepartedSnapshot", self.bot.views[-1][0])
+
+    async def test_full_registered_captain_can_open_roster_management_from_settings(self):
+        self.api.state = "JOINED"
+        self.api.entry.update(status="REGISTERED", isCaptain=True)
+        self.api.entry["members"] = [{"name": "Player " + role, "role": role} for role in participation.ROLE_NAMES]
+        await self.action("team-settings")
+        self.assertIn(participation.tournament_callback("roster", self.context["eventHex"]),
+                      [button.callback_data for button in self.buttons()])
+
     async def test_outbox_request_approval_and_decline_use_distinct_notices(self):
         context = self.save_state("REQUESTED")
         self.api.state = "JOINED"
@@ -636,7 +660,7 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(transport.send_message.await_count, 2)
         self.assertEqual(participation.load_tournament_context(self.storage, USER_ID, self.context["eventHex"])["state"], "JOINED")
 
-    async def test_outbox_site_user_without_saved_tournament_context_gets_current_composition(self):
+    async def test_outbox_site_user_without_saved_context_gets_a_link_to_the_current_composition(self):
         self.storage.set_choices(USER_ID, participation.CONTEXT_PREFIX + self.context["eventHex"], [])
         self.storage.unlink(USER_ID)
         self.api.login_telegram_bot_session.side_effect = None
@@ -645,11 +669,43 @@ class TournamentTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.deliver("found"))
         self.api.login_telegram_bot_session.assert_awaited_once_with(USER_ID)
         self.assertEqual(self.storage.get_session(USER_ID).access_token, "recovered")
-        self.assertIn("0 MMR", self.bot.sent_messages[-1][1])
-        self.assertIn("1/5", self.bot.sent_messages[-1][1])
+        self.assertIn("Актуальный состав", self.bot.sent_messages[-1][1])
+        self.assertNotIn("1/5", self.bot.sent_messages[-1][1])
         self.assertEqual(self.bot.sent_messages[-1][2].inline_keyboard[0][0].callback_data,
-                         participation.tournament_callback("web", self.context["eventHex"]))
+                         participation.tournament_callback("status", self.context["eventHex"]))
         self.assertEqual(participation.load_tournament_context(self.storage, USER_ID, self.context["eventHex"])["entryId"], ENTRY_ID)
+
+    async def test_opening_a_legacy_registration_notice_retires_its_snapshot_and_shows_current_members(self):
+        self.save_state("JOINED")
+        self.api.entry.update(status="RECRUITING", isCaptain=True)
+        self.api.entry["members"] = [{"name": "Current " + role, "role": role, "mmr": 4000} for role in "1234"]
+        callback = self.callback(participation.tournament_callback("status", self.context["eventHex"]))
+        callback.message.message_id = 123
+        callback.message.text = "✅ Состав собран\n\nКоманда\n• DepartedSnapshot · Хард-саппорт"
+        original = self.bot.edit_message_text
+        self.bot.edit_message_text = AsyncMock(side_effect=original)
+        await tournaments.tournament_action(callback, self.state, self.api, self.settings, self.storage)
+        legacy = next(call for call in self.bot.edit_message_text.await_args_list if call.kwargs.get("message_id") == 123)
+        self.assertNotIn("DepartedSnapshot", legacy.args[0])
+        self.assertIn("актуальную карточку", legacy.args[0])
+        live = [text for text, _ in self.bot.views if "Собираем состав · 4/5" in text]
+        self.assertTrue(live)
+        self.assertTrue(all("DepartedSnapshot" not in text for text in live))
+
+    async def test_legacy_cleanup_does_not_overwrite_a_live_panel_or_block_it_on_telegram_failure(self):
+        self.save_state("JOINED")
+        await self.action("status")
+        panel = self.storage.get_panel(USER_ID)
+        message = SimpleNamespace(message_id=panel.message_id, chat=SimpleNamespace(id=USER_ID),
+                                  text="✅ Состав собран\n• Old player")
+        original = self.bot.edit_message_text
+        self.bot.edit_message_text = AsyncMock(side_effect=original)
+        await participation.retire_legacy_tournament_notice(self.bot, self.storage, USER_ID, message, self.context)
+        self.bot.edit_message_text.assert_not_awaited()
+        message.message_id = 123
+        self.bot.edit_message_text.side_effect = TelegramAPIError(method=SendMessage(chat_id=USER_ID, text="x"), message="offline")
+        await participation.retire_legacy_tournament_notice(self.bot, self.storage, USER_ID, message, self.context)
+        self.assertEqual(self.storage.get_panel(USER_ID).screen, "tournaments:status")
 
     async def test_outbox_suppresses_stale_entry_closed_event_and_premature_registration(self):
         self.api.state = "JOINED"

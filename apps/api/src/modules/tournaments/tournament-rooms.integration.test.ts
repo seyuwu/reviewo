@@ -125,6 +125,29 @@ describe("Tournament team rooms (isolated local PostgreSQL)", { skip: !connectio
     assert.equal((await rooms.get(slug, entryA)).description, "");
   });
 
+  it("allows a full registered captain to remove a player and refill the freed role", async () => {
+    for (const [index, role] of (["2", "3", "4", "5"] as const).entries()) {
+      await service.joinEntry(slug, entryA, { positionRole: role }, users[index + 2]!);
+    }
+    assert.equal((await prisma.dotaTournamentEntry.findUniqueOrThrow({ where: { id: entryA } })).status, "REGISTERED");
+    const complete = await rooms.get(slug, entryA, users[0]!);
+    assert.equal(complete.members.length, 5);
+    assert.equal(complete.canManageRoster, true);
+    await assert.rejects(service.removeEntryMember(slug, entryA, users[5]!.id, users[2]!), rejectsStatus(403));
+    await service.removeEntryMember(slug, entryA, users[5]!.id, users[0]!);
+    const partial = await rooms.get(slug, entryA, users[0]!);
+    assert.equal(partial.members.length, 4);
+    assert.ok(!partial.members.some(member => member.userId === users[5]!.id));
+    assert.equal(partial.status, "RECRUITING");
+    await service.joinEntry(slug, entryA, { positionRole: "5" }, users[5]!);
+    assert.equal((await rooms.get(slug, entryA, users[0]!)).status, "REGISTERED");
+    await service.leaveEntry(slug, entryA, users[5]!);
+    const afterLeave = await rooms.get(slug, entryA, users[0]!);
+    assert.equal(afterLeave.members.length, 4);
+    assert.equal(afterLeave.status, "RECRUITING");
+    assert.ok(!afterLeave.members.some(member => member.userId === users[5]!.id));
+  });
+
   it("renames only the captains event entry and freezes its name after bracket generation", async () => {
     await service.joinEntry(slug, entryA, { positionRole: "2" }, users[2]!);
     await rooms.updateDescription(slug, entryA, users[0]!, "Keep the description");

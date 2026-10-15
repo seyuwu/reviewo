@@ -23,7 +23,7 @@ from ..services.tournament_participation import (
     load_tournament_context, remember_participation, save_tournament_context,
     tournament_api_path, tournament_callback, tournament_status_keyboard,
     tournament_status_text, tournament_date_text, tournament_overview_text, tournament_rules_button, participation_requests, uuid_hex,
-    company_menu, tournament_team_settings_keyboard,
+    company_menu, tournament_team_settings_keyboard, retire_legacy_tournament_notice,
 )
 from ..storage.database import BotStorage
 
@@ -620,6 +620,7 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
                        [_button("Остаться в команде", "leave-cancel", context["eventHex"])]])
         elif action == "status":
             await _open_tournament(callback.bot, api, settings, storage, user_id, chat_id, context)
+            await retire_legacy_tournament_notice(callback.bot, storage, user_id, callback.message, context)
         elif action == "team-settings":
             result = await _participation(api, storage, user_id, context)
             if settings_guard[0].revision != settings_guard[1]:
@@ -651,6 +652,8 @@ async def tournament_action(callback: CallbackQuery, state: FSMContext, api: Opi
                     storage.add_temporary_message(user_id, chat_id, callback.message.message_id, 0)
                 else:
                     storage.remove_temporary_message(chat_id, callback.message.message_id)
+            else:
+                await retire_legacy_tournament_notice(callback.bot, storage, user_id, callback.message, context)
         elif action == "sponsor":
             result = await _participation(api, storage, user_id, context)
             sponsor = next((item for item in result.get("sponsors", []) if item.get("id") == choice["sponsorId"]), None)
