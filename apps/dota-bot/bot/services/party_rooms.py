@@ -415,36 +415,50 @@ class PartyRooms:
         for user_id in dict.fromkeys(targets):
             if user_id in room["data"].get("cleanupDoneIds", []):
                 continue
+            check = await self.request("POST", f"/{room['id']}/eligible", {
+                "userId": user_id, "generation": room["generation"], "inviteLink": ""})
+            if check.get("generation") != room["generation"]:
+                raise ApiError("Party membership changed before removal", 409)
+            if not check.get("mayRemove"):
+                continue
             await self.remove_member(room, user_id)
 
     async def remove_member(self, room, user_id):
         member = await self.read("get_chat_member", int(room["chatId"]), int(user_id))
-        owned_ban = member.status != "kicked"
+        absent = member.status == "left" or member.status == "restricted" and not getattr(member, "is_member", False)
+        owned_ban = member.status == "kicked" and user_id in room["data"].get("botBannedIds", [])
         purged_before = int(time.time())
-        if owned_ban:
-            try:
-                await self.mutate("ban_chat_member", int(room["chatId"]), int(user_id), revoke_messages=True)
-            except TelegramBadRequest:
-                if member.status != "left":
-                    raise
-                owned_ban = False
-            # Until ban ownership is persisted, preserve the conservative recovery path.
-            try:
-                member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=15)
-            except TelegramNetworkError as error:
-                raise RoomReviewError("Participant removal verification interrupted before ownership was saved", "participant_removal") from error
-        if member.status not in {"kicked", "left"}:
-            raise RoomReviewError("Participant removal not confirmed", "participant_removal")
+        if not absent and member.status != "kicked":
+            if not await self.mutate("ban_chat_member", int(room["chatId"]), int(user_id), revoke_messages=True):
+                raise RoomCleanupRetry("Participant removal awaits acknowledgement")
+            # A successful ban can precede its read/update. Keep the removal pending;
+            # the durable actor journal also recovers ownership after a restart.
+            for attempt in range(3):
+                try:
+                    member = await self.bot.get_chat_member(int(room["chatId"]), int(user_id), request_timeout=5)
+                except (TelegramNetworkError, TelegramServerError) as error:
+                    raise RoomCleanupRetry("Participant removal confirmation temporarily unavailable") from error
+                if member.status in {"kicked", "left"} or member.status == "restricted" and not getattr(member, "is_member", False):
+                    break
+                if attempt < 2:
+                    await asyncio.sleep(.25 * (attempt + 1))
+            else:
+                raise RoomCleanupRetry("Participant removal confirmation is delayed")
+            owned_ban = member.status == "kicked"
         await self.report(room, "member-removed", userId=user_id, ownedBan=owned_ban, purgedBefore=purged_before)
 
     async def delete_batch(self, room):
         batch = await self.request("POST", f"/{room['id']}/deletions", self.lease_body(room))
         if not batch:
             return False
-        if any((datetime.now(UTC) - datetime.fromisoformat(item["sentAt"].replace("Z", "+00:00"))).total_seconds() >= 48 * 3600 for item in batch):
-            raise RoomReviewError("Messages older than Telegram deletion limit need manual cleanup", "old_messages")
+        old = any((datetime.now(UTC) - datetime.fromisoformat(item["sentAt"].replace("Z", "+00:00"))).total_seconds() >= 48 * 3600 for item in batch)
         ids = [item["messageId"] for item in batch]
-        success = await self.cleanup_mutate("delete_messages", int(room["chatId"]), ids)
+        try:
+            success = await self.cleanup_mutate("delete_messages", int(room["chatId"]), ids)
+        except TelegramBadRequest as error:
+            if old and any(value in str(error).lower() for value in ("can't be deleted", "cannot be deleted", "message_delete_forbidden")):
+                raise RoomReviewError("Existing old messages need owner cleanup", "old_messages") from error
+            raise
         if not success:
             raise RoomCleanupRetry("Message deletion awaits acknowledgement")
         await self.request("POST", f"/{room['id']}/deleted", {**self.lease_body(room), "messageIds": ids})
@@ -554,8 +568,13 @@ class PartyRooms:
                 raise RoomConfigurationError("Administrator list changed; manual review required", "admins_changed")
             self.validated_at[room["id"]] = time.time()
         settling = room["state"] == "CLOSING" and room["data"].get("cleanupFenceAt")
-        if room["state"] in {"PREPARING", "ROTATING", "CLOSING"} and not settling:
+        if room["state"] == "ROTATING":
+            # Invitation rotation must not mute the players who remain in the party.
+            # This also repairs a chat frozen by an interrupted older rotation.
+            await self.cleanup_mutate("set_chat_permissions", chat_id, permissions(True), use_independent_chat_permissions=True)
+        if room["state"] in {"PREPARING", "CLOSING"} and not settling:
             await self.cleanup_mutate("set_chat_permissions", chat_id, permissions(False), use_independent_chat_permissions=True)
+        if room["state"] in {"PREPARING", "ROTATING", "CLOSING"} and not settling:
             pending = room["data"].get("pendingInvite")
             preserve_pending = room["state"] in {"PREPARING", "ROTATING"} and pending and pending["generation"] == room["generation"]
             await self.revoke(room, preserve_pending=bool(preserve_pending))

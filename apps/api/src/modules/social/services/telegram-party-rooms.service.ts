@@ -30,6 +30,7 @@ type RoomData = {
   possibleIds?: string[];
   cleanupFenceAt?: string;
   historyBaselineAt?: string;
+  closingReason?: "party_ended" | "preparation_timeout";
 };
 function dataOf(room: TelegramPartyChatRoom): RoomData {
   return { staffIds: [], links: [], presentIds: [], seenIds: [], evictIds: [], roster: [], ...(room.data as object) } as RoomData;
@@ -63,13 +64,15 @@ export class TelegramPartyRoomsService {
 
   async adminList(adminId: string) {
     this.assertAdmin(adminId);
-    const [pool, rooms] = await Promise.all([
+    const [pool, rooms, workers] = await Promise.all([
       this.prisma.telegramPartyChatPool.findUniqueOrThrow({ where: { id: "default" } }),
-      this.prisma.telegramPartyChatRoom.findMany({ orderBy: { createdAt: "asc" } })
+      this.prisma.telegramPartyChatRoom.findMany({ orderBy: { createdAt: "asc" }, include: { _count: { select: { messages: { where: { deletedAt: null } } } } } }),
+      this.prisma.telegramPartyChatWorker.findMany({ where: { heartbeatAt: { gte: new Date(Date.now() - 90_000) } }, select: { botId: true } })
     ]);
     return { capacity: pool.capacity, rooms: rooms.map(room => ({
       id: room.id, chatId: room.chatId, botId: room.botId, title: room.title, state: room.state,
       enabled: room.enabled, removeWhenFree: room.removeWhenFree, generation: room.generation,
+      available: room.state === "FREE" && room.enabled && !room.removeWhenFree && !room._count.messages && workers.some(worker => worker.botId === room.botId),
       partyId: room.partyId, partyName: dataOf(room).partyName ?? null, error: dataOf(room).error ?? null,
       errorCode: dataOf(room).errorCode ?? null, cleanupUncertain: Boolean(dataOf(room).cleanupUncertain),
       inviteLink: room.state === "ACTIVE" ? dataOf(room).links.find(link => !link.revoked)?.url ?? null : null
@@ -117,8 +120,11 @@ export class TelegramPartyRoomsService {
       if (action === "retry") {
         if (room.state !== "REVIEW") throw new ConflictException("Group does not require review");
         const data = dataOf(room); delete data.cleanupFenceAt;
+        const party = room.partyId ? await tx.gameParty.findUnique({ where: { id: room.partyId }, include: partyInclude }) : null;
+        const live = party?.kind === "PARTY" && !party.mergedIntoSlug && Boolean(party.expiresAt
+          && (party.expiresAt > new Date() || party.discordChannelId)) && party.members.some(member => member.user.status === "active");
         return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
-          state: "CLOSING", generation: { increment: 1 }, leaseToken: null, leaseUntil: null, retryAt: null, data: json(data)
+          state: live ? "ROTATING" : "CLOSING", generation: { increment: 1 }, leaseToken: null, leaseUntil: null, retryAt: null, data: json(data)
         } });
       }
       return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
@@ -180,21 +186,37 @@ export class TelegramPartyRoomsService {
 
   async reconcile(roomId: string) {
     return this.locked(roomId, async (tx, room) => {
-      if (["FREE", "REVIEW", "CLOSING"].includes(room.state)) return room;
       const data = dataOf(room);
+      if (room.state === "FREE") {
+        if (!await tx.telegramPartyChatMessage.count({ where: { roomId, deletedAt: null } })) return room;
+        delete data.cleanupFenceAt;
+        return tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: {
+          state: "CLOSING", generation: { increment: 1 }, retryAt: null, data: json(data)
+        } });
+      }
+      const removalReview = room.state === "REVIEW" && data.errorCode === "participant_removal";
+      if (room.state === "REVIEW" && !removalReview) return room;
       const party = room.partyId ? await tx.gameParty.findUnique({ where: { id: room.partyId }, include: partyInclude }) : null;
       // Discord occupancy can extend an expired party through its existing lifecycle.
       // Wait for that lifecycle to extend/delete it rather than interrupting a call.
       if (!party || party.kind !== "PARTY" || party.mergedIntoSlug || !party.expiresAt
         || (party.expiresAt <= new Date() && !party.discordChannelId)
         || !party.members.some(member => member.user.status === "active")) {
+        if (room.state === "CLOSING") return room;
         delete data.cleanupFenceAt;
+        data.closingReason = "party_ended";
         data.evictIds = unique([...data.evictIds, ...data.presentIds, ...(data.possibleIds ?? [])].filter(id => !data.staffIds.includes(id)));
         return tx.telegramPartyChatRoom.update({ where: { id: room.id }, data: {
           state: "CLOSING", generation: { increment: 1 }, data: json(data)
         } });
       }
       const roster = this.roster(party);
+      if (room.state === "CLOSING" && data.closingReason === "preparation_timeout"
+        && !data.presentIds.some(id => roster.some(member => member.telegramId === id))) return room;
+      const resume = removalReview || room.state === "CLOSING";
+      if (resume) {
+        delete data.cleanupFenceAt; delete data.closingReason; delete data.error; delete data.errorCode;
+      }
       const removed = data.roster.some(old => !roster.some(member => member.membershipId === old.membershipId && member.telegramId === old.telegramId));
       const allowed = new Set(roster.map(member => member.telegramId).filter(Boolean));
       data.evictIds = unique([...data.evictIds, ...data.presentIds, ...(data.possibleIds ?? [])].filter(id => !allowed.has(id) && !data.staffIds.includes(id)));
@@ -210,8 +232,11 @@ export class TelegramPartyRoomsService {
       data.roster = roster; data.partyName = party.name; data.partySlug = party.slug; data.expiresAt = party.expiresAt?.toISOString() ?? null;
       data.discordClickedMembershipIds = (data.discordClickedMembershipIds ?? []).filter(id => roster.some(member => member.membershipId === id));
       const preparationTimedOut = room.state === "PREPARING" && room.assignedAt && Date.now() - room.assignedAt.getTime() >= 10 * 60_000;
+      const occupiedPreparation = preparationTimedOut && data.presentIds.some(id => roster.some(member => member.telegramId === id));
+      if (preparationTimedOut) data.closingReason = "preparation_timeout";
       return tx.telegramPartyChatRoom.update({ where: { id: room.id }, data: {
-        ...(preparationTimedOut ? { state: "CLOSING", generation: { increment: 1 } }
+        ...(resume || occupiedPreparation ? { state: "ROTATING", generation: { increment: 1 }, retryAt: null }
+          : preparationTimedOut ? { state: "CLOSING", generation: { increment: 1 } }
           : removed && room.state !== "ROTATING" ? { state: "ROTATING", generation: { increment: 1 } } : {}), data: json(data)
       } });
     });
@@ -223,9 +248,13 @@ export class TelegramPartyRoomsService {
       await this.prisma.telegramPartyChatWorker.upsert({ where: { botId },
         create: { botId, heartbeatAt: new Date() }, update: { heartbeatAt: new Date() } });
     }
-    const rooms = await this.prisma.telegramPartyChatRoom.findMany({ where: { botId }, orderBy: { createdAt: "asc" } });
+    const rooms = await this.prisma.telegramPartyChatRoom.findMany({ where: { botId }, orderBy: { createdAt: "asc" },
+      include: { _count: { select: { messages: { where: { deletedAt: null } } } } } });
     const refreshed = [];
-    for (const room of rooms) refreshed.push(await this.reconcile(room.id));
+    for (const { _count, ...room } of rooms) {
+      // Include legacy pending IDs in recovery without a transaction for every clean free room.
+      refreshed.push(room.state === "FREE" && !_count.messages ? room : await this.reconcile(room.id));
+    }
     return refreshed;
   }
 
@@ -395,7 +424,10 @@ export class TelegramPartyRoomsService {
     const current = room.botId === botId && room.generation === generation;
     return { botOwnedBan: current && Boolean(data.botBannedIds?.includes(telegramId)), allowed: current
       && ["PREPARING", "ACTIVE", "ROTATING"].includes(room.state) && Boolean(data.expiresAt && new Date(data.expiresAt) > new Date())
-      && data.roster.some(member => member.telegramId === telegramId), generation: room.generation };
+      && data.roster.some(member => member.telegramId === telegramId), generation: room.generation,
+      mayRemove: current && ["PREPARING", "ACTIVE", "ROTATING", "CLOSING"].includes(room.state)
+        && telegramId !== botId && !data.staffIds.includes(telegramId)
+        && (room.state === "CLOSING" || !data.roster.some(member => member.telegramId === telegramId)) };
   }
 
   async presence(botId: string, chatId: string, userId: string, event: string, actorId?: string,

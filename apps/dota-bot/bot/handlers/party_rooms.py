@@ -181,10 +181,10 @@ async def show_rooms(bot, api, settings, storage, user_id, chat_id, page=0, noti
     rooms = snapshot["rooms"]
     counts = Counter(room["state"] for room in rooms)
     used = sum(counts[key] for key in ("PREPARING", "ACTIVE", "ROTATING"))
-    free = sum(room["state"] == "FREE" and room["enabled"] for room in rooms)
+    free = sum(room.get("available", room["state"] == "FREE" and room["enabled"] and not room.get("removeWhenFree")) for room in rooms)
     text = ("<b>Группы пати FDP</b>\n\n"
             f"Подключено: <b>{len(rooms)}</b> · рабочий лимит: <b>{snapshot['capacity']}</b>\n"
-            f"Выдано: <b>{used}</b> · свободных: <b>{free}</b>\n"
+            f"Выдано: <b>{used}</b> · готовы к выдаче: <b>{free}</b>\n"
             f"Очистка: <b>{counts['CLOSING']}</b> · требуют проверки: <b>{counts['REVIEW']}</b>\n\n"
             "Лимит ограничивает новые выдачи. Отключение занятой группы вступит в силу после завершения пати.")
     if notice:
@@ -259,6 +259,9 @@ async def room_admin_action(callback: CallbackQuery, state: FSMContext, api, set
             text = f"<b>{escape(room.get('partyName') or room['title'])}</b>\n\nСостояние: {STATES[room['state']]}\nВыдача: {'включена' if room['enabled'] else 'отключена'}"
             if room["removeWhenFree"]:
                 text += "\nУдаление из списка после завершения пати."
+            text += ("\n\n<b>История для новых участников</b>\nВ Telegram: «Изменить → История чата → Видна». "
+                     "Бот не может переключить эту настройку. Перед первым включением дождись завершения пати, "
+                     "очисти историю для всех и подтверди ручную очистку здесь. Дальше новые игроки увидят переписку текущей пати.")
             if room.get("error"):
                 details = review_details(room)
                 text += "\n\n<b>" + escape(details["reason"]) + "</b>\n" + escape(details["action"])
@@ -281,7 +284,7 @@ async def room_admin_action(callback: CallbackQuery, state: FSMContext, api, set
             target = parts[3]
             text = ("Удалить группу из списка FDP? Занятая группа будет отключена от новых выдач и удалена из списка после завершения и очистки. Сама Telegram-группа останется."
                     if target == "remove" else "Вручную очисти историю группы ДЛЯ ВСЕХ и оставь только администрацию и бота. Подтверждение освободит текущий чат пати. Продолжить?"
-                    if target == "manual" else "Повторить очистку? Участники текущего чата будут удалены, переписка очищена.")
+                    if target == "manual" else "Повторить обработку чата? В действующей пати бот сохранит участников и восстановит приглашение. Если пати уже завершилась — очистит группу.")
             await edit_panel_content(callback.bot, storage, api, settings, user_id, "admin:rooms:confirm", text,
                 InlineKeyboardMarkup(inline_keyboard=[[button("Подтверждаю", f"roomadmin:do:{parts[2]}:{target}"), button("Отмена", f"roomadmin:view:{parts[2]}")]]), user_id)
         elif action == "do":

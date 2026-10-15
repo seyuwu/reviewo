@@ -485,3 +485,57 @@ The pre-existing review group was not force-released. Initial unknown history an
 Telegram deletion limits still require the documented owner confirmation. Full
 release evidence, preservation checks and backup location are recorded in
 [the rewards release notes](fdp-rewards.md#совместная-выкладка-15-октября-2026).
+
+## Recovery after live-chat reports (15 October 2026)
+
+The first release missed two production states. A `FREE` room could retain a late
+tracked message from an older cleanup; allocation correctly excluded it but the
+worker never scheduled that existing row for cleanup. Separately, rotation froze
+the whole group before removing a departed member. A delayed `getChatMember`
+response after a successful ban turned this into `participant_removal` review,
+leaving the remaining current players unable to write. Review also retained an
+old roster, so a returning party member could remain bot-banned.
+
+The reported room 12 still had an active party. Read-only checks matched its
+members to Telegram and verified that no outsiders were present. Default writing
+permissions were restored under a room lease without removing any participant or
+force-clearing review. The permanent correction is covered by regression tests:
+
+- Rotation opens/preserves ordinary writing permissions; only initial preparation
+  and actual party-end cleanup freeze the group. Retrying an active party resumes
+  rotation rather than closing/removing all members.
+- Removal rechecks authoritative current membership and generation immediately
+  before each ban. Current party members, the serving bot and administrators are
+  not removal targets. Rejoin invalidates an old target list. Moderator bans are
+  not claimed or undone by the bot.
+- An already absent user is acknowledged without another ban. A successful ban
+  permits three bounded confirmation reads; delayed/network confirmations retain
+  the removal target and automatically retry without a false history-review alert.
+  Durable Telegram actor updates still recover bot-ban ownership across restart.
+- Legacy `participant_removal` reviews refresh the real roster and resume a live
+  party. Real history-gap uncertainty is preserved. A live party cannot remain in
+  an interrupted closing pass, except an empty preparation that truly timed out.
+  An occupied timed-out preparation resumes instead of freezing current players.
+- Worker sync fetches pending-message counts in a bounded query and schedules
+  existing dirty free rooms for cleanup. Clean free rooms skip extra transactions.
+  Old IDs are submitted to Telegram too: missing messages can be acknowledged,
+  while actual undeletable old messages still need owner cleanup. No IDs are
+  acknowledged after a failed deletion.
+- Administration counts only groups eligible for allocation (clean, enabled,
+  not retiring, serving worker online), and explains the active-party retry and
+  Telegram history setting.
+
+Tests first reproduced the rotation freeze and delayed-removal errors, then the
+legacy free-room and active-review failures. The final local API suite passes 401
+tests; the full bot suite passes 322 tests. PostgreSQL coverage includes an actual
+reservation after cleanup, not merely a count of rows marked free. TypeScript and
+changed-file ESLint pass. These corrections add no table/migration and no requests
+to ordinary search; added eligibility checks occur only during member removal.
+
+History checks on enabled production groups confirmed hidden history in every
+successful Telegram response, including room 12; one response timed out and was
+not treated as a confirmed setting. The owner must enable “Изменить → История
+чата → Видна” once after initial cleanup. Bot API exposes `has_visible_history`
+but cannot toggle it; [the Telegram method is for user accounts only](https://core.telegram.org/method/channels.togglePreHistoryHidden).
+Message contents are not stored/copied as a workaround. This history setting is
+separate from writing permissions and does not justify muting existing players.

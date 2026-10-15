@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock
 
-from aiogram.exceptions import TelegramNetworkError, TelegramServerError
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError, TelegramServerError
 from aiogram.methods import DeleteMessages, GetUpdates
 from aiogram.types import Update
 
@@ -59,6 +59,74 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
         await self.pool.operate(self.room)
         self.pool.mutate.assert_not_awaited()
         self.pool.report.assert_awaited_once_with(self.room,"closed",pollStartedAt=int(self.pool.last_poll_started_at*1000))
+
+    async def test_rotation_failure_does_not_mute_remaining_party_members(self):
+        self.room["state"] = "ROTATING"
+        self.pool.remove_members = AsyncMock(side_effect=RoomReviewError("Participant removal not confirmed", "participant_removal"))
+        with self.assertRaises(RoomReviewError):
+            await self.pool.operate(self.room)
+        freezes = [call for call in self.pool.mutate.await_args_list
+                   if call.args[0] == "set_chat_permissions" and not call.args[2].can_send_messages]
+        self.assertEqual(freezes, [], "Rotating invitations must not freeze a live party chat")
+
+    async def test_removal_waits_for_telegram_to_observe_a_confirmed_ban(self):
+        self.pool.read.return_value = SimpleNamespace(status="member")
+        self.pool.read.side_effect = None
+        self.pool.bot.get_chat_member = AsyncMock(side_effect=[SimpleNamespace(status="member"),SimpleNamespace(status="kicked")])
+        await self.pool.remove_member(self.room,"22")
+        self.assertEqual(self.pool.bot.get_chat_member.await_count,2)
+        self.assertTrue(self.pool.report.await_args.kwargs["ownedBan"])
+
+    async def test_absent_members_do_not_need_another_ban_during_rotation(self):
+        self.room["state"] = "ROTATING"
+        self.pool.read.side_effect = None
+        self.pool.read.return_value = SimpleNamespace(status="left")
+        self.pool.bot.get_chat_member = AsyncMock(return_value=SimpleNamespace(status="left"))
+        await self.pool.remove_member(self.room,"22")
+        self.pool.mutate.assert_not_awaited()
+        self.assertFalse(self.pool.report.await_args.kwargs["ownedBan"])
+
+    async def test_old_missing_message_ids_can_be_acknowledged_by_telegram(self):
+        self.pool.request.return_value = [{"messageId":101,"sentAt":(datetime.now(UTC)-timedelta(days=4)).isoformat()}]
+        self.assertTrue(await self.pool.delete_batch(self.room))
+        self.assertEqual(self.pool.request.await_count,2)
+
+    async def test_existing_undeletable_old_messages_still_require_manual_cleanup(self):
+        self.pool.request.return_value = [{"messageId":101,"sentAt":(datetime.now(UTC)-timedelta(days=4)).isoformat()}]
+        self.pool.mutate.side_effect = TelegramBadRequest(method=DeleteMessages(chat_id=int(self.room["chatId"]),message_ids=[101]),message="message can't be deleted")
+        with self.assertRaises(RoomReviewError) as error:
+            await self.pool.delete_batch(self.room)
+        self.assertEqual(error.exception.code,"old_messages")
+        self.assertEqual(self.pool.request.await_count,1)
+
+    async def test_member_who_rejoined_is_not_removed_from_an_old_target_list(self):
+        self.room["state"]="ROTATING"
+        self.room["data"]["evictIds"]=["22"]
+        self.pool.request.return_value={"generation":4,"allowed":True,"mayRemove":False}
+        self.pool.remove_member=AsyncMock()
+        await self.pool.remove_members(self.room)
+        self.pool.remove_member.assert_not_awaited()
+
+    async def test_outdated_removal_generation_never_bans_any_player(self):
+        from bot.api.client import ApiError
+        self.room["data"]["evictIds"]=["22"]
+        self.pool.request.return_value={"generation":5,"mayRemove":True}
+        with self.assertRaises(ApiError):await self.pool.remove_members(self.room)
+        self.pool.mutate.assert_not_awaited()
+
+    async def test_delayed_confirmation_keeps_removal_pending_and_never_requests_manual_review(self):
+        self.pool.read.side_effect=None
+        self.pool.read.return_value=SimpleNamespace(status="member")
+        self.pool.bot.get_chat_member=AsyncMock(return_value=SimpleNamespace(status="member"))
+        with self.assertRaises(RoomCleanupRetry):await self.pool.remove_member(self.room,"22")
+        self.pool.report.assert_not_awaited()
+
+    async def test_existing_moderator_ban_is_not_claimed_by_the_bot(self):
+        self.pool.read.side_effect=None
+        self.pool.read.return_value=SimpleNamespace(status="kicked")
+        await self.pool.remove_member(self.room,"22")
+        self.pool.mutate.assert_not_awaited()
+        self.assertFalse(self.pool.report.await_args.kwargs["ownedBan"])
 
     async def test_waiting_for_poll_does_not_claim_or_revalidate_the_group(self):
         self.room["data"]["cleanupFenceAt"] = datetime.now(UTC).isoformat()

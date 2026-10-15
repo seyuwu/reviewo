@@ -312,6 +312,165 @@ describe("Group Dota ID and lifecycle with isolated PostgreSQL", { skip: !url },
       1
     );
   });
+  it("queues previously saved pending messages in a free room during worker sync", async () => {
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: { state: "FREE", partyId: null, assignedAt: null, data: {} }
+    });
+    await db.telegramPartyChatMessage.create({
+      data: { roomId, messageId: 501, generation: 3, sentAt: new Date(Date.now() - 86400000) }
+    });
+    await db.telegramPartyChatWorker.upsert({
+      where: { botId: "12345" },
+      create: { botId: "12345", heartbeatAt: new Date() },
+      update: { heartbeatAt: new Date() }
+    });
+    assert.equal(
+      (await rooms.adminList("1")).rooms.find((room) => room.id === roomId)?.available,
+      false
+    );
+    const result = await rooms.workerRooms("12345");
+    assert.equal(result.find((room) => room.id === roomId)?.state, "CLOSING");
+    const claim = await rooms.claim(roomId, "12345");
+    assert.ok(claim);
+    const lease = { botId: "12345", generation: claim.generation, leaseToken: claim.leaseToken };
+    await rooms.report(roomId, { ...lease, event: "cleanup-fenced" });
+    await rooms.deleted(roomId, "12345", lease.generation, lease.leaseToken, [501]);
+    await rooms.report(roomId, { ...lease, event: "closed", pollStartedAt: Date.now() });
+    assert.equal(
+      (await db.telegramPartyChatRoom.findUniqueOrThrow({ where: { id: roomId } })).state,
+      "FREE"
+    );
+    assert.equal(
+      await db.telegramPartyChatMessage.count({ where: { roomId, deletedAt: null } }),
+      0
+    );
+    assert.equal(
+      (await rooms.adminList("1")).rooms.find((room) => room.id === roomId)?.available,
+      true
+    );
+    const reservation = new TelegramPartyRoomsService(
+      db as PrismaService,
+      new ConfigService<EnvironmentVariables, true>(),
+      {
+        getPartyBySlug: async () => ({
+          id: partyId,
+          kind: "PARTY",
+          isMember: true,
+          mergedIntoSlug: null,
+          members: [{ userId: ids[0], dotaAccountId: null }]
+        })
+      } as unknown as GamePartiesService,
+      {} as PartyCoordinationService,
+      {} as DiscordVoiceService,
+      {} as DotaProfileService
+    );
+    await db.telegramPartyChatPool.upsert({
+      where: { id: "default" },
+      create: { id: "default", capacity: 10 },
+      update: {}
+    });
+    await db.telegramPartyChatWorker.upsert({
+      where: { botId: "12345" },
+      create: { botId: "12345", heartbeatAt: new Date() },
+      update: { heartbeatAt: new Date() }
+    });
+    const party = await db.gameParty.findUniqueOrThrow({ where: { id: partyId } });
+    const reserved = await reservation.reserve("12345", telegramId, party.slug);
+    assert.equal(reserved?.id, roomId);
+    assert.equal(reserved?.state, "PREPARING");
+  });
+  it("recovers a removal review into the current live roster without erasing history uncertainty", async () => {
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: {
+        state: "REVIEW",
+        data: {
+          errorCode: "participant_removal",
+          cleanupUncertain: true,
+          presentIds: [telegramId],
+          roster: [],
+          evictIds: [telegramId]
+        }
+      }
+    });
+    const room = await rooms.reconcile(roomId);
+    assert.equal(room.state, "ROTATING");
+    const data = room.data as { roster: unknown[]; evictIds: string[]; cleanupUncertain: boolean };
+    assert.equal(data.roster.length, 2);
+    assert.deepEqual(data.evictIds, []);
+    assert.equal(data.cleanupUncertain, true);
+  });
+  it("protects a live party from closing after an administrative retry", async () => {
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: { state: "REVIEW", data: { errorCode: "participant_removal" } }
+    });
+    assert.equal((await rooms.adminAction(roomId, "1", "retry")).state, "ROTATING");
+  });
+  it("resumes an interrupted closing pass when the assigned party is still alive", async () => {
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: {
+        state: "CLOSING",
+        data: { presentIds: [telegramId], roster: [], cleanupFenceAt: new Date().toISOString() }
+      }
+    });
+    const room = await rooms.reconcile(roomId);
+    assert.equal(room.state, "ROTATING");
+    assert.equal((room.data as { cleanupFenceAt?: string }).cleanupFenceAt, undefined);
+  });
+  it("never permits removal of a current member or an administrator from a live party", async () => {
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: { state: "ROTATING", data: { staffIds: ["1"], evictIds: [telegramId], roster: [] } }
+    });
+    const eligible = await rooms.eligible(roomId, "12345", telegramId, 4);
+    assert.equal(eligible.allowed, true);
+    assert.equal((eligible as { mayRemove?: boolean }).mayRemove, false);
+    assert.equal(
+      ((await rooms.eligible(roomId, "12345", "1", 4)) as { mayRemove?: boolean }).mayRemove,
+      false
+    );
+    assert.equal(
+      ((await rooms.eligible(roomId, "12345", "999", 4)) as { mayRemove?: boolean }).mayRemove,
+      true
+    );
+    assert.equal(
+      ((await rooms.eligible(roomId, "12345", "999", 3)) as { mayRemove?: boolean }).mayRemove,
+      false
+    );
+  });
+  it("does not auto-clear a history-gap review on an active party", async () => {
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: { state: "REVIEW", data: { errorCode: "history_gap", cleanupUncertain: true } }
+    });
+    assert.equal((await rooms.reconcile(roomId)).state, "REVIEW");
+  });
+  it("a preparation timeout cannot freeze an already present current party member", async () => {
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: {
+        state: "PREPARING",
+        assignedAt: new Date(Date.now() - 660000),
+        data: { presentIds: [telegramId], roster: [] }
+      }
+    });
+    assert.equal((await rooms.reconcile(roomId)).state, "ROTATING");
+  });
+  it("an empty timed-out preparation still closes without restarting indefinitely", async () => {
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: {
+        state: "PREPARING",
+        assignedAt: new Date(Date.now() - 660000),
+        data: { presentIds: [], roster: [] }
+      }
+    });
+    assert.equal((await rooms.reconcile(roomId)).state, "CLOSING");
+    assert.equal((await rooms.reconcile(roomId)).state, "CLOSING");
+  });
   it("preserves real history uncertainty instead of freeing an unverified group", async () => {
     await db.telegramPartyChatRoom.update({
       where: { id: roomId },
@@ -352,6 +511,10 @@ describe("Group Dota ID and lifecycle with isolated PostgreSQL", { skip: !url },
     assert.equal((result.data as { cleanupUncertain?: boolean }).cleanupUncertain, undefined);
   });
   it("a manual retry starts a new closing pass rather than trusting an old fence", async () => {
+    await db.gameParty.update({
+      where: { id: partyId },
+      data: { expiresAt: new Date(Date.now() - 1000) }
+    });
     await db.telegramPartyChatRoom.update({
       where: { id: roomId },
       data: {
