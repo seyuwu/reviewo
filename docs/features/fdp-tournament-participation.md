@@ -370,3 +370,13 @@ passed, including 5/5 REGISTERED → captain removal → 4/5 RECRUITING → refi
 5/5 REGISTERED → self-departure → 4/5 with no former player in the live roster.
 Three handler-generated preview screens at a 280-pixel card width had no clipped
 button labels; these were static previews, not live Telegram screenshots.
+
+Production rollout used `93176f6a2ecdefe663d7f15b7a588ab4aef2ef23` and changed
+only the main bot image. The candidate passed 83 tournament tests and 17 panel
+lifecycle tests. SQLite was backed up and the previous bot image retained for
+rollback; saved rewards configuration and the API/web containers were preserved.
+Runtime checks confirmed the roster router, full-captain control, member denial,
+compact main card, neutral notices and legacy cleanup. All services were running,
+API/web were healthy and reward sync was fresh, with no recent error markers or
+container restarts. No production player was removed for testing. Local test
+PostgreSQL was stopped.
