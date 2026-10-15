@@ -284,6 +284,123 @@ describe("Group Dota ID and lifecycle with isolated PostgreSQL", { skip: !url },
     );
     assert.equal(await db.telegramPartyChatMessage.count({ where: { roomId } }), 0);
   });
+  it("requires explicit message deletion after a confirmed participant ban", async () => {
+    const row = await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: {
+        state: "CLOSING",
+        data: { staffIds: [], presentIds: [telegramId], links: [] }
+      }
+    });
+    const sentAt = Math.floor(Date.now() / 1000) - 30;
+    await rooms.track({
+      botId: "12345",
+      messages: [
+        { chatId: row.chatId, messageId: 601, sentAt, userId: telegramId },
+        { chatId: row.chatId, messageId: 602, sentAt }
+      ]
+    });
+    const claim = await rooms.claim(roomId, "12345");
+    assert.ok(claim);
+    const lease = { botId: "12345", generation: claim.generation, leaseToken: claim.leaseToken };
+    await rooms.report(roomId, {
+      ...lease,
+      event: "member-removed",
+      userId: telegramId,
+      ownedBan: true,
+      purgedBefore: sentAt + 10
+    });
+    const pending = await rooms.deletions(roomId, "12345", claim.generation, claim.leaseToken);
+    assert.deepEqual(
+      pending.map((message) => message.messageId),
+      [601, 602],
+      "A participant ban must not silently acknowledge their remaining chat messages"
+    );
+    await rooms.report(roomId, { ...lease, event: "cleanup-fenced" });
+    await assert.rejects(
+      rooms.report(roomId, { ...lease, event: "closed", pollStartedAt: Date.now() }),
+      { status: 409 }
+    );
+    await rooms.deleted(roomId, "12345", claim.generation, claim.leaseToken, [601, 602]);
+    assert.equal(
+      (await rooms.report(roomId, { ...lease, event: "closed", pollStartedAt: Date.now() })).state,
+      "FREE"
+    );
+  });
+  it("deletes delayed player and join messages despite a legacy purge marker", async () => {
+    const sentAt = Math.floor(Date.now() / 1000) - 30;
+    const row = await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: {
+        state: "CLOSING",
+        data: {
+          staffIds: [],
+          presentIds: [],
+          links: [],
+          purgedThrough: { [telegramId]: sentAt + 10 }
+        }
+      }
+    });
+    await rooms.track({
+      botId: "12345",
+      messages: [
+        { chatId: row.chatId, messageId: 611, sentAt, userId: telegramId },
+        {
+          chatId: row.chatId,
+          messageId: 612,
+          sentAt: sentAt + 1,
+          userId: telegramId,
+          service: false
+        }
+      ]
+    });
+    const claim = await rooms.claim(roomId, "12345");
+    assert.ok(claim);
+    assert.deepEqual(
+      (await rooms.deletions(roomId, "12345", claim.generation, claim.leaseToken)).map(
+        (message) => message.messageId
+      ),
+      [611, 612]
+    );
+  });
+  it("requeues legacy ban acknowledgements once when the party ends", async () => {
+    const sentAt = Math.floor(Date.now() / 1000) - 30;
+    await db.telegramPartyChatRoom.update({
+      where: { id: roomId },
+      data: {
+        state: "CLOSING",
+        data: {
+          staffIds: [],
+          presentIds: [],
+          links: [],
+          purgedThrough: { [telegramId]: sentAt + 10 }
+        }
+      }
+    });
+    await db.telegramPartyChatMessage.create({
+      data: {
+        roomId,
+        generation: 4,
+        messageId: 621,
+        sentAt: new Date(sentAt * 1000),
+        senderId: telegramId,
+        deletedAt: new Date()
+      }
+    });
+    const claim = await rooms.claim(roomId, "12345");
+    assert.ok(claim);
+    assert.deepEqual(
+      (await rooms.deletions(roomId, "12345", claim.generation, claim.leaseToken)).map(
+        (message) => message.messageId
+      ),
+      [621]
+    );
+    await rooms.deleted(roomId, "12345", claim.generation, claim.leaseToken, [621]);
+    assert.deepEqual(
+      await rooms.deletions(roomId, "12345", claim.generation, claim.leaseToken),
+      []
+    );
+  });
   it("cleans late messages in a free group and ignores immutable creation notices", async () => {
     const chatId = (await db.telegramPartyChatRoom.findUniqueOrThrow({ where: { id: roomId } }))
       .chatId;

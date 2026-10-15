@@ -550,3 +550,20 @@ normal termination still requires initial owner confirmation before another part
 can reuse that group. A newly assigned, never-published group with unknown visible
 history remains blocked before its first invitation. History-gap reviews are not
 automatically cleared. No current conversation is deleted to satisfy a setup check.
+
+The follow-up report for group 1 reproduced a false-clean result in production:
+four recent player messages still existed and were successfully deleted by their
+individual IDs after the room had become free. The API incorrectly treated a
+bot-owned participant ban as acknowledgement of every earlier message attributed
+to that sender, including join notices. Delayed metadata inherited the same
+assumption from `purgedThrough`. Neither path now acknowledges message deletion.
+The worker submits every tracked ID to `deleteMessages`; only its successful
+response permits acknowledgement. Missing IDs that Telegram already removed can
+be safely included. Legacy purge acknowledgements are requeued once during
+closing/preparation, preserving live conversations, and their obsolete marker is
+removed so actual deletion receipts are not undone on every pass. Three database
+regressions cover confirmed bans, delayed player/join records and legacy repair.
+
+On the owner's explicit attestation of manual cleanup, empty unassigned groups
+are confirmed only after checking the real creator, bot rights, administration
+and member count. Occupied/assigned parties and disabled groups are excluded.

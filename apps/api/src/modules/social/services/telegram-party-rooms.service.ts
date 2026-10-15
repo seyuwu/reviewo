@@ -346,10 +346,8 @@ export class TelegramPartyRoomsService {
           if (!(latest?.status === "kicked" && latest.actorId && latest.actorId !== input.botId && latest.sentAt >= before)) {
             data.botBannedIds = unique([...(data.botBannedIds ?? []), input.userId]);
           }
-          data.purgedThrough = { ...(data.purgedThrough ?? {}), [input.userId]: before };
-          await tx.telegramPartyChatMessage.updateMany({ where: {
-            roomId, senderId: input.userId, deletedAt: null, sentAt: { lt: new Date(before * 1000) }
-          }, data: { deletedAt: new Date() } });
+          // Ban ownership controls later unbanning. Message deletion is acknowledged
+          // only after deleteMessages succeeds for those exact IDs.
         }
       } else if (input.event === "admitting" && input.userId) {
         const party = room.partyId ? await tx.gameParty.findUnique({ where: { id: room.partyId }, include: partyInclude }) : null;
@@ -498,8 +496,7 @@ export class TelegramPartyRoomsService {
         }
         if (items.length) await tx.telegramPartyChatMessage.createMany({ data: items.map(item => ({
           roomId: room.id, generation: room.generation, messageId: item.messageId, sentAt: new Date(item.sentAt * 1000),
-          senderId: item.userId ?? null,
-          deletedAt: item.userId && item.sentAt < (data.purgedThrough?.[item.userId] ?? 0) ? new Date() : null
+          senderId: item.userId ?? null
         })), skipDuplicates: true });
         const dirtyFree = room.state === "FREE" && items.length && await tx.telegramPartyChatMessage.count({ where: { roomId: room.id, deletedAt: null } });
         if (dirtyFree) delete data.cleanupFenceAt;
@@ -514,6 +511,22 @@ export class TelegramPartyRoomsService {
   async deletions(roomId: string, botId: string, generation: number, leaseToken: string) {
     const room = await this.prisma.telegramPartyChatRoom.findUniqueOrThrow({ where: { id: roomId } });
     this.assertLease(room, { botId, generation, leaseToken });
+    if (["CLOSING", "PREPARING"].includes(room.state) && Object.keys(dataOf(room).purgedThrough ?? {}).length) {
+      await this.locked(roomId, async (tx, current) => {
+        this.assertLease(current, { botId, generation, leaseToken });
+        const data = dataOf(current);
+        const targets = Object.entries(data.purgedThrough ?? {}).map(([senderId, before]) => ({
+          senderId, sentAt: { lt: new Date(before * 1000) }
+        }));
+        // Repair legacy acknowledgements once. Already absent IDs are safe to
+        // resubmit; live-party messages are never requeued for this recovery.
+        if (targets.length) await tx.telegramPartyChatMessage.updateMany({ where: {
+          roomId, deletedAt: { not: null }, OR: targets
+        }, data: { deletedAt: null } });
+        delete data.purgedThrough;
+        await tx.telegramPartyChatRoom.update({ where: { id: roomId }, data: { data: json(data) } });
+      });
+    }
     return this.prisma.telegramPartyChatMessage.findMany({ where: {
       roomId, deletedAt: null, ...(["CLOSING", "PREPARING"].includes(room.state) ? {} : { sentAt: { lte: new Date(Date.now() - 12 * 3600_000) } })
     }, orderBy: { messageId: "asc" }, take: 100 });
