@@ -95,6 +95,22 @@ async def open_party_dota_id(message: Message, command: CommandObject, state: FS
         await message.answer("Не получилось открыть Dota ID. Попробуй ещё раз через «Аккаунт» в FDP.")
 
 
+def ping_menu_content(choices):
+    pending = [choice for choice in choices if not choice.get("sent")]
+    rows = [[button("🔔 Позвать " + choice["name"], "roomping:pick:" + choice["token"])] for choice in pending]
+    if not choices:
+        text = "<b>Пока некого позвать</b>\nТиммейты появятся здесь, когда подключат бота FDP и ещё не будут в чате."
+    elif pending:
+        text = "<b>Кого ждём в чате?</b>\n\nНажми на имя — FDP отправит игроку личное приглашение с кнопкой входа."
+        sent = [escape(choice["name"]) for choice in choices if choice.get("sent")]
+        if sent:
+            text += "\n\n✅ Уже позвали: " + ", ".join(sent)
+        text += "\n\nЗвать одного игрока можно раз в 5 минут."
+    else:
+        text = "✅ <b>Все тиммейты приглашены</b>\nFDP отправит им кнопки входа. Осталось дождаться их в чате."
+    return text, InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
 @router.callback_query(F.data.regexp(r"^roomping:[a-f0-9-]{36}:\d+$"))
 async def group_ping_menu(callback: CallbackQuery, api, settings, storage):
     if callback.message is None or callback.message.chat.type != "supergroup":
@@ -120,14 +136,11 @@ async def group_ping_menu(callback: CallbackQuery, api, settings, storage):
         choices = [{"token": secrets.token_hex(10), "roomId": room_id, "generation": int(generation),
                     "chatId": callback.message.chat.id, "targetMembershipId": target["membershipId"], "expiresAt": now + 120,
                     "name": str(target.get("name") or "Игрок")[:40], "inChat": bool(target.get("inChat"))}
-                   for target in result.get("targets", [])[:4]]
+                   for target in result.get("targets", []) if not target.get("inChat")][:4]
         storage.set_choices(callback.from_user.id, "room_ping_choices", choices)
-        rows = [[button(("💬 " if choice["inChat"] else "🔔 ") + choice["name"], "roomping:pick:" + choice["token"])] for choice in choices]
-        text = ("<b>Кого позвать в чат?</b>\n\nВыбери игрока — FDP пришлёт ему личное уведомление с кнопкой чата.\n"
-                "💬 — уже состоит в чате. Повторный вызов: раз в 5 минут." if choices
-                else "В пати пока нет других игроков, которые подключили бота FDP.")
+        text, markup = ping_menu_content(choices)
         await pool.mutate(SendPartyDiscordMessage(chat_id=callback.message.chat.id, text=text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
+            reply_markup=markup,
             ephemeral_message_parameters={"receiver_user_id": callback.from_user.id, "callback_query_id": callback.id}))
     except ApiError as error:
         await callback.answer(str(error) if error.status in {400, 403, 409, 429} else "Не удалось открыть список. Попробуй ещё раз.", show_alert=True)
@@ -146,6 +159,9 @@ async def group_ping_player(callback: CallbackQuery, api, settings, storage):
     if not choice or choice.get("chatId") != callback.message.chat.id or choice.get("expiresAt", 0) <= time.time():
         await callback.answer("Список устарел. Нажми «Позвать в чат» заново.", show_alert=True)
         return
+    if choice.get("sent"):
+        await callback.answer("Этого игрока уже позвали. Можно выбрать следующего.")
+        return
     pool = api.party_rooms
     room = pool.by_chat.get(callback.message.chat.id) if pool else None
     if not room or room["id"] != choice["roomId"]:
@@ -155,11 +171,15 @@ async def group_ping_player(callback: CallbackQuery, api, settings, storage):
         await pool.request("POST", f"/{choice['roomId']}/ping", {"userId": str(callback.from_user.id),
             "generation": choice["generation"], "targetMembershipId": choice["targetMembershipId"]})
         await callback.answer("🔔 Позвал игрока — FDP отправит кнопку чата.")
+        choice["sent"] = True
+        choices = [item for item in choices if isinstance(item, dict)]
+        storage.set_choices(callback.from_user.id, "room_ping_choices", choices)
         ephemeral_id = callback.message.model_dump().get("ephemeral_message_id")
         if ephemeral_id:
             try:
+                text, markup = ping_menu_content(choices)
                 await pool.mutate(EditPartyDiscordMessage(chat_id=callback.message.chat.id, receiver_user_id=callback.from_user.id,
-                    ephemeral_message_id=ephemeral_id, text="🔔 <b>Игрок приглашён в чат</b>\nFDP отправит ему личное уведомление."))
+                    ephemeral_message_id=ephemeral_id, text=text, reply_markup=markup))
             except TelegramAPIError:
                 pass
     except ApiError as error:

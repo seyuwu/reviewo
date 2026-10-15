@@ -679,7 +679,8 @@ export class TelegramPartyRoomsService {
 
   async pingTargets(roomId: string, botId: string, telegramId: string, generation: number) {
     const { data, sender } = await this.pingContext(roomId, botId, telegramId, generation);
-    const candidates = data.roster.filter(member => member.membershipId !== sender.membershipId && member.telegramId);
+    const candidates = data.roster.filter(member => member.membershipId !== sender.membershipId && member.telegramId
+      && !data.presentIds.includes(member.telegramId) && !data.staffIds.includes(member.telegramId));
     const started = await this.prisma.telegramBotStart.findMany({
       where: { telegramUserId: { in: candidates.map(member => member.telegramId!) } }, select: { telegramUserId: true }
     });
@@ -691,8 +692,12 @@ export class TelegramPartyRoomsService {
 
   async ping(roomId: string, botId: string, telegramId: string, generation: number, targetMembershipId: string) {
     const { room, data, sender } = await this.pingContext(roomId, botId, telegramId, generation);
-    if (!this.pings || !data.roster.some(member => member.membershipId === targetMembershipId && member.membershipId !== sender.membershipId)) {
+    const target = data.roster.find(member => member.membershipId === targetMembershipId && member.membershipId !== sender.membershipId);
+    if (!this.pings || !target) {
       throw new ConflictException("Состав изменился. Открой список игроков заново.");
+    }
+    if (target.telegramId && (data.presentIds.includes(target.telegramId) || data.staffIds.includes(target.telegramId))) {
+      throw new ConflictException("Игрок уже в чате. Открой список заново, чтобы позвать остальных.");
     }
     // Reuse membership fencing, target cooldown and the existing main-bot outbox.
     return this.pings.create(data.partySlug!, sender.userId, { partyId: room.partyId!, membershipId: sender.membershipId,

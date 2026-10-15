@@ -57,3 +57,19 @@ it("rejects self-pings and a removed target", async () => {
   await assert.rejects(service.ping("room", "12345", "11", 4, "gone"));
   assert.equal(calls.length, 0);
 });
+it("leaves present players and party administrators out of the invitation list", async () => {
+  for (const field of ["presentIds", "staffIds"] as const) {
+    const { service, calls, room } = fixture();
+    (room.data as unknown as Record<string, string[]>)[field]!.push("22");
+    assert.deepEqual((await service.pingTargets("room", "12345", "11", 4)).targets, []);
+    await assert.rejects(service.ping("room", "12345", "11", 4, "other"), /Игрок уже в чате/);
+    assert.equal(calls.length, 0);
+  }
+});
+it("rechecks a target who joined after the invitation menu was opened", async () => {
+  const { service, calls, room } = fixture();
+  assert.equal((await service.pingTargets("room", "12345", "11", 4)).targets.length, 1);
+  (room.data as { presentIds: string[] }).presentIds.push("22");
+  await assert.rejects(service.ping("room", "12345", "11", 4, "other"), /Игрок уже в чате/);
+  assert.equal(calls.length, 0);
+});

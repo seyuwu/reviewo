@@ -81,6 +81,19 @@ Shared roster cards expose Telegram usernames only when the player shared their
 contact with this party or made it public.
 
 “Позвать в чат” opens an ephemeral list visible only to the clicking member.
+The join-refreshed shared card shows how many current party members are in the
+Telegram group and marks each linked member as present or still expected. The
+first arrival sees “Ты первый в чате — позови команду!” with the “Позвать
+остальных” action; after everyone arrives the invitation action disappears and
+the card explains readiness. Opening the menu does not notify anyone. It lists
+only absent linked bot users, and each named button invites one teammate. After a
+successful queue acknowledgement the same private menu retains the remaining
+buttons and marks progress, so the caller need not reopen it for every teammate.
+The room API rechecks current presence before queuing a click from an older menu;
+current group members and party administrators cannot be targeted there. The
+existing per-recipient five-minute cooldown still applies across all senders.
+These are additional fields/text from existing room/card reads, with no new
+polling loop or requests in ordinary matchmaking.
 Selection tokens are bound to that member, group and generation, expire after
 two minutes and cover at most four other players. The room owner worker validates
 active party membership and presence before delegating to the existing ping

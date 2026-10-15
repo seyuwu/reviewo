@@ -513,12 +513,24 @@ class PartyRooms:
         if replace_card and time.time() * 1000 < card.get("refreshAfter", 0):
             return
         members = card.get("members", [])
+        present = set(room["data"].get("presentIds", [])) | set(room["data"].get("staffIds", []))
+        in_chat = [member for member in members if str(member.get("telegramId")) in present]
+        waiting = [member for member in members if member.get("telegramId") and str(member["telegramId"]) not in present]
         text = f"🎮 <b>{escape(str(card.get('name') or 'Пати FDP'))}</b>\n"
-        text += f"Состав: <b>{len(members)}/5</b> · Готовы: <b>{sum(bool(member.get('ready')) for member in members)}/{len(members)}</b>\n\n"
+        text += f"Состав: <b>{len(members)}/5</b> · В чате: <b>{len(in_chat)}/{len(members)}</b>\n"
+        if len(in_chat) == 1 and waiting:
+            text += "\n👋 <b>Ты первый в чате — позови команду!</b>\nНажми «🔔 Позвать остальных» и выбери тиммейта. FDP отправит ему личное приглашение с кнопкой входа.\n"
+        elif in_chat and waiting:
+            text += "\n⏳ <b>Ждём остальных в чате.</b>\nНажми «🔔 Позвать остальных», чтобы отправить им личное приглашение.\n"
+        elif members and len(in_chat) == len(members):
+            text += "\n💬 <b>Все в чате!</b> Договоритесь об игре и нажмите «Готов играть».\n"
+        text += f"\nГотовы играть: <b>{sum(bool(member.get('ready')) for member in members)}/{len(members)}</b>\n\n"
         for member in sorted(members, key=lambda item: item.get("role") or "9"):
             name = escape(member["name"][:50])
             role = escape(member.get("role") or "—")
             text += f"{'✅' if member.get('ready') else '❌'} {role} · <b>{name}</b>"
+            if member.get("telegramId"):
+                text += " · 💬 в чате" if str(member["telegramId"]) in present else " · ⏳ ждём в чате"
             if member.get("mmr") is not None:
                 text += " · " + escape(str(member["mmr"])) + " MMR"
             contact = telegram_contact_text(member)
@@ -529,8 +541,8 @@ class PartyRooms:
         if any(not member.get("dotaAccountId") for member in members):
             text += "\n\n🎮 Dota ID можно указать прямо здесь: нажми кнопку и ответь боту цифрами."
         row = [InlineKeyboardButton(text="✅ Готов играть", callback_data=f"roomready:{room['id']}:{room['generation']}")]
-        if len(members) > 1:
-            row.append(InlineKeyboardButton(text="🔔 Позвать в чат", callback_data=f"roomping:{room['id']}:{room['generation']}"))
+        if len(members) > 1 and waiting:
+            row.append(InlineKeyboardButton(text="🔔 Позвать остальных", callback_data=f"roomping:{room['id']}:{room['generation']}"))
         actions = [InlineKeyboardButton(text="⚙️ Управлять пати",
             url=f"https://t.me/{getattr(self.settings, 'main_bot_username', 'FDPdotabot')}?start=manage_{UUID(room['partyId']).hex}")]
         if card.get("discordAvailable"):

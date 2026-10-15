@@ -98,14 +98,67 @@ class RoomControlTests(RoomControlFixture, unittest.IsolatedAsyncioTestCase):
         self.pool.finish_card = AsyncMock()
         self.pool.report = AsyncMock()
         self.pool.request.return_value = {"generation": 4, "name": "Test", "members": [
-            {"name": "Alice", "role": "1", "mmr": 0, "dotaAccountId": None},
-            {"name": "Bob", "role": "2", "mmr": 1200, "dotaAccountId": "123456789"}]}
+            {"name": "Alice", "telegramId": "11", "role": "1", "mmr": 0, "dotaAccountId": None},
+            {"name": "Bob", "telegramId": "22", "role": "2", "mmr": 1200, "dotaAccountId": "123456789"}]}
         await self.pool.update_card(self.room)
         markup = self.pool.mutate.await_args.kwargs["reply_markup"]
         buttons = [button for row in markup.inline_keyboard for button in row]
         self.assertTrue(any(button.callback_data == f"roomping:{self.room_id}:4" for button in buttons))
         self.assertTrue(any(button.callback_data == f"roomdota:{self.room_id}:4" for button in buttons))
         self.assertIn("0 MMR", self.pool.mutate.await_args.args[2])
+
+    async def test_first_arrival_sees_the_next_step_and_only_missing_teammates_are_callable(self):
+        self.pool.finish_card = AsyncMock()
+        self.pool.report = AsyncMock()
+        self.room["data"]["presentIds"] = ["11"]
+        self.pool.request.return_value = {"generation": 4, "name": "Test", "members": [
+            {"name": "Alice", "telegramId": "11", "role": "1", "dotaAccountId": "123456789"},
+            {"name": "Bob", "telegramId": "22", "role": "2", "dotaAccountId": "234567890"}]}
+        await self.pool.update_card(self.room)
+        text = self.pool.mutate.await_args.args[2]
+        self.assertIn("Ты первый в чате — позови команду!", text)
+        self.assertIn("В чате: <b>1/2</b>", text)
+        self.assertIn("<b>Bob</b> · ⏳ ждём в чате", text)
+        self.assertTrue(any(button.text == "🔔 Позвать остальных"
+            for row in self.pool.mutate.await_args.kwargs["reply_markup"].inline_keyboard for button in row))
+        self.assertFalse(any(call.args[0] == "POST" and call.args[1].endswith("/ping") for call in self.pool.request.await_args_list))
+
+    async def test_all_players_arriving_removes_the_invite_prompt_and_button(self):
+        self.pool.finish_card = AsyncMock()
+        self.pool.report = AsyncMock()
+        self.room["data"]["presentIds"] = ["11", "22"]
+        self.pool.request.return_value = {"generation": 4, "name": "Test", "members": [
+            {"name": "Alice", "telegramId": "11", "role": "1"}, {"name": "Bob", "telegramId": "22", "role": "2"}]}
+        await self.pool.update_card(self.room)
+        self.assertIn("Все в чате!", self.pool.mutate.await_args.args[2])
+        self.assertFalse(any((button.callback_data or "").startswith("roomping:")
+            for row in self.pool.mutate.await_args.kwargs["reply_markup"].inline_keyboard for button in row))
+
+    async def test_ping_menu_does_not_offer_players_already_in_the_chat(self):
+        self.pool.request.return_value = {"targets": [
+            {"membershipId": "arrived", "name": "Alice", "inChat": True},
+            {"membershipId": self.target, "name": "Bob", "inChat": False}]}
+        await self.menu()
+        choices = self.choices[(self.user_id, "room_ping_choices")]
+        self.assertEqual([choice["targetMembershipId"] for choice in choices], [self.target])
+        self.assertEqual(self.pool.mutate.await_args.args[0].reply_markup.inline_keyboard[0][0].text, "🔔 Позвать Bob")
+
+    async def test_inviting_one_player_keeps_the_next_player_available(self):
+        self.pool.request.return_value = {"targets": [
+            {"membershipId": self.target, "name": "Bob", "inChat": False},
+            {"membershipId": "third", "name": "Charlie", "inChat": False}]}
+        await self.menu()
+        tokens = [row[0].callback_data for row in self.pool.mutate.await_args.args[0].reply_markup.inline_keyboard]
+        await group_ping_player(self.callback(tokens[0]), self.api, self.settings, self.storage)
+        method = self.pool.mutate.await_args.args[0]
+        self.assertIn("Уже позвали: Bob", method.text)
+        self.assertEqual(method.reply_markup.inline_keyboard[0][0].callback_data, tokens[1])
+        self.pool.request.reset_mock()
+        await group_ping_player(self.callback(tokens[0]), self.api, self.settings, self.storage)
+        self.pool.request.assert_not_awaited()
+        await group_ping_player(self.callback(tokens[1]), self.api, self.settings, self.storage)
+        self.assertIsNone(self.pool.mutate.await_args.args[0].reply_markup)
+        self.assertIn("Все тиммейты приглашены", self.pool.mutate.await_args.args[0].text)
 
     async def test_chat_ready_offers_id_only_when_missing_and_updates_same_notice(self):
         fresh = {"partyId": self.party_id, "inviteLink": "https://t.me/+qa", "generation": 4, "membershipId": "own", "dotaAccountId": None}
